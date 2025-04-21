@@ -1,27 +1,229 @@
+/* Reset and base styles */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
 body {
-    font-family: sans-serif;
-    width: 300px;
-    padding: 8px;
-  }
-  
-  .video-item {
-    margin-bottom: 12px;
-    border-bottom: 1px solid #ccc;
-    padding-bottom: 8px;
-  }
-  
-  .thumb {
+    width: 400px;
+    min-height: 200px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+    color: #333;
+    background: #f5f5f5;
+}
+
+.container {
+    padding: 16px;
+}
+
+/* Initial loader */
+.initial-loader {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    height: 168px;
+    color: #666;
+}
+
+/* Video list styles */
+.videos-container {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.video-item {
+    display: flex;
+    gap: 16px;
+    padding: 16px;
+    background: #fff;
+    border-radius: 8px;
+    border: 1px solid #e0e0e0;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+/* Preview column */
+.preview-column {
+    flex: 0 0 120px;
+    position: relative;
+    aspect-ratio: 16/9;
+    background: #f5f5f5;
+    border-radius: 4px;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.preview-image {
     width: 100%;
-    display: block;
-    margin-bottom: 4px;
-  }
-  
-  .controls {
-    margin-top: 6px;
-  }
-  
-  .error {
-    color: red;
-    font-size: 0.9em;
-    margin-top: 4px;
-  }
+    height: 100%;
+    object-fit: cover;
+}
+
+.preview-image.placeholder {
+    object-fit: contain;
+    padding: 8px;
+}
+
+/* Info column */
+.info-column {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 0; /* Enable text truncation */
+}
+
+.title-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+}
+
+.video-title {
+    flex: 1;
+    font-weight: 500;
+    font-size: 14px;
+    line-height: 1.4;
+    word-break: break-word;
+    overflow-wrap: break-word;
+    max-width: 100%;
+}
+
+/* Copy button */
+.copy-button {
+    flex-shrink: 0;
+    background: none;
+    border: none;
+    padding: 4px;
+    cursor: pointer;
+    opacity: 0.6;
+    transition: opacity 0.2s;
+    position: relative;
+}
+
+.copy-button:hover {
+    opacity: 1;
+}
+
+.copy-button svg {
+    fill: currentColor;
+}
+
+/* Resolution info */
+.resolution-info {
+    color: #666;
+    font-size: 13px;
+}
+
+/* Download buttons */
+.download-group {
+    display: flex;
+    gap: 8px;
+    margin-top: 8px;
+}
+
+.download-btn,
+.save-as-btn {
+    height: 36px;
+    min-width: 90px;
+    padding: 0 16px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    transition: background-color 0.2s;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    white-space: nowrap;
+}
+
+.download-btn {
+    background-color: #1a73e8;
+    color: white;
+}
+
+.save-as-btn {
+    background-color: #f1f3f4;
+    color: #1a73e8;
+}
+
+/* Loader in button */
+.button-loader {
+    width: 16px;
+    height: 16px;
+    border: 2px solid rgba(255,255,255,0.3);
+    border-top: 2px solid #fff;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin: 0 auto;
+}
+
+.save-as-btn .button-loader {
+    border: 2px solid rgba(26,115,232,0.3);
+    border-top: 2px solid #1a73e8;
+}
+
+/* Loader animation */
+.loader {
+    width: 20px;
+    height: 20px;
+    border: 2px solid #f3f3f3;
+    border-top: 2px solid #1a73e8;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Tooltip */
+.tooltip {
+    position: absolute;
+    background: rgba(0, 0, 0, 0.8);
+    color: white;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    top: -24px;
+    left: 50%;
+    transform: translateX(-50%);
+    white-space: nowrap;
+    pointer-events: none;
+    animation: fadeIn 0.2s;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translate(-50%, 4px); }
+    to { opacity: 1; transform: translate(-50%, 0); }
+}
+
+/* Empty state */
+.initial-message {
+    text-align: center;
+    padding: 32px 16px;
+    color: #666;
+    font-size: 14px;
+}
+
+/* Remove old preview styles */
+.preview {
+    display: none; /* Hide old class if it appears */
+}
+
+/* Update video info styles */
+.video-info {
+    display: none; /* Hide old class */
+}

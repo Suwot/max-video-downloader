@@ -9,94 +9,20 @@ async function render(items) {
   root.innerHTML = '';
   
   if (!items || items.length === 0) {
-    root.textContent = 'No videos found on this page.';
+    const message = document.createElement('div');
+    message.className = 'initial-message';
+    message.textContent = 'No videos found on this page.';
+    root.appendChild(message);
     return;
   }
 
   for (const item of items) {
-    const div = document.createElement('div');
-    div.className = 'video-item';
-    
-    // Preview container
-    const preview = document.createElement('div');
-    preview.className = 'preview';
-    preview.innerHTML = 'Loading preview...';
-    
-    // Try to get preview
-    if (item.type === 'hls') {
-      const previewUrl = await findPreviewForHLS(item.url);
-      if (previewUrl) {
-        preview.innerHTML = `<img src="${previewUrl}" alt="Preview">`;
-      } else {
-        preview.innerHTML = 'No preview available';
-      }
-    }
-    
-    // Video info
-    const info = document.createElement('div');
-    info.className = 'video-info';
-    
-    const filename = item.url.split('/').pop().split('?')[0] || 'video.mp4';
-    
-    // Create download button group
-    const buttonGroup = document.createElement('div');
-    buttonGroup.className = 'download-group';
-
-    // Main download button
-    const downloadBtn = document.createElement('button');
-    downloadBtn.className = 'download-btn';
-    downloadBtn.textContent = 'Download';
-    downloadBtn.setAttribute('data-tooltip', 'Download to default location');
-    downloadBtn.onclick = () => {
-        chrome.runtime.sendMessage({
-            type: 'downloadHLS',
-            url: item.url,
-            filename: filename
-        });
-    };
-
-    // Save As button
-    const saveAsBtn = document.createElement('button');
-    saveAsBtn.className = 'save-as-btn';
-    saveAsBtn.setAttribute('data-tooltip', 'Choose save location');
-    const saveIcon = document.createElement('span');
-    saveIcon.className = 'save-icon';
-    saveAsBtn.appendChild(saveIcon);
-
-    saveAsBtn.onclick = async () => {
-        try {
-            // First, prompt for filename
-            const suggestedName = prompt('Save as:', filename);
-            if (!suggestedName) return;
-
-            // Then show folder picker
-            const dirHandle = await window.showDirectoryPicker();
-            
-            // Send both filename and save path to background
-            chrome.runtime.sendMessage({
-                type: 'downloadHLS',
-                url: item.url,
-                filename: suggestedName,
-                savePath: dirHandle.name
-            });
-        } catch (error) {
-            console.error('Failed to get save location:', error);
-            // If user cancelled the folder picker, just return silently
-            if (error.name !== 'AbortError') {
-                alert('Failed to select save location: ' + error.message);
-            }
-        }
-    };
-
-    buttonGroup.appendChild(downloadBtn);
-    buttonGroup.appendChild(saveAsBtn);
-
-    // Add to the container
-    info.appendChild(document.createTextNode(filename));
-    div.appendChild(preview);
-    div.appendChild(info);
-    div.appendChild(buttonGroup);
-    root.appendChild(div);
+    const videoElement = createVideoElement({
+      url: item.url,
+      title: new URL(item.url).pathname.split('/').pop(),
+      type: item.type
+    });
+    root.appendChild(videoElement);
   }
 }
 
@@ -373,32 +299,65 @@ function createVideoElement(video) {
     const container = document.createElement('div');
     container.className = 'video-item';
 
-    // Create preview container with loader
+    // Left column - Preview
     const previewContainer = document.createElement('div');
-    previewContainer.className = 'preview-container';
+    previewContainer.className = 'preview-column';
     
     const loader = document.createElement('div');
     loader.className = 'loader';
     
     const previewImg = document.createElement('img');
     previewImg.className = 'preview-image';
+    // Set default placeholder
+    previewImg.src = '../icons/video-placeholder.png';
+    previewImg.classList.add('placeholder');
     
     previewContainer.appendChild(loader);
     previewContainer.appendChild(previewImg);
 
-    // Create video info and controls
+    // Right column - Info & Controls
     const infoContainer = document.createElement('div');
-    infoContainer.className = 'video-info';
+    infoContainer.className = 'info-column';
     
-    const filename = new URL(video.url).pathname.split('/').pop().split('?')[0] || 'video.mp4';
+    // Title row with copy button
+    const titleRow = document.createElement('div');
+    titleRow.className = 'title-row';
     
-    // Add title with better handling of long text
-    const titleElement = document.createElement('div');
-    titleElement.textContent = video.title || filename;
-    titleElement.style.marginBottom = '8px';
-    infoContainer.appendChild(titleElement);
+    const titleText = document.createElement('div');
+    titleText.className = 'video-title';
+    titleText.textContent = video.title || new URL(video.url).pathname.split('/').pop();
+    
+    const copyButton = document.createElement('button');
+    copyButton.className = 'copy-button';
+    copyButton.innerHTML = `<svg viewBox="0 0 24 24" width="16" height="16">
+        <path d="M16 1H4C3 1 2 2 2 3v14h2V3h12V1zm3 4H8C7 5 6 6 6 7v14c0 1 1 2 2 2h11c1 0 2-1 2-2V7c0-1-1-2-2-2zm0 16H8V7h11v14z"/>
+    </svg>`;
+    copyButton.title = "Copy HLS URL";
+    
+    copyButton.onclick = () => {
+        navigator.clipboard.writeText(video.url).then(() => {
+            const tooltip = document.createElement('div');
+            tooltip.className = 'tooltip';
+            tooltip.textContent = 'Copied!';
+            copyButton.appendChild(tooltip);
+            setTimeout(() => tooltip.remove(), 2000);
+        });
+    };
+    
+    titleRow.appendChild(titleText);
+    titleRow.appendChild(copyButton);
 
-    // Create download button group
+    // Resolution info
+    const resolutionInfo = document.createElement('div');
+    resolutionInfo.className = 'resolution-info';
+    resolutionInfo.textContent = 'Loading resolution...';
+    
+    // Get resolution info
+    getStreamResolution(video.url).then(resolution => {
+        resolutionInfo.textContent = resolution || 'Resolution unknown';
+    });
+
+    // Download buttons container
     const buttonGroup = document.createElement('div');
     buttonGroup.className = 'download-group';
 
@@ -406,55 +365,71 @@ function createVideoElement(video) {
     const downloadBtn = document.createElement('button');
     downloadBtn.className = 'download-btn';
     downloadBtn.textContent = 'Download';
-    downloadBtn.setAttribute('data-tooltip', 'Download to default location');
-    downloadBtn.onclick = () => {
-        chrome.runtime.sendMessage({
-            type: 'downloadHLS',
-            url: video.url,
-            filename: filename
-        });
-    };
-
-    // Save As button
+    
+    // Save As button (simplified)
     const saveAsBtn = document.createElement('button');
     saveAsBtn.className = 'save-as-btn';
-    saveAsBtn.setAttribute('data-tooltip', 'Choose save location');
-    const saveIcon = document.createElement('span');
-    saveIcon.className = 'save-icon';
-    saveAsBtn.appendChild(saveIcon);
+    saveAsBtn.textContent = 'Save as...';
 
-    saveAsBtn.onclick = async () => {
+    // Handle download clicks
+    const handleDownload = async (customPath = false) => {
+        const btn = customPath ? saveAsBtn : downloadBtn;
+        const originalText = btn.textContent;
+        
+        // Replace text with loader while maintaining button size
+        btn.innerHTML = '<div class="button-loader"></div>';
+        btn.disabled = true;
+
         try {
-            // First, prompt for filename
-            const suggestedName = prompt('Save as:', filename);
-            if (!suggestedName) return;
+            if (customPath) {
+                const suggestedName = prompt('Save as:', video.title || 'video.mp4');
+                if (!suggestedName) {
+                    btn.textContent = originalText;
+                    btn.disabled = false;
+                    return;
+                }
 
-            // Then show folder picker
-            const dirHandle = await window.showDirectoryPicker();
-            
-            // Send both filename and save path to background
-            chrome.runtime.sendMessage({
-                type: 'downloadHLS',
-                url: video.url,
-                filename: suggestedName,
-                savePath: dirHandle.name
-            });
+                const dirHandle = await window.showDirectoryPicker();
+                chrome.runtime.sendMessage({
+                    type: 'downloadHLS',
+                    url: video.url,
+                    filename: suggestedName,
+                    savePath: dirHandle.name
+                });
+            } else {
+                chrome.runtime.sendMessage({
+                    type: 'downloadHLS',
+                    url: video.url,
+                    filename: video.title || 'video.mp4'
+                });
+            }
         } catch (error) {
-            console.error('Failed to get save location:', error);
-            // If user cancelled the folder picker, just return silently
             if (error.name !== 'AbortError') {
                 alert('Failed to select save location: ' + error.message);
             }
         }
+
+        // Reset button after download starts
+        setTimeout(() => {
+            btn.textContent = originalText;
+            btn.disabled = false;
+        }, 1000);
     };
+
+    downloadBtn.onclick = () => handleDownload(false);
+    saveAsBtn.onclick = () => handleDownload(true);
 
     buttonGroup.appendChild(downloadBtn);
     buttonGroup.appendChild(saveAsBtn);
 
-    // Assemble the components
+    // Assemble the right column
+    infoContainer.appendChild(titleRow);
+    infoContainer.appendChild(resolutionInfo);
+    infoContainer.appendChild(buttonGroup);
+
+    // Assemble the main container
     container.appendChild(previewContainer);
     container.appendChild(infoContainer);
-    container.appendChild(buttonGroup);
 
     // Start loading preview in parallel
     loadPreview(video.url, previewImg, loader);
@@ -470,15 +445,12 @@ function loadPreview(videoUrl, imgElement, loaderElement) {
         if (response && response.previewUrl) {
             imgElement.onload = () => {
                 loaderElement.style.display = 'none';
+                imgElement.classList.remove('placeholder');
                 imgElement.classList.add('loaded');
             };
             imgElement.src = response.previewUrl;
         } else {
-            // If preview generation fails, show a placeholder
             loaderElement.style.display = 'none';
-            // Use a data URL for the placeholder to avoid missing file issues
-            imgElement.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAHgAAAB4CAMAAAAOusbgAAAAQlBMVEX///+hoaGdnZ2ampqXl5eUlJSRkZGOjo7x8fHt7e3p6ens7Ozo6Ojm5ubj4+Pg4ODd3d3a2trX19fU1NTR0dHOzs4xvP2LAAAAAXRSTlMAQObYZgAAAJlJREFUeNrt1kEKwyAQQNFJTGIa09r0/letCF0FQQcXA++4ePAfRAYAAAAAAP6NHIIcghyCHIIcghyCHIIcghyCHIIcghyCHIIcghyCHIIcghyCHIIcghyCHIIcghyCHIIcghyCHIIcghyCHIIcghyCHIIcghyCHIIcghyCHIIcghyCHIIcghyCHIIcghyCHIIcghyC/ADkFwAA//+QlAX/cFltXwAAAABJRU5ErkJggg==';
-            imgElement.classList.add('loaded');
         }
     });
 }
@@ -523,8 +495,40 @@ function updateVideoList() {
 }
 
 // Initialize when popup opens
-document.addEventListener('DOMContentLoaded', () => {
-    updateVideoList();
+document.addEventListener('DOMContentLoaded', async () => {
+    // Wait for the background script to be ready
+    try {
+        await new Promise(resolve => {
+            const checkConnection = () => {
+                chrome.runtime.sendMessage({ type: 'ping' }, response => {
+                    if (chrome.runtime.lastError) {
+                        setTimeout(checkConnection, 100);
+                    } else {
+                        resolve();
+                    }
+                });
+            };
+            checkConnection();
+        });
+        
+        // Now that connection is established, update the video list
+        updateVideoList();
+    } catch (error) {
+        console.error('Failed to initialize:', error);
+        const container = document.getElementById('videos');
+        container.innerHTML = '<div class="initial-message">Failed to connect to extension</div>';
+    }
+});
+
+// Update the message handling to handle disconnections
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (message.type === 'error') {
+        // Handle error messages
+        const container = document.getElementById('videos');
+        container.innerHTML = `<div class="initial-message">${message.error}</div>`;
+    }
+    // Return true if you're going to call sendResponse asynchronously
+    return true;
 });
 
 function downloadVideo(url) {
@@ -533,5 +537,22 @@ function downloadVideo(url) {
         type: 'downloadHLS',
         url: url,
         filename: filename
+    });
+}
+
+// Add this new function to get stream resolution
+async function getStreamResolution(url) {
+    return new Promise((resolve) => {
+        chrome.runtime.sendMessage({
+            type: 'getHLSQualities',
+            url: url
+        }, response => {
+            if (response && response.qualities && response.qualities.length > 0) {
+                const quality = response.qualities[0];
+                resolve(`${quality.resolution}p${quality.bitrate ? ` (${quality.bitrate}kbps)` : ''}`);
+            } else {
+                resolve(null);
+            }
+        });
     });
 }

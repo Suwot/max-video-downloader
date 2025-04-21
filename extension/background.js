@@ -64,24 +64,51 @@ chrome.webRequest.onBeforeRequest.addListener(
     { urls: ["<all_urls>"] }
 );
 
-// Add timeout and error handling for native messaging
-function sendNativeMessage(message, timeout = 5000) {
-    return new Promise((resolve, reject) => {
-        const timeoutId = setTimeout(() => {
-            reject(new Error('Native host communication timeout'));
-        }, timeout);
+// Add connection handling
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (message.type === 'ping') {
+        sendResponse({ type: 'pong' });
+        return false;
+    }
+    // ... rest of your message handling
+    return true; // Will respond asynchronously
+});
 
+// Add error handling for native messaging
+let nativePort = null;
+
+function connectNativeHost() {
+    try {
+        nativePort = chrome.runtime.connectNative('com.mycompany.ffmpeg');
+        
+        nativePort.onDisconnect.addListener(() => {
+            console.error('Native host disconnected:', chrome.runtime.lastError);
+            nativePort = null;
+        });
+
+        return true;
+    } catch (error) {
+        console.error('Failed to connect to native host:', error);
+        return false;
+    }
+}
+
+// Update your message sending function to handle reconnection
+async function sendNativeMessage(message) {
+    if (!nativePort && !connectNativeHost()) {
+        throw new Error('Could not connect to native host');
+    }
+
+    return new Promise((resolve, reject) => {
         try {
             chrome.runtime.sendNativeMessage('com.mycompany.ffmpeg', message, response => {
-                clearTimeout(timeoutId);
                 if (chrome.runtime.lastError) {
-                    reject(new Error(chrome.runtime.lastError.message));
-                    return;
+                    reject(chrome.runtime.lastError);
+                } else {
+                    resolve(response);
                 }
-                resolve(response);
             });
         } catch (error) {
-            clearTimeout(timeoutId);
             reject(error);
         }
     });

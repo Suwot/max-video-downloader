@@ -83,9 +83,25 @@ process.on('unhandledRejection', (err) => {
 // Message handling
 let buffer = Buffer.alloc(0);
 
+// Add message deduplication
+const processedMessages = new Set();
+let messageTimeout = null;
+
 process.stdin.on('data', (data) => {
     buffer = Buffer.concat([buffer, data]);
     
+    // Clear any existing timeout
+    if (messageTimeout) {
+        clearTimeout(messageTimeout);
+    }
+    
+    // Set a new timeout to process messages
+    messageTimeout = setTimeout(() => {
+        processMessages();
+    }, 50); // Wait 50ms to collect all message parts
+});
+
+function processMessages() {
     while (buffer.length >= 4) {
         const length = buffer.readUInt32LE(0);
         if (buffer.length < length + 4) break;
@@ -95,7 +111,22 @@ process.stdin.on('data', (data) => {
         
         try {
             const request = JSON.parse(message);
-            logDebug('Received message:', request);
+            const messageId = JSON.stringify(request); // Use the message content as ID
+            
+            // Skip if we've already processed this message
+            if (processedMessages.has(messageId)) {
+                continue;
+            }
+            
+            // Add to processed messages
+            processedMessages.add(messageId);
+            
+            // Clear old messages after 1 second
+            setTimeout(() => {
+                processedMessages.delete(messageId);
+            }, 1000);
+            
+            logDebug('Processing message:', request);
             handleMessage(request).catch(err => {
                 logDebug('Error in message handling:', err);
                 sendResponse({ error: err.message });
@@ -105,7 +136,7 @@ process.stdin.on('data', (data) => {
             sendResponse({ error: 'Invalid message format' });
         }
     }
-});
+}
 
 // Add at the top of the file with other globals
 let lastResponseTime = 0;
