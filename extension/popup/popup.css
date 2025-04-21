@@ -1,0 +1,27 @@
+body {
+    font-family: sans-serif;
+    width: 300px;
+    padding: 8px;
+  }
+  
+  .video-item {
+    margin-bottom: 12px;
+    border-bottom: 1px solid #ccc;
+    padding-bottom: 8px;
+  }
+  
+  .thumb {
+    width: 100%;
+    display: block;
+    margin-bottom: 4px;
+  }
+  
+  .controls {
+    margin-top: 6px;
+  }
+  
+  .error {
+    color: red;
+    font-size: 0.9em;
+    margin-top: 4px;
+  }

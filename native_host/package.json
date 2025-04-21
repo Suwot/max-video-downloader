@@ -1,0 +1,22 @@
+{
+  "name": "video-downloader-host",
+  "version": "1.0.0",
+  "description": "Native host for video downloader extension",
+  "main": "host.js",
+  "bin": "host.js",
+  "pkg": {
+    "targets": ["node16-macos-arm64"],
+    "outputPath": "."
+  },
+  "scripts": {
+    "build": "pkg .",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "pkg": "^5.8.1"
+  },
+  "dependencies": {}
+}
