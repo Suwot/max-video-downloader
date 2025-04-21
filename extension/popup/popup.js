@@ -85,67 +85,124 @@ chrome.runtime.onMessage.addListener(msg => {
 
 // On load: detect videos & playlists
 document.addEventListener('DOMContentLoaded', async () => {
-  const root = document.getElementById('videos');
-  root.textContent = 'Searching for videos...';
+  const container = document.getElementById('videos');
   
   try {
+    // Wait for the background script to be ready
+    await new Promise(resolve => {
+      const checkConnection = () => {
+        chrome.runtime.sendMessage({ type: 'ping' }, response => {
+          if (chrome.runtime.lastError) {
+            setTimeout(checkConnection, 100);
+          } else {
+            resolve();
+          }
+        });
+      };
+      checkConnection();
+    });
+
+    // Show loading state
+    container.innerHTML = '<div class="initial-loader">Searching for videos...</div>';
+    
+    // Get current tab
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     const videos = [];
-    
-    // Set a timeout to show "No videos found" if nothing is found within 5 seconds
+    let videosFound = false;
+
+    // Set a timeout for "No videos found" message
     const timeout = setTimeout(() => {
-      if (!hasUpdated) {
-        render([]);
+      if (!videosFound) {
+        container.innerHTML = '<div class="initial-message">No videos found</div>';
       }
     }, 5000);
 
     // Get videos from content script
-    chrome.tabs.sendMessage(tab.id, { action: 'findVideos' }, (response) => {
-      if (chrome.runtime.lastError) {
-        console.error(chrome.runtime.lastError);
-        if (!hasUpdated) {
-          render([]);
-        }
-        return;
-      }
-      
+    try {
+      const response = await new Promise((resolve) => {
+        chrome.tabs.sendMessage(tab.id, { action: 'findVideos' }, (response) => {
+          if (chrome.runtime.lastError) {
+            resolve(null);
+            return;
+          }
+          resolve(response);
+        });
+      });
+
       if (response) {
         videos.push(...response.map(url => ({ url, type: 'regular' })));
-        updateUI();
       }
-    });
+    } catch (error) {
+      console.error('Content script error:', error);
+    }
 
     // Get HLS playlists from background script
-    chrome.runtime.sendMessage({ action: 'getStoredPlaylists', tabId: tab.id }, (playlists) => {
-      if (chrome.runtime.lastError) {
-        console.error(chrome.runtime.lastError);
-        return;
-      }
-      
-      if (playlists && playlists.length) {
-        videos.push(...playlists.map(url => ({ url, type: 'hls' })));
-        updateUI();
-      }
-    });
+    try {
+      const playlists = await new Promise((resolve) => {
+        chrome.runtime.sendMessage({ 
+          action: 'getStoredPlaylists', 
+          tabId: tab.id 
+        }, (response) => {
+          if (chrome.runtime.lastError) {
+            resolve([]);
+            return;
+          }
+          resolve(response || []);
+        });
+      });
 
-    function updateUI() {
+      if (playlists.length) {
+        videos.push(...playlists.map(url => ({ url, type: 'hls' })));
+      }
+    } catch (error) {
+      console.error('Background script error:', error);
+    }
+
+    // Update UI only if we have videos
+    if (videos.length > 0) {
+      videosFound = true;
       clearTimeout(timeout);
-      hasUpdated = true;
-      render(videos);
+      container.innerHTML = '';
+      videos.forEach(video => {
+        const videoElement = createVideoElement(video);
+        container.appendChild(videoElement);
+      });
+    } else if (!container.querySelector('.initial-message')) {
+      // Only update if there's no message already
+      container.innerHTML = '<div class="initial-message">No videos found</div>';
     }
 
   } catch (error) {
-    console.error('Error:', error);
-    root.textContent = 'Error searching for videos.';
+    console.error('Initialization error:', error);
+    container.innerHTML = '<div class="initial-message">Failed to initialize</div>';
   }
 });
 
 // Listen for video updates from background script
-chrome.runtime.onMessage.addListener((message) => {
-  if (message.action === 'videosFound' && message.videos) {
-    const newVideos = message.videos.map(url => ({ url, type: url.includes('.m3u8') ? 'hls' : 'regular' }));
-    render(newVideos);
-  }
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (message.type === 'error') {
+        // Handle error messages
+        const container = document.getElementById('videos');
+        container.innerHTML = `<div class="initial-message">${message.error}</div>`;
+        sendResponse(); // Send empty response to close the message channel
+    } else if (message.action === 'videosFound' && message.videos) {
+        const container = document.getElementById('videos');
+        const videos = message.videos.map(url => ({ 
+            url, 
+            type: url.includes('.m3u8') ? 'hls' : 'regular' 
+        }));
+
+        if (videos.length > 0) {
+            container.innerHTML = '';
+            videos.forEach(video => {
+                const videoElement = createVideoElement(video);
+                container.appendChild(videoElement);
+            });
+        }
+        sendResponse(); // Send empty response to close the message channel
+    }
+    // Only return true if we need to respond asynchronously
+    return false; // We're handling responses synchronously now
 });
 
 async function getCurrentTab() {
@@ -308,9 +365,7 @@ function createVideoElement(video) {
     
     const previewImg = document.createElement('img');
     previewImg.className = 'preview-image';
-    // Set default placeholder
-    previewImg.src = '../icons/video-placeholder.png';
-    previewImg.classList.add('placeholder');
+    previewImg.style.display = 'none'; // Hide initially
     
     previewContainer.appendChild(loader);
     previewContainer.appendChild(previewImg);
@@ -376,13 +431,13 @@ function createVideoElement(video) {
         const btn = customPath ? saveAsBtn : downloadBtn;
         const originalText = btn.textContent;
         
-        // Replace text with loader while maintaining button size
         btn.innerHTML = '<div class="button-loader"></div>';
         btn.disabled = true;
 
         try {
             if (customPath) {
-                const suggestedName = prompt('Save as:', video.title || 'video.mp4');
+                const defaultName = getUniqueFilename(video.url);
+                const suggestedName = prompt('Save as:', defaultName);
                 if (!suggestedName) {
                     btn.textContent = originalText;
                     btn.disabled = false;
@@ -400,7 +455,8 @@ function createVideoElement(video) {
                 chrome.runtime.sendMessage({
                     type: 'downloadHLS',
                     url: video.url,
-                    filename: video.title || 'video.mp4'
+                    filename: getUniqueFilename(video.url),
+                    savePath: 'Desktop'
                 });
             }
         } catch (error) {
@@ -409,7 +465,6 @@ function createVideoElement(video) {
             }
         }
 
-        // Reset button after download starts
         setTimeout(() => {
             btn.textContent = originalText;
             btn.disabled = false;
@@ -432,25 +487,38 @@ function createVideoElement(video) {
     container.appendChild(infoContainer);
 
     // Start loading preview in parallel
-    loadPreview(video.url, previewImg, loader);
+    loadPreview(video.url, previewImg, loader, previewContainer);
 
     return container;
 }
 
-function loadPreview(videoUrl, imgElement, loaderElement) {
+function loadPreview(videoUrl, imgElement, loaderElement, containerElement) {
     chrome.runtime.sendMessage({
         type: 'generatePreview',
         url: videoUrl
     }, response => {
+        if (chrome.runtime.lastError) {
+            console.error('Preview generation error:', chrome.runtime.lastError);
+            // Show placeholder on error
+            loaderElement.style.display = 'none';
+            imgElement.src = '../icons/video-placeholder.png';
+            imgElement.style.display = 'block';
+            imgElement.classList.add('placeholder');
+            return;
+        }
+
         if (response && response.previewUrl) {
             imgElement.onload = () => {
                 loaderElement.style.display = 'none';
-                imgElement.classList.remove('placeholder');
-                imgElement.classList.add('loaded');
+                imgElement.style.display = 'block';
             };
             imgElement.src = response.previewUrl;
         } else {
+            // If preview generation failed, show placeholder
             loaderElement.style.display = 'none';
+            imgElement.src = '../icons/video-placeholder.png';
+            imgElement.style.display = 'block';
+            imgElement.classList.add('placeholder');
         }
     });
 }
@@ -520,17 +588,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 });
 
-// Update the message handling to handle disconnections
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-    if (message.type === 'error') {
-        // Handle error messages
-        const container = document.getElementById('videos');
-        container.innerHTML = `<div class="initial-message">${message.error}</div>`;
-    }
-    // Return true if you're going to call sendResponse asynchronously
-    return true;
-});
-
 function downloadVideo(url) {
     const filename = new URL(url).pathname.split('/').pop().split('?')[0] || 'video.mp4';
     chrome.runtime.sendMessage({
@@ -547,12 +604,35 @@ async function getStreamResolution(url) {
             type: 'getHLSQualities',
             url: url
         }, response => {
-            if (response && response.qualities && response.qualities.length > 0) {
-                const quality = response.qualities[0];
-                resolve(`${quality.resolution}p${quality.bitrate ? ` (${quality.bitrate}kbps)` : ''}`);
-            } else {
-                resolve(null);
+            if (chrome.runtime.lastError) {
+                console.error('Resolution fetch error:', chrome.runtime.lastError);
+                resolve('Resolution unknown');
+                return;
+            }
+
+            try {
+                if (response && response.streamInfo) {
+                    const { width, height, fps } = response.streamInfo;
+                    if (width && height) {
+                        resolve(`${width}x${height} @ ${fps}fps`);
+                    } else {
+                        resolve('Resolution unknown');
+                    }
+                } else {
+                    resolve('Resolution unknown');
+                }
+            } catch (error) {
+                console.error('Resolution parse error:', error);
+                resolve('Resolution unknown');
             }
         });
     });
+}
+
+// Add this helper function at the top of the file
+function getUniqueFilename(url) {
+    // Extract stream name from URL (e.g., "4mplf/video_3" from "https://cdn.hotscope.tv/videos/4mplf/video_3.m3u8")
+    const urlPath = new URL(url).pathname;
+    const streamName = urlPath.split('/').slice(-2).join('_').replace('.m3u8', '');
+    return `${streamName}.mp4`;
 }

@@ -169,17 +169,29 @@ async function downloadVideo(url, filename, savePath, quality = 'best') {
         
         // Set output path
         const finalOutput = savePath ? 
-            path.join(savePath, outputFilename) : 
-            path.join(process.env.HOME, 'Downloads', outputFilename);
+            (savePath === 'Desktop' ? 
+                path.join(process.env.HOME, 'Desktop', outputFilename) : 
+                path.join(savePath, outputFilename)) : 
+            path.join(process.env.HOME, 'Desktop', outputFilename);
 
-        logDebug('Output file will be:', finalOutput);
+        // Check if file exists and append number if needed
+        let counter = 1;
+        let uniqueOutput = finalOutput;
+        while (fs.existsSync(uniqueOutput)) {
+            const ext = path.extname(finalOutput);
+            const base = finalOutput.slice(0, -ext.length);
+            uniqueOutput = `${base} (${counter})${ext}`;
+            counter++;
+        }
+
+        logDebug('Output file will be:', uniqueOutput);
 
         // Basic FFmpeg args that work for both HLS and regular videos
         const ffmpegArgs = [
             '-i', url,
             '-c', 'copy',
             '-bsf:a', 'aac_adtstoasc',
-            finalOutput
+            uniqueOutput
         ];
 
         if (url.includes('.m3u8')) {
@@ -204,7 +216,7 @@ async function downloadVideo(url, filename, savePath, quality = 'best') {
             ffmpeg.on('close', (code) => {
                 if (code === 0) {
                     logDebug('Download completed successfully');
-                    sendResponse({ success: true, path: finalOutput });
+                    sendResponse({ success: true, path: uniqueOutput });
                     resolve();
                 } else {
                     const error = `FFmpeg exited with code ${code}: ${errorOutput}`;
@@ -252,29 +264,32 @@ async function getStreamQualities(url) {
             if (code === 0) {
                 try {
                     const data = JSON.parse(output);
-                    const qualities = data.streams
-                        .filter(stream => stream.codec_type === 'video')
-                        .map(stream => ({
-                            resolution: stream.height,
-                            bitrate: Math.round(stream.bit_rate / 1000) || null
-                        }));
-                    sendResponse({ qualities: qualities.length ? qualities : [{ resolution: 'best', bitrate: null }] });
-                    resolve();
+                    const videoStream = data.streams.find(stream => stream.codec_type === 'video');
+                    
+                    if (videoStream) {
+                        const streamInfo = {
+                            width: videoStream.width,
+                            height: videoStream.height,
+                            fps: Math.round(eval(videoStream.r_frame_rate)), // Convert "30/1" to 30
+                            bitrate: videoStream.bit_rate ? Math.round(videoStream.bit_rate / 1000) : null
+                        };
+                        sendResponse({ streamInfo });
+                    } else {
+                        sendResponse({ error: 'No video stream found' });
+                    }
                 } catch (e) {
-                    sendResponse({ qualities: [{ resolution: 'best', bitrate: null }] });
-                    resolve();
+                    logDebug('Failed to parse stream info:', e);
+                    sendResponse({ error: 'Failed to parse stream info' });
                 }
             } else {
                 const error = `FFprobe exited with code ${code}: ${errorOutput}`;
                 sendResponse({ error });
-                reject(new Error(error));
             }
         });
 
         ffprobe.on('error', (err) => {
             logDebug('FFprobe spawn error:', err);
             sendResponse({ error: err.message });
-            reject(err);
         });
     });
 }
