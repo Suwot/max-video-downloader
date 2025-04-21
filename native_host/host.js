@@ -107,12 +107,16 @@ process.stdin.on('data', (data) => {
     }
 });
 
+// Add at the top of the file with other globals
+let lastResponseTime = 0;
+const MIN_RESPONSE_INTERVAL = 100; // Minimum 100ms between messages
+
 async function handleMessage(request) {
     logDebug('Processing message:', request);
     
     switch(request.type) {
         case 'download':
-            await downloadVideo(request.url, request.filename, request.quality);
+            await downloadVideo(request.url, request.filename, request.savePath, request.quality);
             break;
         case 'getQualities':
             await getStreamQualities(request.url);
@@ -125,52 +129,71 @@ async function handleMessage(request) {
     }
 }
 
-async function downloadVideo(url, filename, quality = 'best') {
-    logDebug('Starting download:', { url, filename, quality });
-    const outputPath = path.join(process.env.HOME, 'Downloads', filename);
+async function downloadVideo(url, filename, savePath, quality = 'best') {
+    logDebug('Starting download:', { url, filename, savePath, quality });
     
-    const isHLS = url.includes('.m3u8');
-    const ffmpegArgs = isHLS ? [
-        '-protocol_whitelist', 'file,http,https,tcp,tls,crypto',
-        '-i', url,
-        '-c', 'copy',
-        '-bsf:a', 'aac_adtstoasc',
-        outputPath
-    ] : [
-        '-i', url,
-        '-c', 'copy',
-        outputPath
-    ];
+    try {
+        // Ensure proper file extension
+        let outputFilename = filename.replace(/\.(m3u8|ts)$/, '.mp4');
+        
+        // Set output path
+        const finalOutput = savePath ? 
+            path.join(savePath, outputFilename) : 
+            path.join(process.env.HOME, 'Downloads', outputFilename);
 
-    logDebug('FFmpeg command:', FFMPEG_PATH, ffmpegArgs.join(' '));
-    
-    return new Promise((resolve, reject) => {
-        const ffmpeg = spawn(FFMPEG_PATH, ffmpegArgs, { env: getFullEnv() });
-        let errorOutput = '';
+        logDebug('Output file will be:', finalOutput);
 
-        ffmpeg.stderr.on('data', (data) => {
-            errorOutput += data.toString();
-            logDebug(`ffmpeg stderr: ${data}`);
+        // Basic FFmpeg args that work for both HLS and regular videos
+        const ffmpegArgs = [
+            '-i', url,
+            '-c', 'copy',
+            '-bsf:a', 'aac_adtstoasc',
+            finalOutput
+        ];
+
+        if (url.includes('.m3u8')) {
+            ffmpegArgs.unshift('-protocol_whitelist', 'file,http,https,tcp,tls,crypto');
+        }
+
+        logDebug('FFmpeg command:', FFMPEG_PATH, ffmpegArgs.join(' '));
+
+        return new Promise((resolve, reject) => {
+            const ffmpeg = spawn(FFMPEG_PATH, ffmpegArgs, { 
+                env: getFullEnv()
+            });
+
+            let errorOutput = '';
+
+            ffmpeg.stderr.on('data', (data) => {
+                const output = data.toString();
+                errorOutput += output;
+                logDebug('FFmpeg stderr:', output);
+            });
+
+            ffmpeg.on('close', (code) => {
+                if (code === 0) {
+                    logDebug('Download completed successfully');
+                    sendResponse({ success: true, path: finalOutput });
+                    resolve();
+                } else {
+                    const error = `FFmpeg exited with code ${code}: ${errorOutput}`;
+                    logDebug('Download failed:', error);
+                    sendResponse({ error });
+                    reject(new Error(error));
+                }
+            });
+
+            ffmpeg.on('error', (err) => {
+                logDebug('FFmpeg spawn error:', err);
+                sendResponse({ error: err.message });
+                reject(err);
+            });
         });
-
-        ffmpeg.on('close', (code) => {
-            if (code === 0) {
-                sendResponse({ success: true, path: outputPath });
-                resolve();
-            } else {
-                const error = `FFmpeg exited with code ${code}: ${errorOutput}`;
-                logDebug(error);
-                sendResponse({ error });
-                reject(new Error(error));
-            }
-        });
-
-        ffmpeg.on('error', (err) => {
-            logDebug('FFmpeg spawn error:', err);
-            sendResponse({ error: err.message });
-            reject(err);
-        });
-    });
+    } catch (err) {
+        logDebug('Download error:', err);
+        sendResponse({ error: err.message });
+        throw err;
+    }
 }
 
 async function getStreamQualities(url) {
@@ -274,25 +297,28 @@ function generatePreview(url) {
 
 function sendResponse(message) {
     try {
+        // Rate limit messages
+        const now = Date.now();
+        if (now - lastResponseTime < MIN_RESPONSE_INTERVAL) {
+            return; // Skip this update if too soon
+        }
+        lastResponseTime = now;
+
         const messageStr = JSON.stringify(message);
         const header = Buffer.alloc(4);
         header.writeUInt32LE(messageStr.length, 0);
         
-        process.stdout.write(header);
-        process.stdout.write(messageStr);
-        
-        logDebug('Sent response:', message);
-    } catch (err) {
-        logDebug('Error sending response:', err);
-        try {
-            const errorMessage = JSON.stringify({ error: err.message });
-            const errorHeader = Buffer.alloc(4);
-            errorHeader.writeUInt32LE(errorMessage.length, 0);
-            process.stdout.write(errorHeader);
-            process.stdout.write(errorMessage);
-        } catch (e) {
-            logDebug('Failed to send error response:', e);
+        // Check if stdout is still writable
+        if (process.stdout.writable) {
+            process.stdout.write(header);
+            process.stdout.write(messageStr);
+            logDebug('Sent response:', message);
+        } else {
+            logDebug('Cannot send response - pipe closed');
         }
+    } catch (err) {
+        // Only log the error, don't try to send error response
+        logDebug('Error sending response:', err);
     }
 }
 
