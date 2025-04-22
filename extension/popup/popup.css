@@ -33,6 +33,7 @@ body.theme-light {
     height: 100%;
     width: 100%;
     overflow: hidden;
+    padding-right: 6px;
 }
 
 /* App title */
@@ -172,6 +173,7 @@ body.theme-light {
     padding: 0;
     transition: background-color 0.3s;
     position: relative;
+    scrollbar-gutter: stable;
 }
 
 .videos-container {
@@ -230,49 +232,50 @@ body.theme-light {
 
 /* Dark theme headers */
 .theme-dark .media-type-header.hls {
-    background-color: #1a237e;
+    background-color: #ff5f5f;
 }
 
 .theme-dark .media-type-header.dash {
-    background-color: #1b5e20;
+    background-color: #5f9fff;
 }
 
 .theme-dark .media-type-header.direct {
-    background-color: #e65100;
+    background-color: #5fff7f;
+    color: #333;
 }
 
 .theme-dark .media-type-header.blob {
-    background-color: #4a148c;
+    background-color: #ff5fff;
 }
 
 .theme-dark .media-type-header.unknown {
-    background-color: #37474f;
+    background-color: #7f7f7f;
 }
 
 /* Light theme headers */
 .theme-light .media-type-header.hls {
-    background-color: #E3F2FD;
-    color: #0d47a1;
+    background-color: #ffebeb;
+    color: #c83737;
 }
 
 .theme-light .media-type-header.dash {
-    background-color: #E8F5E9;
-    color: #1b5e20;
+    background-color: #e5f0ff;
+    color: #2a65b3;
 }
 
 .theme-light .media-type-header.direct {
-    background-color: #FFF3E0;
-    color: #e65100;
+    background-color: #e5ffe5;
+    color: #258f25;
 }
 
 .theme-light .media-type-header.blob {
-    background-color: #F3E5F5;
-    color: #4a148c;
+    background-color: #ffe5ff;
+    color: #b329b3;
 }
 
 .theme-light .media-type-header.unknown {
-    background-color: #ECEFF1;
-    color: #263238;
+    background-color: #e5e5e5;
+    color: #444;
 }
 
 .media-type-title {
