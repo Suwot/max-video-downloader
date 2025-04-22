@@ -240,11 +240,14 @@ async function downloadVideo(url, filename, savePath, quality = 'best') {
 }
 
 async function getStreamQualities(url) {
+    logDebug('Getting stream qualities for:', url);
+    
     return new Promise((resolve, reject) => {
         const ffprobe = spawn(FFPROBE_PATH, [
             '-v', 'quiet',
             '-print_format', 'json',
             '-show_streams',
+            '-show_format',
             url
         ], { env: getFullEnv() });
 
@@ -256,40 +259,46 @@ async function getStreamQualities(url) {
         });
 
         ffprobe.stderr.on('data', (data) => {
-            errorOutput += data.toString();
-            logDebug(`ffprobe stderr: ${data}`);
+            errorOutput += data;
         });
 
         ffprobe.on('close', (code) => {
-            if (code === 0) {
+            if (code === 0 && output) {
                 try {
-                    const data = JSON.parse(output);
-                    const videoStream = data.streams.find(stream => stream.codec_type === 'video');
+                    const info = JSON.parse(output);
+                    const videoStream = info.streams.find(s => s.codec_type === 'video');
                     
                     if (videoStream) {
                         const streamInfo = {
-                            width: videoStream.width,
-                            height: videoStream.height,
-                            fps: Math.round(eval(videoStream.r_frame_rate)), // Convert "30/1" to 30
-                            bitrate: videoStream.bit_rate ? Math.round(videoStream.bit_rate / 1000) : null
+                            width: parseInt(videoStream.width) || null,
+                            height: parseInt(videoStream.height) || null,
+                            fps: parseFloat(videoStream.r_frame_rate) || null,
+                            codec: videoStream.codec_name,
+                            bitrate: parseInt(videoStream.bit_rate) || null
                         };
+                        
+                        logDebug('Stream info:', streamInfo);
                         sendResponse({ streamInfo });
                     } else {
+                        logDebug('No video stream found');
                         sendResponse({ error: 'No video stream found' });
                     }
-                } catch (e) {
-                    logDebug('Failed to parse stream info:', e);
+                } catch (err) {
+                    logDebug('Failed to parse ffprobe output:', err);
                     sendResponse({ error: 'Failed to parse stream info' });
                 }
             } else {
-                const error = `FFprobe exited with code ${code}: ${errorOutput}`;
+                const error = `FFprobe failed with code ${code}: ${errorOutput}`;
+                logDebug(error);
                 sendResponse({ error });
             }
+            resolve();
         });
 
         ffprobe.on('error', (err) => {
             logDebug('FFprobe spawn error:', err);
             sendResponse({ error: err.message });
+            resolve();
         });
     });
 }

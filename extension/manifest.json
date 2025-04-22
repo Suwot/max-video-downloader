@@ -10,7 +10,8 @@
       "nativeMessaging",
       "webRequest",
       "notifications",
-      "downloads.shelf"
+      "downloads.shelf",
+      "storage"
     ],
     "host_permissions": [
       "<all_urls>"
