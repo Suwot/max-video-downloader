@@ -102,8 +102,8 @@ body.theme-light {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 8px;
-    z-index: 10;
+    padding: 6px;
+    z-index: 101;
     transition: background-color 0.3s, border-color 0.3s, box-shadow 0.3s;
 }
 
@@ -167,10 +167,11 @@ body.theme-light {
     flex: 1;
     overflow-y: auto;
     overflow-x: hidden;
-    height: calc(100% - 110px);
+    height: calc(100% - 46px);
     scroll-behavior: smooth;
     padding: 0;
     transition: background-color 0.3s;
+    position: relative;
 }
 
 .videos-container {
@@ -187,10 +188,11 @@ body.theme-light {
 
 /* Media Type Groups */
 .media-type-group {
-    margin-bottom: 8px;
+    margin-bottom: 4px;
     border-radius: 4px;
     overflow: visible;
     transition: box-shadow 0.3s, background-color 0.3s;
+    position: relative;
 }
 
 .theme-dark .media-type-group {
@@ -207,9 +209,12 @@ body.theme-light {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 6px 10px;
+    padding: 4px 8px;
     cursor: pointer;
     transition: background-color 0.3s, border-color 0.3s, color 0.3s;
+    position: sticky;
+    top: 0;
+    z-index: 100;
 }
 
 /* Theme specific header colors */
@@ -315,8 +320,8 @@ body.theme-light {
 /* Video Item */
 .video-item {
     display: flex;
-    margin-bottom: 4px;
-    padding: 8px;
+    margin-bottom: 2px;
+    padding: 6px;
     transition: background-color 0.3s, border-color 0.3s;
     align-items: flex-start;
 }
@@ -336,16 +341,16 @@ body.theme-light {
 }
 
 .preview-column {
-    width: 120px;
+    width: 100px;
     flex-shrink: 0;
-    margin-right: 10px;
+    margin-right: 8px;
 }
 
 .preview-container {
     position: relative;
-    width: 120px;
-    height: 75px;
-    border-radius: 6px;
+    width: 100px;
+    height: 62px;
+    border-radius: 4px;
     overflow: hidden;
 }
 
@@ -420,13 +425,13 @@ body.theme-light {
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
-    margin-bottom: 6px;
+    margin-bottom: 4px;
     width: 100%;
 }
 
 .video-title {
     flex: 1;
-    font-size: 14px;
+    font-size: 13px;
     font-weight: 500;
     margin: 0;
     overflow: hidden;
@@ -436,6 +441,7 @@ body.theme-light {
     -webkit-box-orient: vertical;
     word-break: break-word;
     max-width: calc(100% - 30px);
+    line-height: 1.2;
 }
 
 .theme-dark .video-title {
@@ -493,9 +499,9 @@ body.theme-light {
 .file-info {
     display: flex;
     flex-direction: column;
-    gap: 5px;
-    margin: 5px 0;
-    font-size: 12px;
+    gap: 3px;
+    margin: 3px 0;
+    font-size: 11px;
     width: 100%;
 }
 
@@ -518,9 +524,9 @@ body.theme-light {
 .media-type-info {
     display: flex;
     align-items: center;
-    padding: 2px 6px;
-    border-radius: 4px;
-    font-size: 12px;
+    padding: 1px 4px;
+    border-radius: 3px;
+    font-size: 11px;
 }
 
 .media-type-info svg {
@@ -592,13 +598,13 @@ body.theme-light {
 /* Download button */
 .download-group {
     display: flex;
-    gap: 6px;
-    margin-top: auto;
+    gap: 4px;
+    margin-top: 4px;
 }
 
 .download-btn {
     flex: 1;
-    padding: 4px 8px;
+    padding: 3px 6px;
     background-color: #1976D2;
     color: white;
     border: none;
