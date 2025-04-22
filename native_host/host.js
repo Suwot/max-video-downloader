@@ -4,13 +4,14 @@
 const fs = require('fs');
 const path = require('path');
 const { spawn, execSync } = require('child_process');
+const os = require('os');
 
 // Use detected FFmpeg paths
 let FFMPEG_PATH;
 let FFPROBE_PATH;
 
 // Debug logging
-const LOG_FILE = path.join(process.env.HOME, '.cache', 'video-downloader.log');
+const LOG_FILE = path.join(process.env.HOME || os.homedir(), '.cache', 'video-downloader.log');
 function logDebug(...args) {
     const message = args.map(arg => 
         typeof arg === 'object' ? JSON.stringify(arg) : arg
@@ -21,9 +22,37 @@ function logDebug(...args) {
 // Verify ffmpeg installation at startup
 function checkFFmpeg() {
     try {
-        // Hardcode the paths based on your system
-        FFMPEG_PATH = '/opt/homebrew/bin/ffmpeg';  // Replace with your actual path from `which ffmpeg`
-        FFPROBE_PATH = '/opt/homebrew/bin/ffprobe'; // Replace with your actual path from `which ffprobe`
+        // Try to auto-detect ffmpeg paths first
+        try {
+            const findCommand = process.platform === 'win32' ? 'where' : 'which';
+            FFMPEG_PATH = execSync(`${findCommand} ffmpeg`).toString().trim();
+            FFPROBE_PATH = execSync(`${findCommand} ffprobe`).toString().trim();
+            logDebug('Auto-detected FFmpeg at:', FFMPEG_PATH);
+            logDebug('Auto-detected FFprobe at:', FFPROBE_PATH);
+        } catch (autoDetectError) {
+            logDebug('Could not auto-detect FFmpeg, using hardcoded paths');
+            
+            // Fallback to hardcoded paths based on platform
+            if (process.platform === 'darwin') {
+                // macOS - common Homebrew/MacPorts locations
+                FFMPEG_PATH = '/opt/homebrew/bin/ffmpeg';
+                FFPROBE_PATH = '/opt/homebrew/bin/ffprobe';
+                
+                // Check for Intel Mac Homebrew location if M1 location fails
+                if (!fs.existsSync(FFMPEG_PATH)) {
+                    FFMPEG_PATH = '/usr/local/bin/ffmpeg';
+                    FFPROBE_PATH = '/usr/local/bin/ffprobe';
+                }
+            } else if (process.platform === 'win32') {
+                // Windows
+                FFMPEG_PATH = 'C:\\ffmpeg\\bin\\ffmpeg.exe';
+                FFPROBE_PATH = 'C:\\ffmpeg\\bin\\ffprobe.exe';
+            } else {
+                // Linux/other
+                FFMPEG_PATH = '/usr/bin/ffmpeg';
+                FFPROBE_PATH = '/usr/bin/ffprobe';
+            }
+        }
         
         // Verify the files exist
         if (!fs.existsSync(FFMPEG_PATH) || !fs.existsSync(FFPROBE_PATH)) {
@@ -40,9 +69,21 @@ function checkFFmpeg() {
 }
 
 function getFullEnv() {
+    // Get a complete environment with PATH that includes common locations
+    const extraPaths = [
+        '/opt/homebrew/bin',
+        '/usr/local/bin',
+        '/usr/bin',
+        '/bin',
+        '/usr/sbin',
+        '/sbin'
+    ];
+    
+    const path = extraPaths.join(process.platform === 'win32' ? ';' : ':');
+    
     return {
         ...process.env,
-        PATH: '/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin'
+        PATH: `${path}:${process.env.PATH || ''}`
     };
 }
 
@@ -54,12 +95,12 @@ try {
         // Log all environment info for debugging
         logDebug('PATH:', process.env.PATH);
         logDebug('Current working directory:', process.cwd());
-        logDebug('User home:', process.env.HOME);
+        logDebug('User home:', process.env.HOME || os.homedir());
         process.exit(1);
     }
 
     // Create cache directory
-    const cacheDir = path.join(process.env.HOME, '.cache');
+    const cacheDir = path.join(process.env.HOME || os.homedir(), '.cache');
     if (!fs.existsSync(cacheDir)) {
         fs.mkdirSync(cacheDir, { recursive: true });
     }
@@ -164,15 +205,34 @@ async function downloadVideo(url, filename, savePath, quality = 'best') {
     logDebug('Starting download:', { url, filename, savePath, quality });
     
     try {
-        // Ensure proper file extension
-        let outputFilename = filename.replace(/\.(m3u8|ts)$/, '.mp4');
+        // Determine video type from URL
+        const videoType = getVideoTypeFromUrl(url);
         
-        // Set output path
+        // Ensure proper file extension
+        let outputFilename = filename || 'video.mp4';
+        
+        // Clean up filename:
+        // 1. Remove query params
+        outputFilename = outputFilename.replace(/[?#].*$/, '');
+        
+        // 2. Replace manifest extensions with MP4
+        if (videoType === 'hls' || videoType === 'dash') {
+            outputFilename = outputFilename.replace(/\.(m3u8|mpd|ts)$/, '.mp4');
+        }
+        
+        // 3. Make sure we have a video extension for direct URLs
+        if (videoType === 'direct' && !/\.(mp4|webm|mov|avi|mkv|flv)$/i.test(outputFilename)) {
+            outputFilename += '.mp4';
+        }
+        
+        // Set output path - prefer desktop by default
+        const defaultDir = path.join(process.env.HOME || os.homedir(), 'Desktop');
+        
         const finalOutput = savePath ? 
             (savePath === 'Desktop' ? 
-                path.join(process.env.HOME, 'Desktop', outputFilename) : 
+                path.join(defaultDir, outputFilename) : 
                 path.join(savePath, outputFilename)) : 
-            path.join(process.env.HOME, 'Desktop', outputFilename);
+            path.join(defaultDir, outputFilename);
 
         // Check if file exists and append number if needed
         let counter = 1;
@@ -186,17 +246,28 @@ async function downloadVideo(url, filename, savePath, quality = 'best') {
 
         logDebug('Output file will be:', uniqueOutput);
 
-        // Basic FFmpeg args that work for both HLS and regular videos
-        const ffmpegArgs = [
-            '-i', url,
-            '-c', 'copy',
-            '-bsf:a', 'aac_adtstoasc',
-            uniqueOutput
-        ];
-
-        if (url.includes('.m3u8')) {
-            ffmpegArgs.unshift('-protocol_whitelist', 'file,http,https,tcp,tls,crypto');
+        // Build FFmpeg args based on video type
+        let ffmpegArgs = [];
+        
+        // Common input parameters for all types
+        if (videoType === 'hls' || videoType === 'dash') {
+            // Streaming protocol support for HLS/DASH
+            ffmpegArgs.push(
+                '-protocol_whitelist', 'file,http,https,tcp,tls,crypto',
+                '-i', url
+            );
+        } else {
+            // Direct video
+            ffmpegArgs.push('-i', url);
         }
+        
+        // Output parameters - try to copy streams when possible
+        ffmpegArgs = ffmpegArgs.concat([
+            '-c', 'copy',            // Copy streams without re-encoding
+            '-bsf:a', 'aac_adtstoasc', // Fix for certain audio streams
+            '-movflags', '+faststart',  // Optimize for streaming playback
+            uniqueOutput
+        ]);
 
         logDebug('FFmpeg command:', FFMPEG_PATH, ffmpegArgs.join(' '));
 
@@ -206,10 +277,34 @@ async function downloadVideo(url, filename, savePath, quality = 'best') {
             });
 
             let errorOutput = '';
+            let progressOutput = '';
+            let lastProgressUpdate = 0;
 
             ffmpeg.stderr.on('data', (data) => {
                 const output = data.toString();
                 errorOutput += output;
+                progressOutput += output;
+                
+                // Parse progress and send updates, but not too frequently
+                const now = Date.now();
+                if (now - lastProgressUpdate > 1000) {
+                    lastProgressUpdate = now;
+                    
+                    // Extract progress information
+                    const timeMatch = progressOutput.match(/time=(\d+:\d+:\d+.\d+)/);
+                    if (timeMatch) {
+                        const timeStr = timeMatch[1];
+                        const [hours, minutes, seconds] = timeStr.split(':').map(parseFloat);
+                        const totalSeconds = hours * 3600 + minutes * 60 + seconds;
+                        
+                        // Send progress update
+                        sendResponse({ 
+                            type: 'progress',
+                            progress: Math.min(99, Math.round(totalSeconds / 10)) // Simple estimate
+                        });
+                    }
+                }
+                
                 logDebug('FFmpeg stderr:', output);
             });
 
@@ -239,8 +334,28 @@ async function downloadVideo(url, filename, savePath, quality = 'best') {
     }
 }
 
+function getVideoTypeFromUrl(url) {
+    if (url.includes('.m3u8')) {
+        return 'hls';
+    } else if (url.includes('.mpd')) {
+        return 'dash';
+    } else if (/\.(mp4|webm|ogg|mov|avi|mkv|flv)/i.test(url)) {
+        return 'direct';
+    } else if (url.startsWith('blob:')) {
+        return 'blob';
+    } else {
+        return 'unknown';
+    }
+}
+
 async function getStreamQualities(url) {
     logDebug('Getting stream qualities for:', url);
+    
+    // Skip for blob URLs
+    if (url.startsWith('blob:')) {
+        sendResponse({ error: 'Cannot analyze blob URLs' });
+        return;
+    }
     
     return new Promise((resolve, reject) => {
         const ffprobe = spawn(FFPROBE_PATH, [
@@ -267,50 +382,120 @@ async function getStreamQualities(url) {
                 try {
                     const info = JSON.parse(output);
                     const videoStream = info.streams.find(s => s.codec_type === 'video');
+                    const audioStream = info.streams.find(s => s.codec_type === 'audio');
                     
+                    const streamInfo = {};
+                    
+                    // Video stream info
                     if (videoStream) {
-                        const streamInfo = {
-                            width: parseInt(videoStream.width) || null,
-                            height: parseInt(videoStream.height) || null,
-                            fps: parseFloat(videoStream.r_frame_rate) || null,
-                            codec: videoStream.codec_name,
-                            bitrate: parseInt(videoStream.bit_rate) || null
-                        };
+                        const width = parseInt(videoStream.width) || null;
+                        const height = parseInt(videoStream.height) || null;
                         
-                        logDebug('Stream info:', streamInfo);
-                        sendResponse({ streamInfo });
-                    } else {
-                        logDebug('No video stream found');
-                        sendResponse({ error: 'No video stream found' });
+                        // Calculate framerate from either r_frame_rate or avg_frame_rate
+                        let fps = null;
+                        try {
+                            if (videoStream.r_frame_rate) {
+                                const [num, den] = videoStream.r_frame_rate.split('/').map(Number);
+                                if (den && num) fps = num / den;
+                            } else if (videoStream.avg_frame_rate) {
+                                const [num, den] = videoStream.avg_frame_rate.split('/').map(Number);
+                                if (den && num) fps = num / den;
+                            }
+                        } catch (e) {
+                            logDebug('Error parsing framerate:', e);
+                        }
+                        
+                        // Extract bitrate from video stream or format
+                        let bitrate = null;
+                        if (videoStream.bit_rate) {
+                            bitrate = parseInt(videoStream.bit_rate);
+                        }
+                        
+                        // Set video properties
+                        streamInfo.width = width;
+                        streamInfo.height = height;
+                        streamInfo.fps = fps;
+                        streamInfo.codec = videoStream.codec_name;
+                        streamInfo.bitrate = bitrate;
                     }
-                } catch (err) {
-                    logDebug('Failed to parse ffprobe output:', err);
+                    
+                    // Audio stream info
+                    if (audioStream) {
+                        streamInfo.audio_codec = audioStream.codec_name;
+                        if (audioStream.bit_rate) {
+                            streamInfo.audio_bitrate = parseInt(audioStream.bit_rate);
+                        }
+                    }
+                    
+                    // Format info (contains size and duration)
+                    if (info.format) {
+                        // Get duration
+                        if (info.format.duration) {
+                            streamInfo.duration = parseFloat(info.format.duration);
+                        }
+                        
+                        // Get file size if available
+                        if (info.format.size) {
+                            streamInfo.sizeBytes = parseInt(info.format.size);
+                        }
+                        
+                        // Get overall bitrate if available
+                        if (info.format.bit_rate && !streamInfo.bitrate) {
+                            streamInfo.bitrate = parseInt(info.format.bit_rate);
+                        }
+                    }
+                    
+                    // Calculate estimated size if size is not provided but bitrate and duration are
+                    if (!streamInfo.sizeBytes && streamInfo.bitrate && streamInfo.duration) {
+                        // Calculate estimated size in bytes (bitrate is in bits per second)
+                        streamInfo.sizeBytes = Math.round((streamInfo.bitrate * streamInfo.duration) / 8);
+                    }
+                    
+                    // Send stream info
+                    sendResponse({ 
+                        success: true, 
+                        streamInfo: streamInfo
+                    });
+                    
+                    // Log what we found
+                    logDebug('Stream info:', streamInfo);
+                    
+                    resolve();
+                } catch (error) {
+                    logDebug('Error parsing FFprobe output:', error);
                     sendResponse({ error: 'Failed to parse stream info' });
+                    resolve();
                 }
             } else {
-                const error = `FFprobe failed with code ${code}: ${errorOutput}`;
-                logDebug(error);
-                sendResponse({ error });
+                logDebug('FFprobe failed with code:', code, 'Error:', errorOutput);
+                sendResponse({ error: 'Failed to analyze video' });
+                resolve();
             }
-            resolve();
         });
 
         ffprobe.on('error', (err) => {
             logDebug('FFprobe spawn error:', err);
-            sendResponse({ error: err.message });
+            sendResponse({ error: 'Failed to start FFprobe: ' + err.message });
             resolve();
         });
     });
 }
 
 function generatePreview(url) {
+    // Skip for blob URLs
+    if (url.startsWith('blob:')) {
+        sendResponse({ error: 'Cannot generate preview for blob URLs' });
+        return Promise.resolve();
+    }
+    
     return new Promise((resolve, reject) => {
-        const previewPath = path.join(process.env.HOME, '.cache', 'video-preview-' + Date.now() + '.jpg');
+        const previewPath = path.join(process.env.HOME || os.homedir(), '.cache', 'video-preview-' + Date.now() + '.jpg');
         const ffmpeg = spawn(FFMPEG_PATH, [
-            '-ss', '00:00:01',
+            '-ss', '00:00:01',  // Skip to 1 second in
             '-i', url,
-            '-vframes', '1',
-            '-vf', 'scale=120:-1',
+            '-vframes', '1',    // Extract one frame
+            '-vf', 'scale=120:-1',  // Scale to 120px width
+            '-q:v', '2',        // High quality
             previewPath
         ], { env: getFullEnv() });
 

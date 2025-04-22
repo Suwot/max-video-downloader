@@ -1,8 +1,8 @@
 {
     "manifest_version": 3,
-    "name": "Video Downloader",
+    "name": "Universal Video Downloader",
     "version": "1.0",
-    "description": "Download videos from any website",
+    "description": "Download videos from any website - supports HLS, DASH, direct videos, and blob URLs",
     "permissions": [
       "activeTab",
       "scripting",
