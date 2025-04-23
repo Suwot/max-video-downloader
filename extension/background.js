@@ -1,56 +1,215 @@
 // Add at the top of the file
+import { NativeConnection } from './popup/js/native-connection.js';
+
 let previewGenerationQueue = new Map();
 // Store all detected videos per tab
 const videosPerTab = {};
 // Store HLS playlists per tab
 const playlistsPerTab = {};
 
-// Receive native‑host responses
-chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-  console.log('hostResponse:', msg);
-  if (msg.type === 'downloadHLS' || msg.type === 'download') {
-    const notificationId = `download-${Date.now()}`;
-    let hasError = false;
+// Create native connection instance
+const nativeConnection = new NativeConnection();
 
-    // Show initial notification
-    chrome.notifications.create(notificationId, {
-      type: 'basic',
-      iconUrl: 'icons/48.png',
-      title: 'Downloading Video',
-      message: 'Starting download...'
+// Health check interval
+const HEALTH_CHECK_INTERVAL = 60000; // 1 minute
+
+// Keep track of the service worker's active status
+let isServiceWorkerActive = true;
+
+// Setup health check
+function setupHealthCheck() {
+    // Check native host connection periodically
+    const healthCheckInterval = setInterval(async () => {
+        if (!isServiceWorkerActive) {
+            clearInterval(healthCheckInterval);
+            return;
+        }
+
+        try {
+            const isConnected = await nativeConnection.checkNativeHost();
+            console.log('Native host connection status:', isConnected ? 'Connected' : 'Disconnected');
+        } catch (error) {
+            console.error('Error checking native host connection:', error);
+        }
+    }, HEALTH_CHECK_INTERVAL);
+    
+    // Listen for service worker lifecycle events
+    self.addEventListener('activate', () => {
+        console.log('Service worker activated');
+        isServiceWorkerActive = true;
     });
+    
+    self.addEventListener('install', () => {
+        console.log('Service worker installed');
+    });
+    
+    // Properly handle when service worker is about to be terminated
+    self.addEventListener('beforeunload', () => {
+        isServiceWorkerActive = false;
+        if (nativeConnection && nativeConnection.connected) {
+            nativeConnection.disconnect();
+        }
+    });
+}
 
-    chrome.runtime.sendNativeMessage('com.mycompany.ffmpeg', {
+// Initialize on startup
+setupHealthCheck();
+
+// Receive runtime messages
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  console.log('Background message received:', msg);
+  
+  // Native host commands that need to be routed to the native connection
+  if (msg.type === 'native-command') {
+    handleNativeCommand(msg, sendResponse);
+    return true; // Keep the message channel open
+  }
+
+  if (msg.type === 'downloadHLS' || msg.type === 'download') {
+    handleDownload(msg, sendResponse);
+    return true; // Keep the message channel open
+  }
+
+  if (msg.type === 'generatePreview') {
+    handlePreviewGeneration(msg, sendResponse);
+    return true; // Keep the message channel open
+  }
+
+  if (msg.type === 'getHLSQualities') {
+    handleGetQualities(msg, sendResponse);
+    return true; // Keep the message channel open
+  }
+  
+  if (msg.type === 'checkNativeConnection') {
+    nativeConnection.checkNativeHost().then(isConnected => {
+      sendResponse({
+        connected: isConnected,
+        error: isConnected ? null : nativeConnection.getConnectionErrorDetails()
+      });
+    }).catch(error => {
+      sendResponse({
+        connected: false,
+        error: error.message
+      });
+    });
+    return true; // Keep the message channel open
+  }
+  
+  return false;
+});
+
+/**
+ * Handle generic native commands
+ */
+function handleNativeCommand(msg, sendResponse) {
+  // Ensure we have a fresh connection for each command
+  nativeConnection.connect().then(connected => {
+    if (!connected) {
+      sendResponse({
+        success: false,
+        error: 'Could not connect to native host',
+        details: nativeConnection.getConnectionErrorDetails()
+      });
+      return;
+    }
+    
+    nativeConnection.sendMessage({
+      type: msg.command,
+      ...msg.params
+    }).then(response => {
+      sendResponse({
+        success: true,
+        data: response
+      });
+    }).catch(error => {
+      console.error('Native command error:', error);
+      sendResponse({
+        success: false,
+        error: error.message
+      });
+    });
+  });
+}
+
+/**
+ * Handle video/HLS download requests
+ */
+function handleDownload(msg, sendResponse) {
+  const notificationId = `download-${Date.now()}`;
+  let hasError = false;
+
+  // Show initial notification
+  chrome.notifications.create(notificationId, {
+    type: 'basic',
+    iconUrl: 'icons/48.png',
+    title: 'Downloading Video',
+    message: 'Starting download...'
+  });
+
+  // Ensure we have a fresh connection
+  nativeConnection.connect().then(connected => {
+    if (!connected) {
+      chrome.notifications.update(notificationId, {
+        title: 'Download Failed',
+        message: `Could not connect to native host. ${nativeConnection.getConnectionErrorDetails()}`
+      });
+      sendResponse({ success: false, error: 'Could not connect to native host' });
+      return;
+    }
+    
+    // Use native connection to send message
+    nativeConnection.sendMessage({
       type: 'download',
       url: msg.url,
+      format: msg.type || 'direct',
       filename: msg.filename || 'video.mp4',
       savePath: msg.savePath,
-      quality: msg.quality
-    }, response => {
-      if (chrome.runtime.lastError) {
-        console.error('Native messaging error:', chrome.runtime.lastError);
-        if (!hasError) {
-          hasError = true;
-          chrome.notifications.update(notificationId, {
-            title: 'Download Failed',
-            message: chrome.runtime.lastError.message
-          });
-          sendResponse({ success: false, error: chrome.runtime.lastError.message });
-        }
-        return;
-      }
+      quality: msg.quality,
+      downloadId: msg.downloadId || notificationId
+    }).then(response => {
+      if (response.status === 'started') {
+        // Add progress listener for this download
+        const listenerId = nativeConnection.addEventListener('progress', progressData => {
+          if (progressData.downloadId === msg.downloadId || progressData.downloadId === notificationId) {
+            // Update notification with progress
+            chrome.notifications.update(notificationId, {
+              message: `Downloading: ${progressData.progress}%`
+            });
 
-      if (response && response.type === 'progress' && !hasError) {
-        chrome.notifications.update(notificationId, {
-          message: `Downloading: ${response.progress}%`
+            // If download is complete, clean up
+            if (progressData.progress >= 100 || progressData.status === 'completed') {
+              chrome.notifications.update(notificationId, {
+                title: 'Download Complete',
+                message: `Saved to: ${progressData.path || 'your downloads folder'}`
+              });
+              
+              // Remove the progress listener
+              nativeConnection.removeEventListener('progress', listenerId);
+              
+              // Send success response if not yet sent
+              if (!hasError) {
+                sendResponse({ success: true, path: progressData.path });
+              }
+            } else if (progressData.status === 'error') {
+              // Handle error in progress
+              hasError = true;
+              chrome.notifications.update(notificationId, {
+                title: 'Download Failed',
+                message: progressData.error || 'Unknown error occurred'
+              });
+              
+              // Remove the progress listener
+              nativeConnection.removeEventListener('progress', listenerId);
+              
+              // Send error response
+              sendResponse({ success: false, error: progressData.error });
+            }
+          }
         });
-      } else if (response && response.success && !hasError) {
-        chrome.notifications.update(notificationId, {
-          title: 'Download Complete',
-          message: `Saved to: ${response.path}`
-        });
-        sendResponse({ success: true, path: response.path });
-      } else if (response && response.error && !hasError) {
+        
+        // Return success initial status
+        sendResponse({ success: true, status: 'started' });
+      } else if (response.error) {
         hasError = true;
         chrome.notifications.update(notificationId, {
           title: 'Download Failed',
@@ -58,93 +217,32 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         });
         sendResponse({ success: false, error: response.error });
       }
+    }).catch(error => {
+      console.error('Native messaging error:', error);
+      if (!hasError) {
+        hasError = true;
+        chrome.notifications.update(notificationId, {
+          title: 'Download Failed',
+          message: error.message || 'Failed to communicate with native host'
+        });
+        sendResponse({ success: false, error: error.message });
+      }
     });
-    
-    return true;
-  }
-
-  if (msg.type === 'generatePreview') {
-    // Check if we're already generating this preview
-    const cacheKey = msg.url;
-    if (previewGenerationQueue.has(cacheKey)) {
-      // If we are, wait for the existing promise
-      previewGenerationQueue.get(cacheKey).then(sendResponse);
-      return true;
-    }
-
-    // Create new preview generation promise
-    const previewPromise = new Promise(resolve => {
-      chrome.runtime.sendNativeMessage('com.mycompany.ffmpeg', {
-        type: 'generatePreview',
-        url: msg.url
-      }, response => {
-        previewGenerationQueue.delete(cacheKey);
-        
-        // If we successfully generated a preview, cache it with the video
-        if (response && response.previewUrl && msg.tabId && videosPerTab[msg.tabId]) {
-          const normalizedUrl = normalizeUrl(msg.url);
-          const videoInfo = videosPerTab[msg.tabId].get(normalizedUrl);
-          if (videoInfo) {
-            videoInfo.previewUrl = response.previewUrl;
-            videosPerTab[msg.tabId].set(normalizedUrl, videoInfo);
-          }
-        }
-        
-        resolve(response);
-      });
-    });
-
-    // Store the promise
-    previewGenerationQueue.set(cacheKey, previewPromise);
-    
-    // Wait for the preview and send it
-    previewPromise.then(sendResponse);
-    return true;
-  }
-
-  if (msg.type === 'getHLSQualities') {
-    // Create promise for quality detection
-    const qualityPromise = new Promise(resolve => {
-      chrome.runtime.sendNativeMessage('com.mycompany.ffmpeg', {
-        type: 'getQualities',
-        url: msg.url
-      }, response => {
-        // If we got stream info, save it with the video
-        if (response && response.streamInfo && msg.tabId && videosPerTab[msg.tabId]) {
-          const normalizedUrl = normalizeUrl(msg.url);
-          const videoInfo = videosPerTab[msg.tabId].get(normalizedUrl);
-          if (videoInfo) {
-            videoInfo.resolution = {
-              width: response.streamInfo.width,
-              height: response.streamInfo.height,
-              fps: response.streamInfo.fps,
-              bitrate: response.streamInfo.bitrate
-            };
-            videosPerTab[msg.tabId].set(normalizedUrl, videoInfo);
-            
-            // Log the stream info for debugging
-            console.log('Stream info updated:', {
-              url: msg.url,
-              streamInfo: response.streamInfo
-            });
-          }
-        }
-        
-        resolve(response);
-      });
-    });
-    
-    // Wait for quality info and send response
-    qualityPromise.then(sendResponse);
-    return true;
-  }
-});
+  });
+}
 
 // Add connection handling
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.type === 'ping') {
-        sendResponse({ type: 'pong' });
-        return false;
+        // Check native host connection
+        nativeConnection.connect()
+          .then(connected => {
+            sendResponse({ type: 'pong', nativeHostConnected: connected });
+          })
+          .catch(() => {
+            sendResponse({ type: 'pong', nativeHostConnected: false });
+          });
+        return true;
     }
     
     // Add video detected from content script
@@ -156,64 +254,217 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return false;
     }
     
-    // ... rest of your message handling
+    // Get stored playlists (legacy support)
+    if (message.action === 'getStoredPlaylists') {
+        const playlists = playlistsPerTab[message.tabId] 
+            ? Array.from(playlistsPerTab[message.tabId])
+            : [];
+        sendResponse(playlists);
+        return true;
+    }
+    
+    // Get all videos for a tab
+    if (message.action === 'getVideos') {
+        const tabId = message.tabId;
+        
+        if (!videosPerTab[tabId] || videosPerTab[tabId].size === 0) {
+            sendResponse([]);
+            return true;
+        }
+        
+        // Convert Map to Array for sending
+        const videos = Array.from(videosPerTab[tabId].values());
+        
+        // Sort by timestamp (newest first)
+        videos.sort((a, b) => b.timestamp - a.timestamp);
+        
+        sendResponse(videos);
+        return true;
+    }
+    
+    // Check native host status
+    if (message.action === 'checkNativeHost') {
+        nativeConnection.connect()
+          .then(connected => {
+            sendResponse({ connected });
+          })
+          .catch(error => {
+            sendResponse({ connected: false, error: error.message });
+          });
+        return true;
+    }
+    
     return true; // Will respond asynchronously
 });
 
-// Add URL normalization to prevent duplicates
-function normalizeUrl(url) {
-    // Don't normalize blob URLs
-    if (url.startsWith('blob:')) {
-        return url;
+/**
+ * Handle preview generation requests
+ */
+function handlePreviewGeneration(msg, sendResponse) {
+  // Check if we're already generating this preview
+  const cacheKey = msg.url;
+  if (previewGenerationQueue.has(cacheKey)) {
+    // If we are, wait for the existing promise
+    previewGenerationQueue.get(cacheKey).then(sendResponse);
+    return;
+  }
+
+  // Ensure we have a fresh connection
+  nativeConnection.connect().then(connected => {
+    if (!connected) {
+      sendResponse({
+        success: false,
+        error: 'Could not connect to native host',
+        details: nativeConnection.getConnectionErrorDetails()
+      });
+      return;
     }
+
+    // Create new preview generation promise
+    const previewPromise = nativeConnection.sendMessage({
+      type: 'generatePreview',
+      url: msg.url
+    }).then(response => {
+      previewGenerationQueue.delete(cacheKey);
+      
+      // If we successfully generated a preview, cache it with the video
+      if (response && response.previewUrl && msg.tabId && videosPerTab[msg.tabId]) {
+        const normalizedUrl = normalizeUrl(msg.url);
+        const videoInfo = videosPerTab[msg.tabId].get(normalizedUrl);
+        if (videoInfo) {
+          videoInfo.previewUrl = response.previewUrl;
+          videosPerTab[msg.tabId].set(normalizedUrl, videoInfo);
+        }
+      }
+      
+      return response;
+    }).catch(error => {
+      previewGenerationQueue.delete(cacheKey);
+      console.error('Preview generation error:', error);
+      return { success: false, error: error.message };
+    });
+
+    // Store the promise
+    previewGenerationQueue.set(cacheKey, previewPromise);
     
+    // Wait for the preview and send it
+    previewPromise.then(sendResponse);
+  });
+}
+
+/**
+ * Handle HLS quality detection requests
+ */
+function handleGetQualities(msg, sendResponse) {
+  // Ensure we have a fresh connection
+  nativeConnection.connect().then(connected => {
+    if (!connected) {
+      sendResponse({
+        success: false,
+        error: 'Could not connect to native host',
+        details: nativeConnection.getConnectionErrorDetails()
+      });
+      return;
+    }
+
+    // Create promise for quality detection
+    nativeConnection.sendMessage({
+      type: 'getQualities',
+      url: msg.url
+    }).then(response => {
+      // If we got stream info, save it with the video
+      if (response && response.streamInfo && msg.tabId && videosPerTab[msg.tabId]) {
+        const normalizedUrl = normalizeUrl(msg.url);
+        const videoInfo = videosPerTab[msg.tabId].get(normalizedUrl);
+        if (videoInfo) {
+          videoInfo.resolution = {
+            width: response.streamInfo.width,
+            height: response.streamInfo.height,
+            fps: response.streamInfo.fps,
+            bitrate: response.streamInfo.bitrate
+          };
+          videosPerTab[msg.tabId].set(normalizedUrl, videoInfo);
+          
+          // Log the stream info for debugging
+          console.log('Stream info updated:', {
+            url: msg.url,
+            streamInfo: response.streamInfo
+          });
+        }
+      }
+      
+      sendResponse(response);
+    }).catch(error => {
+      console.error('Get qualities error:', error);
+      sendResponse({ success: false, error: error.message });
+    });
+  });
+}
+
+/**
+ * Normalize URL for consistent mapping
+ */
+function normalizeUrl(url) {
     try {
-        const urlObj = new URL(url);
-        // Remove common parameters that don't affect the content
-        urlObj.searchParams.delete('_t');
-        urlObj.searchParams.delete('_r');
-        urlObj.searchParams.delete('cache');
-        return urlObj.origin + urlObj.pathname + urlObj.search;
-    } catch {
+        // For HLS URLs, strip parameters that don't affect content
+        if (url.includes('.m3u8') || url.includes('/manifest') || url.includes('/playlist')) {
+            const urlObj = new URL(url);
+            
+            // Keep only essential parameters for identification
+            const params = new URLSearchParams();
+            for (const [key, value] of urlObj.searchParams.entries()) {
+                // Keep only parameters that affect content
+                if (['id', 'video_id', 'v', 'format', 'quality'].includes(key)) {
+                    params.set(key, value);
+                }
+            }
+            
+            // Reconstruct URL with only essential parameters
+            urlObj.search = params.toString();
+            return urlObj.toString();
+        }
+        
+        return url;
+    } catch (e) {
+        console.error('Error normalizing URL:', e);
         return url;
     }
 }
 
-// Add video to tab's collection
-function addVideoToTab(tabId, videoInfo) {
+/**
+ * Add video information to a tab's collection, avoiding duplicates
+ */
+function addVideoToTab(tabId, data) {
     if (!videosPerTab[tabId]) {
         videosPerTab[tabId] = new Map();
     }
+
+    // Normalize URL to prevent duplicates
+    const normalizedUrl = normalizeUrl(data.url);
     
-    const normalizedUrl = normalizeUrl(videoInfo.url);
-    
-    // Skip if already detected
-    if (videosPerTab[tabId].has(normalizedUrl)) {
+    // Skip if it's a duplicate
+    const isDuplicate = videosPerTab[tabId].has(normalizedUrl);
+    if (isDuplicate) {
+        console.log(`Skipping duplicate video: ${normalizedUrl}`);
         return;
     }
     
-    // Add video info
-    const timestamp = Date.now();
+    // Add to the collection
+    console.log(`Adding ${data.type} video to tab ${tabId}:`, normalizedUrl);
     videosPerTab[tabId].set(normalizedUrl, {
-        url: videoInfo.url,
-        type: videoInfo.type,
-        source: videoInfo.source || 'unknown',
-        timestamp: timestamp,
-        title: videoInfo.title || getFilenameFromUrl(videoInfo.url),
-        poster: videoInfo.poster || null,
-        resolution: null, // Will be populated later
-        previewUrl: null  // Will be populated later
+        ...data,
+        url: normalizedUrl
     });
     
-    console.log(`Added ${videoInfo.type} video to tab ${tabId}:`, videoInfo.url);
-    
-    // For HLS playlists, also add to that specific collection for back-compat
-    if (videoInfo.type === 'hls' && videoInfo.url.includes('.m3u8')) {
+    // Handle HLS playlists for backward compatibility
+    if (data.type === 'hls' && data.url.includes('.m3u8')) {
         if (!playlistsPerTab[tabId]) {
             playlistsPerTab[tabId] = new Set();
         }
         playlistsPerTab[tabId].add(normalizedUrl);
     }
+    
+    console.log(`Tab ${tabId} now has ${videosPerTab[tabId].size} videos`);
 }
 
 // Extract filename from URL
@@ -235,112 +486,112 @@ function getFilenameFromUrl(url) {
     return 'video';
 }
 
-// Listen for web requests to catch video-related content
+// Listen for video-related requests
 chrome.webRequest.onBeforeRequest.addListener(
-    (details) => {
-        if (details.tabId < 0) return;
-
+    function(details) {
+        // Process media requests from tabs only
+        if (!details.tabId || details.tabId === -1) return;
+        
         const url = details.url;
-        // Check for HLS, DASH, and direct video files
-        if (
-            url.includes('.m3u8') || 
-            url.includes('.mpd') || 
-            /\.(mp4|webm|ogg|mov|avi|mkv|flv)(\?|$)/i.test(url)
-        ) {
-            // Determine type
-            let type = 'unknown';
-            if (url.includes('.m3u8')) {
-                type = 'hls';
-            } else if (url.includes('.mpd')) {
-                type = 'dash';
-            } else if (/\.(mp4|webm|ogg|mov|avi|mkv|flv)(\?|$)/i.test(url)) {
-                type = 'direct';
+        console.log(`Checking request: ${url.substring(0, 100)}...`);
+        
+        // Skip blob URLs as they are often duplicates of already captured requests
+        if (url.startsWith('blob:')) {
+            // Only add blob URLs if they have specific indicators of being videos
+            if (url.indexOf('video') !== -1 || url.indexOf('media') !== -1) {
+                console.log('Processing blob URL with video/media indicator:', url);
+                addVideoToTab(details.tabId, {
+                    url,
+                    type: 'blob',
+                    title: getFilenameFromUrl(url) || 'Video',
+                    source: 'request'
+                });
+            } else {
+                console.log('Skipping non-media blob URL:', url);
             }
+            return;
+        }
+
+        // Check for HLS playlists
+        if (url.includes('.m3u8') || url.endsWith('.m3u') || url.includes('/master.m3u') || 
+            url.includes('/playlist.m3u') || url.includes('/manifest.m3u') || 
+            url.includes('/hls/') || url.includes('/video/') || url.includes('/media/')) {
             
-            // Add video
+            // Enhanced HLS detection based on URL patterns
+            const isLikelyHLS = 
+                url.includes('.m3u8') || 
+                url.endsWith('.m3u') || 
+                url.includes('/master.m3u') || 
+                url.includes('/playlist.m3u') || 
+                url.includes('/manifest.m3u') || 
+                (url.includes('/hls/') && url.includes('/segment')) ||
+                url.includes('/segments/') ||
+                url.includes('/segment') ||
+                url.includes('/playlist') ||
+                url.includes('/manifest');
+                
+            if (isLikelyHLS) {
+                console.log('Detected likely HLS playlist:', url);
+                addVideoToTab(details.tabId, {
+                    url,
+                    type: 'hls',
+                    title: getFilenameFromUrl(url) || 'HLS Video',
+                    source: 'request'
+                });
+                return;
+            }
+        }
+        
+        // Check for DASH manifests
+        if (url.includes('.mpd') || url.includes('/dash/') || url.includes('/manifest')) {
+            console.log('Detected DASH manifest:', url);
             addVideoToTab(details.tabId, {
-                url: url,
-                type: type,
-                source: 'webRequest'
+                url,
+                type: 'dash',
+                title: getFilenameFromUrl(url) || 'DASH Video',
+                source: 'request'
             });
+            return;
+        }
+        
+        // Check direct video files
+        const videoExtensions = ['.mp4', '.webm', '.mkv', '.avi', '.mov', '.flv', '.wmv', '.m4v'];
+        if (videoExtensions.some(ext => url.endsWith(ext) || url.includes(ext + '?'))) {
+            console.log('Detected direct video file:', url);
+            addVideoToTab(details.tabId, {
+                url,
+                type: 'direct',
+                title: getFilenameFromUrl(url) || 'Video',
+                source: 'request'
+            });
+            return;
+        }
+        
+        // Additional checks for audio files
+        const audioExtensions = ['.mp3', '.aac', '.wav', '.ogg', '.flac', '.m4a'];
+        if (audioExtensions.some(ext => url.endsWith(ext) || url.includes(ext + '?')) ||
+            url.includes('/audio/') || url.includes('_audio') || url.includes('/audio_')) {
+            console.log('Detected audio file:', url);
+            addVideoToTab(details.tabId, {
+                url,
+                type: 'audio',
+                title: getFilenameFromUrl(url) || 'Audio',
+                source: 'request'
+            });
+            return;
         }
     },
     { urls: ["<all_urls>"] }
 );
 
-// Listen for messages from popup/content script
-chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-    // Get stored playlists (legacy support)
-    if (request.action === 'getStoredPlaylists') {
-        const playlists = playlistsPerTab[request.tabId] 
-            ? Array.from(playlistsPerTab[request.tabId])
-            : [];
-        sendResponse(playlists);
-        return true;
-    }
-    
-    // Get all videos for a tab
-    if (request.action === 'getVideos') {
-        const tabId = request.tabId;
-        
-        if (!videosPerTab[tabId] || videosPerTab[tabId].size === 0) {
-            sendResponse([]);
-            return true;
-        }
-        
-        // Convert Map to Array for sending
-        const videos = Array.from(videosPerTab[tabId].values());
-        
-        // Sort by timestamp (newest first)
-        videos.sort((a, b) => b.timestamp - a.timestamp);
-        
-        sendResponse(videos);
-        return true;
-    }
-    
-    // Error handling for native messaging
-    let nativePort = null;
-
-    function connectNativeHost() {
-        try {
-            nativePort = chrome.runtime.connectNative('com.mycompany.ffmpeg');
-            
-            nativePort.onDisconnect.addListener(() => {
-                console.error('Native host disconnected:', chrome.runtime.lastError);
-                nativePort = null;
-            });
-
-            return true;
-        } catch (error) {
-            console.error('Failed to connect to native host:', error);
-            return false;
-        }
-    }
-
-    // Update your message sending function to handle reconnection
-    async function sendNativeMessage(message) {
-        if (!nativePort && !connectNativeHost()) {
-            throw new Error('Could not connect to native host');
-        }
-
-        return new Promise((resolve, reject) => {
-            try {
-                chrome.runtime.sendNativeMessage('com.mycompany.ffmpeg', message, response => {
-                    if (chrome.runtime.lastError) {
-                        reject(chrome.runtime.lastError);
-                    } else {
-                        resolve(response);
-                    }
-                });
-            } catch (error) {
-                reject(error);
-            }
-        });
-    }
-});
-
 // Clean up when tabs are closed
 chrome.tabs.onRemoved.addListener((tabId) => {
     delete videosPerTab[tabId];
     delete playlistsPerTab[tabId];
+});
+
+// Initialize connection when extension loads
+nativeConnection.connect().catch(error => {
+    console.warn('Failed to establish initial native host connection:', error);
+    // We don't need to handle this error, as reconnection will happen when needed
 });

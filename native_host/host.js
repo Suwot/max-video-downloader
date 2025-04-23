@@ -187,6 +187,9 @@ async function handleMessage(request) {
     logDebug('Processing message:', request);
     
     switch(request.type) {
+        case 'ping':
+            sendResponse({ type: 'pong', nativeHostConnected: true });
+            break;
         case 'download':
             await downloadVideo(request.url, request.filename, request.savePath, request.quality);
             break;

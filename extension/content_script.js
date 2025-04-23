@@ -154,29 +154,46 @@ function getVideoTitle(videoElement) {
 
 // Check if a URL is likely to be video content
 function isVideoRelatedUrl(url, contentType) {
+    console.log('Checking URL for video content:', url, 'Content-Type:', contentType);
+    
     // Known video extensions and manifest formats
     const videoPatterns = [
-        /\.(mp4|webm|ogg|mov|avi|mkv|flv)(\?|$)/i,   // Direct video files
-        /\.(m3u8|m3u)(\?|$)/i,                       // HLS playlists
-        /\.(mpd)(\?|$)/i,                            // DASH manifests
-        /\/(playlist|manifest|master)\.json(\?|$)/i   // Some custom manifest formats
+        /\.(mp4|webm|ogg|mov|avi|mkv|flv)(\?|#|$)/i,    // Direct video files
+        /\.(m3u8|m3u)(\?|#|$)/i,                        // HLS playlists
+        /\.(mpd)(\?|#|$)/i,                            // DASH manifests
+        /\/(playlist|manifest|master)\.json(\?|#|$)/i,  // Some custom manifest formats
+        /\/hls[\/\-_]/i,                               // HLS folder patterns
+        /\/dash[\/\-_]/i,                              // DASH folder patterns
+        /\/playlist[\/\-_]/i,                          // Playlist folder patterns
+        /\/live[\/\-_]/i,                              // Live stream patterns
+        /\/segment[s]?[\/\-_]/i,                       // Segment patterns
+        /\/manifest[\/\-_]/i,                          // Manifest patterns
+        /\/audio_/i,                                   // Audio patterns
+        /_audio/i                                      // Audio patterns
     ];
     
     // Known video MIME types
     const videoMimeTypes = [
         'video/',
         'application/x-mpegURL',
+        'application/vnd.apple.mpegURL',
         'application/dash+xml',
-        'application/vnd.apple.mpegURL'
+        'application/vnd.ms-sstr+xml',  // Smooth Streaming
+        'audio/',                       // Include audio MIME types
+        'application/octet-stream'      // Some streams use this generic MIME type
     ];
     
     // Check URL patterns
     if (videoPatterns.some(pattern => pattern.test(url))) {
+        const matchedPattern = videoPatterns.find(pattern => pattern.test(url));
+        console.log('URL matched video pattern:', matchedPattern);
         return true;
     }
     
     // Check content type if available
     if (contentType && videoMimeTypes.some(type => contentType.includes(type))) {
+        const matchedType = videoMimeTypes.find(type => contentType.includes(type));
+        console.log('Content-Type matched video MIME type:', matchedType);
         return true;
     }
     
@@ -199,6 +216,8 @@ function sendVideoToBackground(url, source, additionalInfo = {}) {
     // Determine type from URL
     const type = getVideoType(url);
     
+    console.log(`Sending ${type} video to background:`, url, 'Source:', source);
+    
     // Send to background
     chrome.runtime.sendMessage({
         action: 'addVideo',
@@ -211,17 +230,23 @@ function sendVideoToBackground(url, source, additionalInfo = {}) {
 
 // Get video type from URL
 function getVideoType(url) {
-    if (url.startsWith('blob:')) {
-        return 'blob';
-    } else if (url.includes('.m3u8')) {
+    // Check for HLS manifests (.m3u8)
+    if (url.match(/\.m3u8(\?|$)/i)) {
         return 'hls';
-    } else if (url.includes('.mpd')) {
-        return 'dash';
-    } else if (/\.(mp4|webm|ogg|mov|avi|mkv|flv)/i.test(url)) {
-        return 'direct';
-    } else {
-        return 'unknown';
     }
+
+    // Check for DASH manifests
+    if (url.match(/\.mpd(\?|$)/i) || url.match(/\/dash[\/\-_]/i)) {
+        return 'dash';
+    }
+
+    // Check for audio files
+    if (url.match(/\.(mp3|m4a|aac|wav|flac|ogg)(\?|$)/i)) {
+        return 'audio';
+    }
+
+    // Default to regular video
+    return 'video';
 }
 
 // Normalize URL to avoid duplicates
@@ -295,6 +320,12 @@ function init() {
     
     // Listen for messages from popup
     chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+        // Ping to check if content script is ready
+        if (message.action === 'ping') {
+            sendResponse({ status: 'ready' });
+            return true;
+        }
+        
         if (message.action === 'findVideos') {
             const videos = findVideos();
             sendResponse(videos);
@@ -416,21 +447,30 @@ function setupEnhancedDetection() {
 
 // Extract video information from a video element
 function extractVideoInfo(videoElement) {
-    let src = videoElement.src || '';
-    
-    // If no src attribute, check for source elements
-    if (!src) {
-        const source = videoElement.querySelector('source');
-        if (source) {
-            src = source.src || '';
-        }
+    if (!videoElement || !videoElement.src) {
+        return null;
     }
     
-    if (!src) return null;
+    // Determine type based on URL
+    let type = getVideoType(videoElement.src);
+    
+    // Check if this is actually an audio element or video without visual tracks
+    if (videoElement.videoWidth === 0 || 
+        videoElement.videoHeight === 0 || 
+        videoElement.getAttribute('data-audio-only') === 'true' ||
+        videoElement.classList.contains('audio-only') ||
+        videoElement.mozHasAudio ||
+        (videoElement.src && (
+            videoElement.src.includes('/audio_') ||
+            videoElement.src.includes('_audio') ||
+            videoElement.src.match(/\.(mp3|m4a|aac|wav|flac|ogg|opus)(\?|#|$)/i)
+        ))) {
+        type = 'audio';
+    }
     
     return {
-        url: src,
-        type: getVideoType(src),
+        url: videoElement.src,
+        type: type,
         poster: videoElement.poster || null,
         title: getVideoTitle(videoElement),
         timestamp: Date.now()
@@ -457,3 +497,38 @@ function notifyBackground(videos) {
         });
     }
 }
+
+// Check if service worker is responsive
+function checkServiceWorkerHealth() {
+    return new Promise((resolve) => {
+        const timeout = setTimeout(() => {
+            console.warn('Service worker health check timed out');
+            resolve(false);
+        }, 1000);
+        
+        chrome.runtime.sendMessage({ type: 'healthCheck' })
+            .then(() => {
+                clearTimeout(timeout);
+                resolve(true);
+            })
+            .catch((error) => {
+                clearTimeout(timeout);
+                console.error('Service worker health check failed:', error);
+                resolve(false);
+            });
+    });
+}
+
+// Perform periodic health checks
+setInterval(async () => {
+    const isHealthy = await checkServiceWorkerHealth();
+    
+    if (!isHealthy) {
+        console.warn('Service worker appears to be unresponsive, reloading extension...');
+        // Notify user that extension needs to reload
+        chrome.runtime.reload(); // This might help in some cases
+    }
+}, 120000); // Check every 2 minutes
+
+// Initialize listeners
+init();

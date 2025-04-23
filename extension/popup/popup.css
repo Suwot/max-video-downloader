@@ -240,12 +240,18 @@ body.theme-light {
 }
 
 .theme-dark .media-type-header.direct {
-    background-color: #5fff7f;
-    color: #333;
+    background-color: rgba(95, 255, 127, 0.15);
+    border-left: 3px solid #5fff7f;
+}
+
+.theme-dark .media-type-header.audio {
+    background-color: rgba(255, 179, 71, 0.15);
+    border-left: 3px solid #ffb347;
 }
 
 .theme-dark .media-type-header.blob {
-    background-color: #ff5fff;
+    background-color: rgba(255, 95, 255, 0.15);
+    border-left: 3px solid #ff5fff;
 }
 
 .theme-dark .media-type-header.unknown {
@@ -264,13 +270,18 @@ body.theme-light {
 }
 
 .theme-light .media-type-header.direct {
-    background-color: #e5ffe5;
-    color: #258f25;
+    background-color: rgba(95, 255, 127, 0.15);
+    border-left: 3px solid #5fff7f;
+}
+
+.theme-light .media-type-header.audio {
+    background-color: rgba(255, 179, 71, 0.15);
+    border-left: 3px solid #ffb347;
 }
 
 .theme-light .media-type-header.blob {
-    background-color: #ffe5ff;
-    color: #b329b3;
+    background-color: rgba(255, 95, 255, 0.15);
+    border-left: 3px solid #ff5fff;
 }
 
 .theme-light .media-type-header.unknown {
@@ -407,6 +418,10 @@ body.theme-light {
     background-color: #5fff7f;
 }
 
+.type-badge.audio {
+    background-color: #ffb347;
+}
+
 .type-badge.blob {
     background-color: #ff5fff;
 }
@@ -516,7 +531,7 @@ body.theme-light {
     color: #666;
 }
 
-.media-type-container, .resolution-container {
+.media-type-container, .resolution-container, .codec-container, .details-container {
     display: flex;
     align-items: center;
     width: 100%;
@@ -552,50 +567,80 @@ body.theme-light {
     fill: #666;
 }
 
-.resolution-info {
+.resolution-info, .codec-container, .details-container {
     display: flex;
     align-items: center;
     padding: 2px 6px;
     border-radius: 4px;
 }
 
-/* Resolution selector */
-.resolution-selector {
-    width: 100%;
-}
-
-.resolution-selector select {
-    width: 100%;
-    padding: 3px 6px;
-    border-radius: 3px;
+/* Codec container styles */
+.codec-container {
+    font-family: monospace;
     font-size: 10px;
-    transition: background-color 0.3s, border-color 0.3s, color 0.3s;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
-.theme-dark .resolution-selector select {
-    border: 1px solid #444;
-    background-color: #333;
-    color: white;
+.theme-dark .codec-container {
+    color: #88c0ff;
 }
 
-.theme-light .resolution-selector select {
-    border: 1px solid #ddd;
-    background-color: #f9f9f9;
-    color: #333;
+.theme-light .codec-container {
+    color: #1565c0;
 }
 
-/* Warning for blob URLs */
-.blob-warning {
-    font-size: 9px;
-    margin-bottom: 4px;
+/* Details container styles */
+.details-container {
+    font-size: 10px;
 }
 
-.theme-dark .blob-warning {
-    color: #ff6b6b;
+.theme-dark .details-container {
+    color: #ffab91;
 }
 
-.theme-light .blob-warning {
-    color: #D32F2F;
+.theme-light .details-container {
+    color: #d84315;
+}
+
+/* Progress bar */
+.progress-container {
+    width: 100%;
+    height: 4px;
+    background-color: rgba(0, 0, 0, 0.1);
+    border-radius: 2px;
+    overflow: hidden;
+    margin: 4px 0;
+    display: none;
+}
+
+.progress-bar {
+    height: 100%;
+    width: 0;
+    background-color: #1976D2;
+    border-radius: 2px;
+    transition: width 0.3s ease;
+}
+
+.theme-dark .progress-bar {
+    background-color: #64B5F6;
+}
+
+/* Download button states */
+.download-btn.success {
+    background-color: #43a047;
+}
+
+.download-btn.success:hover {
+    background-color: #388e3c;
+}
+
+.theme-dark .download-btn.success {
+    background-color: #43a047;
+}
+
+.theme-light .download-btn.success {
+    background-color: #4caf50;
 }
 
 /* Download button */
@@ -786,4 +831,128 @@ body.theme-light {
     margin-bottom: 12px;
     border-radius: 8px;
     overflow: hidden;
+}
+
+/* Notification styles */
+.notifications-container {
+    position: fixed;
+    top: 10px;
+    right: 10px;
+    width: 300px;
+    max-width: 80%;
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.notification {
+    background-color: var(--surface);
+    color: var(--text);
+    border-radius: 4px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+    padding: 12px;
+    display: flex;
+    align-items: flex-start;
+    transform: translateX(110%);
+    transition: transform 0.3s ease-out, opacity 0.3s ease-out;
+    opacity: 0;
+    max-width: 100%;
+    overflow: hidden;
+}
+
+.notification-visible {
+    transform: translateX(0);
+    opacity: 1;
+}
+
+.notification-hiding {
+    transform: translateX(110%);
+    opacity: 0;
+}
+
+.notification-icon {
+    margin-right: 12px;
+    flex-shrink: 0;
+}
+
+.notification-content {
+    flex-grow: 1;
+    margin-right: 8px;
+}
+
+.notification-title {
+    font-weight: bold;
+    margin-bottom: 4px;
+}
+
+.notification-message {
+    font-size: 14px;
+    white-space: normal;
+    word-break: break-word;
+}
+
+.notification-close {
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: 18px;
+    line-height: 1;
+    padding: 0;
+    margin-left: auto;
+    flex-shrink: 0;
+}
+
+.notification-close:hover {
+    color: var(--text);
+}
+
+.notification-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 8px;
+}
+
+.notification-action-button {
+    background-color: var(--primary);
+    color: var(--on-primary);
+    border: none;
+    border-radius: 4px;
+    padding: 6px 12px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.notification-action-button:hover {
+    background-color: var(--primary-hover);
+}
+
+/* Notification type colors */
+.notification-info .notification-icon {
+    color: var(--info, #2196F3);
+}
+
+.notification-warning .notification-icon {
+    color: var(--warning, #FF9800);
+}
+
+.notification-error .notification-icon {
+    color: var(--error, #F44336);
+}
+
+.notification-success .notification-icon {
+    color: var(--success, #4CAF50);
+}
+
+/* Error details in initial message */
+.error-details {
+    margin-top: 10px;
+    padding: 10px;
+    background-color: rgba(244, 67, 54, 0.1);
+    border-radius: 4px;
+    font-size: 13px;
+    font-family: monospace;
+    color: var(--error, #F44336);
 }

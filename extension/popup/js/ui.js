@@ -173,4 +173,109 @@ export function scrollToLastPosition() {
             document.getElementById('videos').scrollTop = scrollPosition;
         }, 50);
     }
+}
+
+/**
+ * Save scroll position
+ * @param {number} position - Position to save
+ */
+export function setScrollPosition(position) {
+    if (typeof position !== 'number') return;
+    try {
+        localStorage.setItem('popupScrollPosition', position.toString());
+    } catch (error) {
+        console.error('Error saving scroll position:', error);
+    }
+}
+
+/**
+ * Show a notification to the user
+ * @param {Object} options - Notification options
+ * @param {string} options.type - Notification type ('info', 'warning', 'error', 'success')
+ * @param {string} options.title - Notification title
+ * @param {string} options.message - Notification message
+ * @param {number} options.duration - Time in ms to display the notification (0 for no auto-hide)
+ * @param {Array} options.actions - Optional array of action buttons
+ * @returns {HTMLElement} The notification element
+ */
+export function showNotification(options) {
+    const { type = 'info', title, message, duration = 5000, actions = [] } = options;
+    
+    // Create notification container if it doesn't exist
+    let notificationsContainer = document.querySelector('.notifications-container');
+    if (!notificationsContainer) {
+        notificationsContainer = document.createElement('div');
+        notificationsContainer.className = 'notifications-container';
+        document.body.appendChild(notificationsContainer);
+    }
+    
+    // Create notification element
+    const notification = document.createElement('div');
+    notification.className = `notification notification-${type}`;
+    
+    // Get icon based on type
+    const iconMap = {
+        info: '<svg viewBox="0 0 24 24" width="20" height="20"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 15c-.55 0-1-.45-1-1v-4c0-.55.45-1 1-1s1 .45 1 1v4c0 .55-.45 1-1 1zm1-8h-2V7h2v2z"/></svg>',
+        warning: '<svg viewBox="0 0 24 24" width="20" height="20"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 15c-.55 0-1-.45-1-1v-4c0-.55.45-1 1-1s1 .45 1 1v4c0 .55-.45 1-1 1zm1-8h-2V7h2v2z"/></svg>',
+        error: '<svg viewBox="0 0 24 24" width="20" height="20"><path d="M12 2C6.47 2 2 6.47 2 12s4.47 10 10 10 10-4.47 10-10S17.53 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm3.59-13L12 10.59 8.41 7 7 8.41 10.59 12 7 15.59 8.41 17 12 13.41 15.59 17 17 15.59 13.41 12 17 8.41z"/></svg>',
+        success: '<svg viewBox="0 0 24 24" width="20" height="20"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm4.59-12.42L10 14.17l-2.59-2.58L6 13l4 4 8-8-1.41-1.42z"/></svg>'
+    };
+    
+    // Create notification content
+    notification.innerHTML = `
+        <div class="notification-icon">${iconMap[type] || iconMap.info}</div>
+        <div class="notification-content">
+            ${title ? `<div class="notification-title">${title}</div>` : ''}
+            ${message ? `<div class="notification-message">${message}</div>` : ''}
+        </div>
+        <button class="notification-close">&times;</button>
+    `;
+    
+    // Add action buttons if provided
+    if (actions.length > 0) {
+        const actionsContainer = document.createElement('div');
+        actionsContainer.className = 'notification-actions';
+        
+        actions.forEach(action => {
+            const button = document.createElement('button');
+            button.className = 'notification-action-button';
+            button.textContent = action.label;
+            button.addEventListener('click', () => {
+                if (typeof action.callback === 'function') {
+                    action.callback();
+                }
+                // Close notification after action unless specified otherwise
+                if (action.keepOpen !== true) {
+                    notification.remove();
+                }
+            });
+            actionsContainer.appendChild(button);
+        });
+        
+        notification.querySelector('.notification-content').appendChild(actionsContainer);
+    }
+    
+    // Add close button functionality
+    notification.querySelector('.notification-close').addEventListener('click', () => {
+        notification.classList.add('notification-hiding');
+        setTimeout(() => notification.remove(), 300);
+    });
+    
+    // Add notification to container
+    notificationsContainer.appendChild(notification);
+    
+    // Add show class after a small delay to trigger transition
+    setTimeout(() => notification.classList.add('notification-visible'), 10);
+    
+    // Auto-hide after duration (if duration is not 0)
+    if (duration > 0) {
+        setTimeout(() => {
+            if (notification.parentNode) {
+                notification.classList.add('notification-hiding');
+                setTimeout(() => notification.remove(), 300);
+            }
+        }, duration);
+    }
+    
+    return notification;
 } 

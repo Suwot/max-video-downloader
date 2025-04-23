@@ -81,6 +81,7 @@ export function groupVideosByType(videos) {
         hls: [],
         dash: [],
         direct: [],
+        audio: [],
         blob: [],
         unknown: []
     };

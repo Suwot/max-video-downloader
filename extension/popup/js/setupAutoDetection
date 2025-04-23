@@ -1,0 +1,41 @@
+/**
+ * Sets up communication for automatic detection of new videos
+ */
+export async function setupAutoDetection() {
+    // Listen for messages from background script about new videos
+    chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+        if (message.action === 'newVideoDetected') {
+            // Always update when new videos detected
+            updateVideoList(true);
+            sendResponse({ received: true });
+        }
+        return true;
+    });
+    
+    // Tell content script to start detecting with error handling
+    try {
+        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        if (tab) {
+            // First check if content script is ready
+            try {
+                await chrome.tabs.sendMessage(tab.id, { action: 'ping' });
+                // If we get here, content script is ready, so send the command
+                chrome.tabs.sendMessage(tab.id, { 
+                    action: 'startBackgroundDetection',
+                    enabled: true
+                }).catch(err => console.warn('Error enabling detection:', err));
+            } catch (err) {
+                console.warn('Content script not ready, will retry once');
+                // Wait a bit and try one more time
+                setTimeout(() => {
+                    chrome.tabs.sendMessage(tab.id, { 
+                        action: 'startBackgroundDetection',
+                        enabled: true
+                    }).catch(err => console.warn('Content script still not ready'));
+                }, 2000);
+            }
+        }
+    } catch (err) {
+        console.warn('Error setting up auto detection:', err);
+    }
+} 
