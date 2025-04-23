@@ -1,6 +1,8 @@
 import { showError } from './utilities.js';
 import { debounce } from './utilities.js';
 
+let downloadPort = null;
+
 /**
  * Handle download button click
  * @param {HTMLElement} button - Download button
@@ -10,36 +12,128 @@ import { debounce } from './utilities.js';
 export async function handleDownload(button, url, type) {
     const originalText = button.textContent;
     button.disabled = true;
-    button.textContent = 'Downloading...';
+    
+    // Get the progress container and bar
+    const videoItem = button.closest('.video-item');
+    const progressContainer = videoItem.querySelector('.progress-container');
+    const progressBar = progressContainer.querySelector('.progress-bar');
+    
+    // Create progress info container
+    const progressInfo = document.createElement('div');
+    progressInfo.className = 'progress-info';
+    progressContainer.appendChild(progressInfo);
+    
+    // Show progress elements
+    progressContainer.style.display = 'block';
+    progressBar.style.width = '0%';
     
     try {
-        // For blob URLs with blob: protocol, we need special handling
+        // For blob URLs, handle differently
         if (type === 'blob' && url.startsWith('blob:')) {
             await handleBlobDownload(url);
-            setTimeout(() => resetDownloadButton(button, originalText), 2000);
+            resetDownloadState();
             return;
         }
         
-        // Regular video files can be downloaded with the native host
-        const messageType = (type === 'hls' || type === 'dash') ? 'downloadHLS' : 'download';
+        // Create a new port connection for this download
+        downloadPort = chrome.runtime.connect({ name: 'download_progress' });
         
-        chrome.runtime.sendMessage({
-            type: messageType,
-            url: url
-        }, response => {
-            if (response && response.success) {
-                setTimeout(() => resetDownloadButton(button, originalText), 2000);
-            } else if (response && response.error) {
+        // Set up message listener
+        downloadPort.onMessage.addListener((response) => {
+            console.log('Progress update:', response);
+            
+            if (response?.type === 'progress') {
+                // Update progress bar
+                progressBar.style.width = `${response.progress}%`;
+                
+                // Update progress info with speed and ETA
+                const progressText = [];
+                
+                if (response.speed) {
+                    progressText.push(`${formatSpeed(response.speed)}`);
+                }
+                
+                if (response.eta) {
+                    progressText.push(`ETA: ${formatTime(response.eta)}`);
+                }
+                
+                if (response.size) {
+                    progressText.push(`Size: ${formatSize(response.size)}`);
+                }
+                
+                if (response.downloaded) {
+                    progressText.push(`${formatSize(response.downloaded)} downloaded`);
+                }
+                
+                progressInfo.textContent = progressText.join(' • ');
+                button.textContent = `${response.progress}%`;
+            } else if (response?.success) {
+                button.textContent = 'Complete!';
+                setTimeout(() => resetDownloadState(), 2000);
+            } else if (response?.error) {
                 showError(response.error);
-                resetDownloadButton(button, originalText);
+                resetDownloadState();
             }
-            // Ignore progress updates - we just stay in "Downloading..." state
+        });
+        
+        downloadPort.onDisconnect.addListener(() => {
+            console.log('Port disconnected');
+            downloadPort = null;
+            resetDownloadState();
+        });
+        
+        // Send download request
+        console.log('Sending download request:', url);
+        chrome.runtime.sendMessage({
+            type: type === 'hls' ? 'downloadHLS' : 'download',
+            url: url
         });
         
     } catch (error) {
         console.error('Download failed:', error);
         showError('Failed to start download');
-        resetDownloadButton(button, originalText);
+        resetDownloadState();
+    }
+    
+    function resetDownloadState() {
+        if (downloadPort) {
+            downloadPort.disconnect();
+            downloadPort = null;
+        }
+        button.disabled = false;
+        button.textContent = originalText;
+        progressContainer.style.display = 'none';
+        progressBar.style.width = '0%';
+        progressInfo.remove();
+    }
+}
+
+// Format file size in human readable form
+function formatSize(bytes) {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return `${(bytes / Math.pow(k, i)).toFixed(1)} ${sizes[i]}`;
+}
+
+// Format speed in human readable form
+function formatSpeed(bytesPerSecond) {
+    return `${formatSize(bytesPerSecond)}/s`;
+}
+
+// Format time in human readable form
+function formatTime(seconds) {
+    if (seconds < 60) {
+        return `${Math.round(seconds)}s`;
+    } else if (seconds < 3600) {
+        const minutes = Math.floor(seconds / 60);
+        const secs = Math.round(seconds % 60);
+        return `${minutes}m ${secs}s`;
+    } else {
+        const hours = Math.floor(seconds / 3600);
+        const minutes = Math.floor((seconds % 3600) / 60);
+        return `${hours}h ${minutes}m`;
     }
 }
 
@@ -83,4 +177,4 @@ async function handleBlobDownload(url) {
 function resetDownloadButton(button, originalText) {
     button.disabled = false;
     button.textContent = originalText;
-} 
+}

@@ -279,6 +279,29 @@ async function downloadVideo(url, filename, savePath, quality = 'best') {
             let errorOutput = '';
             let progressOutput = '';
             let lastProgressUpdate = 0;
+            let downloadStartTime = Date.now();
+            let lastBytes = 0;
+            let fileSize = null;
+            let lastProgress = -1; // Track last progress to avoid duplicate updates
+            
+            // Try to get total duration from ffprobe first
+            const ffprobe = spawn(FFPROBE_PATH, [
+                '-v', 'quiet',
+                '-print_format', 'json',
+                '-show_format',
+                url
+            ], { env: getFullEnv() });
+            
+            ffprobe.stdout.on('data', data => {
+                try {
+                    const info = JSON.parse(data);
+                    if (info.format && info.format.size) {
+                        fileSize = parseInt(info.format.size);
+                    }
+                } catch (e) {
+                    logDebug('Error parsing ffprobe output:', e);
+                }
+            });
 
             ffmpeg.stderr.on('data', (data) => {
                 const output = data.toString();
@@ -287,30 +310,68 @@ async function downloadVideo(url, filename, savePath, quality = 'best') {
                 
                 // Parse progress and send updates, but not too frequently
                 const now = Date.now();
-                if (now - lastProgressUpdate > 1000) {
+                if (now - lastProgressUpdate > 500) { // Update every 500ms
                     lastProgressUpdate = now;
                     
                     // Extract progress information
-                    const timeMatch = progressOutput.match(/time=(\d+:\d+:\d+.\d+)/);
-                    if (timeMatch) {
-                        const timeStr = timeMatch[1];
-                        const [hours, minutes, seconds] = timeStr.split(':').map(parseFloat);
-                        const totalSeconds = hours * 3600 + minutes * 60 + seconds;
+                    const timeMatch = progressOutput.match(/time=(\d+):(\d+):(\d+.\d+)/);
+                    const sizeMatch = progressOutput.match(/size=\s*(\d+)kB/);
+                    
+                    if (timeMatch && sizeMatch) {
+                        const [_, hours, minutes, seconds] = timeMatch;
+                        const totalSeconds = parseInt(hours) * 3600 + parseInt(minutes) * 60 + parseFloat(seconds);
+                        const currentBytes = parseInt(sizeMatch[1]) * 1024;
                         
-                        // Send progress update
-                        sendResponse({ 
-                            type: 'progress',
-                            progress: Math.min(99, Math.round(totalSeconds / 10)) // Simple estimate
-                        });
+                        // Calculate speed
+                        const elapsedTime = (now - downloadStartTime) / 1000;
+                        const bytesPerSecond = currentBytes / elapsedTime;
+                        const instantSpeed = (currentBytes - lastBytes) * 2; // 500ms update interval -> *2 for per second
+                        lastBytes = currentBytes;
+                        
+                        // Calculate progress and ETA
+                        let progress = 0;
+                        let eta = null;
+                        
+                        if (fileSize) {
+                            progress = Math.min(99, Math.round((currentBytes / fileSize) * 100));
+                            eta = (fileSize - currentBytes) / bytesPerSecond;
+                        } else {
+                            // Fallback progress based on stream duration if available
+                            progress = Math.min(99, Math.round(totalSeconds / 10));
+                        }
+                        
+                        // Only send update if progress has changed
+                        if (progress !== lastProgress) {
+                            lastProgress = progress;
+                            
+                            // Send detailed progress update
+                            sendResponse({ 
+                                type: 'progress',
+                                progress,
+                                speed: instantSpeed > 0 ? instantSpeed : bytesPerSecond,
+                                downloaded: currentBytes,
+                                size: fileSize,
+                                eta: eta
+                            });
+                        }
+                        
+                        // Clear progress output to avoid memory growth
+                        progressOutput = '';
                     }
                 }
-                
-                logDebug('FFmpeg stderr:', output);
             });
 
             ffmpeg.on('close', (code) => {
                 if (code === 0) {
                     logDebug('Download completed successfully');
+                    // Send final progress update
+                    sendResponse({ 
+                        type: 'progress',
+                        progress: 100,
+                        downloaded: fileSize || lastBytes,
+                        size: fileSize || lastBytes
+                    });
+                    // Send success response
                     sendResponse({ success: true, path: uniqueOutput });
                     resolve();
                 } else {
@@ -556,6 +617,7 @@ function sendResponse(message) {
         if (process.stdout.writable) {
             process.stdout.write(header);
             process.stdout.write(messageStr);
+            process.stdout.flush(); // Ensure the message is sent immediately
             logDebug('Sent response:', message);
         } else {
             logDebug('Cannot send response - pipe closed');

@@ -656,6 +656,8 @@ body.theme-light {
     cursor: pointer;
     text-align: center;
     transition: background-color 0.2s;
+    min-width: 80px;
+    transition: background-color 0.2s, color 0.2s;
 }
 
 .download-btn:hover {
@@ -665,11 +667,19 @@ body.theme-light {
 .theme-dark .download-btn:disabled {
     background-color: #464f59;
     cursor: not-allowed;
+    opacity: 0.8;
+    cursor: default;
 }
 
 .theme-light .download-btn:disabled {
     background-color: #bbdefb;
     cursor: not-allowed;
+    opacity: 0.8;
+    cursor: default;
+}
+
+.download-btn[disabled]:not(:empty) {
+    animation: pulse 2s infinite;
 }
 
 /* Refresh button */
@@ -826,4 +836,43 @@ body.theme-light {
     margin-bottom: 12px;
     border-radius: 8px;
     overflow: hidden;
+}
+
+/* Progress container */
+.progress-container {
+    display: none;
+    margin-top: 8px;
+    width: 100%;
+    background-color: rgba(0, 0, 0, 0.1);
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.theme-dark .progress-container {
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+.progress-bar {
+    height: 4px;
+    width: 0%;
+    background-color: #1976D2;
+    transition: width 0.3s ease;
+}
+
+.progress-info {
+    font-size: 11px;
+    color: #666;
+    margin-top: 4px;
+    text-align: center;
+}
+
+.theme-dark .progress-info {
+    color: #aaa;
+}
+
+/* Add animation for the progress percentage text */
+@keyframes pulse {
+    0% { opacity: 0.6; }
+    50% { opacity: 1; }
+    100% { opacity: 0.6; }
 }

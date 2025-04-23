@@ -1,16 +1,60 @@
 // Add at the top of the file
 let previewGenerationQueue = new Map();
-// Store all detected videos per tab
 const videosPerTab = {};
-// Store HLS playlists per tab
 const playlistsPerTab = {};
+const downloadPorts = new Map();
 
-// Receive native‑host responses
+// Handle port connections from popup
+chrome.runtime.onConnect.addListener(port => {
+  if (port.name === 'download_progress') {
+    downloadPorts.set('popup', port);
+    port.onDisconnect.addListener(() => {
+      downloadPorts.delete('popup');
+    });
+  }
+});
+
+// Single message listener for all types of messages
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-  console.log('hostResponse:', msg);
+  console.log('Message received:', msg);
+  
+  // Handle download requests
   if (msg.type === 'downloadHLS' || msg.type === 'download') {
     const notificationId = `download-${Date.now()}`;
     let hasError = false;
+    let responseHandler = null;
+
+    // Get the popup port for sending progress updates
+    const port = downloadPorts.get('popup');
+
+    // Create the response handler
+    responseHandler = (response) => {
+      if (chrome.runtime.lastError) {
+        console.error('Native messaging error:', chrome.runtime.lastError);
+        handleDownloadError(chrome.runtime.lastError.message, notificationId, port);
+        return;
+      }
+
+      // Handle different response types
+      if (response && response.type === 'progress' && !hasError) {
+        // Update notification less frequently than UI
+        if (response.progress % 10 === 0) {
+          chrome.notifications.update(notificationId, {
+            message: `Downloading: ${response.progress}%`
+          });
+        }
+        
+        // Always forward progress to popup
+        if (port) {
+          port.postMessage(response);
+        }
+      } else if (response && response.success && !hasError) {
+        handleDownloadSuccess(response, notificationId, port);
+      } else if (response && response.error && !hasError) {
+        hasError = true;
+        handleDownloadError(response.error, notificationId, port);
+      }
+    };
 
     // Show initial notification
     chrome.notifications.create(notificationId, {
@@ -20,49 +64,53 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       message: 'Starting download...'
     });
 
+    // Send to native host
     chrome.runtime.sendNativeMessage('com.mycompany.ffmpeg', {
       type: 'download',
       url: msg.url,
       filename: msg.filename || 'video.mp4',
       savePath: msg.savePath,
       quality: msg.quality
-    }, response => {
-      if (chrome.runtime.lastError) {
-        console.error('Native messaging error:', chrome.runtime.lastError);
-        if (!hasError) {
-          hasError = true;
-          chrome.notifications.update(notificationId, {
-            title: 'Download Failed',
-            message: chrome.runtime.lastError.message
-          });
-          sendResponse({ success: false, error: chrome.runtime.lastError.message });
-        }
-        return;
-      }
+    }, responseHandler);
 
-      if (response && response.type === 'progress' && !hasError) {
-        chrome.notifications.update(notificationId, {
-          message: `Downloading: ${response.progress}%`
-        });
-      } else if (response && response.success && !hasError) {
-        chrome.notifications.update(notificationId, {
-          title: 'Download Complete',
-          message: `Saved to: ${response.path}`
-        });
-        sendResponse({ success: true, path: response.path });
-      } else if (response && response.error && !hasError) {
-        hasError = true;
-        chrome.notifications.update(notificationId, {
-          title: 'Download Failed',
-          message: response.error
-        });
-        sendResponse({ success: false, error: response.error });
-      }
-    });
-    
+    return true; // Keep channel open for progress updates
+  }
+
+  // Handle video detection from content script
+  if (msg.action === 'addVideo') {
+    const tabId = sender.tab?.id;
+    if (tabId && tabId > 0) {
+      addVideoToTab(tabId, msg);
+    }
+    return false;
+  }
+
+  // Handle stored playlists request
+  if (msg.action === 'getStoredPlaylists') {
+    const playlists = playlistsPerTab[msg.tabId] 
+      ? Array.from(playlistsPerTab[msg.tabId])
+      : [];
+    sendResponse(playlists);
     return true;
   }
 
+  // Handle videos list request
+  if (msg.action === 'getVideos') {
+    const tabId = msg.tabId;
+    
+    if (!videosPerTab[tabId] || videosPerTab[tabId].size === 0) {
+      sendResponse([]);
+      return true;
+    }
+    
+    // Convert Map to Array for sending
+    const videos = Array.from(videosPerTab[tabId].values());
+    videos.sort((a, b) => b.timestamp - a.timestamp);
+    sendResponse(videos);
+    return true;
+  }
+
+  // Handle preview generation
   if (msg.type === 'generatePreview') {
     // Check if we're already generating this preview
     const cacheKey = msg.url;
@@ -102,6 +150,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
 
+  // Handle stream qualities request
   if (msg.type === 'getHLSQualities') {
     // Create promise for quality detection
     const qualityPromise = new Promise(resolve => {
@@ -149,26 +198,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     qualityPromise.then(sendResponse);
     return true;
   }
-});
 
-// Add connection handling
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-    if (message.type === 'ping') {
-        sendResponse({ type: 'pong' });
-        return false;
-    }
-    
-    // Add video detected from content script
-    if (message.action === 'addVideo') {
-        const tabId = sender.tab?.id;
-        if (tabId && tabId > 0) {
-            addVideoToTab(tabId, message);
-        }
-        return false;
-    }
-    
-    // ... rest of your message handling
-    return true; // Will respond asynchronously
+  return false;
 });
 
 // Add URL normalization to prevent duplicates
@@ -279,79 +310,70 @@ chrome.webRequest.onBeforeRequest.addListener(
     { urls: ["<all_urls>"] }
 );
 
-// Listen for messages from popup/content script
-chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-    // Get stored playlists (legacy support)
-    if (request.action === 'getStoredPlaylists') {
-        const playlists = playlistsPerTab[request.tabId] 
-            ? Array.from(playlistsPerTab[request.tabId])
-            : [];
-        sendResponse(playlists);
-        return true;
-    }
-    
-    // Get all videos for a tab
-    if (request.action === 'getVideos') {
-        const tabId = request.tabId;
-        
-        if (!videosPerTab[tabId] || videosPerTab[tabId].size === 0) {
-            sendResponse([]);
-            return true;
-        }
-        
-        // Convert Map to Array for sending
-        const videos = Array.from(videosPerTab[tabId].values());
-        
-        // Sort by timestamp (newest first)
-        videos.sort((a, b) => b.timestamp - a.timestamp);
-        
-        sendResponse(videos);
-        return true;
-    }
-    
-    // Error handling for native messaging
-    let nativePort = null;
+// Error handling for native messaging
+let nativePort = null;
 
-    function connectNativeHost() {
-        try {
-            nativePort = chrome.runtime.connectNative('com.mycompany.ffmpeg');
-            
-            nativePort.onDisconnect.addListener(() => {
-                console.error('Native host disconnected:', chrome.runtime.lastError);
-                nativePort = null;
-            });
-
-            return true;
-        } catch (error) {
-            console.error('Failed to connect to native host:', error);
-            return false;
-        }
-    }
-
-    // Update your message sending function to handle reconnection
-    async function sendNativeMessage(message) {
-        if (!nativePort && !connectNativeHost()) {
-            throw new Error('Could not connect to native host');
-        }
-
-        return new Promise((resolve, reject) => {
-            try {
-                chrome.runtime.sendNativeMessage('com.mycompany.ffmpeg', message, response => {
-                    if (chrome.runtime.lastError) {
-                        reject(chrome.runtime.lastError);
-                    } else {
-                        resolve(response);
-                    }
-                });
-            } catch (error) {
-                reject(error);
-            }
+function connectNativeHost() {
+    try {
+        nativePort = chrome.runtime.connectNative('com.mycompany.ffmpeg');
+        
+        nativePort.onDisconnect.addListener(() => {
+            console.error('Native host disconnected:', chrome.runtime.lastError);
+            nativePort = null;
         });
+
+        return true;
+    } catch (error) {
+        console.error('Failed to connect to native host:', error);
+        return false;
     }
-});
+}
+
+// Update your message sending function to handle reconnection
+async function sendNativeMessage(message) {
+    if (!nativePort && !connectNativeHost()) {
+        throw new Error('Could not connect to native host');
+    }
+
+    return new Promise((resolve, reject) => {
+        try {
+            chrome.runtime.sendNativeMessage('com.mycompany.ffmpeg', message, response => {
+                if (chrome.runtime.lastError) {
+                    reject(chrome.runtime.lastError);
+                } else {
+                    resolve(response);
+                }
+            });
+        } catch (error) {
+            reject(error);
+        }
+    });
+}
 
 // Clean up when tabs are closed
 chrome.tabs.onRemoved.addListener((tabId) => {
     delete videosPerTab[tabId];
     delete playlistsPerTab[tabId];
 });
+
+function handleDownloadSuccess(response, notificationId, port) {
+  chrome.notifications.update(notificationId, {
+    title: 'Download Complete',
+    message: `Saved to: ${response.path}`
+  });
+  
+  if (port) {
+    port.postMessage({ success: true, path: response.path });
+  }
+}
+
+function handleDownloadError(error, notificationId, port) {
+  chrome.notifications.update(notificationId, {
+    title: 'Download Failed',
+    message: error
+  });
+  
+  if (port) {
+    port.postMessage({ success: false, error: error });
+  }
+}
