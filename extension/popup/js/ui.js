@@ -1,5 +1,5 @@
 import { debounce } from './utilities.js';
-import { getCurrentTheme, setCurrentTheme, getAllGroupStates } from './state.js';
+import { getCurrentTheme, setCurrentTheme, getAllGroupStates, setScrollPosition } from './state.js';
 import { updateVideoList } from './video-fetcher.js';
 
 // Reusable tooltip element
@@ -173,4 +173,4 @@ export function scrollToLastPosition() {
             document.getElementById('videos').scrollTop = scrollPosition;
         }, 50);
     }
-} 
+}
