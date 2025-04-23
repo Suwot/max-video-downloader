@@ -244,27 +244,54 @@ export function createVideoElement(video) {
     
     titleRow.append(title, copyButton);
     
-    // Create file info section with media type information
+    // Create file info section with enhanced media type information
     const fileInfo = document.createElement('div');
     fileInfo.className = 'file-info';
     
-    // Determine media content type
+    // Create format info section
+    if (video.mediaInfo?.container || video.format) {
+        const formatInfo = document.createElement('div');
+        formatInfo.className = 'format-info';
+        formatInfo.textContent = video.mediaInfo?.container || video.format || '';
+        fileInfo.appendChild(formatInfo);
+    }
+
+    // Determine media content type and create codec info
     const mediaTypeInfo = document.createElement('div');
     mediaTypeInfo.className = 'media-type-info';
     
-    // Default to "Video & Audio" unless we know otherwise
-    let mediaContentType = "Video & Audio";
+    let mediaContentType = "Unknown";
+    let codecDetails = [];
     
-    // Check for audio-only files based on URL patterns or media info
-    if (video.url.includes('/audio_') || video.url.includes('_audio') || 
-        (video.mediaInfo && !video.mediaInfo.hasVideo && video.mediaInfo.hasAudio)) {
-        mediaContentType = "Audio Only";
-    } else if (video.mediaInfo) {
-        if (video.mediaInfo.hasVideo && !video.mediaInfo.hasAudio) {
+    if (video.mediaInfo) {
+        if (video.mediaInfo.hasVideo && video.mediaInfo.hasAudio) {
+            mediaContentType = "Video & Audio";
+            if (video.mediaInfo.videoCodec) {
+                codecDetails.push(`Video: ${video.mediaInfo.videoCodec.name}`);
+            }
+            if (video.mediaInfo.audioCodec) {
+                codecDetails.push(`Audio: ${video.mediaInfo.audioCodec.name}`);
+            }
+        } else if (video.mediaInfo.hasVideo) {
             mediaContentType = "Video Only";
-        } else if (!video.mediaInfo.hasVideo && video.mediaInfo.hasAudio) {
+            if (video.mediaInfo.videoCodec) {
+                codecDetails.push(`Codec: ${video.mediaInfo.videoCodec.name}`);
+            }
+        } else if (video.mediaInfo.hasAudio) {
             mediaContentType = "Audio Only";
+            if (video.mediaInfo.audioCodec) {
+                codecDetails.push(`Codec: ${video.mediaInfo.audioCodec.name}`);
+                if (video.mediaInfo.audioCodec.channels) {
+                    codecDetails.push(`${video.mediaInfo.audioCodec.channels} channels`);
+                }
+                if (video.mediaInfo.audioCodec.sampleRate) {
+                    codecDetails.push(`${video.mediaInfo.audioCodec.sampleRate}Hz`);
+                }
+            }
         }
+    } else {
+        // Infer initial type from video.type until we get full media info
+        mediaContentType = video.type ? video.type.toUpperCase() : "Unknown";
     }
     
     // Select the appropriate icon based on media type
@@ -283,36 +310,42 @@ export function createVideoElement(video) {
         </svg>
         <span>${mediaContentType}</span>
     `;
-    
+
     // Create a separate container for media type info
     const mediaTypeContainer = document.createElement('div');
     mediaTypeContainer.className = 'media-type-container';
     mediaTypeContainer.appendChild(mediaTypeInfo);
+    
+    // Add codec details if available
+    if (codecDetails.length > 0) {
+        const codecInfo = document.createElement('div');
+        codecInfo.className = 'codec-info';
+        codecInfo.textContent = codecDetails.join(' • ');
+        mediaTypeContainer.appendChild(codecInfo);
+    }
+    
     fileInfo.appendChild(mediaTypeContainer);
     
-    // Resolution info in its own container
+    // Resolution info
     const resolutionContainer = document.createElement('div');
     resolutionContainer.className = 'resolution-container';
     
     const resolutionInfo = document.createElement('div');
     resolutionInfo.className = 'resolution-info';
     
-    // Use resolution from video object if available, otherwise use width/height directly
-    let width, height, fps, bitrate;
-    
+    // Use enhanced resolution formatting with codec info
     if (video.resolution) {
-        width = video.resolution.width;
-        height = video.resolution.height;
-        fps = video.resolution.fps;
-        bitrate = video.resolution.bitrate;
+        const resolutionText = formatResolution(
+            video.resolution.width,
+            video.resolution.height,
+            video.resolution.fps,
+            video.resolution.bitrate,
+            video.mediaInfo
+        );
+        resolutionInfo.textContent = resolutionText;
     } else {
-        width = video.width;
-        height = video.height;
-        fps = video.fps;
-        bitrate = video.bitrate;
+        resolutionInfo.textContent = 'Resolution unknown';
     }
-    
-    resolutionInfo.textContent = formatResolution(width, height, fps, bitrate);
     
     resolutionContainer.appendChild(resolutionInfo);
     fileInfo.appendChild(resolutionContainer);
@@ -358,4 +391,4 @@ export function createVideoElement(video) {
     element.append(previewColumn, infoColumn);
     
     return element;
-} 
+}

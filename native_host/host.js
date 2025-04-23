@@ -384,83 +384,87 @@ async function getStreamQualities(url) {
                     const videoStream = info.streams.find(s => s.codec_type === 'video');
                     const audioStream = info.streams.find(s => s.codec_type === 'audio');
                     
-                    const streamInfo = {};
+                    const streamInfo = {
+                        format: info.format?.format_name || 'unknown',
+                        container: info.format?.format_long_name || 'unknown'
+                    };
                     
                     // Video stream info
                     if (videoStream) {
-                        const width = parseInt(videoStream.width) || null;
-                        const height = parseInt(videoStream.height) || null;
+                        streamInfo.width = parseInt(videoStream.width) || null;
+                        streamInfo.height = parseInt(videoStream.height) || null;
+                        streamInfo.hasVideo = true;
+                        streamInfo.videoCodec = {
+                            name: videoStream.codec_name || 'unknown',
+                            longName: videoStream.codec_long_name || 'unknown',
+                            profile: videoStream.profile || null,
+                            pixFmt: videoStream.pix_fmt || null,
+                            colorSpace: videoStream.color_space || null,
+                            bitDepth: videoStream.bits_per_raw_sample || null
+                        };
                         
-                        // Calculate framerate from either r_frame_rate or avg_frame_rate
+                        // Calculate framerate
                         let fps = null;
                         try {
                             if (videoStream.r_frame_rate) {
                                 const [num, den] = videoStream.r_frame_rate.split('/').map(Number);
-                                if (den && num) fps = num / den;
+                                if (den && num) fps = Math.round(num / den);
                             } else if (videoStream.avg_frame_rate) {
                                 const [num, den] = videoStream.avg_frame_rate.split('/').map(Number);
-                                if (den && num) fps = num / den;
+                                if (den && num) fps = Math.round(num / den);
                             }
                         } catch (e) {
                             logDebug('Error parsing framerate:', e);
                         }
-                        
-                        // Extract bitrate from video stream or format
-                        let bitrate = null;
-                        if (videoStream.bit_rate) {
-                            bitrate = parseInt(videoStream.bit_rate);
-                        }
-                        
-                        // Set video properties
-                        streamInfo.width = width;
-                        streamInfo.height = height;
                         streamInfo.fps = fps;
-                        streamInfo.codec = videoStream.codec_name;
-                        streamInfo.bitrate = bitrate;
+
+                        // Get video bitrate
+                        if (videoStream.bit_rate) {
+                            streamInfo.videoBitrate = parseInt(videoStream.bit_rate);
+                        }
+                    } else {
+                        streamInfo.hasVideo = false;
                     }
                     
                     // Audio stream info
                     if (audioStream) {
-                        streamInfo.audio_codec = audioStream.codec_name;
+                        streamInfo.hasAudio = true;
+                        streamInfo.audioCodec = {
+                            name: audioStream.codec_name || 'unknown',
+                            longName: audioStream.codec_long_name || 'unknown',
+                            profile: audioStream.profile || null,
+                            sampleRate: parseInt(audioStream.sample_rate) || null,
+                            channels: parseInt(audioStream.channels) || null,
+                            channelLayout: audioStream.channel_layout || null,
+                            bitDepth: audioStream.bits_per_raw_sample || null
+                        };
+                        
                         if (audioStream.bit_rate) {
-                            streamInfo.audio_bitrate = parseInt(audioStream.bit_rate);
+                            streamInfo.audioBitrate = parseInt(audioStream.bit_rate);
                         }
+                    } else {
+                        streamInfo.hasAudio = false;
                     }
                     
-                    // Format info (contains size and duration)
-                    if (info.format) {
-                        // Get duration
-                        if (info.format.duration) {
-                            streamInfo.duration = parseFloat(info.format.duration);
-                        }
-                        
-                        // Get file size if available
-                        if (info.format.size) {
-                            streamInfo.sizeBytes = parseInt(info.format.size);
-                        }
-                        
-                        // Get overall bitrate if available
-                        if (info.format.bit_rate && !streamInfo.bitrate) {
-                            streamInfo.bitrate = parseInt(info.format.bit_rate);
-                        }
+                    // Total bitrate from format if available
+                    if (info.format.bit_rate) {
+                        streamInfo.totalBitrate = parseInt(info.format.bit_rate);
                     }
                     
-                    // Calculate estimated size if size is not provided but bitrate and duration are
-                    if (!streamInfo.sizeBytes && streamInfo.bitrate && streamInfo.duration) {
-                        // Calculate estimated size in bytes (bitrate is in bits per second)
-                        streamInfo.sizeBytes = Math.round((streamInfo.bitrate * streamInfo.duration) / 8);
+                    // Duration if available
+                    if (info.format.duration) {
+                        streamInfo.duration = parseFloat(info.format.duration);
                     }
                     
-                    // Send stream info
-                    sendResponse({ 
-                        success: true, 
-                        streamInfo: streamInfo
-                    });
+                    // File size if available
+                    if (info.format.size) {
+                        streamInfo.sizeBytes = parseInt(info.format.size);
+                    }
                     
-                    // Log what we found
+                    sendResponse({ success: true, streamInfo });
                     logDebug('Stream info:', streamInfo);
-                    
                     resolve();
+                    
                 } catch (error) {
                     logDebug('Error parsing FFprobe output:', error);
                     sendResponse({ error: 'Failed to parse stream info' });

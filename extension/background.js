@@ -110,27 +110,38 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         url: msg.url
       }, response => {
         // If we got stream info, save it with the video
-        if (response && response.streamInfo && msg.tabId && videosPerTab[msg.tabId]) {
+        if (response?.streamInfo && msg.tabId && videosPerTab[msg.tabId]) {
           const normalizedUrl = normalizeUrl(msg.url);
           const videoInfo = videosPerTab[msg.tabId].get(normalizedUrl);
           if (videoInfo) {
+            // Store complete stream info
+            videoInfo.mediaInfo = {
+              hasVideo: response.streamInfo.hasVideo,
+              hasAudio: response.streamInfo.hasAudio,
+              videoCodec: response.streamInfo.videoCodec,
+              audioCodec: response.streamInfo.audioCodec,
+              format: response.streamInfo.format,
+              container: response.streamInfo.container,
+              duration: response.streamInfo.duration,
+              sizeBytes: response.streamInfo.sizeBytes
+            };
+            
+            // Store resolution info
             videoInfo.resolution = {
               width: response.streamInfo.width,
               height: response.streamInfo.height,
               fps: response.streamInfo.fps,
-              bitrate: response.streamInfo.bitrate
+              bitrate: response.streamInfo.videoBitrate || response.streamInfo.totalBitrate
             };
-            videosPerTab[msg.tabId].set(normalizedUrl, videoInfo);
             
-            // Log the stream info for debugging
-            console.log('Stream info updated:', {
-              url: msg.url,
-              streamInfo: response.streamInfo
-            });
+            videosPerTab[msg.tabId].set(normalizedUrl, videoInfo);
           }
+          
+          // Always send complete stream info in response
+          resolve({ streamInfo: response.streamInfo });
+        } else {
+          resolve(response);
         }
-        
-        resolve(response);
       });
     });
     

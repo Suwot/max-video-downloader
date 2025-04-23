@@ -152,31 +152,46 @@ export async function fetchVideoInfo(videos, tabId) {
     for (const batch of batches) {
         await Promise.all(batch.map(async (video) => {
             try {
-                if (!video.resolution) {
-                    console.log('Fetching resolution for:', video.url);
-                    const resolution = await getStreamResolution(video.url, video.type, tabId);
-                    console.log('Resolution result:', resolution);
-                    
-                    if (resolution !== 'Resolution unknown' && resolution !== 'Resolution unavailable for blob') {
-                        // Parse resolution into width/height/fps
-                        const match = resolution.match(/(\d+)x(\d+)(?:\s+\(.*?\))?(?:\s+@\s+(\d+)fps)?/);
-                        if (match) {
-                            video.resolution = {
-                                width: parseInt(match[1]),
-                                height: parseInt(match[2]),
-                                fps: match[3] ? parseInt(match[3]) : null
-                            };
-                            
-                            // Update the resolution display in UI
-                            updateVideoResolution(video.url, video.resolution);
-                            
-                            // Update cached videos with new resolution
-                            if (getCachedVideos()) {
-                                const cachedVideo = getCachedVideos().find(v => v.url === video.url);
-                                if (cachedVideo) {
-                                    cachedVideo.resolution = video.resolution;
-                                    setCachedVideos(getCachedVideos());
-                                }
+                if (!video.resolution || !video.mediaInfo) {
+                    console.log('Fetching info for:', video.url);
+                    const response = await chrome.runtime.sendMessage({
+                        type: 'getHLSQualities',
+                        url: video.url,
+                        tabId: tabId
+                    });
+
+                    if (response?.streamInfo) {
+                        const streamInfo = response.streamInfo;
+                        
+                        // Update video object with full stream info
+                        video.mediaInfo = {
+                            hasVideo: streamInfo.hasVideo,
+                            hasAudio: streamInfo.hasAudio,
+                            videoCodec: streamInfo.videoCodec,
+                            audioCodec: streamInfo.audioCodec,
+                            format: streamInfo.format,
+                            container: streamInfo.container,
+                            duration: streamInfo.duration,
+                            sizeBytes: streamInfo.sizeBytes
+                        };
+                        
+                        video.resolution = {
+                            width: streamInfo.width,
+                            height: streamInfo.height,
+                            fps: streamInfo.fps,
+                            bitrate: streamInfo.videoBitrate || streamInfo.totalBitrate
+                        };
+
+                        // Update UI
+                        updateVideoResolution(video.url, streamInfo);
+                        
+                        // Update cached videos
+                        if (getCachedVideos()) {
+                            const cachedVideo = getCachedVideos().find(v => v.url === video.url);
+                            if (cachedVideo) {
+                                cachedVideo.resolution = video.resolution;
+                                cachedVideo.mediaInfo = video.mediaInfo;
+                                setCachedVideos(getCachedVideos());
                             }
                         }
                     }
@@ -193,14 +208,83 @@ export async function fetchVideoInfo(videos, tabId) {
  * @param {string} url - Video URL
  * @param {Object} resolution - Resolution information
  */
-export function updateVideoResolution(url, resolution) {
+export function updateVideoResolution(url, streamInfo) {
     const videoElement = document.querySelector(`.video-item[data-url="${url}"]`);
     if (videoElement) {
         const resolutionInfo = videoElement.querySelector('.resolution-info');
         if (resolutionInfo) {
-            console.log('Updating resolution for', url, resolution);
-            const { width, height, fps, bitrate } = resolution;
-            resolutionInfo.textContent = formatResolution(width, height, fps, bitrate);
+            const resolution = {
+                width: streamInfo.width,
+                height: streamInfo.height,
+                fps: streamInfo.fps,
+                bitrate: streamInfo.videoBitrate || streamInfo.totalBitrate
+            };
+            
+            // Update the resolution text with enhanced codec info
+            resolutionInfo.textContent = formatResolution(
+                resolution.width,
+                resolution.height,
+                resolution.fps,
+                resolution.bitrate,
+                {
+                    videoCodec: streamInfo.videoCodec,
+                    audioCodec: streamInfo.audioCodec
+                }
+            );
+        }
+        
+        // Update media type info if present
+        const mediaTypeInfo = videoElement.querySelector('.media-type-info');
+        if (mediaTypeInfo) {
+            let mediaContentType = "Unknown";
+            if (streamInfo.hasVideo && streamInfo.hasAudio) {
+                mediaContentType = "Video & Audio";
+            } else if (streamInfo.hasVideo) {
+                mediaContentType = "Video Only";
+            } else if (streamInfo.hasAudio) {
+                mediaContentType = "Audio Only";
+            }
+            
+            // Update icon based on media type
+            let mediaIcon = '';
+            if (mediaContentType === "Audio Only") {
+                mediaIcon = '<path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>';
+            } else if (mediaContentType === "Video Only") {
+                mediaIcon = '<path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/>';
+            } else {
+                mediaIcon = '<path d="M21 3H3c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H3V5h18v14z"/><path d="M9 8h2v8H9zm4 0h2v8h-2z"/>';
+            }
+            
+            mediaTypeInfo.innerHTML = `
+                <svg viewBox="0 0 24 24" width="12" height="12" xmlns="http://www.w3.org/2000/svg">
+                    ${mediaIcon}
+                </svg>
+                <span>${mediaContentType}</span>
+            `;
+        }
+        
+        // Update codec info
+        const codecInfo = videoElement.querySelector('.codec-info');
+        if (codecInfo) {
+            const details = [];
+            if (streamInfo.videoCodec) {
+                details.push(`Video: ${streamInfo.videoCodec.name}`);
+            }
+            if (streamInfo.audioCodec) {
+                details.push(`Audio: ${streamInfo.audioCodec.name}`);
+                if (streamInfo.audioCodec.channels) {
+                    details.push(`${streamInfo.audioCodec.channels} channels`);
+                }
+            }
+            codecInfo.textContent = details.join(' • ');
+        }
+        
+        // Update format info if available
+        if (streamInfo.container) {
+            const formatInfo = videoElement.querySelector('.format-info');
+            if (formatInfo) {
+                formatInfo.textContent = streamInfo.container;
+            }
         }
     }
 }
@@ -232,30 +316,28 @@ export async function getStreamResolution(url, type, tabId = null) {
         const response = await chrome.runtime.sendMessage({
             type: 'getHLSQualities',
             url: url,
-            tabId: tabId // Pass tabId for caching
+            tabId: tabId
         });
         
-        if (response && response.streamInfo) {
-            const { width, height, fps, bitrate, hasVideo, hasAudio } = response.streamInfo;
-            if (width && height) {
-                const resolution = formatResolution(width, height, fps, bitrate);
-                addResolutionToCache(url, resolution);
-                
-                // Update cached video with media type info
-                if (getCachedVideos()) {
-                    const cachedVideo = getCachedVideos().find(v => v.url === url);
-                    if (cachedVideo) {
-                        cachedVideo.resolution = { width, height, fps, bitrate };
-                        cachedVideo.mediaInfo = { hasVideo, hasAudio };
-                        setCachedVideos(getCachedVideos());
-                        
-                        // Immediately update the UI
-                        updateVideoResolution(url, { width, height, fps, bitrate });
-                    }
+        if (response?.streamInfo) {
+            const streamInfo = response.streamInfo;
+            const resolution = formatResolution(
+                streamInfo.width,
+                streamInfo.height,
+                streamInfo.fps,
+                streamInfo.videoBitrate || streamInfo.totalBitrate,
+                {
+                    videoCodec: streamInfo.videoCodec,
+                    audioCodec: streamInfo.audioCodec
                 }
-                
-                return resolution;
-            }
+            );
+            
+            addResolutionToCache(url, resolution);
+            
+            // Update UI immediately with full stream info
+            updateVideoResolution(url, streamInfo);
+            
+            return resolution;
         }
     } catch (error) {
         console.error('Failed to get resolution:', error);
@@ -286,4 +368,4 @@ export function setupAutoDetection() {
             }).catch(err => console.log('Content script not ready yet'));
         }
     });
-} 
+}
