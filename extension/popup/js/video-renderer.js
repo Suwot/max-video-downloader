@@ -374,12 +374,12 @@ export function createVideoElement(video) {
     
     const downloadButton = document.createElement('button');
     downloadButton.className = 'download-btn';
-    downloadButton.textContent = 'Download';
+    downloadButton.innerHTML = '<span>Download</span>';
     downloadButton.dataset.url = video.resolutionOptions ? 
         video.resolutionOptions[0].url : video.url;
     
     downloadButton.addEventListener('click', async (event) => {
-        const button = event.target;
+        const button = event.target.closest('.download-btn');
         const url = button.dataset.url || video.url;
         await handleDownload(button, url, video.type);
     });

@@ -7,14 +7,17 @@ const downloadPorts = new Map();
 // Handle port connections from popup
 chrome.runtime.onConnect.addListener(port => {
   if (port.name === 'download_progress') {
-    downloadPorts.set('popup', port);
+    // Create unique ID for each port connection
+    const portId = Date.now().toString();
+    downloadPorts.set(portId, port);
+    
     port.onDisconnect.addListener(() => {
-      downloadPorts.delete('popup');
+      downloadPorts.delete(portId);
     });
   }
 });
 
-// Single message listener for all types of messages
+// Single message listener for all messages
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   console.log('Message received:', msg);
   
@@ -22,37 +25,40 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.type === 'downloadHLS' || msg.type === 'download') {
     const notificationId = `download-${Date.now()}`;
     let hasError = false;
-    let responseHandler = null;
+    
+    // Get all active download ports
+    const ports = Array.from(downloadPorts.values());
 
-    // Get the popup port for sending progress updates
-    const port = downloadPorts.get('popup');
-
-    // Create the response handler
-    responseHandler = (response) => {
+    // Create response handler
+    const responseHandler = (response) => {
       if (chrome.runtime.lastError) {
         console.error('Native messaging error:', chrome.runtime.lastError);
-        handleDownloadError(chrome.runtime.lastError.message, notificationId, port);
+        handleDownloadError(chrome.runtime.lastError.message, notificationId, ports);
         return;
       }
 
       // Handle different response types
       if (response && response.type === 'progress' && !hasError) {
-        // Update notification less frequently than UI
+        // Update notification less frequently
         if (response.progress % 10 === 0) {
           chrome.notifications.update(notificationId, {
             message: `Downloading: ${response.progress}%`
           });
         }
         
-        // Always forward progress to popup
-        if (port) {
-          port.postMessage(response);
-        }
+        // Forward progress to all connected popups
+        ports.forEach(port => {
+          try {
+            port.postMessage(response);
+          } catch (e) {
+            console.error('Error sending progress to port:', e);
+          }
+        });
       } else if (response && response.success && !hasError) {
-        handleDownloadSuccess(response, notificationId, port);
+        handleDownloadSuccess(response, notificationId, ports);
       } else if (response && response.error && !hasError) {
         hasError = true;
-        handleDownloadError(response.error, notificationId, port);
+        handleDownloadError(response.error, notificationId, ports);
       }
     };
 
@@ -356,24 +362,34 @@ chrome.tabs.onRemoved.addListener((tabId) => {
     delete playlistsPerTab[tabId];
 });
 
-function handleDownloadSuccess(response, notificationId, port) {
+function handleDownloadSuccess(response, notificationId, ports) {
   chrome.notifications.update(notificationId, {
     title: 'Download Complete',
     message: `Saved to: ${response.path}`
   });
   
-  if (port) {
-    port.postMessage({ success: true, path: response.path });
-  }
+  // Notify all connected popups
+  ports.forEach(port => {
+    try {
+      port.postMessage(response);
+    } catch (e) {
+      console.error('Error sending success to port:', e);
+    }
+  });
 }
 
-function handleDownloadError(error, notificationId, port) {
+function handleDownloadError(error, notificationId, ports) {
   chrome.notifications.update(notificationId, {
     title: 'Download Failed',
     message: error
   });
   
-  if (port) {
-    port.postMessage({ success: false, error: error });
-  }
+  // Notify all connected popups
+  ports.forEach(port => {
+    try {
+      port.postMessage({ success: false, error: error });
+    } catch (e) {
+      console.error('Error sending error to port:', e);
+    }
+  });
 }

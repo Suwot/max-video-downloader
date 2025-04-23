@@ -359,13 +359,25 @@ export function setupAutoDetection() {
         return true;
     });
     
-    // Tell content script to start detecting
-    chrome.tabs.query({ active: true, currentWindow: true }, tabs => {
-        if (tabs[0]) {
-            chrome.tabs.sendMessage(tabs[0].id, { 
-                action: 'startBackgroundDetection',
-                enabled: true
-            }).catch(err => console.log('Content script not ready yet'));
-        }
-    });
+    // Try to connect to content script with retries
+    function connectToContentScript(retries = 3) {
+        chrome.tabs.query({ active: true, currentWindow: true }, tabs => {
+            if (tabs[0]) {
+                chrome.tabs.sendMessage(tabs[0].id, { 
+                    action: 'startBackgroundDetection',
+                    enabled: true
+                }).then(response => {
+                    console.log('Content script connected successfully');
+                }).catch(err => {
+                    console.log('Content script connection attempt failed:', err);
+                    if (retries > 0) {
+                        // Retry after a short delay
+                        setTimeout(() => connectToContentScript(retries - 1), 500);
+                    }
+                });
+            }
+        });
+    }
+    
+    connectToContentScript();
 }

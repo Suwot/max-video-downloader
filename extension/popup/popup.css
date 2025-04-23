@@ -655,31 +655,47 @@ body.theme-light {
     font-size: 11px;
     cursor: pointer;
     text-align: center;
-    transition: background-color 0.2s;
+    position: relative;
     min-width: 80px;
-    transition: background-color 0.2s, color 0.2s;
+    overflow: hidden;
+}
+
+.download-btn::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+    width: 0;
+    background-color: rgba(255, 255, 255, 0.1);
+    transition: width 0.3s ease;
+}
+
+.download-btn:not(:disabled) {
+    background-image: linear-gradient(to right, #1565C0 0%, #1976D2 0%);
+    background-size: 200% 100%;
+    transition: background-position 0.3s ease;
+}
+
+.download-btn span {
+    position: relative;
+    z-index: 1;
+    mix-blend-mode: screen;
 }
 
 .download-btn:hover {
     background-color: #1565C0;
 }
 
-.theme-dark .download-btn:disabled {
-    background-color: #464f59;
-    cursor: not-allowed;
-    opacity: 0.8;
-    cursor: default;
-}
-
+.theme-dark .download-btn:disabled,
 .theme-light .download-btn:disabled {
-    background-color: #bbdefb;
-    cursor: not-allowed;
-    opacity: 0.8;
     cursor: default;
+    opacity: 1;
 }
 
-.download-btn[disabled]:not(:empty) {
-    animation: pulse 2s infinite;
+.download-btn[data-state="complete"] {
+    background-color: #43A047;
+    background-image: none;
 }
 
 /* Refresh button */
@@ -875,4 +891,52 @@ body.theme-light {
     0% { opacity: 0.6; }
     50% { opacity: 1; }
     100% { opacity: 0.6; }
+}
+
+/* Error notification */
+.error-notification {
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%) translateY(20px);
+    background-color: #d32f2f;
+    color: white;
+    padding: 8px 16px;
+    border-radius: 4px;
+    font-size: 14px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+    z-index: 1000;
+    opacity: 0;
+    transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+/* Dark theme adjustments */
+.theme-dark .error-notification {
+    background-color: #ef5350;
+}
+
+/* Button progress styling */
+.download-button {
+    position: relative;
+    overflow: hidden;
+    transition: background-color 0.3s ease;
+}
+
+.download-button::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+    width: 0%;
+    background-color: rgba(255, 255, 255, 0.1);
+    transition: width 0.3s ease;
+}
+
+.download-button.downloading::after {
+    width: var(--progress, 0%);
+}
+
+.download-button.complete {
+    background-color: #43A047 !important;
 }

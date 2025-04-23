@@ -119,10 +119,31 @@ export function getBaseUrl(url) {
 }
 
 /**
- * Display error notification
- * @param {string} message - Error message
+ * Show error notification
+ * @param {string} message - Error message to display
  */
 export function showError(message) {
+    // Show both popup notification and chrome notification
+    const notification = document.createElement('div');
+    notification.className = 'error-notification';
+    notification.textContent = message;
+    
+    document.body.appendChild(notification);
+    
+    // Animate in
+    requestAnimationFrame(() => {
+        notification.style.opacity = '1';
+        notification.style.transform = 'translateY(0)';
+    });
+    
+    // Remove after 3 seconds
+    setTimeout(() => {
+        notification.style.opacity = '0';
+        notification.style.transform = 'translateY(20px)';
+        setTimeout(() => notification.remove(), 300);
+    }, 3000);
+    
+    // Also show Chrome notification
     chrome.notifications.create({
         type: 'basic',
         iconUrl: 'icons/48.png',

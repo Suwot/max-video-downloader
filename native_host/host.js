@@ -22,45 +22,43 @@ function logDebug(...args) {
 // Verify ffmpeg installation at startup
 function checkFFmpeg() {
     try {
-        // Try to auto-detect ffmpeg paths first
-        try {
-            const findCommand = process.platform === 'win32' ? 'where' : 'which';
-            FFMPEG_PATH = execSync(`${findCommand} ffmpeg`).toString().trim();
-            FFPROBE_PATH = execSync(`${findCommand} ffprobe`).toString().trim();
-            logDebug('Auto-detected FFmpeg at:', FFMPEG_PATH);
-            logDebug('Auto-detected FFprobe at:', FFPROBE_PATH);
-        } catch (autoDetectError) {
-            logDebug('Could not auto-detect FFmpeg, using hardcoded paths');
-            
-            // Fallback to hardcoded paths based on platform
-            if (process.platform === 'darwin') {
-                // macOS - common Homebrew/MacPorts locations
-                FFMPEG_PATH = '/opt/homebrew/bin/ffmpeg';
-                FFPROBE_PATH = '/opt/homebrew/bin/ffprobe';
+        // Try multiple common macOS paths first for M1/Intel Macs
+        const macOSPaths = [
+            '/opt/homebrew/bin',  // M1 Mac Homebrew
+            '/usr/local/bin',     // Intel Mac Homebrew
+            '/opt/local/bin',     // MacPorts
+            '/usr/bin'            // System
+        ];
+
+        if (process.platform === 'darwin') {
+            // Try each path until we find both ffmpeg and ffprobe
+            for (const basePath of macOSPaths) {
+                const ffmpegPath = `${basePath}/ffmpeg`;
+                const ffprobePath = `${basePath}/ffprobe`;
                 
-                // Check for Intel Mac Homebrew location if M1 location fails
-                if (!fs.existsSync(FFMPEG_PATH)) {
-                    FFMPEG_PATH = '/usr/local/bin/ffmpeg';
-                    FFPROBE_PATH = '/usr/local/bin/ffprobe';
+                if (fs.existsSync(ffmpegPath) && fs.existsSync(ffprobePath)) {
+                    FFMPEG_PATH = ffmpegPath;
+                    FFPROBE_PATH = ffprobePath;
+                    logDebug('Found FFmpeg at:', FFMPEG_PATH);
+                    logDebug('Found FFprobe at:', FFPROBE_PATH);
+                    return true;
                 }
-            } else if (process.platform === 'win32') {
-                // Windows
-                FFMPEG_PATH = 'C:\\ffmpeg\\bin\\ffmpeg.exe';
-                FFPROBE_PATH = 'C:\\ffmpeg\\bin\\ffprobe.exe';
-            } else {
-                // Linux/other
-                FFMPEG_PATH = '/usr/bin/ffmpeg';
-                FFPROBE_PATH = '/usr/bin/ffprobe';
             }
+        } else if (process.platform === 'win32') {
+            // Windows paths
+            FFMPEG_PATH = 'C:\\ffmpeg\\bin\\ffmpeg.exe';
+            FFPROBE_PATH = 'C:\\ffmpeg\\bin\\ffprobe.exe';
+        } else {
+            // Linux paths
+            FFMPEG_PATH = '/usr/bin/ffmpeg';
+            FFPROBE_PATH = '/usr/bin/ffprobe';
         }
-        
-        // Verify the files exist
+
+        // Final check if paths are valid
         if (!fs.existsSync(FFMPEG_PATH) || !fs.existsSync(FFPROBE_PATH)) {
             throw new Error('FFmpeg or FFprobe not found at specified paths');
         }
-        
-        logDebug('Found FFmpeg at:', FFMPEG_PATH);
-        logDebug('Found FFprobe at:', FFPROBE_PATH);
+
         return true;
     } catch (err) {
         logDebug('FFmpeg check failed:', err);
@@ -86,6 +84,10 @@ function getFullEnv() {
         PATH: `${path}:${process.env.PATH || ''}`
     };
 }
+
+// Add at the top of the file with other globals
+let lastResponseTime = 0;
+const MIN_RESPONSE_INTERVAL = 250; // Minimum 250ms between progress messages
 
 // Initial setup
 try {
@@ -178,10 +180,6 @@ function processMessages() {
         }
     }
 }
-
-// Add at the top of the file with other globals
-let lastResponseTime = 0;
-const MIN_RESPONSE_INTERVAL = 100; // Minimum 100ms between messages
 
 async function handleMessage(request) {
     logDebug('Processing message:', request);
@@ -281,10 +279,19 @@ async function downloadVideo(url, filename, savePath, quality = 'best') {
             let lastProgressUpdate = 0;
             let downloadStartTime = Date.now();
             let lastBytes = 0;
-            let fileSize = null;
-            let lastProgress = -1; // Track last progress to avoid duplicate updates
-            
-            // Try to get total duration from ffprobe first
+            let totalDuration = null;
+            let hasError = false;
+
+            // Send initial progress
+            sendResponse({
+                type: 'progress',
+                progress: 0,
+                speed: 0,
+                downloaded: 0,
+                size: 0
+            });
+
+            // Try to get duration first
             const ffprobe = spawn(FFPROBE_PATH, [
                 '-v', 'quiet',
                 '-print_format', 'json',
@@ -294,9 +301,10 @@ async function downloadVideo(url, filename, savePath, quality = 'best') {
             
             ffprobe.stdout.on('data', data => {
                 try {
-                    const info = JSON.parse(data);
-                    if (info.format && info.format.size) {
-                        fileSize = parseInt(info.format.size);
+                    const info = JSON.parse(data.toString());
+                    if (info.format && info.format.duration) {
+                        totalDuration = parseFloat(info.format.duration);
+                        logDebug('Got total duration:', totalDuration);
                     }
                 } catch (e) {
                     logDebug('Error parsing ffprobe output:', e);
@@ -304,77 +312,72 @@ async function downloadVideo(url, filename, savePath, quality = 'best') {
             });
 
             ffmpeg.stderr.on('data', (data) => {
+                if (hasError) return;
+                
                 const output = data.toString();
                 errorOutput += output;
                 progressOutput += output;
                 
-                // Parse progress and send updates, but not too frequently
                 const now = Date.now();
-                if (now - lastProgressUpdate > 500) { // Update every 500ms
+                if (now - lastProgressUpdate > 250) {
                     lastProgressUpdate = now;
                     
-                    // Extract progress information
                     const timeMatch = progressOutput.match(/time=(\d+):(\d+):(\d+.\d+)/);
                     const sizeMatch = progressOutput.match(/size=\s*(\d+)kB/);
                     
                     if (timeMatch && sizeMatch) {
                         const [_, hours, minutes, seconds] = timeMatch;
-                        const totalSeconds = parseInt(hours) * 3600 + parseInt(minutes) * 60 + parseFloat(seconds);
+                        const currentTime = parseInt(hours) * 3600 + parseInt(minutes) * 60 + parseFloat(seconds);
                         const currentBytes = parseInt(sizeMatch[1]) * 1024;
                         
                         // Calculate speed
                         const elapsedTime = (now - downloadStartTime) / 1000;
                         const bytesPerSecond = currentBytes / elapsedTime;
-                        const instantSpeed = (currentBytes - lastBytes) * 2; // 500ms update interval -> *2 for per second
+                        const instantSpeed = (currentBytes - lastBytes) * 4;
                         lastBytes = currentBytes;
                         
-                        // Calculate progress and ETA
-                        let progress = 0;
-                        let eta = null;
-                        
-                        if (fileSize) {
-                            progress = Math.min(99, Math.round((currentBytes / fileSize) * 100));
-                            eta = (fileSize - currentBytes) / bytesPerSecond;
+                        // Calculate progress based on time if we have duration
+                        let progress;
+                        if (totalDuration) {
+                            progress = Math.min(99, Math.round((currentTime / totalDuration) * 100));
                         } else {
-                            // Fallback progress based on stream duration if available
-                            progress = Math.min(99, Math.round(totalSeconds / 10));
+                            // Fallback to a time-based estimate
+                            progress = Math.min(99, Math.round((currentTime / 10) * 100));
                         }
                         
-                        // Only send update if progress has changed
-                        if (progress !== lastProgress) {
-                            lastProgress = progress;
-                            
-                            // Send detailed progress update
-                            sendResponse({ 
-                                type: 'progress',
-                                progress,
-                                speed: instantSpeed > 0 ? instantSpeed : bytesPerSecond,
-                                downloaded: currentBytes,
-                                size: fileSize,
-                                eta: eta
-                            });
-                        }
+                        // Send progress update
+                        sendResponse({
+                            type: 'progress',
+                            progress,
+                            speed: instantSpeed > 0 ? instantSpeed : bytesPerSecond,
+                            downloaded: currentBytes,
+                            currentTime,
+                            totalDuration
+                        });
                         
-                        // Clear progress output to avoid memory growth
-                        progressOutput = '';
+                        progressOutput = ''; // Clear processed output
                     }
                 }
             });
 
             ffmpeg.on('close', (code) => {
-                if (code === 0) {
+                if (code === 0 && !hasError) {
                     logDebug('Download completed successfully');
-                    // Send final progress update
-                    sendResponse({ 
+                    // Send final progress
+                    sendResponse({
                         type: 'progress',
                         progress: 100,
-                        downloaded: fileSize || lastBytes,
-                        size: fileSize || lastBytes
+                        downloaded: lastBytes,
+                        speed: 0
                     });
-                    // Send success response
-                    sendResponse({ success: true, path: uniqueOutput });
-                    resolve();
-                } else {
+                    
+                    // Small delay to ensure progress is received first
+                    setTimeout(() => {
+                        sendResponse({ success: true, path: uniqueOutput });
+                        resolve();
+                    }, 100);
+                } else if (!hasError) {
+                    hasError = true;
                     const error = `FFmpeg exited with code ${code}: ${errorOutput}`;
                     logDebug('Download failed:', error);
                     sendResponse({ error });
@@ -383,9 +386,12 @@ async function downloadVideo(url, filename, savePath, quality = 'best') {
             });
 
             ffmpeg.on('error', (err) => {
-                logDebug('FFmpeg spawn error:', err);
-                sendResponse({ error: err.message });
-                reject(err);
+                if (!hasError) {
+                    hasError = true;
+                    logDebug('FFmpeg spawn error:', err);
+                    sendResponse({ error: err.message });
+                    reject(err);
+                }
             });
         });
     } catch (err) {
@@ -602,29 +608,27 @@ function generatePreview(url) {
 
 function sendResponse(message) {
     try {
-        // Rate limit messages
+        // Only rate limit progress messages
         const now = Date.now();
-        if (now - lastResponseTime < MIN_RESPONSE_INTERVAL) {
-            return; // Skip this update if too soon
+        if (message.type === 'progress' && now - lastResponseTime < MIN_RESPONSE_INTERVAL) {
+            return;
         }
         lastResponseTime = now;
-
+        
         const messageStr = JSON.stringify(message);
         const header = Buffer.alloc(4);
         header.writeUInt32LE(messageStr.length, 0);
         
-        // Check if stdout is still writable
-        if (process.stdout.writable) {
-            process.stdout.write(header);
-            process.stdout.write(messageStr);
-            process.stdout.flush(); // Ensure the message is sent immediately
-            logDebug('Sent response:', message);
-        } else {
-            logDebug('Cannot send response - pipe closed');
+        // Wrap in try-catch to handle potential write errors
+        try {
+            // Write as a single operation to avoid interleaved writes
+            const combined = Buffer.concat([header, Buffer.from(messageStr)]);
+            process.stdout.write(combined);
+        } catch (writeErr) {
+            logDebug('Error writing to stdout:', writeErr);
         }
     } catch (err) {
-        // Only log the error, don't try to send error response
-        logDebug('Error sending response:', err);
+        logDebug('Error preparing response:', err);
     }
 }
 

@@ -1,10 +1,11 @@
-console.log('Content script loaded');
+console.log('Content script loading...');
 
 // Track detected videos to avoid duplicates
 const detectedVideos = new Set();
 const blobUrls = new Map();
 let isPopupOpen = false;
 let autoDetectionEnabled = true;
+let isInitialized = false;
 
 // Track XMLHttpRequest and fetch requests for video content
 function setupNetworkListeners() {
@@ -289,46 +290,92 @@ function findVideos() {
 
 // Initialize
 function init() {
+    if (isInitialized) return;
+    
     console.log('Initializing video detection...');
+    
+    // Setup listeners immediately
     setupNetworkListeners();
     setupBlobListeners();
-    
-    // Listen for messages from popup
-    chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-        if (message.action === 'findVideos') {
-            const videos = findVideos();
-            sendResponse(videos);
-            return true;
-        }
-        
-        if (message.action === 'startBackgroundDetection') {
-            autoDetectionEnabled = true;
-            sendResponse({ status: 'ok' });
-            return true;
-        }
-        
-        if (message.action === 'stopBackgroundDetection') {
-            autoDetectionEnabled = false;
-            sendResponse({ status: 'ok' });
-            return true;
-        }
-        
-        if (message.action === 'popupOpened') {
-            isPopupOpen = true;
-            sendResponse({ status: 'ok' });
-            return true;
-        }
-        
-        if (message.action === 'popupClosed') {
-            isPopupOpen = false;
-            sendResponse({ status: 'ok' });
-            return true;
-        }
-    });
-    
-    // Enhanced video detection with MutationObserver
     setupEnhancedDetection();
+    
+    // Listen for messages from popup with retry mechanism
+    function setupMessageListener() {
+        try {
+            chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+                console.log('Content script received message:', message);
+                
+                if (message.action === 'findVideos') {
+                    const videos = findVideos();
+                    console.log('Found videos:', videos);
+                    sendResponse(videos);
+                    return true;
+                }
+                
+                if (message.action === 'startBackgroundDetection') {
+                    autoDetectionEnabled = true;
+                    sendResponse({ status: 'ok' });
+                    return true;
+                }
+                
+                if (message.action === 'stopBackgroundDetection') {
+                    autoDetectionEnabled = false;
+                    sendResponse({ status: 'ok' });
+                    return true;
+                }
+                
+                if (message.action === 'popupOpened') {
+                    isPopupOpen = true;
+                    // Run an immediate video check when popup opens
+                    const videos = findVideos();
+                    if (videos && videos.length > 0) {
+                        notifyBackground(videos);
+                    }
+                    sendResponse({ status: 'ready' });
+                    return true;
+                }
+                
+                if (message.action === 'popupClosed') {
+                    isPopupOpen = false;
+                    sendResponse({ status: 'ok' });
+                    return true;
+                }
+
+                // Default response for unknown messages
+                sendResponse({ error: 'Unknown message type' });
+                return true;
+            });
+            
+            // Successfully set up listener
+            isInitialized = true;
+            console.log('Content script initialized successfully');
+            
+        } catch (error) {
+            console.error('Failed to setup message listener:', error);
+            // Retry setup after a short delay if it fails
+            setTimeout(setupMessageListener, 500);
+        }
+    }
+    
+    setupMessageListener();
 }
+
+// Ensure initialization happens at the right time
+if (document.readyState === 'complete' || document.readyState === 'interactive') {
+    init();
+} else {
+    document.addEventListener('DOMContentLoaded', init);
+    // Fallback in case DOMContentLoaded was missed
+    window.addEventListener('load', init);
+}
+
+// Additional fallback - check initialization after a delay
+setTimeout(() => {
+    if (!isInitialized) {
+        console.log('Fallback initialization...');
+        init();
+    }
+}, 1000);
 
 // Enhanced video detection with MutationObserver
 function setupEnhancedDetection() {

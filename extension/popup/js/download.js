@@ -13,19 +13,9 @@ export async function handleDownload(button, url, type) {
     const originalText = button.textContent;
     button.disabled = true;
     
-    // Get the progress container and bar
-    const videoItem = button.closest('.video-item');
-    const progressContainer = videoItem.querySelector('.progress-container');
-    const progressBar = progressContainer.querySelector('.progress-bar');
-    
-    // Create progress info container
-    const progressInfo = document.createElement('div');
-    progressInfo.className = 'progress-info';
-    progressContainer.appendChild(progressInfo);
-    
-    // Show progress elements
-    progressContainer.style.display = 'block';
-    progressBar.style.width = '0%';
+    // Set initial state
+    button.innerHTML = '<span>Starting...</span>';
+    button.style.backgroundImage = `linear-gradient(to right, #1565C0 0%, #1976D2 0%)`;
     
     try {
         // For blob URLs, handle differently
@@ -35,41 +25,35 @@ export async function handleDownload(button, url, type) {
             return;
         }
         
-        // Create a new port connection for this download
+        // Create a new port connection
         downloadPort = chrome.runtime.connect({ name: 'download_progress' });
         
         // Set up message listener
         downloadPort.onMessage.addListener((response) => {
-            console.log('Progress update:', response);
+            console.log('Download progress:', response); // Debug log
             
             if (response?.type === 'progress') {
-                // Update progress bar
-                progressBar.style.width = `${response.progress}%`;
+                const progress = response.progress || 0;
                 
-                // Update progress info with speed and ETA
-                const progressText = [];
+                // Update button background to show progress
+                button.style.backgroundImage = `linear-gradient(to right, #1565C0 ${progress}%, #1976D2 ${progress}%)`;
                 
+                // Update text with progress and speed
+                let text = `${progress}%`;
                 if (response.speed) {
-                    progressText.push(`${formatSpeed(response.speed)}`);
+                    text += ` • ${formatSpeed(response.speed)}`;
                 }
+                button.querySelector('span').textContent = text;
                 
-                if (response.eta) {
-                    progressText.push(`ETA: ${formatTime(response.eta)}`);
-                }
-                
-                if (response.size) {
-                    progressText.push(`Size: ${formatSize(response.size)}`);
-                }
-                
-                if (response.downloaded) {
-                    progressText.push(`${formatSize(response.downloaded)} downloaded`);
-                }
-                
-                progressInfo.textContent = progressText.join(' • ');
-                button.textContent = `${response.progress}%`;
             } else if (response?.success) {
-                button.textContent = 'Complete!';
+                // Show complete state
+                button.style.backgroundImage = 'none';
+                button.style.backgroundColor = '#43A047';
+                button.querySelector('span').textContent = 'Complete!';
+                
+                // Reset after delay
                 setTimeout(() => resetDownloadState(), 2000);
+                
             } else if (response?.error) {
                 showError(response.error);
                 resetDownloadState();
@@ -77,13 +61,12 @@ export async function handleDownload(button, url, type) {
         });
         
         downloadPort.onDisconnect.addListener(() => {
-            console.log('Port disconnected');
+            console.log('Port disconnected'); // Debug log
             downloadPort = null;
             resetDownloadState();
         });
         
         // Send download request
-        console.log('Sending download request:', url);
         chrome.runtime.sendMessage({
             type: type === 'hls' ? 'downloadHLS' : 'download',
             url: url
@@ -101,11 +84,34 @@ export async function handleDownload(button, url, type) {
             downloadPort = null;
         }
         button.disabled = false;
-        button.textContent = originalText;
-        progressContainer.style.display = 'none';
-        progressBar.style.width = '0%';
-        progressInfo.remove();
+        button.style.backgroundImage = 'none';
+        button.style.backgroundColor = '#1976D2';
+        button.innerHTML = originalText;
     }
+}
+
+function updateProgress(button, progress) {
+    // Ensure progress is between 0 and 100
+    progress = Math.max(0, Math.min(100, progress));
+    
+    // Update background gradient
+    if (progress < 100) {
+        button.style.backgroundImage = `linear-gradient(to right, #1565C0 ${progress}%, #1976D2 ${progress}%)`;
+    } else {
+        button.style.backgroundImage = 'none';
+        button.style.backgroundColor = '#43A047';
+    }
+}
+
+function resetDownloadState(button, originalText) {
+    if (downloadPort) {
+        downloadPort.disconnect();
+        downloadPort = null;
+    }
+    button.disabled = false;
+    button.style.backgroundImage = 'none';
+    button.style.backgroundColor = '#1976D2';
+    button.innerHTML = originalText;
 }
 
 // Format file size in human readable form
