@@ -262,23 +262,46 @@ function getVideoType(url) {
     try {
         const urlObj = new URL(url);
         const baseUrl = url.split('?')[0].split('#')[0];
-        const isGif = baseUrl.toLowerCase().endsWith('.gif');
         
-        // If it's explicitly a GIF file, don't treat it as HLS
-        if (isGif) {
-            return 'direct';
-        }
-        
-        // Check for HLS streams
-        if (baseUrl.toLowerCase().endsWith('.m3u8') || urlObj.pathname.includes('/hls/')) {
-            // Additional check for tracking pixels/analytics
-            if (urlObj.hostname.includes('analytics') || 
-                urlObj.hostname.includes('tracking') ||
-                urlObj.hostname.includes('metric') ||
-                urlObj.pathname.includes('ping') ||
-                urlObj.pathname.includes('pixel')) {
+        // Define patterns for tracking/analytics URLs
+        const ignoredPathPatterns = [
+            /\.gif$/i,                  // tracking pixels
+            /\/ping/i,                  // ping endpoints
+            /\/track/i, /\/pixel/i,
+            /\/stats/i, /\/metric/i,
+            /\/telemetry/i,
+            /\/analytics/i,
+            /jwpltx/, /tracking/
+        ];
+
+        // Check if URL matches ignored patterns
+        if (ignoredPathPatterns.some(pattern => pattern.test(urlObj.pathname) || pattern.test(urlObj.hostname))) {
+            // Before rejecting, check if query params contain actual video URLs
+            const containsVideoParam = Array.from(urlObj.searchParams.values()).some(v => {
+                try {
+                    const decoded = decodeURIComponent(v);
+                    return decoded.includes('.m3u8') || decoded.includes('.mpd');
+                } catch {
+                    return false;
+                }
+            });
+            
+            if (!containsVideoParam) {
                 return 'direct';
             }
+        }
+
+        // Scan query parameters for embedded video URLs
+        for (const [key, value] of urlObj.searchParams.entries()) {
+            try {
+                const decoded = decodeURIComponent(value);
+                if (decoded.match(/\.m3u8(\?|$)/)) return 'hls';
+                if (decoded.match(/\.mpd(\?|$)/)) return 'dash';
+            } catch {}
+        }
+
+        // Check the base URL for direct video patterns
+        if (baseUrl.toLowerCase().endsWith('.m3u8') || urlObj.pathname.includes('/hls/')) {
             return 'hls';
         }
         

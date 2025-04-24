@@ -605,13 +605,24 @@ function handleDownloadError(error, notificationId, ports) {
 // Helper function to fetch manifest content
 async function fetchManifestContent(url) {
     try {
-        const response = await fetch(url);
+        const response = await fetch(url, {
+            credentials: 'include',
+            mode: 'cors',
+            headers: {
+                'Accept': '*/*'
+            }
+        });
+        
         if (!response.ok) {
-            throw new Error(`Failed to fetch manifest: ${response.statusText}`);
+            throw new Error(`Failed to fetch manifest: ${response.status} ${response.statusText}`);
         }
+        
         return await response.text();
     } catch (error) {
         console.error('Error fetching manifest:', error);
+        if (error instanceof TypeError && error.message === 'Failed to fetch') {
+            console.error('This might be due to CORS restrictions or the server being unavailable');
+        }
         return null;
     }
 }
