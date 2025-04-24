@@ -1,137 +1,182 @@
 /**
- * Detect if an M3U8 file is a master playlist
+ * Detect if an M3U8 file is a master playlist using proper HLS spec rules
  * @param {string} content - M3U8 content
- * @returns {boolean} True if this is a master playlist
+ * @returns {Object} Detection result with confidence level
  */
-function isMasterPlaylist(content) {
-    // Quick checks for common tags
-    const hasStreamInf = content.includes('#EXT-X-STREAM-INF:');
-    const hasMediaSegments = content.includes('#EXTINF:');
-    const hasTargetDuration = content.includes('#EXT-X-TARGETDURATION:');
-    
-    // If it has stream variants, it's definitely a master playlist
-    if (hasStreamInf && !hasMediaSegments) {
-        return true;
+function detectPlaylistType(content) {
+    const result = {
+        isMaster: false,
+        confidence: 0,
+        reason: []
+    };
+
+    // Strong indicators for master playlist
+    if (content.includes('#EXT-X-STREAM-INF:')) {
+        result.confidence += 0.5;
+        result.reason.push('Has STREAM-INF tag');
     }
-    
-    // If it has media segments or target duration, it's definitely a variant playlist
-    if (hasMediaSegments || hasTargetDuration) {
-        return false;
+
+    // Strong indicators for variant playlist
+    if (content.includes('#EXTINF:')) {
+        result.confidence -= 0.5;
+        result.reason.push('Has EXTINF tag (variant)');
     }
-    
-    // Default to false if we can't be certain
-    return false;
+    if (content.includes('#EXT-X-TARGETDURATION:')) {
+        result.confidence -= 0.4;
+        result.reason.push('Has TARGETDURATION tag (variant)');
+    }
+    if (content.includes('#EXT-X-MEDIA-SEQUENCE:')) {
+        result.confidence -= 0.3;
+        result.reason.push('Has MEDIA-SEQUENCE tag (variant)');
+    }
+
+    // Additional context clues
+    if (content.includes('#EXT-X-VERSION:')) {
+        // Version tag alone doesn't indicate type but adds confidence
+        result.confidence += 0.1;
+        result.reason.push('Has VERSION tag');
+    }
+
+    // Check for media segment patterns
+    const hasSegments = /\.ts(\?|$)/.test(content) || /\.aac(\?|$)/.test(content) || /\.mp4(\?|$)/.test(content);
+    if (hasSegments) {
+        result.confidence -= 0.3;
+        result.reason.push('Contains media segments');
+    }
+
+    result.isMaster = result.confidence > 0;
+    return result;
 }
 
 /**
- * Parse HLS manifest content and detect relationships
+ * Parse HLS manifest content
  * @param {string} content - M3U8 content
  * @param {string} baseUrl - Base URL for resolving relative paths
- * @param {Object} options - Additional options
- * @returns {Object} Parsed manifest info with variants and relationships
+ * @returns {Object} Parsed manifest info
  */
-export function parseHLSManifest(content, baseUrl, options = {}) {
-    const variants = [];
+export function parseHLSManifest(content, baseUrl) {
     const lines = content.split('\n');
-    let currentVariant = null;
-    let isPlaylist = isMasterPlaylist(content);
+    const type = detectPlaylistType(content);
     
-    // Additional metadata we might find
+    // Early return for non-master playlists
+    if (!type.isMaster) {
+        return {
+            type: 'hls',
+            isPlaylist: false,
+            segments: parseMediaSegments(content, baseUrl),
+            metadata: parseMetadata(content),
+            confidence: Math.abs(type.confidence),
+            reasons: type.reason
+        };
+    }
+
+    const variants = [];
+    let currentVariant = null;
+
+    for (const line of lines) {
+        if (line.startsWith('#EXT-X-STREAM-INF:')) {
+            currentVariant = parseStreamInfo(line);
+        } else if (line && !line.startsWith('#') && currentVariant) {
+            // Add URL to variant
+            currentVariant.url = resolveUrl(baseUrl, line.trim());
+            variants.push(currentVariant);
+            currentVariant = null;
+        }
+    }
+
+    return {
+        type: 'hls',
+        isPlaylist: true,
+        variants: variants,
+        metadata: parseMetadata(content),
+        confidence: type.confidence,
+        reasons: type.reason
+    };
+}
+
+/**
+ * Parse stream information from STREAM-INF tag
+ * @param {string} line - STREAM-INF tag line
+ * @returns {Object} Stream information
+ */
+function parseStreamInfo(line) {
+    const info = {
+        bandwidth: null,
+        resolution: null,
+        codecs: null,
+        frameRate: null
+    };
+
+    // Extract attributes
+    const attributes = line.substring(line.indexOf(':') + 1).split(',');
+    for (const attr of attributes) {
+        const [key, value] = attr.trim().split('=');
+        switch (key) {
+            case 'BANDWIDTH':
+                info.bandwidth = parseInt(value);
+                break;
+            case 'RESOLUTION':
+                info.resolution = value.replace(/"/g, '');
+                if (info.resolution) {
+                    const [width, height] = info.resolution.split('x');
+                    info.width = parseInt(width);
+                    info.height = parseInt(height);
+                }
+                break;
+            case 'CODECS':
+                info.codecs = value.replace(/"/g, '');
+                break;
+            case 'FRAME-RATE':
+                info.frameRate = parseFloat(value);
+                info.fps = parseFloat(value);
+                break;
+        }
+    }
+
+    return info;
+}
+
+/**
+ * Parse metadata from manifest
+ * @param {string} content - M3U8 content
+ * @returns {Object} Metadata object
+ */
+function parseMetadata(content) {
     const metadata = {
         version: null,
         targetDuration: null,
         mediaSequence: null
     };
-    
-    lines.forEach(line => {
-        // Parse version
+
+    const lines = content.split('\n');
+    for (const line of lines) {
         if (line.startsWith('#EXT-X-VERSION:')) {
             metadata.version = parseInt(line.split(':')[1]);
-        }
-        // Parse target duration
-        else if (line.startsWith('#EXT-X-TARGETDURATION:')) {
+        } else if (line.startsWith('#EXT-X-TARGETDURATION:')) {
             metadata.targetDuration = parseInt(line.split(':')[1]);
-        }
-        // Parse media sequence
-        else if (line.startsWith('#EXT-X-MEDIA-SEQUENCE:')) {
+        } else if (line.startsWith('#EXT-X-MEDIA-SEQUENCE:')) {
             metadata.mediaSequence = parseInt(line.split(':')[1]);
         }
-        // Parse stream info
-        else if (line.startsWith('#EXT-X-STREAM-INF:')) {
-            isPlaylist = true;
-            currentVariant = {
-                bandwidth: extractAttribute(line, 'BANDWIDTH'),
-                resolution: extractAttribute(line, 'RESOLUTION'),
-                codecs: extractAttribute(line, 'CODECS'),
-                frameRate: extractAttribute(line, 'FRAME-RATE')
-            };
-            
-            // Convert resolution string to width/height
-            if (currentVariant.resolution) {
-                const [width, height] = currentVariant.resolution.split('x');
-                currentVariant.width = parseInt(width);
-                currentVariant.height = parseInt(height);
-            }
-            
-            // Convert frame rate to number
-            if (currentVariant.frameRate) {
-                currentVariant.fps = parseFloat(currentVariant.frameRate);
-            }
-        } 
-        else if (line && !line.startsWith('#') && currentVariant) {
-            // Add URL to variant
-            currentVariant.url = resolveUrl(baseUrl, line.trim());
-            // Add type and relationship info
-            currentVariant.type = 'hls';
-            currentVariant.isVariant = true;
-            variants.push(currentVariant);
-            currentVariant = null;
-        }
-    });
-    
-    // Sort variants by resolution (height) in descending order
-    variants.sort((a, b) => {
-        if (!a.height || !b.height) return 0;
-        return b.height - a.height;
-    });
-    
-    // If this is a master playlist, return full info
-    if (isPlaylist) {
-        return {
-            type: 'hls',
-            isPlaylist: true,
-            variants: variants,
-            highestQuality: variants[0],
-            baseUrl: baseUrl,
-            metadata
-        };
     }
-    
-    // If this is a variant playlist, return simpler info
-    return {
-        type: 'hls',
-        isPlaylist: false,
-        url: baseUrl,
-        segments: parseHLSSegments(content, baseUrl),
-        metadata
-    };
+
+    return metadata;
 }
 
 /**
- * Parse HLS segments from a variant manifest
+ * Parse media segments from variant playlist
  * @param {string} content - M3U8 content
  * @param {string} baseUrl - Base URL for resolving relative paths
  * @returns {Array} Array of segment URLs
  */
-function parseHLSSegments(content, baseUrl) {
+function parseMediaSegments(content, baseUrl) {
     const segments = [];
     const lines = content.split('\n');
     
-    lines.forEach(line => {
-        if (line && !line.startsWith('#')) {
+    for (const line of lines) {
+        if (line && !line.startsWith('#') && line.trim()) {
             segments.push(resolveUrl(baseUrl, line.trim()));
         }
-    });
+    }
     
     return segments;
 }

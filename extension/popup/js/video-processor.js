@@ -2,6 +2,46 @@ import { getBaseUrl } from './utilities.js';
 import { formatQualityLabel, formatQualityDetails } from './utilities.js';
 import { setVideoGroups, addStreamMetadata, getStreamMetadata, getCachedVideos, setCachedVideos } from './state.js';
 
+// Track HLS relationships globally
+const hlsRelationships = new Map();
+
+/**
+ * Two-pass video processing to ensure proper grouping
+ * @param {Array} videos - Videos to process
+ * @returns {Array} Processed and grouped videos
+ */
+export function processVideos(videos) {
+    // First pass: Identify and store relationships
+    videos.forEach(video => {
+        if (video.type === 'hls') {
+            if (video.isPlaylist && video.qualityVariants?.length > 0) {
+                // Store master playlist relationships
+                video.qualityVariants.forEach(variant => {
+                    hlsRelationships.set(variant.url, {
+                        masterUrl: video.url,
+                        master: video
+                    });
+                });
+            }
+        }
+    });
+
+    // Second pass: Filter out variants that belong to masters
+    const processedVideos = videos.filter(video => {
+        if (video.type === 'hls' && !video.isPlaylist) {
+            const relationship = hlsRelationships.get(video.url);
+            if (relationship) {
+                // Skip this variant as it belongs to a master
+                return false;
+            }
+        }
+        return true;
+    });
+
+    // Now group the processed videos
+    return groupVideos(processedVideos);
+}
+
 // Get base directory for a URL
 function getBaseDirectory(url) {
     try {
@@ -285,4 +325,11 @@ export async function getStreamQualities(url) {
     }
     
     return [];
+}
+
+/**
+ * Clear HLS relationships (call this when forcing refresh)
+ */
+export function clearHLSRelationships() {
+    hlsRelationships.clear();
 }

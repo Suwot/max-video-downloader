@@ -4,6 +4,7 @@ import { groupVideos } from './video-processor.js';
 import { renderVideos } from './video-renderer.js';
 import { formatResolution, formatDuration, getFilenameFromUrl } from './utilities.js';
 import { parseHLSManifest } from './manifest-parser.js';
+import { processVideos, clearHLSRelationships } from './video-processor.js';
 
 // Keep track of master playlists we've seen
 const knownMasterPlaylists = new Map();
@@ -94,9 +95,9 @@ async function processHLSRelationships(video, tabId) {
 export async function updateVideoList(forceRefresh = false) {
     const container = document.getElementById('videos');
     
-    // Clear known master playlists if forcing refresh
+    // Clear relationships if forcing refresh
     if (forceRefresh) {
-        knownMasterPlaylists.clear();
+        clearHLSRelationships();
     }
     
     // Save current scroll position
@@ -131,9 +132,9 @@ export async function updateVideoList(forceRefresh = false) {
                     </div>
                 `;
             }
-        }, 10000); // 10 second timeout
+        }, 10000);
         
-        // Get videos from content script
+        // Collect all videos first
         try {
             const response = await chrome.tabs.sendMessage(tab.id, { action: 'findVideos' });
             if (response && response.length) {
@@ -144,7 +145,6 @@ export async function updateVideoList(forceRefresh = false) {
             contentScriptError = error;
         }
         
-        // Get videos from background script
         try {
             const backgroundVideos = await chrome.runtime.sendMessage({ 
                 action: 'getVideos', 
@@ -152,48 +152,20 @@ export async function updateVideoList(forceRefresh = false) {
             });
             
             if (backgroundVideos && backgroundVideos.length) {
-                // Merge with videos from content script, avoiding duplicates
                 const existingUrls = new Set(videos.map(v => v.url));
-                for (const video of backgroundVideos) {
+                backgroundVideos.forEach(video => {
                     if (!existingUrls.has(video.url)) {
                         videos.push(video);
                         existingUrls.add(video.url);
                     }
-                }
+                });
             }
         } catch (error) {
             console.error('Background script error:', error);
             backgroundScriptError = error;
         }
         
-        // Legacy support: Get HLS playlists from background script
-        try {
-            const playlists = await chrome.runtime.sendMessage({ 
-                action: 'getStoredPlaylists', 
-                tabId: tab.id 
-            });
-            
-            if (playlists && playlists.length) {
-                // Add HLS playlists that aren't already in the list
-                const existingUrls = new Set(videos.map(v => v.url));
-                for (const url of playlists) {
-                    if (!existingUrls.has(url)) {
-                        videos.push({ 
-                            url, 
-                            type: 'hls',
-                            title: getFilenameFromUrl(url),
-                            source: 'legacy' 
-                        });
-                        existingUrls.add(url);
-                    }
-                }
-            }
-        } catch (error) {
-            console.error('Legacy HLS error:', error);
-            // Not critical, so don't update backgroundScriptError
-        }
-        
-        // Clear the timeout since we've completed the search
+        // Clear timeout since we've completed the search
         clearTimeout(searchTimeout);
         
         if (videos.length === 0 && (contentScriptError || backgroundScriptError)) {
@@ -203,7 +175,7 @@ export async function updateVideoList(forceRefresh = false) {
             throw new Error(errorMessage);
         }
         
-        // Process HLS relationships for each video
+        // Process all videos first to establish relationships
         const processedVideos = [];
         for (const video of videos) {
             const processed = await processHLSRelationships(video, tab.id);
@@ -211,9 +183,12 @@ export async function updateVideoList(forceRefresh = false) {
                 processedVideos.push(processed);
             }
         }
+
+        // Small delay to allow any late-arriving masters to be processed
+        await new Promise(resolve => setTimeout(resolve, 500));
         
-        // Group videos immediately and render
-        const groupedVideos = groupVideos(processedVideos);
+        // Use two-pass processing to properly handle relationships
+        const groupedVideos = processVideos(processedVideos);
         setCachedVideos(groupedVideos);
         
         renderVideos(groupedVideos);
@@ -223,7 +198,6 @@ export async function updateVideoList(forceRefresh = false) {
         
     } catch (error) {
         console.error('Failed to get videos:', error);
-        // Only show error if we don't have cached videos already rendered
         if (!getCachedVideos() || container.querySelector('.initial-loader')) {
             showErrorMessage(container, error.message);
         }
