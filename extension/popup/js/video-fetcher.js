@@ -5,6 +5,9 @@ import { renderVideos } from './video-renderer.js';
 import { formatResolution, formatDuration, getFilenameFromUrl } from './utilities.js';
 import { parseHLSManifest } from './manifest-parser.js';
 
+// Keep track of master playlists we've seen
+const knownMasterPlaylists = new Map();
+
 /**
  * Fetch and process HLS manifest content
  * @param {string} url - Manifest URL
@@ -45,6 +48,15 @@ async function fetchHLSManifest(url, tabId) {
 async function processHLSRelationships(video, tabId) {
     if (video.type !== 'hls') return video;
 
+    // First check if this URL is a known variant of a master playlist
+    const masterPlaylist = Array.from(knownMasterPlaylists.values())
+        .find(master => master.qualityVariants?.some(v => v.url === video.url));
+    
+    if (masterPlaylist) {
+        // Skip this video as it will be handled by its master playlist
+        return null;
+    }
+
     // Fetch and check the manifest content
     const manifestInfo = await fetchHLSManifest(video.url, tabId);
     if (!manifestInfo) return video;
@@ -52,9 +64,9 @@ async function processHLSRelationships(video, tabId) {
     // Update video with manifest info
     video.isPlaylist = manifestInfo.isPlaylist;
     
-    // If this is a master playlist, add its variants
+    // If this is a master playlist, store it and add its variants
     if (manifestInfo.isPlaylist && manifestInfo.variants?.length > 0) {
-        return {
+        const enhancedVideo = {
             ...video,
             qualityVariants: manifestInfo.variants.map(v => ({
                 url: v.url,
@@ -65,17 +77,11 @@ async function processHLSRelationships(video, tabId) {
                 codecs: v.codecs
             }))
         };
-    }
-    
-    // Check if this is a variant that belongs to a playlist
-    const relationship = await chrome.runtime.sendMessage({
-        type: 'getManifestRelationship',
-        variantUrl: video.url
-    });
-    
-    if (relationship?.playlistUrl) {
-        // Skip this video as it will be handled as part of the playlist
-        return null;
+        
+        // Store in our known master playlists map
+        knownMasterPlaylists.set(video.url, enhancedVideo);
+        
+        return enhancedVideo;
     }
     
     return video;
@@ -87,6 +93,11 @@ async function processHLSRelationships(video, tabId) {
  */
 export async function updateVideoList(forceRefresh = false) {
     const container = document.getElementById('videos');
+    
+    // Clear known master playlists if forcing refresh
+    if (forceRefresh) {
+        knownMasterPlaylists.clear();
+    }
     
     // Save current scroll position
     if (container.scrollTop) {
