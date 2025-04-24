@@ -1,5 +1,7 @@
 import { showError } from './utilities.js';
 import { debounce } from './utilities.js';
+import { showQualityDialog } from './ui.js';
+import { getStreamQualities } from './video-processor.js';
 
 let downloadPort = null;
 
@@ -183,4 +185,97 @@ async function handleBlobDownload(url) {
 function resetDownloadButton(button, originalText) {
     button.disabled = false;
     button.textContent = originalText;
+}
+
+/**
+ * Start download with quality selection
+ * @param {Object} video - Video object to download
+ * @returns {Promise} Download progress
+ */
+export async function startDownload(video) {
+    try {
+        let downloadUrl = video.url;
+        let quality = null;
+
+        // Get available qualities for HLS/DASH streams
+        if (video.type === 'hls' || video.type === 'dash') {
+            const qualities = await getStreamQualities(video.url);
+            if (qualities && qualities.length > 0) {
+                // Show quality selection dialog
+                quality = await showQualityDialog(qualities);
+                if (!quality) {
+                    // User canceled quality selection
+                    return null;
+                }
+                downloadUrl = quality.url || video.url;
+            }
+        }
+
+        // Create port for progress updates
+        const port = chrome.runtime.connect({ name: 'download_progress' });
+        
+        // Set up progress handling
+        return new Promise((resolve, reject) => {
+            port.onMessage.addListener((msg) => {
+                if (msg.type === 'progress') {
+                    // Update progress UI
+                    updateDownloadProgress(video, msg.progress);
+                } else if (msg.success) {
+                    resolve(msg);
+                    port.disconnect();
+                } else if (msg.error) {
+                    reject(new Error(msg.error));
+                    port.disconnect();
+                }
+            });
+            
+            // Start download
+            chrome.runtime.sendMessage({
+                type: video.type === 'hls' ? 'downloadHLS' : 'download',
+                url: downloadUrl,
+                filename: video.filename,
+                quality: quality ? {
+                    resolution: quality.resolution,
+                    codecs: quality.codecs,
+                    bitrate: quality.bandwidth || quality.videoBitrate
+                } : null
+            });
+        });
+    } catch (error) {
+        showError(`Failed to start download: ${error.message}`);
+        throw error;
+    }
+}
+
+/**
+ * Update download progress UI
+ * @param {Object} video - Video being downloaded
+ * @param {number} progress - Download progress (0-100)
+ */
+function updateDownloadProgress(video, progress) {
+    const downloadBtn = document.querySelector(`[data-url="${video.url}"]`);
+    if (!downloadBtn) return;
+
+    // Update button text
+    downloadBtn.textContent = `Downloading ${Math.round(progress)}%`;
+    
+    // Update progress bar
+    const progressContainer = downloadBtn.closest('.video-item').querySelector('.progress-container');
+    if (progressContainer) {
+        progressContainer.style.display = 'block';
+        const progressBar = progressContainer.querySelector('.progress-bar');
+        if (progressBar) {
+            progressBar.style.width = `${progress}%`;
+        }
+    }
+
+    if (progress >= 100) {
+        downloadBtn.textContent = 'Download Complete';
+        downloadBtn.classList.add('complete');
+        setTimeout(() => {
+            if (progressContainer) {
+                progressContainer.style.display = 'none';
+            }
+        }, 2000);
+    }
 }

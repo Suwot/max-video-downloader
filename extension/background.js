@@ -1,4 +1,6 @@
 // Add at the top of the file
+import { parseHLSManifest, parseDASHManifest } from './popup/js/manifest-parser.js';
+
 let previewGenerationQueue = new Map();
 const videosPerTab = {};
 const playlistsPerTab = {};
@@ -16,57 +18,84 @@ chrome.runtime.onConnect.addListener(port => {
     }
 });
 
-// Process metadata queue in parallel
-function processMetadataQueue(maxConcurrent = 3) {
+// Helper function to extract stream metadata
+async function getStreamMetadata(url) {
+    try {
+        const response = await new Promise(resolve => {
+            chrome.runtime.sendNativeMessage('com.mycompany.ffmpeg', {
+                type: 'getQualities',
+                url: url
+            }, resolve);
+        });
+
+        if (response?.streamInfo) {
+            // Add variants if available
+            if (response.streamInfo.type === 'hls' || response.streamInfo.type === 'dash') {
+                try {
+                    const manifestResponse = await fetch(url);
+                    const content = await manifestResponse.text();
+                    
+                    // Use appropriate parser based on type
+                    const variants = response.streamInfo.type === 'hls' ?
+                        parseHLSManifest(content, url) :
+                        parseDASHManifest(content, url);
+                        
+                    if (variants.length > 0) {
+                        response.streamInfo.variants = variants;
+                    }
+                } catch (error) {
+                    console.warn('Failed to fetch manifest:', error);
+                }
+            }
+            return response.streamInfo;
+        }
+        return null;
+    } catch (error) {
+        console.error('Failed to get stream metadata:', error);
+        return null;
+    }
+}
+
+// Process metadata queue with retry mechanism
+async function processMetadataQueue(maxConcurrent = 3, maxRetries = 2) {
     if (metadataProcessingQueue.size === 0) return;
     
     const entries = Array.from(metadataProcessingQueue.entries()).slice(0, maxConcurrent);
-    const processPromises = entries.map(([url, info]) => {
-        return new Promise(async (resolve) => {
+    const processPromises = entries.map(async ([url, info]) => {
+        let retries = 0;
+        while (retries < maxRetries) {
             try {
                 metadataProcessingQueue.delete(url);
-                
-                // For playlists (HLS/DASH), fetch and parse the manifest
-                if (info.type === 'hls' || info.type === 'dash') {
-                    const response = await fetch(url);
-                    const content = await response.text();
-                    
-                    // Basic manifest parsing
-                    const variants = extractVariantsFromManifest(content, url, info.type);
-                    if (variants.length > 0) {
-                        info.variants = variants;
-                    }
-                }
-                
-                // Get stream info using native host
                 const streamInfo = await getStreamMetadata(url);
-                if (streamInfo) {
-                    info.streamInfo = streamInfo;
-                }
                 
-                // Update video info in storage
-                if (info.tabId && videosPerTab[info.tabId]) {
-                    const normalizedUrl = normalizeUrl(url);
-                    const existingVideo = videosPerTab[info.tabId].get(normalizedUrl);
-                    if (existingVideo) {
-                        videosPerTab[info.tabId].set(normalizedUrl, {
-                            ...existingVideo,
-                            ...info
-                        });
+                if (streamInfo) {
+                    if (info.tabId && videosPerTab[info.tabId]) {
+                        const normalizedUrl = normalizeUrl(url);
+                        const existingVideo = videosPerTab[info.tabId].get(normalizedUrl);
+                        if (existingVideo) {
+                            videosPerTab[info.tabId].set(normalizedUrl, {
+                                ...existingVideo,
+                                streamInfo,
+                                qualities: streamInfo.variants || []
+                            });
+                        }
                     }
+                    break;
                 }
+                retries++;
             } catch (error) {
-                console.error('Failed to process metadata for:', url, error);
+                console.error(`Failed to process metadata for ${url} (attempt ${retries + 1}):`, error);
+                if (retries >= maxRetries - 1) break;
+                await new Promise(resolve => setTimeout(resolve, 1000 * (retries + 1)));
             }
-            resolve();
-        });
-    });
-
-    Promise.all(processPromises).then(() => {
-        if (metadataProcessingQueue.size > 0) {
-            setTimeout(() => processMetadataQueue(maxConcurrent), 100);
         }
     });
+
+    await Promise.all(processPromises);
+    
+    if (metadataProcessingQueue.size > 0) {
+        setTimeout(() => processMetadataQueue(maxConcurrent, maxRetries), 100);
+    }
 }
 
 // Extract variants from manifest content
@@ -280,25 +309,50 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         if (response?.streamInfo) {
           console.group('📊 Received media info from native host:');
           console.log('URL:', msg.url);
+          
+          // Log video info if available
           if (response.streamInfo.hasVideo) {
             console.log('Video:', {
               codec: response.streamInfo.videoCodec.name,
               resolution: `${response.streamInfo.width}x${response.streamInfo.height}`,
               fps: response.streamInfo.fps,
-              bitrate: response.streamInfo.videoBitrate ? `${(response.streamInfo.videoBitrate / 1000000).toFixed(2)} Mbps` : 'unknown'
+              bitrate: response.streamInfo.videoBitrate ? 
+                  `${(response.streamInfo.videoBitrate / 1000000).toFixed(2)} Mbps` : 'unknown'
             });
           }
+          
+          // Log audio info if available
           if (response.streamInfo.hasAudio) {
             console.log('Audio:', {
               codec: response.streamInfo.audioCodec.name,
               channels: response.streamInfo.audioCodec.channels,
-              sampleRate: response.streamInfo.audioCodec.sampleRate ? `${response.streamInfo.audioCodec.sampleRate}Hz` : 'unknown'
+              sampleRate: response.streamInfo.audioCodec.sampleRate ? 
+                  `${response.streamInfo.audioCodec.sampleRate}Hz` : 'unknown'
             });
           }
-          console.log('Duration:', response.streamInfo.duration ? `${Math.floor(response.streamInfo.duration / 60)}:${Math.floor(response.streamInfo.duration % 60).toString().padStart(2, '0')}` : 'unknown');
+          
+          // Log duration and container info
+          if (response.streamInfo.duration) {
+            const minutes = Math.floor(response.streamInfo.duration / 60);
+            const seconds = Math.floor(response.streamInfo.duration % 60);
+            console.log('Duration:', `${minutes}:${seconds.toString().padStart(2, '0')}`);
+          }
           console.log('Container:', response.streamInfo.container);
+          
+          // Process stream variants
+          if (response.streamInfo.variants && response.streamInfo.variants.length > 0) {
+            console.log('Available qualities:', response.streamInfo.variants.length);
+            response.streamInfo.variants.forEach((variant, index) => {
+              console.log(`Quality ${index + 1}:`, {
+                resolution: variant.resolution || `${variant.width}x${variant.height}`,
+                bitrate: variant.bandwidth ? 
+                    `${(variant.bandwidth / 1000000).toFixed(2)} Mbps` : 'unknown',
+                codecs: variant.codecs || 'unknown'
+              });
+            });
+          }
+          
           console.groupEnd();
-          // Always send complete stream info in response
           resolve({ streamInfo: response.streamInfo });
         } else {
           console.warn('❌ Failed to get media info:', response?.error || 'Unknown error');

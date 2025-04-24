@@ -6,9 +6,13 @@
  */
 export function debounce(func, wait) {
     let timeout;
-    return function(...args) {
+    return function executedFunction(...args) {
+        const later = () => {
+            clearTimeout(timeout);
+            func(...args);
+        };
         clearTimeout(timeout);
-        timeout = setTimeout(() => func.apply(this, args), wait);
+        timeout = setTimeout(later, wait);
     };
 }
 
@@ -79,40 +83,65 @@ export function formatBitrate(bitrate) {
 }
 
 /**
+ * Format duration in seconds to MM:SS format
+ * @param {number} seconds - Duration in seconds
+ * @returns {string} Formatted duration
+ */
+export function formatDuration(seconds) {
+    if (!seconds) return '';
+    const minutes = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${minutes}:${secs.toString().padStart(2, '0')}`;
+}
+
+/**
  * Extract filename from URL
  * @param {string} url - URL to extract filename from
  * @returns {string} Extracted filename
  */
 export function getFilenameFromUrl(url) {
-    if (url.startsWith('blob:')) {
-        return 'video_blob';
-    }
-    
     try {
+        if (url.startsWith('blob:')) {
+            return 'blob_video';
+        }
+        
         const urlObj = new URL(url);
         const pathname = urlObj.pathname;
         const filename = pathname.split('/').pop();
         
-        if (filename && filename.length > 0) {
-            // Clean up filename
-            return decodeURIComponent(filename)
-                .replace(/[?#].*$/, '') // Remove query params
-                .replace(/\.(m3u8|mpd)$/, '.mp4'); // Replace manifest extensions with mp4
+        // Remove query parameters and fragments
+        const cleanFilename = filename.split(/[?#]/)[0];
+        
+        // Use the clean filename if it has a video extension
+        if (/\.(mp4|webm|mkv|m3u8|mpd|ts)$/i.test(cleanFilename)) {
+            return cleanFilename;
         }
-    } catch {}
-    
-    return 'video';
+        
+        // If no video extension, add .mp4
+        if (!/\.\w+$/.test(cleanFilename)) {
+            return cleanFilename + '.mp4';
+        }
+        
+        return cleanFilename;
+    } catch (e) {
+        return 'video.mp4';
+    }
 }
 
 /**
- * Get base URL without query parameters
+ * Extract base URL without quality parameters
  * @param {string} url - URL to process
  * @returns {string} Base URL
  */
 export function getBaseUrl(url) {
     try {
         const urlObj = new URL(url);
-        return urlObj.origin + urlObj.pathname;
+        // Remove common quality-related parameters
+        urlObj.searchParams.delete('quality');
+        urlObj.searchParams.delete('q');
+        urlObj.searchParams.delete('res');
+        urlObj.searchParams.delete('resolution');
+        return urlObj.toString();
     } catch {
         return url;
     }
@@ -120,10 +149,9 @@ export function getBaseUrl(url) {
 
 /**
  * Show error notification
- * @param {string} message - Error message to display
+ * @param {string} message - Error message to show
  */
 export function showError(message) {
-    // Show both popup notification and chrome notification
     const notification = document.createElement('div');
     notification.className = 'error-notification';
     notification.textContent = message;
@@ -133,33 +161,60 @@ export function showError(message) {
     // Animate in
     requestAnimationFrame(() => {
         notification.style.opacity = '1';
-        notification.style.transform = 'translateY(0)';
+        notification.style.transform = 'translateX(-50%) translateY(0)';
     });
     
     // Remove after 3 seconds
     setTimeout(() => {
         notification.style.opacity = '0';
-        notification.style.transform = 'translateY(20px)';
+        notification.style.transform = 'translateX(-50%) translateY(20px)';
         setTimeout(() => notification.remove(), 300);
     }, 3000);
-    
-    // Also show Chrome notification
-    chrome.notifications.create({
-        type: 'basic',
-        iconUrl: 'icons/48.png',
-        title: 'Download Error',
-        message: message
-    });
 }
 
 /**
- * Format duration in MM:SS format
- * @param {number} duration - Duration in seconds
- * @returns {string} Formatted duration
+ * Format quality label for display
+ * @param {Object} quality Quality option
+ * @returns {string} Formatted label
  */
-export function formatDuration(duration) {
-    if (!duration) return '';
-    const minutes = Math.floor(duration / 60);
-    const seconds = Math.floor(duration % 60);
-    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+export function formatQualityLabel(quality) {
+    const [width, height] = quality.resolution.split('x').map(Number);
+    let label = `${height}p`;
+    
+    if (quality.fps && quality.fps > 30) {
+        label += quality.fps;
+    }
+    
+    const bitrate = quality.bandwidth || quality.videoBitrate;
+    if (bitrate) {
+        label += ` (${formatBitrate(bitrate)})`;
+    }
+    
+    return label;
+}
+
+/**
+ * Format quality details
+ * @param {Object} quality Quality option
+ * @returns {Object} Formatted details
+ */
+export function formatQualityDetails(quality) {
+    let codecs = '';
+    if (quality.codecs) {
+        codecs = quality.codecs;
+    } else if (quality.videoCodec) {
+        codecs = quality.videoCodec;
+        if (quality.audioCodec) {
+            codecs += ` / ${quality.audioCodec}`;
+        }
+    }
+
+    const bitrate = quality.bandwidth || quality.videoBitrate;
+    
+    return {
+        label: formatQualityLabel(quality),
+        resolution: quality.resolution,
+        codecs: codecs || undefined,
+        bitrate: bitrate ? formatBitrate(bitrate) : undefined
+    };
 }

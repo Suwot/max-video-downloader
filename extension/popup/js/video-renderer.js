@@ -4,6 +4,8 @@ import { groupVideosByType } from './video-processor.js';
 import { handleDownload } from './download.js';
 import { generatePreview } from './preview.js';
 import { restoreScrollPosition } from './ui.js';
+import { showQualityDialog } from './ui.js';
+import { getStreamQualities } from './video-processor.js';
 
 /**
  * Render a list of videos in the UI
@@ -229,7 +231,7 @@ export function createVideoElement(video) {
     copyButton.className = 'copy-button';
     copyButton.innerHTML = `
         <svg viewBox="0 0 24 24" width="14" height="14">
-            <path d="M16 1H4C3 1 2 2 2 3v14h2V3h12V1zm3 4H8C7 5 6 6 6 7v14c0 1 1 2 2 2h11c1 0 2-1 2-2V7c0-1-1-2-2-2zm0 16H8V7h11v14z"/>
+            <path d="M16 1H4C3 1 2 2 2 3v14h2V3h12V1zm3 4H8C7 5 6 6 6 7v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
         </svg>
     `;
     
@@ -367,25 +369,64 @@ export function createVideoElement(video) {
     }
     
     // Create download button 
-    const downloadGroup = document.createElement('div');
-    downloadGroup.className = 'download-group';
-    
-    const downloadButton = document.createElement('button');
-    downloadButton.className = 'download-btn';
-    downloadButton.innerHTML = '<span>Download</span>';
-    downloadButton.dataset.url = video.resolutionOptions ? 
-        video.resolutionOptions[0].url : video.url;
-    
-    downloadButton.addEventListener('click', async (event) => {
-        const button = event.target.closest('.download-btn');
-        const url = button.dataset.url || video.url;
-        await handleDownload(button, url, video.type);
-    });
-    
-    downloadGroup.appendChild(downloadButton);
+    const downloadGroup = createVideoActions(video);
     infoColumn.appendChild(downloadGroup);
     
     element.append(previewColumn, infoColumn);
     
     return element;
+}
+
+function createVideoActions(video) {
+    const actionsDiv = document.createElement('div');
+    actionsDiv.className = 'download-group';
+    
+    // Create download button
+    const downloadBtn = document.createElement('button');
+    downloadBtn.className = 'download-btn';
+    downloadBtn.dataset.url = video.url;
+    downloadBtn.dataset.type = video.type;
+    downloadBtn.textContent = 'Download';
+    
+    downloadBtn.addEventListener('click', async () => {
+        if (video.type === 'hls' || video.type === 'dash') {
+            const qualities = await getStreamQualities(video.url);
+            if (qualities && qualities.length > 0) {
+                const selectedQuality = await showQualityDialog(qualities);
+                if (!selectedQuality) return; // User canceled
+                
+                // Start download with selected quality
+                handleDownload(downloadBtn, selectedQuality.url || video.url, video.type);
+            } else {
+                handleDownload(downloadBtn, video.url, video.type);
+            }
+        } else {
+            handleDownload(downloadBtn, video.url, video.type);
+        }
+    });
+    
+    // Add copy URL button
+    const copyBtn = document.createElement('button');
+    copyBtn.className = 'copy-button';
+    copyBtn.innerHTML = `
+        <svg viewBox="0 0 24 24" width="16" height="16">
+            <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
+        </svg>
+    `;
+    copyBtn.title = 'Copy URL';
+    
+    copyBtn.addEventListener('click', () => {
+        navigator.clipboard.writeText(video.url).then(() => {
+            const tooltip = document.createElement('div');
+            tooltip.className = 'tooltip';
+            tooltip.textContent = 'URL copied!';
+            copyBtn.appendChild(tooltip);
+            setTimeout(() => tooltip.remove(), 2000);
+        });
+    });
+    
+    actionsDiv.appendChild(downloadBtn);
+    actionsDiv.appendChild(copyBtn);
+    
+    return actionsDiv;
 }

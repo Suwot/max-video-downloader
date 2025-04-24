@@ -1,4 +1,4 @@
-import { debounce } from './utilities.js';
+import { debounce, formatQualityLabel, formatQualityDetails } from './utilities.js';
 import { getCurrentTheme, setCurrentTheme, getAllGroupStates, setScrollPosition } from './state.js';
 import { updateVideoList } from './video-fetcher.js';
 
@@ -173,4 +173,95 @@ export function scrollToLastPosition() {
             document.getElementById('videos').scrollTop = scrollPosition;
         }, 50);
     }
+}
+
+/**
+ * Show quality selection dialog
+ * @param {Array} qualities - Available qualities
+ * @returns {Promise} Resolves with selected quality or null if canceled
+ */
+export function showQualityDialog(qualities) {
+    return new Promise((resolve) => {
+        const overlay = document.createElement('div');
+        overlay.className = 'quality-dialog-overlay';
+        
+        const dialog = document.createElement('div');
+        dialog.className = 'quality-dialog';
+        
+        // Sort qualities by resolution (highest first)
+        const sortedQualities = [...qualities].sort((a, b) => {
+            const [aHeight] = a.resolution.split('x').map(Number).reverse();
+            const [bHeight] = b.resolution.split('x').map(Number).reverse();
+            return bHeight - aHeight;
+        });
+        
+        dialog.innerHTML = `
+            <h3>Select Quality</h3>
+            <div class="quality-list">
+                ${sortedQualities.map((q, i) => {
+                    const details = formatQualityDetails(q);
+                    return `
+                        <div class="quality-option" data-index="${i}">
+                            <div class="quality-info">
+                                <div class="quality-resolution">${details.label}</div>
+                                <div class="quality-details">
+                                    ${details.codecs ? `Codec: ${details.codecs}` : ''}
+                                    ${details.bitrate ? ` • ${details.bitrate}` : ''}
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }).join('')}
+            </div>
+            <div class="quality-dialog-buttons">
+                <button class="cancel-btn">Cancel</button>
+                <button class="select-btn">Select</button>
+            </div>
+        `;
+
+        // Add theme variables
+        dialog.style.setProperty('--background', getCurrentTheme() === 'dark' ? '#2d2d2d' : '#ffffff');
+        dialog.style.setProperty('--border', getCurrentTheme() === 'dark' ? '#444' : '#e0e0e0');
+        dialog.style.setProperty('--text-secondary', getCurrentTheme() === 'dark' ? '#aaa' : '#666');
+        dialog.style.setProperty('--hover', getCurrentTheme() === 'dark' ? '#3d3d3d' : '#f5f5f5');
+        dialog.style.setProperty('--primary', '#1976D2');
+        
+        document.body.appendChild(overlay);
+        document.body.appendChild(dialog);
+        
+        let selectedIndex = 0;
+        const options = dialog.querySelectorAll('.quality-option');
+        options[0].classList.add('selected');
+        
+        options.forEach(option => {
+            option.addEventListener('click', () => {
+                options.forEach(o => o.classList.remove('selected'));
+                option.classList.add('selected');
+                selectedIndex = parseInt(option.dataset.index);
+            });
+        });
+        
+        const cleanup = () => {
+            document.body.removeChild(overlay);
+            document.body.removeChild(dialog);
+        };
+        
+        dialog.querySelector('.cancel-btn').addEventListener('click', () => {
+            cleanup();
+            resolve(null);
+        });
+        
+        dialog.querySelector('.select-btn').addEventListener('click', () => {
+            cleanup();
+            resolve(sortedQualities[selectedIndex]);
+        });
+        
+        // Close on overlay click
+        overlay.addEventListener('click', (e) => {
+            if (e.target === overlay) {
+                cleanup();
+                resolve(null);
+            }
+        });
+    });
 }

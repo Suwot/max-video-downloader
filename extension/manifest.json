@@ -1,43 +1,44 @@
 {
-    "manifest_version": 3,
-    "name": "Universal Video Downloader",
-    "version": "1.0",
-    "description": "Download videos from any website - supports HLS, DASH, direct videos, and blob URLs",
-    "permissions": [
-      "activeTab",
-      "scripting",
-      "downloads",
-      "nativeMessaging",
-      "webRequest",
-      "notifications",
-      "downloads.shelf",
-      "storage"
-    ],
-    "host_permissions": [
-      "<all_urls>"
-    ],
-    "background": {
-      "service_worker": "background.js",
+  "manifest_version": 3,
+  "name": "Universal Video Downloader",
+  "version": "1.0",
+  "description": "Download videos from any website - supports HLS, DASH, direct videos, and blob URLs",
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "downloads",
+    "nativeMessaging",
+    "webRequest",
+    "notifications",
+    "downloads.shelf",
+    "storage"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content_script.js"],
+      "run_at": "document_idle",
       "type": "module"
-    },
-    "content_scripts": [
-      {
-        "matches": ["<all_urls>"],
-        "js": ["content_script.js"],
-        "run_at": "document_idle"
-      }
-    ],
-    "action": {
-      "default_popup": "popup/popup.html",
-      "default_icon": {
-        "16": "icons/16.png",
-        "48": "icons/48.png",
-        "128": "icons/128.png"
-      }
-    },
-    "icons": {
+    }
+  ],
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_icon": {
       "16": "icons/16.png",
       "48": "icons/48.png",
       "128": "icons/128.png"
     }
+  },
+  "icons": {
+    "16": "icons/16.png",
+    "48": "icons/48.png",
+    "128": "icons/128.png"
   }
+}

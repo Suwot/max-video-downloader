@@ -1,5 +1,6 @@
 import { getBaseUrl } from './utilities.js';
-import { setVideoGroups } from './state.js';
+import { formatQualityLabel, formatQualityDetails } from './utilities.js';
+import { setVideoGroups, addStreamMetadata, getStreamMetadata, getCachedVideos, setCachedVideos } from './state.js';
 
 /**
  * Check if two videos should be grouped together
@@ -100,4 +101,104 @@ export function groupVideosByType(videos) {
     setVideoGroups(groups);
     
     return groups;
-} 
+}
+
+/**
+ * Parse and process stream qualities
+ * @param {Object} streamInfo - Stream information from native host
+ * @returns {Array} Array of quality options
+ */
+export function processStreamQualities(streamInfo) {
+    const qualities = [];
+    
+    // Process HLS/DASH variants if available
+    if (streamInfo.variants && streamInfo.variants.length > 0) {
+        streamInfo.variants.forEach(variant => {
+            qualities.push({
+                type: 'variant',
+                resolution: variant.resolution || `${variant.width}x${variant.height}`,
+                bandwidth: parseInt(variant.bandwidth),
+                codecs: variant.codecs,
+                url: variant.url,
+                fps: variant.fps
+            });
+        });
+    }
+    
+    // Add main stream quality
+    if (streamInfo.hasVideo) {
+        qualities.push({
+            type: 'main',
+            resolution: `${streamInfo.width}x${streamInfo.height}`,
+            fps: streamInfo.fps,
+            videoBitrate: streamInfo.videoBitrate,
+            videoCodec: streamInfo.videoCodec.name,
+            audioBitrate: streamInfo.audioBitrate,
+            audioCodec: streamInfo.audioCodec?.name,
+            url: streamInfo.url
+        });
+    }
+    
+    // Sort by resolution and bitrate
+    return qualities.sort((a, b) => {
+        const [aHeight] = a.resolution.split('x').map(Number).reverse();
+        const [bHeight] = b.resolution.split('x').map(Number).reverse();
+        if (aHeight === bHeight) {
+            return (b.bandwidth || b.videoBitrate) - (a.bandwidth || a.videoBitrate);
+        }
+        return bHeight - aHeight;
+    });
+}
+
+/**
+ * Process and cache stream metadata
+ * @param {string} url - Stream URL
+ * @param {Object} streamInfo - Stream information
+ */
+export function processStreamMetadata(url, streamInfo) {
+    // Extract and normalize stream configuration
+    const config = {
+        format: streamInfo.container,
+        videoCodec: streamInfo.hasVideo ? {
+            name: streamInfo.videoCodec.name,
+            profile: streamInfo.videoCodec.profile,
+            level: streamInfo.videoCodec.level
+        } : null,
+        audioCodec: streamInfo.hasAudio ? {
+            name: streamInfo.audioCodec.name,
+            channels: streamInfo.audioCodec.channels,
+            sampleRate: streamInfo.audioCodec.sampleRate
+        } : null,
+        qualities: processStreamQualities(streamInfo)
+    };
+    
+    // Cache the processed metadata
+    addStreamMetadata(url, config);
+    return config;
+}
+
+/**
+ * Get stream qualities for a URL
+ * @param {string} url - Stream URL
+ * @returns {Promise<Array>} Array of quality options
+ */
+export async function getStreamQualities(url) {
+    // Check cache first
+    const cached = getStreamMetadata(url);
+    if (cached?.qualities) {
+        return cached.qualities;
+    }
+    
+    // Request fresh metadata
+    const response = await chrome.runtime.sendMessage({
+        type: 'getHLSQualities',
+        url: url
+    });
+    
+    if (response?.streamInfo) {
+        const config = processStreamMetadata(url, response.streamInfo);
+        return config.qualities;
+    }
+    
+    return [];
+}
