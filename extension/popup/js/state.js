@@ -5,10 +5,52 @@ let cachedVideos = null;
 let resolutionCache = new Map();
 let scrollPosition = 0;
 let videoGroups = {};
-let groupState = {}; // To track collapsed state of groups
-let posterCache = new Map(); // For preserving video posters
-let currentTheme = 'dark'; // Default theme
-let mediaInfoCache = new Map(); // Cache for full media info
+let groupState = {}; 
+let posterCache = new Map(); 
+let currentTheme = 'dark'; 
+let mediaInfoCache = new Map();
+
+// Cache configuration
+const CACHE_TTL = 30 * 60 * 1000; // 30 minutes
+const streamMetadataCache = new Map();
+
+/**
+ * Add stream metadata to cache with TTL
+ * @param {string} url - Stream URL
+ * @param {Object} metadata - Stream metadata
+ */
+export function addStreamMetadata(url, metadata) {
+    streamMetadataCache.set(url, {
+        data: metadata,
+        timestamp: Date.now()
+    });
+    saveStreamMetadataCache();
+}
+
+/**
+ * Get stream metadata from cache if valid
+ * @param {string} url - Stream URL
+ * @returns {Object|null} Metadata or null if expired/missing
+ */
+export function getStreamMetadata(url) {
+    const cached = streamMetadataCache.get(url);
+    if (!cached) return null;
+    
+    if (Date.now() - cached.timestamp > CACHE_TTL) {
+        streamMetadataCache.delete(url);
+        return null;
+    }
+    
+    return cached.data;
+}
+
+/**
+ * Save stream metadata cache to storage
+ */
+function saveStreamMetadataCache() {
+    const cacheData = JSON.stringify(Array.from(streamMetadataCache.entries()));
+    chrome.storage.local.set({ streamMetadataCache: cacheData });
+}
 
 /**
  * Initialize state from storage
@@ -17,7 +59,7 @@ export async function initializeState() {
     try {
         // Load theme preference
         const result = await chrome.storage.sync.get(['theme']);
-        const localData = await chrome.storage.local.get(['groupState', 'cachedVideos', 'currentTabId', 'posterCache', 'mediaInfoCache']);
+        const localData = await chrome.storage.local.get(['groupState', 'cachedVideos', 'currentTabId', 'posterCache', 'mediaInfoCache', 'streamMetadataCache']);
         
         // Get system theme preference
         const prefersDarkMode = window.matchMedia('(prefers-color-scheme: dark)').matches;
@@ -49,6 +91,21 @@ export async function initializeState() {
                 mediaInfoCache = new Map(JSON.parse(localData.mediaInfoCache));
             } catch (e) {
                 console.error('Failed to restore media info cache:', e);
+            }
+        }
+
+        // Restore stream metadata cache
+        if (localData.streamMetadataCache) {
+            try {
+                const parsedCache = JSON.parse(localData.streamMetadataCache);
+                streamMetadataCache.clear();
+                for (const [url, data] of parsedCache) {
+                    if (Date.now() - data.timestamp <= CACHE_TTL) {
+                        streamMetadataCache.set(url, data);
+                    }
+                }
+            } catch (e) {
+                console.error('Failed to restore stream metadata cache:', e);
             }
         }
         

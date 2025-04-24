@@ -3,19 +3,131 @@ let previewGenerationQueue = new Map();
 const videosPerTab = {};
 const playlistsPerTab = {};
 const downloadPorts = new Map();
+const metadataProcessingQueue = new Map();
 
 // Handle port connections from popup
 chrome.runtime.onConnect.addListener(port => {
-  if (port.name === 'download_progress') {
-    // Create unique ID for each port connection
-    const portId = Date.now().toString();
-    downloadPorts.set(portId, port);
-    
-    port.onDisconnect.addListener(() => {
-      downloadPorts.delete(portId);
-    });
-  }
+    if (port.name === 'download_progress') {
+        const portId = Date.now().toString();
+        downloadPorts.set(portId, port);
+        port.onDisconnect.addListener(() => {
+            downloadPorts.delete(portId);
+        });
+    }
 });
+
+// Process metadata queue in parallel
+function processMetadataQueue(maxConcurrent = 3) {
+    if (metadataProcessingQueue.size === 0) return;
+    
+    const entries = Array.from(metadataProcessingQueue.entries()).slice(0, maxConcurrent);
+    const processPromises = entries.map(([url, info]) => {
+        return new Promise(async (resolve) => {
+            try {
+                metadataProcessingQueue.delete(url);
+                
+                // For playlists (HLS/DASH), fetch and parse the manifest
+                if (info.type === 'hls' || info.type === 'dash') {
+                    const response = await fetch(url);
+                    const content = await response.text();
+                    
+                    // Basic manifest parsing
+                    const variants = extractVariantsFromManifest(content, url, info.type);
+                    if (variants.length > 0) {
+                        info.variants = variants;
+                    }
+                }
+                
+                // Get stream info using native host
+                const streamInfo = await getStreamMetadata(url);
+                if (streamInfo) {
+                    info.streamInfo = streamInfo;
+                }
+                
+                // Update video info in storage
+                if (info.tabId && videosPerTab[info.tabId]) {
+                    const normalizedUrl = normalizeUrl(url);
+                    const existingVideo = videosPerTab[info.tabId].get(normalizedUrl);
+                    if (existingVideo) {
+                        videosPerTab[info.tabId].set(normalizedUrl, {
+                            ...existingVideo,
+                            ...info
+                        });
+                    }
+                }
+            } catch (error) {
+                console.error('Failed to process metadata for:', url, error);
+            }
+            resolve();
+        });
+    });
+
+    Promise.all(processPromises).then(() => {
+        if (metadataProcessingQueue.size > 0) {
+            setTimeout(() => processMetadataQueue(maxConcurrent), 100);
+        }
+    });
+}
+
+// Extract variants from manifest content
+function extractVariantsFromManifest(content, baseUrl, type) {
+    const variants = [];
+    
+    if (type === 'hls') {
+        // Basic HLS manifest parsing
+        const lines = content.split('\n');
+        let currentVariant = null;
+        
+        lines.forEach(line => {
+            if (line.startsWith('#EXT-X-STREAM-INF:')) {
+                currentVariant = {
+                    bandwidth: extractAttribute(line, 'BANDWIDTH'),
+                    resolution: extractAttribute(line, 'RESOLUTION'),
+                    codecs: extractAttribute(line, 'CODECS')
+                };
+            } else if (line && !line.startsWith('#') && currentVariant) {
+                currentVariant.url = resolveUrl(baseUrl, line.trim());
+                variants.push(currentVariant);
+                currentVariant = null;
+            }
+        });
+    } else if (type === 'dash') {
+        // Basic DASH manifest parsing
+        try {
+            const parser = new DOMParser();
+            const xml = parser.parseFromString(content, 'text/xml');
+            const representations = xml.querySelectorAll('Representation');
+            
+            representations.forEach(rep => {
+                variants.push({
+                    bandwidth: rep.getAttribute('bandwidth'),
+                    width: rep.getAttribute('width'),
+                    height: rep.getAttribute('height'),
+                    codecs: rep.getAttribute('codecs')
+                });
+            });
+        } catch (error) {
+            console.error('Failed to parse DASH manifest:', error);
+        }
+    }
+    
+    return variants;
+}
+
+// Helper to extract attributes from HLS manifest
+function extractAttribute(line, attr) {
+    const match = new RegExp(attr + '=([^,]+)').exec(line);
+    return match ? match[1].replace(/"/g, '') : null;
+}
+
+// Helper to resolve relative URLs
+function resolveUrl(base, relative) {
+    try {
+        return new URL(relative, base).href;
+    } catch {
+        return relative;
+    }
+}
 
 // Single message listener for all messages
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
@@ -222,7 +334,7 @@ function normalizeUrl(url) {
     }
 }
 
-// Add video to tab's collection
+// Add video to tab's collection with enhanced metadata handling
 function addVideoToTab(tabId, videoInfo) {
     if (!videosPerTab[tabId]) {
         videosPerTab[tabId] = new Map();
@@ -235,7 +347,17 @@ function addVideoToTab(tabId, videoInfo) {
         return;
     }
     
-    // Add video info
+    // Add to metadata processing queue
+    if (!metadataProcessingQueue.has(normalizedUrl)) {
+        metadataProcessingQueue.set(normalizedUrl, {
+            ...videoInfo,
+            tabId,
+            timestamp: Date.now()
+        });
+        processMetadataQueue();
+    }
+    
+    // Add basic video info immediately
     const timestamp = Date.now();
     videosPerTab[tabId].set(normalizedUrl, {
         url: videoInfo.url,
@@ -244,19 +366,19 @@ function addVideoToTab(tabId, videoInfo) {
         timestamp: timestamp,
         title: videoInfo.title || getFilenameFromUrl(videoInfo.url),
         poster: videoInfo.poster || null,
-        resolution: null, // Will be populated later
-        previewUrl: null  // Will be populated later
+        contentType: videoInfo.contentType,
+        headers: videoInfo.headers
     });
     
-    console.log(`Added ${videoInfo.type} video to tab ${tabId}:`, videoInfo.url);
-    
-    // For HLS playlists, also add to that specific collection for back-compat
+    // For HLS playlists, also add to that specific collection
     if (videoInfo.type === 'hls' && videoInfo.url.includes('.m3u8')) {
         if (!playlistsPerTab[tabId]) {
             playlistsPerTab[tabId] = new Set();
         }
         playlistsPerTab[tabId].add(normalizedUrl);
     }
+    
+    console.log(`Added ${videoInfo.type} video to tab ${tabId}:`, videoInfo.url);
 }
 
 // Extract filename from URL

@@ -6,6 +6,7 @@ const blobUrls = new Map();
 let isPopupOpen = false;
 let autoDetectionEnabled = true;
 let isInitialized = false;
+let pendingMetadataQueue = new Map();
 
 // Track XMLHttpRequest and fetch requests for video content
 function setupNetworkListeners() {
@@ -21,7 +22,18 @@ function setupNetworkListeners() {
                 const url = xhr.responseURL;
                 
                 if (url && isVideoRelatedUrl(url, contentType)) {
-                    sendVideoToBackground(url, 'xhr');
+                    // Add to pending queue for parallel processing
+                    pendingMetadataQueue.set(url, {
+                        type: 'xhr',
+                        contentType,
+                        responseHeaders: Array.from(xhr.getAllResponseHeaders().trim().split(/[\r\n]+/))
+                            .reduce((headers, line) => {
+                                const parts = line.split(': ');
+                                headers[parts[0]] = parts[1];
+                                return headers;
+                            }, {})
+                    });
+                    processPendingMetadata();
                 }
             }
             
@@ -32,8 +44,8 @@ function setupNetworkListeners() {
         
         return originalXhrOpen.apply(this, [method, url, ...args]);
     };
-    
-    // Override fetch to capture video URLs
+
+    // Override fetch to capture video URLs with parallel processing
     const originalFetch = window.fetch;
     window.fetch = function(resource, init) {
         const url = resource instanceof Request ? resource.url : resource;
@@ -43,13 +55,44 @@ function setupNetworkListeners() {
             
             clonedResponse.headers.get('Content-Type').then(contentType => {
                 if (isVideoRelatedUrl(url, contentType)) {
-                    sendVideoToBackground(url, 'fetch');
+                    // Add to pending queue for parallel processing
+                    pendingMetadataQueue.set(url, {
+                        type: 'fetch',
+                        contentType,
+                        responseHeaders: Object.fromEntries(clonedResponse.headers.entries())
+                    });
+                    processPendingMetadata();
                 }
             }).catch(() => {});
             
             return response;
         });
     };
+}
+
+// Process pending metadata in batches
+function processPendingMetadata(batchSize = 3) {
+    if (pendingMetadataQueue.size === 0) return;
+    
+    const entries = Array.from(pendingMetadataQueue.entries()).slice(0, batchSize);
+    const processPromises = entries.map(([url, info]) => {
+        return new Promise(async (resolve) => {
+            pendingMetadataQueue.delete(url);
+            
+            // Send to background with enhanced metadata
+            await sendVideoToBackground(url, info.type, {
+                contentType: info.contentType,
+                headers: info.responseHeaders
+            });
+            resolve();
+        });
+    });
+
+    Promise.all(processPromises).then(() => {
+        if (pendingMetadataQueue.size > 0) {
+            setTimeout(() => processPendingMetadata(batchSize), 100);
+        }
+    });
 }
 
 // Track MediaSource and SourceBuffer for blob URLs
