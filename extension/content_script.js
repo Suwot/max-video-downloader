@@ -257,15 +257,43 @@ function sendVideoToBackground(url, source, additionalInfo = {}) {
 function getVideoType(url) {
     if (url.startsWith('blob:')) {
         return 'blob';
-    } else if (url.includes('.m3u8')) {
-        return 'hls';
-    } else if (url.includes('.mpd')) {
-        return 'dash';
-    } else if (/\.(mp4|webm|ogg|mov|avi|mkv|flv)/i.test(url)) {
-        return 'direct';
-    } else {
-        return 'unknown';
     }
+    
+    try {
+        const urlObj = new URL(url);
+        const baseUrl = url.split('?')[0].split('#')[0];
+        const isGif = baseUrl.toLowerCase().endsWith('.gif');
+        
+        // If it's explicitly a GIF file, don't treat it as HLS
+        if (isGif) {
+            return 'direct';
+        }
+        
+        // Check for HLS streams
+        if (baseUrl.toLowerCase().endsWith('.m3u8') || urlObj.pathname.includes('/hls/')) {
+            // Additional check for tracking pixels/analytics
+            if (urlObj.hostname.includes('analytics') || 
+                urlObj.hostname.includes('tracking') ||
+                urlObj.hostname.includes('metric') ||
+                urlObj.pathname.includes('ping') ||
+                urlObj.pathname.includes('pixel')) {
+                return 'direct';
+            }
+            return 'hls';
+        }
+        
+        if (baseUrl.toLowerCase().endsWith('.mpd')) {
+            return 'dash';
+        }
+        
+        if (/\.(mp4|webm|ogg|mov|avi|mkv|flv)$/i.test(baseUrl)) {
+            return 'direct';
+        }
+    } catch (e) {
+        console.error('Error parsing URL:', e);
+    }
+    
+    return 'unknown';
 }
 
 // Normalize URL to avoid duplicates

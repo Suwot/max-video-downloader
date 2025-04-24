@@ -1,4 +1,4 @@
-import { getFilenameFromUrl, formatResolution, formatDuration } from './utilities.js';
+import { getFilenameFromUrl, formatResolution, formatDuration, normalizeUrl } from './utilities.js';
 import { getScrollPosition, getAllGroupStates, setGroupState, getAllVideoGroups, getPosterFromCache, addPosterToCache } from './state.js';
 import { groupVideosByType } from './video-processor.js';
 import { handleDownload } from './download.js';
@@ -383,19 +383,36 @@ function createVideoActions(video) {
     
     // Create quality selector if variants are available
     if (video.qualityVariants && video.qualityVariants.length > 0) {
+        // Sort variants by resolution height (highest first)
+        const sortedVariants = [...video.qualityVariants].sort((a, b) => 
+            (b.height || 0) - (a.height || 0)
+        );
+
+        // Check if original quality matches the best quality variant
+        const bestQuality = sortedVariants[0];
+        const originalMatchesBest = video.resolution && bestQuality && (
+            // Compare base URLs (without query params or hash)
+            video.url.split('?')[0].split('#')[0] === bestQuality.url.split('?')[0].split('#')[0] ||
+            // Or compare resolution if both have it
+            (video.resolution.width === bestQuality.width &&
+             video.resolution.height === bestQuality.height)
+        );
+
         const qualitySelector = document.createElement('select');
         qualitySelector.className = 'quality-selector';
         
-        // Add main video quality
-        const mainQuality = document.createElement('option');
-        mainQuality.value = video.url;
-        mainQuality.textContent = video.resolution ? 
-            `${video.resolution.width}x${video.resolution.height}` + (video.resolution.fps ? ` @${video.resolution.fps}fps` : '') :
-            'Original Quality';
-        qualitySelector.appendChild(mainQuality);
+        // Only add original quality if it doesn't match best variant
+        if (!originalMatchesBest) {
+            const mainQuality = document.createElement('option');
+            mainQuality.value = video.url;
+            mainQuality.textContent = video.resolution ? 
+                `${video.resolution.width}x${video.resolution.height}` + (video.resolution.fps ? ` @${video.resolution.fps}fps` : '') :
+                'Original Quality';
+            qualitySelector.appendChild(mainQuality);
+        }
         
-        // Add variant qualities
-        video.qualityVariants.forEach(variant => {
+        // Add sorted variant qualities
+        sortedVariants.forEach(variant => {
             const option = document.createElement('option');
             option.value = variant.url;
             option.textContent = variant.height ? 
@@ -403,7 +420,7 @@ function createVideoActions(video) {
                 'Alternative Quality';
             qualitySelector.appendChild(option);
         });
-        
+
         actionsDiv.appendChild(qualitySelector);
     }
     

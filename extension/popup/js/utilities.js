@@ -148,6 +148,20 @@ export function getBaseUrl(url) {
 }
 
 /**
+ * Normalize URL to compare without query parameters
+ * @param {string} url - URL to normalize
+ * @returns {string} Normalized URL
+ */
+export function normalizeUrl(url) {
+    try {
+        const urlObj = new URL(url);
+        return urlObj.origin + urlObj.pathname;
+    } catch {
+        return url;
+    }
+}
+
+/**
  * Show error notification
  * @param {string} message - Error message to show
  */
