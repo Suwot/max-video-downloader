@@ -1,12 +1,36 @@
 // Add at the top of the file
 import { parseHLSManifest, parseDASHManifest } from './popup/js/manifest-parser.js';
 
+// Debug logging helper
+function logDebug(...args) {
+    console.log('[Background Debug]', new Date().toISOString(), ...args);
+}
+
 let previewGenerationQueue = new Map();
 const videosPerTab = {};
 const playlistsPerTab = {};
 const downloadPorts = new Map();
 const metadataProcessingQueue = new Map();
 const manifestRelationships = new Map();
+
+// Track tab updates and removal
+chrome.tabs.onRemoved.addListener((tabId) => {
+    logDebug('Tab removed:', tabId);
+    if (videosPerTab[tabId]) {
+        logDebug('Cleaning up videos for tab:', tabId, 'Count:', videosPerTab[tabId].size);
+        delete videosPerTab[tabId];
+    }
+});
+
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+    if (changeInfo.status === 'loading') {
+        logDebug('Tab reloading:', tabId);
+        if (videosPerTab[tabId]) {
+            logDebug('Cleaning up videos for reloaded tab:', tabId, 'Count:', videosPerTab[tabId].size);
+            delete videosPerTab[tabId];
+        }
+    }
+});
 
 // Handle port connections from popup
 chrome.runtime.onConnect.addListener(port => {
@@ -421,38 +445,46 @@ function normalizeUrl(url) {
 // Add video to tab's collection with enhanced metadata handling
 function addVideoToTab(tabId, videoInfo) {
     if (!videosPerTab[tabId]) {
+        logDebug('Creating new video collection for tab:', tabId);
         videosPerTab[tabId] = new Map();
     }
     
     const normalizedUrl = normalizeUrl(videoInfo.url);
     
-    // Skip if already detected
-    if (videosPerTab[tabId].has(normalizedUrl)) {
-        return;
+    // Get existing video info if any
+    const existingVideo = videosPerTab[tabId].get(normalizedUrl);
+    
+    // Merge with existing data if present
+    if (existingVideo) {
+        logDebug('Updating existing video:', normalizedUrl);
+        videoInfo = {
+            ...existingVideo,
+            ...videoInfo,
+            // Preserve important existing fields
+            timestamp: existingVideo.timestamp || Date.now(),
+            streamInfo: existingVideo.streamInfo || null,
+            qualities: existingVideo.qualities || [],
+            // Update only if new data is present
+            poster: videoInfo.poster || existingVideo.poster,
+            title: videoInfo.title || existingVideo.title
+        };
+    } else {
+        logDebug('Adding new video:', normalizedUrl);
+        videoInfo.timestamp = Date.now();
     }
+    
+    videosPerTab[tabId].set(normalizedUrl, videoInfo);
+    logDebug('Current video count for tab', tabId, ':', videosPerTab[tabId].size);
     
     // Add to metadata processing queue
     if (!metadataProcessingQueue.has(normalizedUrl)) {
         metadataProcessingQueue.set(normalizedUrl, {
             ...videoInfo,
             tabId,
-            timestamp: Date.now()
+            timestamp: videoInfo.timestamp
         });
         processMetadataQueue();
     }
-    
-    // Add basic video info immediately
-    const timestamp = Date.now();
-    videosPerTab[tabId].set(normalizedUrl, {
-        url: videoInfo.url,
-        type: videoInfo.type,
-        source: videoInfo.source || 'unknown',
-        timestamp: timestamp,
-        title: videoInfo.title || getFilenameFromUrl(videoInfo.url),
-        poster: videoInfo.poster || null,
-        contentType: videoInfo.contentType,
-        headers: videoInfo.headers
-    });
     
     // For HLS playlists, also add to that specific collection
     if (videoInfo.type === 'hls' && videoInfo.url.includes('.m3u8')) {
@@ -520,7 +552,9 @@ chrome.webRequest.onBeforeRequest.addListener(
 // Error handling for native messaging
 let nativePort = null;
 let reconnectTimer = null;
+let heartbeatTimer = null;
 const RECONNECT_DELAY = 2000; // 2 seconds
+const HEARTBEAT_INTERVAL = 15000; // 15 seconds - match native host
 
 function connectNativeHost() {
     try {
@@ -532,12 +566,29 @@ function connectNativeHost() {
             }
         }
 
+        // Clear any existing timers
+        if (heartbeatTimer) {
+            clearInterval(heartbeatTimer);
+            heartbeatTimer = null;
+        }
+
+        if (reconnectTimer) {
+            clearTimeout(reconnectTimer);
+            reconnectTimer = null;
+        }
+
         nativePort = chrome.runtime.connectNative('com.mycompany.ffmpeg');
         
         nativePort.onDisconnect.addListener(() => {
             const error = chrome.runtime.lastError;
             console.error('Native host disconnected:', error);
             nativePort = null;
+
+            // Clear heartbeat timer
+            if (heartbeatTimer) {
+                clearInterval(heartbeatTimer);
+                heartbeatTimer = null;
+            }
 
             // Try to reconnect after delay
             if (!reconnectTimer) {
@@ -548,6 +599,22 @@ function connectNativeHost() {
             }
         });
 
+        // Start heartbeat
+        heartbeatTimer = setInterval(async () => {
+            try {
+                const response = await sendNativeMessage({ type: 'heartbeat' });
+                if (!response?.alive) {
+                    console.error('Invalid heartbeat response');
+                    nativePort.disconnect();
+                }
+            } catch (error) {
+                console.error('Heartbeat failed:', error);
+                if (nativePort) {
+                    nativePort.disconnect();
+                }
+            }
+        }, HEARTBEAT_INTERVAL);
+
         console.log('Successfully connected to native host');
         return true;
     } catch (error) {
@@ -556,7 +623,7 @@ function connectNativeHost() {
     }
 }
 
-// Updated message sending function with retry logic
+// Updated message sending function with retry logic and heartbeat awareness
 async function sendNativeMessage(message, retryCount = 1) {
     if (!nativePort && !connectNativeHost()) {
         throw new Error('Could not connect to native host');

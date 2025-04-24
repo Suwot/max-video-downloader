@@ -89,6 +89,10 @@ function getFullEnv() {
 let lastResponseTime = 0;
 const MIN_RESPONSE_INTERVAL = 250; // Minimum 250ms between progress messages
 
+// Add at the top with other constants
+const HEARTBEAT_INTERVAL = 15000; // 15 seconds
+let lastHeartbeatTime = Date.now();
+
 // Initial setup
 try {
     // Check FFmpeg
@@ -184,7 +188,13 @@ function processMessages() {
 async function handleMessage(request) {
     logDebug('Processing message:', request);
     
+    // Update heartbeat time for any message
+    lastHeartbeatTime = Date.now();
+    
     switch(request.type) {
+        case 'heartbeat':
+            sendResponse({ type: 'heartbeat', alive: true });
+            break;
         case 'download':
             await downloadVideo(request.url, request.filename, request.savePath, request.quality);
             break;
@@ -198,6 +208,16 @@ async function handleMessage(request) {
             sendResponse({ error: 'Unknown command type: ' + request.type });
     }
 }
+
+// Add after error handling setup
+// Monitor heartbeat and exit if no heartbeat received
+setInterval(() => {
+    const now = Date.now();
+    if (now - lastHeartbeatTime > HEARTBEAT_INTERVAL * 2) {
+        logDebug('No heartbeat received for too long, exiting...');
+        process.exit(1);
+    }
+}, HEARTBEAT_INTERVAL);
 
 async function downloadVideo(url, filename, savePath, quality = 'best') {
     logDebug('Starting download:', { url, filename, savePath, quality });

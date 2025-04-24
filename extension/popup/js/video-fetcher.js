@@ -1,10 +1,25 @@
-import { getCachedVideos, setCachedVideos, getScrollPosition, setScrollPosition, hasResolutionCache, getResolutionFromCache, addResolutionToCache, getMediaInfoFromCache, addMediaInfoToCache } from './state.js';
+// Import all from single source
+import {
+    getCachedVideos,
+    setCachedVideos,
+    getScrollPosition,
+    setScrollPosition,
+    hasResolutionCache, 
+    getResolutionFromCache,
+    addResolutionToCache,
+    getMediaInfoFromCache, 
+    addMediaInfoToCache
+} from './state.js';
 import { showLoader, showErrorMessage, restoreScrollPosition } from './ui.js';
-import { groupVideos } from './video-processor.js';
+import { groupVideos, processVideos, clearHLSRelationships } from './video-processor.js';
 import { renderVideos } from './video-renderer.js';
 import { formatResolution, formatDuration, getFilenameFromUrl } from './utilities.js';
 import { parseHLSManifest } from './manifest-parser.js';
-import { processVideos, clearHLSRelationships } from './video-processor.js';
+
+// Debug logging helper
+function logDebug(...args) {
+    console.log('[Video Fetcher]', new Date().toISOString(), ...args);
+}
 
 // Keep track of master playlists we've seen
 const knownMasterPlaylists = new Map();
@@ -94,9 +109,11 @@ async function processHLSRelationships(video, tabId) {
  */
 export async function updateVideoList(forceRefresh = false) {
     const container = document.getElementById('videos');
+    logDebug('Updating video list, force refresh:', forceRefresh);
     
     // Clear relationships if forcing refresh
     if (forceRefresh) {
+        logDebug('Clearing HLS relationships');
         clearHLSRelationships();
     }
     
@@ -105,20 +122,28 @@ export async function updateVideoList(forceRefresh = false) {
         setScrollPosition(container.scrollTop);
     }
     
-    // Use cached videos if available and not forcing refresh
-    if (!forceRefresh && getCachedVideos()) {
-        renderVideos(getCachedVideos());
+    // Check if cached videos are still valid
+    const cachedVideos = getCachedVideos();
+    logDebug('Got cached videos:', cachedVideos?.length || 0);
+    
+    if (!forceRefresh && cachedVideos) {
+        logDebug('Using cached videos');
+        renderVideos(cachedVideos);
+        // Still fetch in background to update stale entries
+        refreshInBackground(cachedVideos);
         return;
     }
     
     // Only show loader if there are no videos currently displayed
-    if (!getCachedVideos()) {
+    if (!cachedVideos) {
         showLoader(container);
     }
     
     try {
         // Get current tab
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        logDebug('Current tab:', tab.id);
+        
         const videos = [];
         let contentScriptError = null;
         let backgroundScriptError = null;
@@ -133,47 +158,40 @@ export async function updateVideoList(forceRefresh = false) {
                 `;
             }
         }, 10000);
-        
-        // Collect all videos first
+
+        // Get videos from content script
         try {
+            logDebug('Requesting videos from content script');
             const response = await chrome.tabs.sendMessage(tab.id, { action: 'findVideos' });
             if (response && response.length) {
+                logDebug('Got videos from content script:', response.length);
                 videos.push(...response);
             }
         } catch (error) {
-            console.error('Content script error:', error);
+            logDebug('Content script error:', error);
             contentScriptError = error;
         }
-        
+
+        // Get videos from background script
         try {
+            logDebug('Requesting videos from background script');
             const backgroundVideos = await chrome.runtime.sendMessage({ 
                 action: 'getVideos', 
                 tabId: tab.id 
             });
             
             if (backgroundVideos && backgroundVideos.length) {
-                const existingUrls = new Set(videos.map(v => v.url));
-                backgroundVideos.forEach(video => {
-                    if (!existingUrls.has(video.url)) {
-                        videos.push(video);
-                        existingUrls.add(video.url);
-                    }
-                });
+                logDebug('Got videos from background script:', backgroundVideos.length);
+                mergeVideos(videos, backgroundVideos);
             }
         } catch (error) {
-            console.error('Background script error:', error);
+            logDebug('Background script error:', error);
             backgroundScriptError = error;
         }
-        
-        // Clear timeout since we've completed the search
+
         clearTimeout(searchTimeout);
         
-        if (videos.length === 0 && (contentScriptError || backgroundScriptError)) {
-            let errorMessage = 'Failed to find videos. ';
-            if (contentScriptError) errorMessage += 'Page scanning failed. ';
-            if (backgroundScriptError) errorMessage += 'Video detection failed. ';
-            throw new Error(errorMessage);
-        }
+        logDebug('Total videos after merge:', videos.length);
         
         // Process all videos first to establish relationships
         const processedVideos = [];
@@ -183,24 +201,93 @@ export async function updateVideoList(forceRefresh = false) {
                 processedVideos.push(processed);
             }
         }
+        
+        logDebug('Videos after processing:', processedVideos.length);
 
         // Small delay to allow any late-arriving masters to be processed
         await new Promise(resolve => setTimeout(resolve, 500));
         
-        // Use two-pass processing to properly handle relationships
+        // Group and cache the videos
         const groupedVideos = processVideos(processedVideos);
+        logDebug('Videos after grouping:', groupedVideos.length);
         setCachedVideos(groupedVideos);
         
+        // Render and start fetching details
         renderVideos(groupedVideos);
-        
-        // Start fetching resolution info in the background
         fetchVideoInfo(processedVideos, tab.id);
         
     } catch (error) {
-        console.error('Failed to get videos:', error);
-        if (!getCachedVideos() || container.querySelector('.initial-loader')) {
+        logDebug('Failed to get videos:', error);
+        if (!getCachedVideos()) {
             showErrorMessage(container, error.message);
         }
+    }
+}
+
+/**
+ * Merge new videos with existing ones, avoiding duplicates
+ * @param {Array} existing - Existing videos array
+ * @param {Array} newVideos - New videos to merge
+ */
+function mergeVideos(existing, newVideos) {
+    const existingUrls = new Set(existing.map(v => v.url));
+    for (const video of newVideos) {
+        if (!existingUrls.has(video.url)) {
+            existing.push(video);
+            existingUrls.add(video.url);
+        } else {
+            // Update existing video with any new information
+            const index = existing.findIndex(v => v.url === video.url);
+            if (index !== -1) {
+                existing[index] = { ...existing[index], ...video };
+            }
+        }
+    }
+}
+
+/**
+ * Refresh video information in the background
+ * @param {Array} videos - Currently displayed videos
+ */
+export async function refreshInBackground(videos) {
+    if (!videos || videos.length === 0) return;
+    logDebug('Starting background refresh for', videos.length, 'videos');
+
+    try {
+        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        const tabId = tab.id;
+        logDebug('Background refresh on tab:', tabId);
+
+        // Update video info in the background
+        fetchVideoInfo(videos, tabId);
+
+        // Check for new videos
+        const response = await chrome.tabs.sendMessage(tabId, { action: 'findVideos' });
+        if (response && response.length) {
+            logDebug('Found new videos in background:', response.length);
+            const newVideos = response.filter(newVideo => 
+                !videos.some(existing => existing.url === newVideo.url)
+            );
+
+            if (newVideos.length > 0) {
+                logDebug('Processing', newVideos.length, 'new videos');
+                const processedVideos = [...videos];
+                for (const video of newVideos) {
+                    const processed = await processHLSRelationships(video, tabId);
+                    if (processed) {
+                        processedVideos.push(processed);
+                    }
+                }
+
+                const groupedVideos = processVideos(processedVideos);
+                logDebug('Updating with new videos, total:', groupedVideos.length);
+                setCachedVideos(groupedVideos);
+                renderVideos(groupedVideos);
+                fetchVideoInfo(newVideos, tabId);
+            }
+        }
+    } catch (error) {
+        logDebug('Background refresh failed:', error);
     }
 }
 
@@ -439,41 +526,4 @@ export async function getStreamResolution(url, type, tabId = null) {
         console.error('Failed to get resolution:', error);
     }
     return 'Resolution unknown';
-}
-
-/**
- * Sets up communication for automatic detection of new videos
- */
-export function setupAutoDetection() {
-    // Listen for messages from background script about new videos
-    chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-        if (message.action === 'newVideoDetected') {
-            // Always update when new videos detected
-            updateVideoList(true);
-            sendResponse({ received: true });
-        }
-        return true;
-    });
-    
-    // Try to connect to content script with retries
-    function connectToContentScript(retries = 3) {
-        chrome.tabs.query({ active: true, currentWindow: true }, tabs => {
-            if (tabs[0]) {
-                chrome.tabs.sendMessage(tabs[0].id, { 
-                    action: 'startBackgroundDetection',
-                    enabled: true
-                }).then(response => {
-                    console.log('Content script connected successfully');
-                }).catch(err => {
-                    console.log('Content script connection attempt failed:', err);
-                    if (retries > 0) {
-                        // Retry after a short delay
-                        setTimeout(() => connectToContentScript(retries - 1), 500);
-                    }
-                });
-            }
-        });
-    }
-    
-    connectToContentScript();
 }
