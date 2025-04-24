@@ -1,4 +1,4 @@
-import { getFilenameFromUrl, formatResolution } from './utilities.js';
+import { getFilenameFromUrl, formatResolution, formatDuration } from './utilities.js';
 import { getScrollPosition, getAllGroupStates, setGroupState, getAllVideoGroups, getPosterFromCache, addPosterToCache } from './state.js';
 import { groupVideosByType } from './video-processor.js';
 import { handleDownload } from './download.js';
@@ -125,6 +125,14 @@ export function createVideoElement(video) {
     previewImage.className = 'preview-image placeholder';
     previewImage.src = chrome.runtime.getURL('icons/video-placeholder.png');
     previewImage.alt = 'Video preview';
+    
+    // Add duration display if available in video.mediaInfo
+    if (video.mediaInfo?.duration) {
+        const durationElement = document.createElement('div');
+        durationElement.className = 'video-duration';
+        durationElement.textContent = formatDuration(video.mediaInfo.duration);
+        previewContainer.appendChild(durationElement);
+    }
     
     // Add type badge to preview container
     const typeBadge = document.createElement('div');

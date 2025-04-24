@@ -151,3 +151,15 @@ export function showError(message) {
         message: message
     });
 }
+
+/**
+ * Format duration in MM:SS format
+ * @param {number} duration - Duration in seconds
+ * @returns {string} Formatted duration
+ */
+export function formatDuration(duration) {
+    if (!duration) return '';
+    const minutes = Math.floor(duration / 60);
+    const seconds = Math.floor(duration % 60);
+    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+}
