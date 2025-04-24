@@ -8,6 +8,7 @@ let videoGroups = {};
 let groupState = {}; // To track collapsed state of groups
 let posterCache = new Map(); // For preserving video posters
 let currentTheme = 'dark'; // Default theme
+let mediaInfoCache = new Map(); // Cache for full media info
 
 /**
  * Initialize state from storage
@@ -16,7 +17,7 @@ export async function initializeState() {
     try {
         // Load theme preference
         const result = await chrome.storage.sync.get(['theme']);
-        const localData = await chrome.storage.local.get(['groupState', 'cachedVideos', 'currentTabId', 'posterCache']);
+        const localData = await chrome.storage.local.get(['groupState', 'cachedVideos', 'currentTabId', 'posterCache', 'mediaInfoCache']);
         
         // Get system theme preference
         const prefersDarkMode = window.matchMedia('(prefers-color-scheme: dark)').matches;
@@ -41,6 +42,15 @@ export async function initializeState() {
                 console.error('Failed to restore poster cache:', e);
             }
         }
+
+        // Restore media info cache
+        if (localData.mediaInfoCache) {
+            try {
+                mediaInfoCache = new Map(JSON.parse(localData.mediaInfoCache));
+            } catch (e) {
+                console.error('Failed to restore media info cache:', e);
+            }
+        }
         
         // Get current tab to check if we're on the same page as before
         const [currentTab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -49,6 +59,16 @@ export async function initializeState() {
         // Only use cached videos if we're on the same tab as before
         if (localData.cachedVideos && localData.currentTabId === currentTabId) {
             cachedVideos = localData.cachedVideos;
+            // Restore media info for cached videos
+            if (cachedVideos) {
+                cachedVideos = cachedVideos.map(video => {
+                    const mediaInfo = mediaInfoCache.get(video.url);
+                    if (mediaInfo) {
+                        return { ...video, mediaInfo };
+                    }
+                    return video;
+                });
+            }
         }
         
         // Store current tab ID
@@ -222,4 +242,31 @@ export function getResolutionFromCache(url) {
  */
 export function addResolutionToCache(url, resolution) {
     resolutionCache.set(url, resolution);
-} 
+}
+
+/**
+ * Add media info to cache
+ * @param {string} url - Video URL
+ * @param {Object} mediaInfo - Full media info object
+ */
+export function addMediaInfoToCache(url, mediaInfo) {
+    mediaInfoCache.set(url, mediaInfo);
+    saveMediaInfoCache();
+}
+
+/**
+ * Get media info from cache
+ * @param {string} url - Video URL
+ * @returns {Object|undefined} Media info or undefined
+ */
+export function getMediaInfoFromCache(url) {
+    return mediaInfoCache.get(url);
+}
+
+/**
+ * Save media info cache to storage
+ */
+function saveMediaInfoCache() {
+    const mediaInfoData = JSON.stringify(Array.from(mediaInfoCache.entries()));
+    chrome.storage.local.set({ mediaInfoCache: mediaInfoData });
+}

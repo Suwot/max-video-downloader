@@ -1,8 +1,8 @@
-import { getCachedVideos, setCachedVideos, getScrollPosition, setScrollPosition, hasResolutionCache, getResolutionFromCache, addResolutionToCache } from './state.js';
+import { getCachedVideos, setCachedVideos, getScrollPosition, setScrollPosition, hasResolutionCache, getResolutionFromCache, addResolutionToCache, getMediaInfoFromCache, addMediaInfoToCache } from './state.js';
 import { showLoader, showErrorMessage, restoreScrollPosition } from './ui.js';
 import { groupVideos } from './video-processor.js';
 import { renderVideos } from './video-renderer.js';
-import { formatResolution, getFilenameFromUrl } from './utilities.js';
+import { formatResolution, formatDuration, getFilenameFromUrl } from './utilities.js';
 
 /**
  * Update the video list, either from cache or by fetching new videos
@@ -142,49 +142,76 @@ export async function fetchVideoInfo(videos, tabId) {
     // Process all videos in parallel
     Promise.all(videos.map(async (video) => {
         try {
-            if (!video.resolution || !video.mediaInfo) {
-                console.log('Fetching info for:', video.url);
-                const response = await chrome.runtime.sendMessage({
-                    type: 'getHLSQualities',
-                    url: video.url,
-                    tabId: tabId
-                });
+            // Check if we already have this video's media info in the cache
+            const cachedMediaInfo = getMediaInfoFromCache(video.url);
+            if (cachedMediaInfo) {
+                // Use cached media info
+                const updatedVideo = {
+                    ...video,
+                    mediaInfo: cachedMediaInfo
+                };
+                
+                // Update UI with cached info
+                updateVideoResolution(video.url, cachedMediaInfo);
+                
+                // Update video in cached videos
+                const cachedVideos = getCachedVideos();
+                if (cachedVideos) {
+                    const index = cachedVideos.findIndex(v => v.url === video.url);
+                    if (index !== -1) {
+                        cachedVideos[index] = updatedVideo;
+                        setCachedVideos(cachedVideos);
+                    }
+                }
+                return;
+            }
 
-                if (response?.streamInfo) {
-                    const streamInfo = response.streamInfo;
-                    
-                    // Update video object with full stream info
-                    const updatedVideo = {
-                        ...video,
-                        mediaInfo: {
-                            hasVideo: streamInfo.hasVideo,
-                            hasAudio: streamInfo.hasAudio,
-                            videoCodec: streamInfo.videoCodec,
-                            audioCodec: streamInfo.audioCodec,
-                            format: streamInfo.format,
-                            container: streamInfo.container,
-                            duration: streamInfo.duration,
-                            sizeBytes: streamInfo.sizeBytes
-                        },
-                        resolution: {
-                            width: streamInfo.width,
-                            height: streamInfo.height,
-                            fps: streamInfo.fps,
-                            bitrate: streamInfo.videoBitrate || streamInfo.totalBitrate
-                        }
-                    };
+            // No cached info, fetch from native host
+            console.log('Fetching info for:', video.url);
+            const response = await chrome.runtime.sendMessage({
+                type: 'getHLSQualities',
+                url: video.url,
+                tabId: tabId
+            });
 
-                    // Update UI immediately
-                    updateVideoResolution(video.url, streamInfo);
-                    
-                    // Update just this video in the cache
-                    const cachedVideos = getCachedVideos();
-                    if (cachedVideos) {
-                        const index = cachedVideos.findIndex(v => v.url === video.url);
-                        if (index !== -1) {
-                            cachedVideos[index] = updatedVideo;
-                            setCachedVideos(cachedVideos);
-                        }
+            if (response?.streamInfo) {
+                const streamInfo = response.streamInfo;
+                
+                // Create media info object
+                const mediaInfo = {
+                    hasVideo: streamInfo.hasVideo,
+                    hasAudio: streamInfo.hasAudio,
+                    videoCodec: streamInfo.videoCodec,
+                    audioCodec: streamInfo.audioCodec,
+                    format: streamInfo.format,
+                    container: streamInfo.container,
+                    duration: streamInfo.duration,
+                    sizeBytes: streamInfo.sizeBytes,
+                    width: streamInfo.width,
+                    height: streamInfo.height,
+                    fps: streamInfo.fps,
+                    bitrate: streamInfo.videoBitrate || streamInfo.totalBitrate
+                };
+
+                // Cache the media info
+                addMediaInfoToCache(video.url, mediaInfo);
+
+                // Update video object with media info
+                const updatedVideo = {
+                    ...video,
+                    mediaInfo
+                };
+
+                // Update UI immediately
+                updateVideoResolution(video.url, mediaInfo);
+                
+                // Update this video in the cache
+                const cachedVideos = getCachedVideos();
+                if (cachedVideos) {
+                    const index = cachedVideos.findIndex(v => v.url === video.url);
+                    if (index !== -1) {
+                        cachedVideos[index] = updatedVideo;
+                        setCachedVideos(cachedVideos);
                     }
                 }
             }
@@ -204,6 +231,21 @@ export async function fetchVideoInfo(videos, tabId) {
 export function updateVideoResolution(url, streamInfo) {
     const videoElement = document.querySelector(`.video-item[data-url="${url}"]`);
     if (videoElement) {
+        // Update duration display
+        if (streamInfo.duration) {
+            let durationElement = videoElement.querySelector('.video-duration');
+            if (!durationElement) {
+                durationElement = document.createElement('div');
+                durationElement.className = 'video-duration';
+                const previewContainer = videoElement.querySelector('.preview-container');
+                if (previewContainer) {
+                    previewContainer.appendChild(durationElement);
+                }
+            }
+            durationElement.textContent = formatDuration(streamInfo.duration);
+        }
+
+        // Update resolution info
         const resolutionInfo = videoElement.querySelector('.resolution-info');
         if (resolutionInfo) {
             const resolution = {
@@ -213,7 +255,6 @@ export function updateVideoResolution(url, streamInfo) {
                 bitrate: streamInfo.videoBitrate || streamInfo.totalBitrate
             };
             
-            // Update the resolution text with enhanced codec info
             resolutionInfo.textContent = formatResolution(
                 resolution.width,
                 resolution.height,
@@ -226,7 +267,7 @@ export function updateVideoResolution(url, streamInfo) {
             );
         }
         
-        // Update media type info if present
+        // Update media type info
         const mediaTypeInfo = videoElement.querySelector('.media-type-info');
         if (mediaTypeInfo) {
             let mediaContentType = "Unknown";
@@ -238,7 +279,6 @@ export function updateVideoResolution(url, streamInfo) {
                 mediaContentType = "Audio Only";
             }
             
-            // Update icon based on media type
             let mediaIcon = '';
             if (mediaContentType === "Audio Only") {
                 mediaIcon = '<path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>';

@@ -160,41 +160,36 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.type === 'getHLSQualities') {
     // Create promise for quality detection
     const qualityPromise = new Promise(resolve => {
+      console.log('🎥 Requesting media info from native host for:', msg.url);
       chrome.runtime.sendNativeMessage('com.mycompany.ffmpeg', {
         type: 'getQualities',
         url: msg.url
       }, response => {
-        // If we got stream info, save it with the video
-        if (response?.streamInfo && msg.tabId && videosPerTab[msg.tabId]) {
-          const normalizedUrl = normalizeUrl(msg.url);
-          const videoInfo = videosPerTab[msg.tabId].get(normalizedUrl);
-          if (videoInfo) {
-            // Store complete stream info
-            videoInfo.mediaInfo = {
-              hasVideo: response.streamInfo.hasVideo,
-              hasAudio: response.streamInfo.hasAudio,
-              videoCodec: response.streamInfo.videoCodec,
-              audioCodec: response.streamInfo.audioCodec,
-              format: response.streamInfo.format,
-              container: response.streamInfo.container,
-              duration: response.streamInfo.duration,
-              sizeBytes: response.streamInfo.sizeBytes
-            };
-            
-            // Store resolution info
-            videoInfo.resolution = {
-              width: response.streamInfo.width,
-              height: response.streamInfo.height,
+        if (response?.streamInfo) {
+          console.group('📊 Received media info from native host:');
+          console.log('URL:', msg.url);
+          if (response.streamInfo.hasVideo) {
+            console.log('Video:', {
+              codec: response.streamInfo.videoCodec.name,
+              resolution: `${response.streamInfo.width}x${response.streamInfo.height}`,
               fps: response.streamInfo.fps,
-              bitrate: response.streamInfo.videoBitrate || response.streamInfo.totalBitrate
-            };
-            
-            videosPerTab[msg.tabId].set(normalizedUrl, videoInfo);
+              bitrate: response.streamInfo.videoBitrate ? `${(response.streamInfo.videoBitrate / 1000000).toFixed(2)} Mbps` : 'unknown'
+            });
           }
-          
+          if (response.streamInfo.hasAudio) {
+            console.log('Audio:', {
+              codec: response.streamInfo.audioCodec.name,
+              channels: response.streamInfo.audioCodec.channels,
+              sampleRate: response.streamInfo.audioCodec.sampleRate ? `${response.streamInfo.audioCodec.sampleRate}Hz` : 'unknown'
+            });
+          }
+          console.log('Duration:', response.streamInfo.duration ? `${Math.floor(response.streamInfo.duration / 60)}:${Math.floor(response.streamInfo.duration % 60).toString().padStart(2, '0')}` : 'unknown');
+          console.log('Container:', response.streamInfo.container);
+          console.groupEnd();
           // Always send complete stream info in response
           resolve({ streamInfo: response.streamInfo });
         } else {
+          console.warn('❌ Failed to get media info:', response?.error || 'Unknown error');
           resolve(response);
         }
       });

@@ -416,10 +416,11 @@ function getVideoTypeFromUrl(url) {
 }
 
 async function getStreamQualities(url) {
-    logDebug('Getting stream qualities for:', url);
+    logDebug('🎥 Analyzing media from:', url);
     
     // Skip for blob URLs
     if (url.startsWith('blob:')) {
+        logDebug('❌ Cannot analyze blob URLs');
         sendResponse({ error: 'Cannot analyze blob URLs' });
         return;
     }
@@ -455,6 +456,9 @@ async function getStreamQualities(url) {
                         format: info.format?.format_name || 'unknown',
                         container: info.format?.format_long_name || 'unknown'
                     };
+
+                    logDebug('📊 Media analysis results:');
+                    logDebug(`Container: ${streamInfo.container}`);
                     
                     // Video stream info
                     if (videoStream) {
@@ -481,7 +485,7 @@ async function getStreamQualities(url) {
                                 if (den && num) fps = Math.round(num / den);
                             }
                         } catch (e) {
-                            logDebug('Error parsing framerate:', e);
+                            logDebug('⚠️ Error parsing framerate:', e);
                         }
                         streamInfo.fps = fps;
 
@@ -489,8 +493,16 @@ async function getStreamQualities(url) {
                         if (videoStream.bit_rate) {
                             streamInfo.videoBitrate = parseInt(videoStream.bit_rate);
                         }
+                        
+                        logDebug('🎬 Video stream:', {
+                            codec: streamInfo.videoCodec.name,
+                            resolution: `${streamInfo.width}x${streamInfo.height}`,
+                            fps: `${streamInfo.fps}fps`,
+                            bitrate: streamInfo.videoBitrate ? `${(streamInfo.videoBitrate / 1000000).toFixed(2)}Mbps` : 'unknown'
+                        });
                     } else {
                         streamInfo.hasVideo = false;
+                        logDebug('ℹ️ No video stream found');
                     }
                     
                     // Audio stream info
@@ -509,8 +521,16 @@ async function getStreamQualities(url) {
                         if (audioStream.bit_rate) {
                             streamInfo.audioBitrate = parseInt(audioStream.bit_rate);
                         }
+                        
+                        logDebug('🔊 Audio stream:', {
+                            codec: streamInfo.audioCodec.name,
+                            channels: streamInfo.audioCodec.channels,
+                            sampleRate: streamInfo.audioCodec.sampleRate ? `${streamInfo.audioCodec.sampleRate}Hz` : 'unknown',
+                            bitrate: streamInfo.audioBitrate ? `${(streamInfo.audioBitrate / 1000).toFixed(0)}kbps` : 'unknown'
+                        });
                     } else {
                         streamInfo.hasAudio = false;
+                        logDebug('ℹ️ No audio stream found');
                     }
                     
                     // Total bitrate from format if available
@@ -521,31 +541,36 @@ async function getStreamQualities(url) {
                     // Duration if available
                     if (info.format.duration) {
                         streamInfo.duration = parseFloat(info.format.duration);
+                        const minutes = Math.floor(streamInfo.duration / 60);
+                        const seconds = Math.floor(streamInfo.duration % 60);
+                        logDebug(`⏱️ Duration: ${minutes}:${seconds.toString().padStart(2, '0')}`);
                     }
                     
                     // File size if available
                     if (info.format.size) {
                         streamInfo.sizeBytes = parseInt(info.format.size);
+                        const sizeMB = (streamInfo.sizeBytes / (1024 * 1024)).toFixed(1);
+                        logDebug(`📦 Size: ${sizeMB}MB`);
                     }
                     
                     sendResponse({ success: true, streamInfo });
-                    logDebug('Stream info:', streamInfo);
+                    logDebug('✅ Media analysis complete');
                     resolve();
                     
                 } catch (error) {
-                    logDebug('Error parsing FFprobe output:', error);
+                    logDebug('❌ Error parsing FFprobe output:', error);
                     sendResponse({ error: 'Failed to parse stream info' });
                     resolve();
                 }
             } else {
-                logDebug('FFprobe failed with code:', code, 'Error:', errorOutput);
+                logDebug('❌ FFprobe failed with code:', code, 'Error:', errorOutput);
                 sendResponse({ error: 'Failed to analyze video' });
                 resolve();
             }
         });
 
         ffprobe.on('error', (err) => {
-            logDebug('FFprobe spawn error:', err);
+            logDebug('❌ FFprobe spawn error:', err);
             sendResponse({ error: 'Failed to start FFprobe: ' + err.message });
             resolve();
         });
