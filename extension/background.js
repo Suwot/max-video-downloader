@@ -519,16 +519,36 @@ chrome.webRequest.onBeforeRequest.addListener(
 
 // Error handling for native messaging
 let nativePort = null;
+let reconnectTimer = null;
+const RECONNECT_DELAY = 2000; // 2 seconds
 
 function connectNativeHost() {
     try {
+        if (nativePort) {
+            try {
+                nativePort.disconnect();
+            } catch (e) {
+                console.log('Error disconnecting old port:', e);
+            }
+        }
+
         nativePort = chrome.runtime.connectNative('com.mycompany.ffmpeg');
         
         nativePort.onDisconnect.addListener(() => {
-            console.error('Native host disconnected:', chrome.runtime.lastError);
+            const error = chrome.runtime.lastError;
+            console.error('Native host disconnected:', error);
             nativePort = null;
+
+            // Try to reconnect after delay
+            if (!reconnectTimer) {
+                reconnectTimer = setTimeout(() => {
+                    reconnectTimer = null;
+                    connectNativeHost();
+                }, RECONNECT_DELAY);
+            }
         });
 
+        console.log('Successfully connected to native host');
         return true;
     } catch (error) {
         console.error('Failed to connect to native host:', error);
@@ -536,8 +556,8 @@ function connectNativeHost() {
     }
 }
 
-// Update your message sending function to handle reconnection
-async function sendNativeMessage(message) {
+// Updated message sending function with retry logic
+async function sendNativeMessage(message, retryCount = 1) {
     if (!nativePort && !connectNativeHost()) {
         throw new Error('Could not connect to native host');
     }
@@ -546,7 +566,21 @@ async function sendNativeMessage(message) {
         try {
             chrome.runtime.sendNativeMessage('com.mycompany.ffmpeg', message, response => {
                 if (chrome.runtime.lastError) {
-                    reject(chrome.runtime.lastError);
+                    const error = chrome.runtime.lastError;
+                    console.error('Native message error:', error);
+                    
+                    // If this was a connection error and we have retries left, try again
+                    if (retryCount > 0 && error.message.includes('Native host has exited')) {
+                        console.log('Retrying native message...');
+                        setTimeout(() => {
+                            sendNativeMessage(message, retryCount - 1)
+                                .then(resolve)
+                                .catch(reject);
+                        }, 500);
+                        return;
+                    }
+                    
+                    reject(error);
                 } else {
                     resolve(response);
                 }
