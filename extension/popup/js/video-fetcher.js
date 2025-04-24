@@ -139,32 +139,24 @@ export async function updateVideoList(forceRefresh = false) {
  * @param {number} tabId - Tab ID
  */
 export async function fetchVideoInfo(videos, tabId) {
-    // Process videos in parallel batches to improve performance
-    const batchSize = 5; // Process 5 videos at a time
-    const batches = [];
+    // Process all videos in parallel
+    Promise.all(videos.map(async (video) => {
+        try {
+            if (!video.resolution || !video.mediaInfo) {
+                console.log('Fetching info for:', video.url);
+                const response = await chrome.runtime.sendMessage({
+                    type: 'getHLSQualities',
+                    url: video.url,
+                    tabId: tabId
+                });
 
-    // Create batches of videos
-    for (let i = 0; i < videos.length; i += batchSize) {
-        batches.push(videos.slice(i, i + batchSize));
-    }
-
-    // Process each batch in parallel
-    for (const batch of batches) {
-        await Promise.all(batch.map(async (video) => {
-            try {
-                if (!video.resolution || !video.mediaInfo) {
-                    console.log('Fetching info for:', video.url);
-                    const response = await chrome.runtime.sendMessage({
-                        type: 'getHLSQualities',
-                        url: video.url,
-                        tabId: tabId
-                    });
-
-                    if (response?.streamInfo) {
-                        const streamInfo = response.streamInfo;
-                        
-                        // Update video object with full stream info
-                        video.mediaInfo = {
+                if (response?.streamInfo) {
+                    const streamInfo = response.streamInfo;
+                    
+                    // Update video object with full stream info
+                    const updatedVideo = {
+                        ...video,
+                        mediaInfo: {
                             hasVideo: streamInfo.hasVideo,
                             hasAudio: streamInfo.hasAudio,
                             videoCodec: streamInfo.videoCodec,
@@ -173,34 +165,35 @@ export async function fetchVideoInfo(videos, tabId) {
                             container: streamInfo.container,
                             duration: streamInfo.duration,
                             sizeBytes: streamInfo.sizeBytes
-                        };
-                        
-                        video.resolution = {
+                        },
+                        resolution: {
                             width: streamInfo.width,
                             height: streamInfo.height,
                             fps: streamInfo.fps,
                             bitrate: streamInfo.videoBitrate || streamInfo.totalBitrate
-                        };
+                        }
+                    };
 
-                        // Update UI
-                        updateVideoResolution(video.url, streamInfo);
-                        
-                        // Update cached videos
-                        if (getCachedVideos()) {
-                            const cachedVideo = getCachedVideos().find(v => v.url === video.url);
-                            if (cachedVideo) {
-                                cachedVideo.resolution = video.resolution;
-                                cachedVideo.mediaInfo = video.mediaInfo;
-                                setCachedVideos(getCachedVideos());
-                            }
+                    // Update UI immediately
+                    updateVideoResolution(video.url, streamInfo);
+                    
+                    // Update just this video in the cache
+                    const cachedVideos = getCachedVideos();
+                    if (cachedVideos) {
+                        const index = cachedVideos.findIndex(v => v.url === video.url);
+                        if (index !== -1) {
+                            cachedVideos[index] = updatedVideo;
+                            setCachedVideos(cachedVideos);
                         }
                     }
                 }
-            } catch (error) {
-                console.error('Error fetching info for video:', video.url, error);
             }
-        }));
-    }
+        } catch (error) {
+            console.error('Error fetching info for video:', video.url, error);
+        }
+    })).catch(error => {
+        console.error('Error in parallel video info fetching:', error);
+    });
 }
 
 /**
