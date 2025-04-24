@@ -381,6 +381,32 @@ function createVideoActions(video) {
     const actionsDiv = document.createElement('div');
     actionsDiv.className = 'download-group';
     
+    // Create quality selector if variants are available
+    if (video.qualityVariants && video.qualityVariants.length > 0) {
+        const qualitySelector = document.createElement('select');
+        qualitySelector.className = 'quality-selector';
+        
+        // Add main video quality
+        const mainQuality = document.createElement('option');
+        mainQuality.value = video.url;
+        mainQuality.textContent = video.resolution ? 
+            `${video.resolution.width}x${video.resolution.height}` + (video.resolution.fps ? ` @${video.resolution.fps}fps` : '') :
+            'Original Quality';
+        qualitySelector.appendChild(mainQuality);
+        
+        // Add variant qualities
+        video.qualityVariants.forEach(variant => {
+            const option = document.createElement('option');
+            option.value = variant.url;
+            option.textContent = variant.height ? 
+                `${variant.width}x${variant.height}` + (variant.fps ? ` @${variant.fps}fps` : '') :
+                'Alternative Quality';
+            qualitySelector.appendChild(option);
+        });
+        
+        actionsDiv.appendChild(qualitySelector);
+    }
+    
     // Create download button
     const downloadBtn = document.createElement('button');
     downloadBtn.className = 'download-btn';
@@ -389,19 +415,22 @@ function createVideoActions(video) {
     downloadBtn.textContent = 'Download';
     
     downloadBtn.addEventListener('click', async () => {
+        const selectedUrl = actionsDiv.querySelector('.quality-selector')?.value || video.url;
+        
         if (video.type === 'hls' || video.type === 'dash') {
-            const qualities = await getStreamQualities(video.url);
-            if (qualities && qualities.length > 0) {
-                const selectedQuality = await showQualityDialog(qualities);
-                if (!selectedQuality) return; // User canceled
-                
-                // Start download with selected quality
-                handleDownload(downloadBtn, selectedQuality.url || video.url, video.type);
-            } else {
-                handleDownload(downloadBtn, video.url, video.type);
+            // Only fetch stream qualities if we don't have variants
+            if (!video.qualityVariants) {
+                const qualities = await getStreamQualities(selectedUrl);
+                if (qualities && qualities.length > 0) {
+                    const selectedQuality = await showQualityDialog(qualities);
+                    if (!selectedQuality) return; // User canceled
+                    handleDownload(downloadBtn, selectedQuality.url || selectedUrl, video.type);
+                    return;
+                }
             }
+            handleDownload(downloadBtn, selectedUrl, video.type);
         } else {
-            handleDownload(downloadBtn, video.url, video.type);
+            handleDownload(downloadBtn, selectedUrl, video.type);
         }
     });
     

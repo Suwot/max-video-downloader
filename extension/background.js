@@ -6,6 +6,7 @@ const videosPerTab = {};
 const playlistsPerTab = {};
 const downloadPorts = new Map();
 const metadataProcessingQueue = new Map();
+const manifestRelationships = new Map();
 
 // Handle port connections from popup
 chrome.runtime.onConnect.addListener(port => {
@@ -366,6 +367,35 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
 
+  // Handle manifest fetching
+  if (msg.type === 'fetchManifest') {
+    fetchManifestContent(msg.url).then(content => {
+        sendResponse({ content });
+    });
+    return true;
+  }
+
+  // Handle manifest relationship storage
+  if (msg.type === 'storeManifestRelationship') {
+    msg.variants.forEach(variant => {
+        manifestRelationships.set(variant.url, {
+            playlistUrl: msg.playlistUrl,
+            bandwidth: variant.bandwidth,
+            resolution: variant.resolution,
+            codecs: variant.codecs,
+            fps: variant.fps
+        });
+    });
+    sendResponse({ success: true });
+    return true;
+  }
+
+  // Handle manifest relationship lookup
+  if (msg.type === 'getManifestRelationship') {
+    sendResponse(manifestRelationships.get(msg.variantUrl) || null);
+    return true;
+  }
+
   return false;
 });
 
@@ -531,6 +561,13 @@ async function sendNativeMessage(message) {
 chrome.tabs.onRemoved.addListener((tabId) => {
     delete videosPerTab[tabId];
     delete playlistsPerTab[tabId];
+    
+    // Clear manifest relationships for this tab's URLs
+    for (const [url, info] of manifestRelationships.entries()) {
+        if (url.includes(tabId.toString())) {
+            manifestRelationships.delete(url);
+        }
+    }
 });
 
 function handleDownloadSuccess(response, notificationId, ports) {
@@ -563,4 +600,18 @@ function handleDownloadError(error, notificationId, ports) {
       console.error('Error sending error to port:', e);
     }
   });
+}
+
+// Helper function to fetch manifest content
+async function fetchManifestContent(url) {
+    try {
+        const response = await fetch(url);
+        if (!response.ok) {
+            throw new Error(`Failed to fetch manifest: ${response.statusText}`);
+        }
+        return await response.text();
+    } catch (error) {
+        console.error('Error fetching manifest:', error);
+        return null;
+    }
 }

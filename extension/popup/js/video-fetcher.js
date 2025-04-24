@@ -3,6 +3,83 @@ import { showLoader, showErrorMessage, restoreScrollPosition } from './ui.js';
 import { groupVideos } from './video-processor.js';
 import { renderVideos } from './video-renderer.js';
 import { formatResolution, formatDuration, getFilenameFromUrl } from './utilities.js';
+import { parseHLSManifest } from './manifest-parser.js';
+
+/**
+ * Fetch and process HLS manifest content
+ * @param {string} url - Manifest URL
+ * @param {number} tabId - Tab ID
+ * @returns {Promise<Object>} Manifest info with variants
+ */
+async function fetchHLSManifest(url, tabId) {
+    try {
+        const response = await chrome.runtime.sendMessage({
+            type: 'fetchManifest',
+            url: url,
+            tabId: tabId
+        });
+        
+        if (response?.content) {
+            const manifestInfo = parseHLSManifest(response.content, url);
+            if (manifestInfo.isPlaylist) {
+                // Store the relationship between playlist and variants
+                await chrome.runtime.sendMessage({
+                    type: 'storeManifestRelationship',
+                    playlistUrl: url,
+                    variants: manifestInfo.variants
+                });
+            }
+            return manifestInfo;
+        }
+    } catch (error) {
+        console.error('Failed to fetch HLS manifest:', error);
+    }
+    return null;
+}
+
+/**
+ * Process video for HLS relationships
+ * @param {Object} video - Video object
+ * @param {number} tabId - Tab ID
+ */
+async function processHLSRelationships(video, tabId) {
+    if (video.type !== 'hls') return video;
+
+    // Fetch and check the manifest content
+    const manifestInfo = await fetchHLSManifest(video.url, tabId);
+    if (!manifestInfo) return video;
+
+    // Update video with manifest info
+    video.isPlaylist = manifestInfo.isPlaylist;
+    
+    // If this is a master playlist, add its variants
+    if (manifestInfo.isPlaylist && manifestInfo.variants?.length > 0) {
+        return {
+            ...video,
+            qualityVariants: manifestInfo.variants.map(v => ({
+                url: v.url,
+                width: v.width,
+                height: v.height,
+                fps: v.fps,
+                bandwidth: v.bandwidth,
+                codecs: v.codecs
+            }))
+        };
+    }
+    
+    // Check if this is a variant that belongs to a playlist
+    const relationship = await chrome.runtime.sendMessage({
+        type: 'getManifestRelationship',
+        variantUrl: video.url
+    });
+    
+    if (relationship?.playlistUrl) {
+        // Skip this video as it will be handled as part of the playlist
+        return null;
+    }
+    
+    return video;
+}
 
 /**
  * Update the video list, either from cache or by fetching new videos
@@ -115,14 +192,23 @@ export async function updateVideoList(forceRefresh = false) {
             throw new Error(errorMessage);
         }
         
+        // Process HLS relationships for each video
+        const processedVideos = [];
+        for (const video of videos) {
+            const processed = await processHLSRelationships(video, tab.id);
+            if (processed) {
+                processedVideos.push(processed);
+            }
+        }
+        
         // Group videos immediately and render
-        const groupedVideos = groupVideos(videos);
+        const groupedVideos = groupVideos(processedVideos);
         setCachedVideos(groupedVideos);
         
         renderVideos(groupedVideos);
         
         // Start fetching resolution info in the background
-        fetchVideoInfo(videos, tab.id);
+        fetchVideoInfo(processedVideos, tab.id);
         
     } catch (error) {
         console.error('Failed to get videos:', error);

@@ -1097,3 +1097,38 @@ body.theme-light {
     background: var(--primary);
     transition: width 0.3s ease;
 }
+
+/* Quality selector dropdown */
+.quality-selector {
+    height: 24px;
+    font-size: 11px;
+    padding: 0 6px;
+    border-radius: 3px;
+    background-color: var(--background);
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    margin-right: 4px;
+    flex: 1;
+}
+
+.theme-dark .quality-selector {
+    background-color: #333;
+    border-color: #444;
+    color: #aaa;
+}
+
+.theme-light .quality-selector {
+    background-color: #f9f9f9;
+    border-color: #ddd;
+    color: #666;
+}
+
+.quality-selector:hover {
+    border-color: var(--primary);
+}
+
+.quality-selector:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 1px var(--primary);
+}

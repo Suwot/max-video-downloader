@@ -3,7 +3,6 @@ import { initializeState, getCachedVideos } from './state.js';
 import { applyTheme, initializeUI, setupScrollPersistence, scrollToLastPosition } from './ui.js';
 import { updateVideoList } from './video-fetcher.js';
 import { renderVideos } from './video-renderer.js';
-import { setupAutoDetection } from './video-fetcher.js';
 
 // Initialize when DOM is ready
 document.addEventListener('DOMContentLoaded', async () => {
@@ -42,8 +41,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         // Always update in background to get fresh data
         updateVideoList(true);
         
-        // Setup auto-detection - always enabled now
-        setupAutoDetection();
+
         
         // Setup scroll persistence
         setupScrollPersistence();

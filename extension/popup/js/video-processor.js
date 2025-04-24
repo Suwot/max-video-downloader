@@ -2,6 +2,44 @@ import { getBaseUrl } from './utilities.js';
 import { formatQualityLabel, formatQualityDetails } from './utilities.js';
 import { setVideoGroups, addStreamMetadata, getStreamMetadata, getCachedVideos, setCachedVideos } from './state.js';
 
+// Get base directory for a URL
+function getBaseDirectory(url) {
+    try {
+        const urlObj = new URL(url);
+        return urlObj.origin + urlObj.pathname.substring(0, urlObj.pathname.lastIndexOf('/'));
+    } catch {
+        return '';
+    }
+}
+
+/**
+ * Check if videos are related HLS streams
+ * @param {Object} video1 - First video
+ * @param {Object} video2 - Second video
+ * @returns {boolean} True if videos are related HLS streams 
+ */
+function areRelatedHLSStreams(video1, video2) {
+    if (video1.type !== 'hls' || video2.type !== 'hls') return false;
+    
+    const dir1 = getBaseDirectory(video1.url);
+    const dir2 = getBaseDirectory(video2.url);
+    
+    // Must be in same directory
+    if (dir1 !== dir2) return false;
+    
+    const name1 = video1.url.split('/').pop();
+    const name2 = video2.url.split('/').pop();
+    
+    // Check if one is playlist.m3u8 and other is a variant
+    if (name1 === 'playlist.m3u8' && name2.startsWith('video_')) return true;
+    if (name2 === 'playlist.m3u8' && name1.startsWith('video_')) return true;
+    
+    // Check if both are video_X.m3u8 variants
+    if (name1.startsWith('video_') && name2.startsWith('video_')) return true;
+    
+    return false;
+}
+
 /**
  * Check if two videos should be grouped together
  * @param {Object} video1 - First video
@@ -9,6 +47,33 @@ import { setVideoGroups, addStreamMetadata, getStreamMetadata, getCachedVideos, 
  * @returns {boolean} True if videos should be grouped
  */
 export function shouldGroupVideos(video1, video2) {
+    // Check if both are HLS videos in the same directory
+    if (video1.type === 'hls' && video2.type === 'hls') {
+        try {
+            const url1 = new URL(video1.url);
+            const url2 = new URL(video2.url);
+            const dir1 = url1.origin + url1.pathname.substring(0, url1.pathname.lastIndexOf('/'));
+            const dir2 = url2.origin + url2.pathname.substring(0, url2.pathname.lastIndexOf('/'));
+            
+            // Must be in same directory
+            if (dir1 === dir2) {
+                // If one is a master playlist and the other isn't, they should be grouped
+                const isMaster1 = video1.isPlaylist;
+                const isMaster2 = video2.isPlaylist;
+                if (isMaster1 !== isMaster2) return true;
+                
+                // If both are variants (not master playlists), they should be grouped
+                if (!isMaster1 && !isMaster2) {
+                    const name1 = video1.url.split('/').pop();
+                    const name2 = video2.url.split('/').pop();
+                    if (name1.startsWith('video_') && name2.startsWith('video_')) return true;
+                }
+            }
+        } catch (e) {
+            console.error('Error checking HLS relationship:', e);
+        }
+    }
+    
     // Check if it's the same base URL (ignoring quality parameters)
     const baseUrl1 = getBaseUrl(video1.url);
     const baseUrl2 = getBaseUrl(video2.url);
@@ -21,7 +86,7 @@ export function shouldGroupVideos(video1, video2) {
 }
 
 /**
- * Group videos by resolution
+ * Group videos by resolution and HLS relationships
  * @param {Array} videos - Videos to group
  * @returns {Array} Grouped videos
  */
@@ -49,20 +114,31 @@ export function groupVideos(videos) {
         }
         
         if (group.length > 1) {
-            // Create a group entry
-            const baseVideo = { ...group[0] };
-            // Sort resolutions from highest to lowest
-            baseVideo.resolutionOptions = group
-                .sort((a, b) => {
-                    if (!a.resolution || !b.resolution) return 0;
-                    return (b.resolution.height - a.resolution.height);
-                })
+            // Find the main video (prefer playlist.m3u8 or highest quality)
+            const mainVideo = group.find(v => v.url.endsWith('playlist.m3u8')) || 
+                            group.reduce((prev, curr) => {
+                                if (!prev.resolution) return curr;
+                                if (!curr.resolution) return prev;
+                                return curr.resolution.height > prev.resolution.height ? curr : prev;
+                            });
+            
+            const baseVideo = { ...mainVideo };
+            
+            // Add all variants as quality options
+            baseVideo.qualityVariants = group
+                .filter(v => v !== mainVideo)
                 .map(v => ({
                     url: v.url,
                     width: v.resolution?.width,
                     height: v.resolution?.height,
-                    fps: v.resolution?.fps
-                }));
+                    fps: v.resolution?.fps,
+                    isHLS: v.type === 'hls'
+                }))
+                .sort((a, b) => {
+                    if (!a.height || !b.height) return 0;
+                    return b.height - a.height;
+                });
+            
             groupedVideos.push(baseVideo);
         } else {
             groupedVideos.push(video);
