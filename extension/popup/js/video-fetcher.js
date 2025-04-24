@@ -271,14 +271,6 @@ export function updateVideoResolution(url, streamInfo) {
             }
             codecInfo.textContent = details.join(' • ');
         }
-        
-        // Update format info if available
-        if (streamInfo.container) {
-            const formatInfo = videoElement.querySelector('.format-info');
-            if (formatInfo) {
-                formatInfo.textContent = streamInfo.container;
-            }
-        }
     }
 }
 

@@ -244,19 +244,11 @@ export function createVideoElement(video) {
     
     titleRow.append(title, copyButton);
     
-    // Create file info section with enhanced media type information
+    // Create file info section
     const fileInfo = document.createElement('div');
     fileInfo.className = 'file-info';
-    
-    // Create format info section
-    if (video.mediaInfo?.container || video.format) {
-        const formatInfo = document.createElement('div');
-        formatInfo.className = 'format-info';
-        formatInfo.textContent = video.mediaInfo?.container || video.format || '';
-        fileInfo.appendChild(formatInfo);
-    }
 
-    // Determine media content type and create codec info
+    // Create media type info
     const mediaTypeInfo = document.createElement('div');
     mediaTypeInfo.className = 'media-type-info';
     
@@ -290,11 +282,9 @@ export function createVideoElement(video) {
             }
         }
     } else {
-        // Infer initial type from video.type until we get full media info
         mediaContentType = video.type ? video.type.toUpperCase() : "Unknown";
     }
     
-    // Select the appropriate icon based on media type
     let mediaIcon = '';
     if (mediaContentType === "Audio Only") {
         mediaIcon = '<path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>';
@@ -387,7 +377,6 @@ export function createVideoElement(video) {
     downloadGroup.appendChild(downloadButton);
     infoColumn.appendChild(downloadGroup);
     
-    // Assemble video item
     element.append(previewColumn, infoColumn);
     
     return element;
