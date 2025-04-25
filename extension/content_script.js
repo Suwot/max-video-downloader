@@ -276,6 +276,30 @@ function getVideoType(url) {
     
     try {
         const urlObj = new URL(url);
+        
+        // Early rejection: skip tracking images and known bad extensions
+        const badExtensions = /\.(gif|png|jpg|jpeg|webp|bmp|svg)(\?|$)/i;
+        if (badExtensions.test(urlObj.pathname)) {
+            // However, check if a real video URL is buried inside query params
+            for (const [key, value] of urlObj.searchParams.entries()) {
+                try {
+                    const decoded = decodeURIComponent(value);
+                    if (decoded.match(/\.m3u8(\?|$)/) || decoded.match(/\.mpd(\?|$)/)) {
+                        // Only consider it if it looks like an actual URL
+                        if (decoded.includes('http') || decoded.startsWith('/') || decoded.includes('://')) {
+                            // Return both the embedded URL and its type
+                            return {
+                                url: decoded,
+                                type: decoded.match(/\.m3u8(\?|$)/) ? 'hls' : 'dash'
+                            };
+                        }
+                    }
+                } catch {}
+            }
+            // Otherwise, reject
+            return 'ignored';
+        }
+        
         const baseUrl = url.split('?')[0].split('#')[0];
         
         // Define patterns for tracking/analytics URLs
@@ -286,38 +310,101 @@ function getVideoType(url) {
             /\/stats/i, /\/metric/i,
             /\/telemetry/i,
             /\/analytics/i,
-            /jwpltx/, /tracking/
+            /jwpltx/, /\/tracking/
         ];
 
         // Check if URL matches ignored patterns
         if (ignoredPathPatterns.some(pattern => pattern.test(urlObj.pathname) || pattern.test(urlObj.hostname))) {
-            // Before rejecting, check if query params contain actual video URLs
-            const containsVideoParam = Array.from(urlObj.searchParams.values()).some(v => {
-                try {
-                    const decoded = decodeURIComponent(v);
-                    return decoded.includes('.m3u8') || decoded.includes('.mpd');
-                } catch {
-                    return false;
-                }
-            });
-            
-            if (!containsVideoParam) {
-                return 'direct';
-            }
+            return 'ignored';
         }
 
-        // Scan query parameters for embedded video URLs
+        // Improved HLS detection - check for common indicators that confirm it's an actual HLS stream
+        // rather than just having .m3u8 in the URL
+        if (baseUrl.toLowerCase().endsWith('.m3u8')) {
+            // Check for additional HLS indicators to confirm it's really a manifest
+            const hasHLSIndicators = 
+                // These are common URL patterns for actual HLS streams
+                urlObj.pathname.includes('/playlist/') || 
+                urlObj.pathname.includes('/manifest/') || 
+                urlObj.pathname.includes('/media/') ||
+                urlObj.pathname.includes('/content/') ||
+                urlObj.pathname.includes('/stream/') ||
+                urlObj.pathname.includes('/video/') ||
+                urlObj.hostname.includes('cdn') ||
+                // Check for pattern of direct media URLs
+                /\/[^\/]+\/[^\/]+\.m3u8$/.test(urlObj.pathname);
+                
+            if (hasHLSIndicators) {
+                return 'hls';
+            }
+                
+            // If the path has many segments and ends with .m3u8, it's likely a real HLS URL
+            if (urlObj.pathname.split('/').length > 3) {
+                return 'hls';
+            }
+                
+            // Additional validation: if m3u8 is a structural part of the URL rather than just a parameter
+            if (!urlObj.search.includes('m3u8')) {
+                return 'hls';
+            }
+                
+            // Less confident, but still check for content in /hls/ paths
+            if (urlObj.pathname.includes('/hls/')) {
+                return 'hls';
+            }
+            
+            // Default to unknown for suspicious .m3u8 URLs that don't match expected patterns
+            return 'unknown';
+        } 
+        
+        // Special case for /hls/ paths - more strict validation
+        if (urlObj.pathname.includes('/hls/')) {
+            // Only consider it HLS if it has other typical media path components
+            const hasMediaPathComponents =
+                urlObj.pathname.includes('/stream/') ||
+                urlObj.pathname.includes('/video/') ||
+                urlObj.pathname.includes('/content/') ||
+                urlObj.pathname.includes('/media/');
+                
+            if (hasMediaPathComponents) {
+                return 'hls';
+            }
+        }
+        
+        // Check query parameters for embedded video URLs
         for (const [key, value] of urlObj.searchParams.entries()) {
             try {
                 const decoded = decodeURIComponent(value);
-                if (decoded.match(/\.m3u8(\?|$)/)) return 'hls';
-                if (decoded.match(/\.mpd(\?|$)/)) return 'dash';
+                
+                // More precise check for HLS in query params
+                if (decoded.match(/\.m3u8(\?|$)/)) {
+                    // Only consider it HLS if:
+                    // 1. It looks like a valid URL rather than just a parameter containing "m3u8" text
+                    // 2. AND it's not just a simple token/identifier with "m3u8" in it
+                    if ((decoded.includes('http') || decoded.startsWith('/') || decoded.includes('://')) && 
+                        // Additional validation to prevent false positives:
+                        // It should look like an actual URL path, not just text containing "m3u8"
+                        (decoded.includes('/') || decoded.match(/^https?:\/\//))) {
+                        // Return both the embedded URL and its type
+                        return {
+                            url: decoded,
+                            type: 'hls'
+                        };
+                    }
+                }
+                
+                if (decoded.match(/\.mpd(\?|$)/)) {
+                    // Similar validation for DASH manifests
+                    if ((decoded.includes('http') || decoded.startsWith('/') || decoded.includes('://')) &&
+                        (decoded.includes('/') || decoded.match(/^https?:\/\//))) {
+                        // Return both the embedded URL and its type
+                        return {
+                            url: decoded,
+                            type: 'dash'
+                        };
+                    }
+                }
             } catch {}
-        }
-
-        // Check the base URL for direct video patterns
-        if (baseUrl.toLowerCase().endsWith('.m3u8') || urlObj.pathname.includes('/hls/')) {
-            return 'hls';
         }
         
         if (baseUrl.toLowerCase().endsWith('.mpd')) {
