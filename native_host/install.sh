@@ -8,7 +8,7 @@ DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 HOST_PATH="$DIR/index.js"
 
 # Hardcoded extension ID - no need to prompt
-EXTENSION_ID="jfncojbcnbfnjajniebimjajlaepapho"
+EXTENSION_ID="bkblnddclhmmgjlmbofhakhhbklkcofd"
 
 echo "Installing native host with extension ID: $EXTENSION_ID"
 
