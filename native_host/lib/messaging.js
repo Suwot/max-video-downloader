@@ -81,9 +81,12 @@ class MessagingService {
                 // Update heartbeat time for any message
                 this.lastHeartbeatTime = Date.now();
                 
+                // Store message ID for responses
+                const requestId = request.id;
+                
                 // Pass message to handler
                 if (this.messageHandler) {
-                    this.messageHandler(request);
+                    this.messageHandler(request, requestId);
                 }
             } catch (err) {
                 logDebug('Error parsing message:', err);
@@ -94,17 +97,22 @@ class MessagingService {
 
     /**
      * Send a response back to the extension
+     * @param {Object} message The response message to send
+     * @param {string} requestId Optional ID to include in response for request tracking
      */
-    sendResponse(message) {
+    sendResponse(message, requestId = null) {
         try {
+            // Add ID to response if this is a reply to a specific request
+            const responseWithId = requestId ? { ...message, id: requestId } : message;
+            
             // Only rate limit progress messages
             const now = Date.now();
-            if (message.type === 'progress' && now - this.lastResponseTime < this.MIN_RESPONSE_INTERVAL) {
+            if (responseWithId.type === 'progress' && now - this.lastResponseTime < this.MIN_RESPONSE_INTERVAL) {
                 return;
             }
             this.lastResponseTime = now;
             
-            const messageStr = JSON.stringify(message);
+            const messageStr = JSON.stringify(responseWithId);
             const header = Buffer.alloc(4);
             header.writeUInt32LE(messageStr.length, 0);
             

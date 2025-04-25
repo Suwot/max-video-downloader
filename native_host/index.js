@@ -87,13 +87,14 @@ function registerCommands(commandRunner, registry) {
  * Process incoming messages and route to appropriate command
  */
 async function processMessage(request, commandRunner) {
-    logDebug('Processing message:', request);
+    const requestId = request.id;
+    logDebug('Processing message:', request, 'ID:', requestId);
     
     // Command type is in the request.type field
     const commandType = request.type;
     
-    // Execute the command through the command runner
-    return await commandRunner.executeCommand(request);
+    // Execute the command through the command runner, passing the request ID
+    return await commandRunner.executeCommand(request, requestId);
 }
 
 // Start the application

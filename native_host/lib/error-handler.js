@@ -25,20 +25,25 @@ class ErrorHandler {
 
     /**
      * Handle command execution errors
+     * @param {Error} err The error object
+     * @param {string} commandName The name of the command that failed
+     * @param {string} requestId Optional message ID for response tracking
      */
-    handleCommandError(err, commandName) {
+    handleCommandError(err, commandName, requestId = null) {
         const errorMessage = `Error executing ${commandName || 'command'}: ${err.message}`;
         logDebug(errorMessage);
-        this.messaging.sendResponse({ error: errorMessage });
+        this.messaging.sendResponse({ error: errorMessage }, requestId);
         return { error: errorMessage };
     }
     
     /**
      * Handle messaging protocol errors
+     * @param {Error} err The error object
+     * @param {string} requestId Optional message ID for response tracking
      */
-    handleMessageError(err) {
+    handleMessageError(err, requestId = null) {
         logDebug('Error in message handling:', err);
-        this.messaging.sendResponse({ error: err.message });
+        this.messaging.sendResponse({ error: err.message }, requestId);
         return { error: err.message };
     }
 }

@@ -1,5 +1,6 @@
 // Add at the top of the file
 import { parseHLSManifest, parseDASHManifest } from './popup/js/manifest-parser.js';
+import nativeHostService from './js/native-host-service.js';
 
 // Debug logging helper
 function logDebug(...args) {
@@ -46,11 +47,9 @@ chrome.runtime.onConnect.addListener(port => {
 // Helper function to extract stream metadata
 async function getStreamMetadata(url) {
     try {
-        const response = await new Promise(resolve => {
-            chrome.runtime.sendNativeMessage('com.mycompany.ffmpeg', {
-                type: 'getQualities',
-                url: url
-            }, resolve);
+        const response = await nativeHostService.sendMessage({
+            type: 'getQualities',
+            url: url
         });
 
         if (response?.streamInfo) {
@@ -197,13 +196,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
     // Create response handler
     const responseHandler = (response) => {
-      if (chrome.runtime.lastError) {
-        console.error('Native messaging error:', chrome.runtime.lastError);
-        handleDownloadError(chrome.runtime.lastError.message, notificationId, ports);
-        return;
-      }
-
-      // Handle different response types
       if (response && response.type === 'progress' && !hasError) {
         // Update notification less frequently
         if (response.progress % 10 === 0) {
@@ -236,14 +228,16 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       message: 'Starting download...'
     });
 
-    // Send to native host
-    chrome.runtime.sendNativeMessage('com.mycompany.ffmpeg', {
+    // Send to native host using our service
+    nativeHostService.sendMessage({
       type: 'download',
       url: msg.url,
       filename: msg.filename || 'video.mp4',
       savePath: msg.savePath,
       quality: msg.quality
-    }, responseHandler);
+    }, responseHandler).catch(error => {
+      handleDownloadError(error.message, notificationId, ports);
+    });
 
     return true; // Keep channel open for progress updates
   }
@@ -294,10 +288,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
     // Create new preview generation promise
     const previewPromise = new Promise(resolve => {
-      chrome.runtime.sendNativeMessage('com.mycompany.ffmpeg', {
+      nativeHostService.sendMessage({
         type: 'generatePreview',
         url: msg.url
-      }, response => {
+      }).then(response => {
         previewGenerationQueue.delete(cacheKey);
         
         // If we successfully generated a preview, cache it with the video
@@ -311,6 +305,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         }
         
         resolve(response);
+      }).catch(error => {
+        previewGenerationQueue.delete(cacheKey);
+        resolve({ error: error.message });
       });
     });
 
@@ -327,10 +324,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     // Create promise for quality detection
     const qualityPromise = new Promise(resolve => {
       console.log('🎥 Requesting media info from native host for:', msg.url);
-      chrome.runtime.sendNativeMessage('com.mycompany.ffmpeg', {
+      
+      nativeHostService.sendMessage({
         type: 'getQualities',
         url: msg.url
-      }, response => {
+      }).then(response => {
         if (response?.streamInfo) {
           console.group('📊 Received media info from native host:');
           console.log('URL:', msg.url);
@@ -383,6 +381,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           console.warn('❌ Failed to get media info:', response?.error || 'Unknown error');
           resolve(response);
         }
+      }).catch(error => {
+        console.error('Error getting media info:', error);
+        resolve({ error: error.message });
       });
     });
     
@@ -548,115 +549,6 @@ chrome.webRequest.onBeforeRequest.addListener(
     },
     { urls: ["<all_urls>"] }
 );
-
-// Error handling for native messaging
-let nativePort = null;
-let reconnectTimer = null;
-let heartbeatTimer = null;
-const RECONNECT_DELAY = 2000; // 2 seconds
-const HEARTBEAT_INTERVAL = 15000; // 15 seconds - match native host
-
-function connectNativeHost() {
-    try {
-        if (nativePort) {
-            try {
-                nativePort.disconnect();
-            } catch (e) {
-                console.log('Error disconnecting old port:', e);
-            }
-        }
-
-        // Clear any existing timers
-        if (heartbeatTimer) {
-            clearInterval(heartbeatTimer);
-            heartbeatTimer = null;
-        }
-
-        if (reconnectTimer) {
-            clearTimeout(reconnectTimer);
-            reconnectTimer = null;
-        }
-
-        nativePort = chrome.runtime.connectNative('com.mycompany.ffmpeg');
-        
-        nativePort.onDisconnect.addListener(() => {
-            const error = chrome.runtime.lastError;
-            console.error('Native host disconnected:', error);
-            nativePort = null;
-
-            // Clear heartbeat timer
-            if (heartbeatTimer) {
-                clearInterval(heartbeatTimer);
-                heartbeatTimer = null;
-            }
-
-            // Try to reconnect after delay
-            if (!reconnectTimer) {
-                reconnectTimer = setTimeout(() => {
-                    reconnectTimer = null;
-                    connectNativeHost();
-                }, RECONNECT_DELAY);
-            }
-        });
-
-        // Start heartbeat
-        heartbeatTimer = setInterval(async () => {
-            try {
-                const response = await sendNativeMessage({ type: 'heartbeat' });
-                if (!response?.alive) {
-                    console.error('Invalid heartbeat response');
-                    nativePort.disconnect();
-                }
-            } catch (error) {
-                console.error('Heartbeat failed:', error);
-                if (nativePort) {
-                    nativePort.disconnect();
-                }
-            }
-        }, HEARTBEAT_INTERVAL);
-
-        console.log('Successfully connected to native host');
-        return true;
-    } catch (error) {
-        console.error('Failed to connect to native host:', error);
-        return false;
-    }
-}
-
-// Updated message sending function with retry logic and heartbeat awareness
-async function sendNativeMessage(message, retryCount = 1) {
-    if (!nativePort && !connectNativeHost()) {
-        throw new Error('Could not connect to native host');
-    }
-
-    return new Promise((resolve, reject) => {
-        try {
-            chrome.runtime.sendNativeMessage('com.mycompany.ffmpeg', message, response => {
-                if (chrome.runtime.lastError) {
-                    const error = chrome.runtime.lastError;
-                    console.error('Native message error:', error);
-                    
-                    // If this was a connection error and we have retries left, try again
-                    if (retryCount > 0 && error.message.includes('Native host has exited')) {
-                        console.log('Retrying native message...');
-                        setTimeout(() => {
-                            sendNativeMessage(message, retryCount - 1)
-                                .then(resolve)
-                                .catch(reject);
-                        }, 500);
-                        return;
-                    }
-                    
-                    reject(error);
-                } else {
-                    resolve(response);
-                }
-            });
-        } catch (error) {
-            reject(error);
-        }
-    });
-}
 
 // Clean up when tabs are closed
 chrome.tabs.onRemoved.addListener((tabId) => {

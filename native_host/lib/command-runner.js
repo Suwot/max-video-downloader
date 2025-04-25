@@ -21,27 +21,39 @@ class CommandRunner {
 
     /**
      * Process and execute a command based on message type
+     * @param {Object} message The message containing the command
+     * @param {string} requestId Optional message ID for tracking responses
      */
-    async executeCommand(message) {
+    async executeCommand(message, requestId) {
         const commandType = message.type;
         
-        logDebug(`Executing command: ${commandType}`);
+        logDebug(`Executing command: ${commandType} (ID: ${requestId || 'none'})`);
         
         if (!this.commandRegistry.has(commandType)) {
             const error = `Unknown command type: ${commandType}`;
-            this.messaging.sendResponse({ error });
+            this.messaging.sendResponse({ error }, requestId);
             return { error };
         }
 
         try {
-            // Instantiate the command
+            // Create a messaging proxy that will include the requestId in all responses
+            const messagingProxy = {
+                sendResponse: (response) => this.messaging.sendResponse(response, requestId),
+                // Proxy other methods directly
+                initialize: (...args) => this.messaging.initialize(...args),
+                handleIncomingData: (...args) => this.messaging.handleIncomingData(...args),
+                processMessages: (...args) => this.messaging.processMessages(...args),
+                startHeartbeatMonitor: (...args) => this.messaging.startHeartbeatMonitor(...args)
+            };
+
+            // Instantiate the command with the messaging proxy
             const CommandClass = this.commandRegistry.get(commandType);
-            const command = new CommandClass(this.messaging);
+            const command = new CommandClass(messagingProxy);
 
             // Execute the command
             return await command.execute(message);
         } catch (err) {
-            return this.errorHandler.handleCommandError(err, commandType);
+            return this.errorHandler.handleCommandError(err, commandType, requestId);
         }
     }
 }
