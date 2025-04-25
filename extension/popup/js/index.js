@@ -1,5 +1,5 @@
 // extension/popup/js/index.js
-import { initializeState, getCachedVideos } from './state.js';
+import { initializeState, getCachedVideos, getCurrentTheme } from './state.js';
 import { applyTheme, initializeUI, setupScrollPersistence, scrollToLastPosition } from './ui.js';
 import { updateVideoList } from './video-fetcher.js';
 import { renderVideos } from './video-renderer.js';
@@ -41,8 +41,19 @@ document.addEventListener('DOMContentLoaded', async () => {
         // Always update in background to get fresh data
         updateVideoList(true);
         
+        // Watch for system theme changes
+        const darkModeMediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+        darkModeMediaQuery.addEventListener('change', (e) => {
+            // Only update theme automatically if user hasn't set a preference
+            chrome.storage.sync.get(['theme'], (result) => {
+                // If theme was not explicitly set by the user, follow system preference
+                if (result.theme === undefined) {
+                    const newTheme = e.matches ? 'dark' : 'light';
+                    applyTheme(newTheme);
+                }
+            });
+        });
 
-        
         // Setup scroll persistence
         setupScrollPersistence();
         
@@ -73,4 +84,4 @@ window.addEventListener('unload', () => {
             }
         }
     });
-}); 
+});

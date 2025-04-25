@@ -43,7 +43,7 @@ body.theme-light {
     height: 100%;
     width: 100%;
     overflow: hidden;
-    padding-right: 6px;
+    /* Removing the padding-right that might be affecting the layout */
 }
 
 /* App title */
@@ -178,7 +178,8 @@ body.theme-light {
     flex: 1;
     overflow-y: auto;
     overflow-x: hidden;
-    height: calc(100% - 46px);
+    /* Use 100% height instead of calculated height to fill the container */
+    height: 100%;
     scroll-behavior: smooth;
     padding: 0;
     transition: background-color 0.3s;
@@ -188,6 +189,8 @@ body.theme-light {
 
 .videos-container {
     padding: 8px;
+    /* Ensuring the container uses all available space */
+    height: auto;
 }
 
 .theme-dark #videos {
@@ -202,6 +205,7 @@ body.theme-light {
 .media-type-group {
     margin-bottom: 4px;
     border-radius: 4px;
+    /* Change from hidden to visible to allow sticky headers to work */
     overflow: visible;
     transition: box-shadow 0.3s, background-color 0.3s;
     position: relative;
@@ -226,7 +230,10 @@ body.theme-light {
     transition: background-color 0.3s, border-color 0.3s, color 0.3s;
     position: sticky;
     top: 0;
-    z-index: 100;
+    /* Increase z-index to make sure headers stay on top */
+    z-index: 50;
+    /* Add width to ensure it spans the full width */
+    width: 100%;
 }
 
 /* Theme specific header colors */
@@ -315,13 +322,18 @@ body.theme-light {
     transition: transform 0.2s;
 }
 
+/* Add white color for the toggle arrow in dark theme */
+.theme-dark .media-type-toggle {
+    color: white;
+    fill: white;
+}
+
 .media-type-toggle.collapsed {
     transform: rotate(-90deg);
 }
 
 .media-type-content {
-    max-height: 1000px;
-    overflow: visible;
+    overflow: hidden; /* Changed from 'visible' to 'hidden' */
     transition: max-height 0.3s;
 }
 

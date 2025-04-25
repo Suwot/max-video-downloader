@@ -144,9 +144,10 @@ export async function initializeState() {
             'streamMetadataCache'
         ]);
         
-        // Set theme
+        // Set theme based on user preference or system preference
         const prefersDarkMode = window.matchMedia('(prefers-color-scheme: dark)').matches;
-        currentTheme = result.theme || (prefersDarkMode ? 'dark' : 'light');
+        // Only use stored theme if explicitly set by user, otherwise use system preference
+        currentTheme = result.theme !== undefined ? result.theme : (prefersDarkMode ? 'dark' : 'light');
         
         // Set group state
         groupState = localData.groupState || { 
