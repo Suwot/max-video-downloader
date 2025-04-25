@@ -1,5 +1,5 @@
 {
-  "name": "com.video.downloader",
+  "name": "com.mycompany.ffmpeg",
   "description": "Video Downloader Native Host",
   "path": "HOST_PATH",
   "type": "stdio",

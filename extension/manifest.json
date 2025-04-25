@@ -3,6 +3,7 @@
   "name": "Universal Video Downloader",
   "version": "1.0",
   "description": "Download videos from any website - supports HLS, DASH, direct videos, and blob URLs",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAqfVB3fyGbd4TP8Ruhzc6YAsF1Px1nGGDcZGZDydYYMXkcQI+D4fztMHX0/UgFe6w0WFUxHqzSWjbC6OVFxBbeEE2iKjBVQUUQ8erYJjZ5SIOmhEZQXy5JyLocLrZoTaEm5U0UkCPPVP9JDm+GHj2jHLHR4vbmx6MhAZWpV+SFCozGCxYcgMLaf3yqYP1GhLBg5D5rLsP+PlXIk5UqQi4zFwbZqsFPc0zMQ8v2z6t9b5PHPUlt5jjOo56U6JrLzHsVvDr/nr968UnpAnL9S3TSQCrAQ2xfs0t7fFcm+TXSpovkQVCZUIdfXxUGF/8dK1PEpOFHRTjeMUHrA+nCQNCkQIDAQAB",
   "permissions": [
     "activeTab",
     "scripting",
