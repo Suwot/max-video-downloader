@@ -1,4 +1,16 @@
-// extension/popup/js/state.js
+/**
+ * @ai-guide-component StateManager
+ * @ai-guide-description Manages application state for the extension
+ * @ai-guide-responsibilities
+ * - Provides centralized state management
+ * - Handles video caching and storage
+ * - Manages user preferences and settings
+ * - Stores resolution and media info caches
+ * - Maintains scroll position between UI updates
+ * - Coordinates state persistence across extension sessions
+ */
+
+// popup/js/state.js
 
 // State management
 const CACHE_TTL = 30 * 60 * 1000; // 30 minutes

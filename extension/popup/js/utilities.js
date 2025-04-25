@@ -1,4 +1,18 @@
 /**
+ * @ai-guide-component UtilityFunctions
+ * @ai-guide-description General utility functions used across the extension
+ * @ai-guide-responsibilities
+ * - Provides formatting helpers for video metadata
+ * - Handles URL parsing and normalization
+ * - Manages filename generation and sanitization
+ * - Implements time and duration formatting
+ * - Provides browser compatibility functions
+ * - Offers data conversion and transformation utilities
+ */
+
+// popup/js/utilities.js
+
+/**
  * Debounce helper to limit function calls
  * @param {Function} func - Function to debounce
  * @param {number} wait - Wait time in milliseconds

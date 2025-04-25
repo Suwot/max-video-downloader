@@ -1,3 +1,18 @@
+/**
+ * @ai-guide-component NativeHostService
+ * @ai-guide-description Bridge between extension and native messaging host
+ * @ai-guide-responsibilities
+ * - Establishes and maintains connection with native host
+ * - Handles message passing with installed native application
+ * - Manages request/response communication pattern
+ * - Implements error handling and recovery mechanisms
+ * - Ensures proper initialization of native capabilities
+ * - Provides platform-specific functionality to extension
+ * - Validates host installation and compatibility
+ */
+
+// js/native-host-service.js
+
 // NativeHostService - Consolidated native messaging service
 export class NativeHostService {
     constructor() {

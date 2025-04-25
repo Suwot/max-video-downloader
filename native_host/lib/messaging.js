@@ -1,3 +1,14 @@
+/**
+ * @ai-guide-component NativeMessaging
+ * @ai-guide-description Handles Chrome native messaging protocol implementation
+ * @ai-guide-responsibilities
+ * - Implements Chrome's native messaging protocol (read/write messages)
+ * - Handles message size limits and multi-part messages if needed
+ * - Manages serialization/deserialization of messages
+ * - Provides error handling for corrupted messages
+ * - Supports both synchronous and asynchronous communication patterns
+ */
+
 // lib/messaging.js
 const { logDebug } = require('../utils/logger');
 

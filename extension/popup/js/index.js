@@ -1,3 +1,16 @@
+/**
+ * @ai-guide-component PopupController
+ * @ai-guide-description Main entry point for popup UI functionality
+ * @ai-guide-responsibilities
+ * - Initializes the popup UI and components
+ * - Coordinates interaction between UI components
+ * - Handles message passing with background script
+ * - Manages video loading and display flow
+ * - Coordinates between state management and UI rendering
+ * - Handles user interface events and interactions
+ * - Implements popup lifecycle management
+ */
+
 // extension/popup/js/index.js
 import { initializeState, getCachedVideos, getCurrentTheme } from './state.js';
 import { applyTheme, initializeUI, setupScrollPersistence, scrollToLastPosition } from './ui.js';

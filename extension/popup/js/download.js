@@ -1,3 +1,17 @@
+/**
+ * @ai-guide-component DownloadHandler
+ * @ai-guide-description Manages video download operations
+ * @ai-guide-responsibilities
+ * - Handles video download requests 
+ * - Communicates with native host for downloading
+ * - Manages HLS/DASH download processes
+ * - Tracks download progress and status
+ * - Manages file naming and save paths
+ * - Handles download error conditions
+ * - Provides download quality selection options
+ */
+
+// popup/js/download.js
 import { showError } from './utilities.js';
 import { debounce } from './utilities.js';
 import { showQualityDialog } from './ui.js';

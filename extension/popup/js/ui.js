@@ -1,3 +1,15 @@
+/**
+ * @ai-guide-component UIManager
+ * @ai-guide-description Manages the user interface for the extension popup
+ * @ai-guide-responsibilities
+ * - Renders video cards and containers in the popup
+ * - Manages UI state transitions and animations
+ * - Handles user interaction events
+ * - Provides theme switching capabilities
+ * - Implements loading states and progress indicators
+ * - Manages video preview generation and display
+ */
+
 import { debounce, formatQualityLabel, formatQualityDetails } from './utilities.js';
 import { getCurrentTheme, setCurrentTheme, getAllGroupStates, setScrollPosition } from './state.js';
 import { updateVideoList } from './video-fetcher.js';

@@ -1,4 +1,16 @@
 #!/usr/bin/env node
+/**
+ * @ai-guide-component NativeHostMain
+ * @ai-guide-description Main entry point for the native host application
+ * @ai-guide-responsibilities
+ * - Initializes the native messaging host environment
+ * - Establishes connection with Chrome extension
+ * - Sets up command handling and execution pipeline
+ * - Coordinates services and dependency injection
+ * - Manages application lifecycle and error handling
+ * - Bridges browser extension with system capabilities
+ */
+
 // native_host/index.js - Main entry point for the native host application
 
 const fs = require('fs');

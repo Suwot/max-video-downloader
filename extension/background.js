@@ -1,3 +1,18 @@
+/**
+ * @ai-guide-component BackgroundScript
+ * @ai-guide-description Main extension service worker
+ * @ai-guide-responsibilities
+ * - Initializes the video detection system on extension startup
+ * - Manages cross-tab communication via message passing
+ * - Coordinates content script injection into web pages
+ * - Maintains video detection state across browser sessions
+ * - Handles native host communication via Native Host Service
+ * - Implements browser action icon and badge functionality  
+ * - Provides centralized video metadata storage for popup UI
+ */
+
+// background.js - Service worker for the extension
+
 // Add at the top of the file
 import { parseHLSManifest, parseDASHManifest } from './popup/js/manifest-parser.js';
 import nativeHostService from './js/native-host-service.js';

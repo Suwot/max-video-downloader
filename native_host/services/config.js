@@ -1,3 +1,15 @@
+/**
+ * @ai-guide-component ConfigService
+ * @ai-guide-description Application configuration management service
+ * @ai-guide-responsibilities
+ * - Manages persistent application settings
+ * - Handles loading/saving configuration to disk
+ * - Provides defaults for missing configuration options
+ * - Ensures configuration directory structure exists
+ * - Offers consistent API for accessing configuration values
+ * - Maintains configuration version compatibility
+ */
+
 // services/config.js
 const fs = require('fs');
 const path = require('path');

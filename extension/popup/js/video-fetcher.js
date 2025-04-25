@@ -1,3 +1,16 @@
+/**
+ * @ai-guide-component VideoFetcher
+ * @ai-guide-description Video source detection and metadata retrieval
+ * @ai-guide-responsibilities
+ * - Retrieves detected videos from background script
+ * - Manages video source prioritization and filtering
+ * - Handles video metadata enrichment and formatting
+ * - Implements cache and refresh mechanisms for video sources
+ * - Supports various video source types (direct, HLS, DASH)
+ * - Coordinates with background script for cross-tab operation
+ * - Provides normalized video objects to the UI components
+ */
+
 // Import all from single source
 import {
     getCachedVideos,

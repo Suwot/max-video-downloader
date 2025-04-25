@@ -1,3 +1,15 @@
+/**
+ * @ai-guide-component FFmpegService
+ * @ai-guide-description Core service for video processing using FFmpeg
+ * @ai-guide-responsibilities
+ * - Manages FFmpeg binary location and execution
+ * - Detects video type and format from URLs
+ * - Handles video stream analysis and metadata extraction
+ * - Generates video previews/thumbnails
+ * - Provides utilities for FFmpeg command construction
+ * - Supports hardware acceleration detection and usage
+ */
+
 // services/ffmpeg.js
 const fs = require('fs');
 const path = require('path');

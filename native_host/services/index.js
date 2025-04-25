@@ -1,3 +1,15 @@
+/**
+ * @ai-guide-component ServiceManager
+ * @ai-guide-description Centralized service management and dependency injection
+ * @ai-guide-responsibilities
+ * - Initializes and manages service lifecycle
+ * - Provides dependency injection for services
+ * - Ensures services are properly initialized before use
+ * - Manages configuration and settings across services
+ * - Handles service startup dependencies
+ * - Exports shared services for command usage
+ */
+
 // services/index.js
 const ffmpegService = require('./ffmpeg');
 const configService = require('./config');

@@ -1,3 +1,14 @@
+/**
+ * @ai-guide-component BaseCommand
+ * @ai-guide-description Foundation class for all native host commands
+ * @ai-guide-responsibilities
+ * - Provides common structure for all command implementations
+ * - Manages messaging between native host and extension
+ * - Offers standardized success/error/progress response methods
+ * - Handles service access and dependency injection
+ * - Enforces consistent command execution pattern
+ */
+
 // commands/base-command.js
 const { logDebug } = require('../utils/logger');
 const servicesManager = require('../services');

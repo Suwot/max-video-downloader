@@ -1,3 +1,16 @@
+/**
+ * @ai-guide-component GetQualitiesCommand
+ * @ai-guide-description Video stream quality analyzer
+ * @ai-guide-responsibilities
+ * - Analyzes video streams for available quality options
+ * - Uses FFprobe to extract stream metadata
+ * - Identifies resolution, bitrate, and codec information
+ * - Parses HLS/DASH manifests for variant streams
+ * - Maps technical stream data to user-friendly quality labels
+ * - Returns structured quality options to the extension UI
+ * - Handles various streaming protocol formats
+ */
+
 // commands/get-qualities.js
 const { spawn } = require('child_process');
 const BaseCommand = require('./base-command');

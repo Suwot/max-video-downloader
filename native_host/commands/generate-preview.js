@@ -1,3 +1,16 @@
+/**
+ * @ai-guide-component GeneratePreviewCommand
+ * @ai-guide-description Video thumbnail generator
+ * @ai-guide-responsibilities
+ * - Creates thumbnail previews from video URLs
+ * - Uses FFmpeg to extract frames from remote videos
+ * - Converts thumbnails to base64 data URLs
+ * - Handles various video source formats
+ * - Optimizes thumbnails for UI display
+ * - Implements temporary file management
+ * - Reports preview generation progress and errors
+ */
+
 // commands/generate-preview.js
 const fs = require('fs');
 const path = require('path');

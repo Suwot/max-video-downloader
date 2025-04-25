@@ -1,3 +1,15 @@
+/**
+ * @ai-guide-component ResourceUtils
+ * @ai-guide-description Utilities for system resources and environment management
+ * @ai-guide-responsibilities
+ * - Provides enhanced environment variables
+ * - Manages application cache directory
+ * - Ensures proper system paths are available
+ * - Creates necessary directory structures
+ * - Supports cross-platform path handling
+ * - Offers consistent system resource access
+ */
+
 // utils/resources.js
 const fs = require('fs');
 const path = require('path');

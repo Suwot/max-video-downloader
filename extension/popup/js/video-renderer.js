@@ -1,3 +1,18 @@
+/**
+ * @ai-guide-component VideoRenderer
+ * @ai-guide-description UI component for video visualization
+ * @ai-guide-responsibilities
+ * - Renders detected video items in the popup UI
+ * - Creates thumbnail previews from video metadata
+ * - Formats video quality and format badges
+ * - Implements selection UI for download options
+ * - Manages video item interaction states
+ * - Provides context menu functionality for video items
+ * - Handles responsive layout for different screen sizes
+ */
+
+// popup/js/video-renderer.js
+
 import { getFilenameFromUrl, formatResolution, formatDuration, normalizeUrl } from './utilities.js';
 import { getScrollPosition, getAllGroupStates, setGroupState, getAllVideoGroups, getPosterFromCache, addPosterToCache } from './state.js';
 import { groupVideosByType } from './video-processor.js';

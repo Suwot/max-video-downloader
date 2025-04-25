@@ -1,3 +1,15 @@
+/**
+ * @ai-guide-component ErrorHandler
+ * @ai-guide-description Centralized error handling system for the native host
+ * @ai-guide-responsibilities
+ * - Provides structured error handling and reporting
+ * - Standardizes error formats for extension communication
+ * - Logs errors with appropriate detail levels
+ * - Categorizes errors by type and severity
+ * - Manages error recovery strategies
+ * - Ensures consistent error responses across components
+ */
+
 // lib/error-handler.js
 const { logDebug } = require('../utils/logger');
 

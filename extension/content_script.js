@@ -1,3 +1,18 @@
+/**
+ * @ai-guide-component ContentScript
+ * @ai-guide-description In-page video detector
+ * @ai-guide-responsibilities
+ * - Scans DOM for video elements and sources
+ * - Monitors network requests for video streams
+ * - Detects HLS and DASH manifests in page resources
+ * - Extracts metadata from video elements
+ * - Intercepts media player initialization
+ * - Reports detected videos to background service
+ * - Maintains real-time monitoring of video content
+ */
+
+// content_script.js
+
 console.log('Content script loading...');
 
 // Track detected videos to avoid duplicates

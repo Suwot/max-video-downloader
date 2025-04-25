@@ -1,3 +1,18 @@
+/**
+ * @ai-guide-component VideoProcessor
+ * @ai-guide-description Transforms and enhances video data
+ * @ai-guide-responsibilities
+ * - Processes raw video data into displayable formats
+ * - Groups videos by type and source
+ * - Extracts and normalizes video metadata
+ * - Handles stream metadata for different formats (HLS/DASH)
+ * - Manages video quality variants and resolution info
+ * - Provides analysis of video content types
+ * - Deduplicates video sources across formats
+ */
+
+// popup/js/video-processor.js
+
 import { getBaseUrl } from './utilities.js';
 import { formatQualityLabel, formatQualityDetails } from './utilities.js';
 import { setVideoGroups, addStreamMetadata, getStreamMetadata, getCachedVideos, setCachedVideos } from './state.js';

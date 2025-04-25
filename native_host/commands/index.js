@@ -1,3 +1,15 @@
+/**
+ * @ai-guide-component CommandRegistry
+ * @ai-guide-description Command registration and management system
+ * @ai-guide-responsibilities
+ * - Maintains registry of available command implementations
+ * - Maps command types to their handler classes
+ * - Provides lookup mechanism for command resolution
+ * - Ensures consistent command initialization
+ * - Centralizes command registration logic
+ * - Allows dynamic command discovery and instantiation
+ */
+
 // commands/index.js
 const { logDebug } = require('../utils/logger');
 

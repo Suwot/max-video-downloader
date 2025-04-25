@@ -1,4 +1,17 @@
+/**
+ * @ai-guide-component PreviewGenerator
+ * @ai-guide-description Generates and manages video thumbnails and previews
+ * @ai-guide-responsibilities
+ * - Requests thumbnail generation from the native host
+ * - Manages preview image caching to avoid redundant generation
+ * - Handles displaying previews in the UI
+ * - Provides fallback mechanisms when preview generation fails
+ * - Optimizes preview loading for better user experience
+ * - Handles different preview formats based on video type
+ */
+
 import { addPosterToCache } from './state.js';
+
 
 /**
  * Generate preview image for a video
@@ -46,4 +59,4 @@ export function generatePreview(url, loader, previewImage, regenerateButton) {
             }
         });
     });
-} 
+}

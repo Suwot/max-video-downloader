@@ -1,3 +1,15 @@
+/**
+ * @ai-guide-component Logger
+ * @ai-guide-description Simple logging utility for application diagnostics
+ * @ai-guide-responsibilities
+ * - Provides centralized logging functionality
+ * - Creates and manages log file storage
+ * - Formats log messages with timestamps
+ * - Handles object serialization for logging
+ * - Ensures log directory structure exists
+ * - Exports consistent logging interface
+ */
+
 // utils/logger.js
 const fs = require('fs');
 const path = require('path');

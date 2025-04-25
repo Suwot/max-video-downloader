@@ -1,4 +1,16 @@
 /**
+ * @ai-guide-component ManifestParser
+ * @ai-guide-description Parses streaming manifest files
+ * @ai-guide-responsibilities
+ * - Parses HLS (m3u8) manifests to extract stream variants
+ * - Parses DASH (mpd) manifests to extract media representations
+ * - Resolves relative URLs in streaming manifests
+ * - Extracts quality and codec information from manifests
+ * - Provides structured access to streaming manifest data
+ * - Supports both master playlists and media playlists
+ */
+
+/**
  * Detect if an M3U8 file is a master playlist using proper HLS spec rules
  * @param {string} content - M3U8 content
  * @returns {Object} Detection result with confidence level

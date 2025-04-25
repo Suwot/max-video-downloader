@@ -1,3 +1,14 @@
+/**
+ * @ai-guide-component CommandRunner
+ * @ai-guide-description Implements command pattern for the native host
+ * @ai-guide-responsibilities
+ * - Registers and manages available commands (download, get-qualities, etc.)
+ * - Routes incoming messages to appropriate command handlers
+ * - Manages service dependency injection for commands
+ * - Provides error handling and logging for command execution
+ * - Maintains service lifecycle and initialization
+ */
+
 // lib/command-runner.js
 const { logDebug } = require('../utils/logger');
 
