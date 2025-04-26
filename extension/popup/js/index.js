@@ -13,28 +13,18 @@
 
 // extension/popup/js/index.js
 import { initializeState, getCachedVideos, getCurrentTheme } from './state.js';
-import { applyTheme, initializeUI, setupScrollPersistence, scrollToLastPosition } from './ui.js';
+import { applyTheme, initializeUI, setupScrollPersistence, scrollToLastPosition, showLoadingState, hideLoadingState, showNoVideosMessage } from './ui.js';
 import { updateVideoList } from './video-fetcher.js';
 import { renderVideos } from './video-renderer.js';
 
 // Initialize when DOM is ready
 document.addEventListener('DOMContentLoaded', async () => {
     try {
+        console.log('Popup initializing...');
+        
         // Wait for chrome.storage to be available
         if (!chrome.storage) {
             throw new Error('Chrome storage API not available');
-        }
-
-        // Notify content script that popup is open
-        try {
-            chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-                if (tabs[0]) {
-                    chrome.tabs.sendMessage(tabs[0].id, { action: 'popupOpened' })
-                        .catch(err => console.log('Content script not ready yet'));
-                }
-            });
-        } catch (e) {
-            console.log('Error notifying content script:', e);
         }
 
         // Initialize state
@@ -46,13 +36,57 @@ document.addEventListener('DOMContentLoaded', async () => {
         // Initialize UI elements
         initializeUI();
         
-        // Initial video list update - render cached videos immediately if available
-        if (state.cachedVideos) {
+        // Show loading state immediately - will be hidden when we get videos
+        showLoadingState('Loading videos...');
+        
+        // Get the active tab ID to communicate with background script
+        const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+        if (!tabs || !tabs[0] || !tabs[0].id) {
+            throw new Error('Could not determine active tab');
+        }
+        const activeTabId = tabs[0].id;
+        
+        // Attempt to render cached videos immediately
+        let hasCachedVideos = false;
+        if (state.cachedVideos && state.cachedVideos.length > 0) {
+            console.log('Found cached videos, rendering immediately:', state.cachedVideos.length);
             renderVideos(state.cachedVideos);
+            hasCachedVideos = true;
+            hideLoadingState();
         }
         
-        // Always update in background to get fresh data
-        updateVideoList(true);
+        // Setup message listener for new videos from content script
+        chrome.runtime.onMessage.addListener((message) => {
+            if (message.action === 'newVideoDetected') {
+                console.log('Received new videos from content script:', message.videos.length);
+                if (message.videos && message.videos.length > 0) {
+                    renderVideos(message.videos);
+                    hideLoadingState();
+                }
+            }
+        });
+
+        // Notify content script that popup is open
+        try {
+            chrome.tabs.sendMessage(activeTabId, { action: 'popupOpened' })
+                .catch(err => console.log('Content script not ready yet:', err));
+        } catch (e) {
+            console.log('Error notifying content script:', e);
+        }
+
+        // Always update from background script for fresh data
+        console.log('Requesting fresh videos from background...');
+        const freshVideos = await updateVideoList(true, activeTabId);
+        
+        // Hide loading state if we have videos
+        if (freshVideos && freshVideos.length > 0) {
+            console.log('Received fresh videos from background:', freshVideos.length);
+            hideLoadingState();
+        } else if (!hasCachedVideos) {
+            // If no cached videos and no fresh videos, show "no videos" message
+            console.log('No videos found');
+            showNoVideosMessage();
+        }
         
         // Watch for system theme changes
         const darkModeMediaQuery = window.matchMedia('(prefers-color-scheme: dark)');

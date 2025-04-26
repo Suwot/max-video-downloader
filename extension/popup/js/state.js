@@ -15,6 +15,7 @@
 // State management
 const CACHE_TTL = 30 * 60 * 1000; // 30 minutes
 const CACHE_VERSION = "1.0"; // Version of the cache schema - increment when cache structure changes
+const CACHE_VERSION_KEY = "cacheVersion"; // Single consistent key for all cache versions
 
 // Cache size limits
 const MAX_VIDEOS_CACHE_SIZE = 100;
@@ -228,14 +229,20 @@ export function setCachedVideos(videos) {
         
         // Add timestamps and version to videos if not present
         videos = videos.map(video => {
+            // Add any available metadata from cache that might not be in the video object
+            const mediaInfo = video.mediaInfo || getMediaInfoFromCache(video.url);
             const withMetadata = {
                 ...video,
+                mediaInfo,
                 timestamp: video.timestamp || Date.now(),
                 lastAccessed: Date.now(),
                 version: CACHE_VERSION
             };
             if (!video.timestamp) {
                 logDebug('Added missing timestamp to video:', video.url);
+            }
+            if (mediaInfo && !video.mediaInfo) {
+                logDebug('Added metadata from cache to video:', video.url);
             }
             return withMetadata;
         });
@@ -247,12 +254,13 @@ export function setCachedVideos(videos) {
         }
         
         cachedVideos = videos;
-        const cacheTimestamp = Date.now();
+        const timestamp = Date.now();
         
-        logDebug('Saving to storage with timestamp:', new Date(cacheTimestamp).toISOString());
+        logDebug('Saving to storage with timestamp:', new Date(timestamp).toISOString());
         chrome.storage.local.set({ 
             cachedVideos,
-            cacheTimestamp
+            videosCacheTimestamp: timestamp,
+            [CACHE_VERSION_KEY]: CACHE_VERSION // Store the current cache version
         }).catch(error => {
             handleError('Storage', 'setting cached videos', error);
         });
@@ -262,7 +270,11 @@ export function setCachedVideos(videos) {
         if (Array.isArray(videos)) {
             try {
                 cachedVideos = videos;
-                chrome.storage.local.set({ cachedVideos }).catch(() => {});
+                chrome.storage.local.set({ 
+                    cachedVideos,
+                    videosCacheTimestamp: Date.now(),
+                    [CACHE_VERSION_KEY]: CACHE_VERSION
+                }).catch(() => {});
             } catch (e) {
                 // Last resort failed, give up
             }
@@ -276,7 +288,7 @@ function saveStreamMetadataCache() {
         const cacheData = JSON.stringify(Array.from(streamMetadataCache.entries()));
         chrome.storage.local.set({ 
             streamMetadataCache: cacheData,
-            streamMetadataCacheVersion: CACHE_VERSION
+            [CACHE_VERSION_KEY]: CACHE_VERSION // Use consistent version key
         }).catch(error => {
             handleError('Storage', 'saving stream metadata cache', error);
         });
@@ -290,7 +302,7 @@ function savePosterCache() {
         const posterData = JSON.stringify(Array.from(posterCache.entries()));
         chrome.storage.local.set({ 
             posterCache: posterData,
-            posterCacheVersion: CACHE_VERSION
+            [CACHE_VERSION_KEY]: CACHE_VERSION // Use consistent version key
         }).catch(error => {
             handleError('Storage', 'saving poster cache', error);
         });
@@ -304,7 +316,7 @@ function saveMediaInfoCache() {
         const mediaInfoData = JSON.stringify(Array.from(mediaInfoCache.entries()));
         chrome.storage.local.set({ 
             mediaInfoCache: mediaInfoData,
-            mediaInfoCacheVersion: CACHE_VERSION
+            [CACHE_VERSION_KEY]: CACHE_VERSION // Use consistent version key
         }).catch(error => {
             handleError('Storage', 'saving media info cache', error);
         });
@@ -326,13 +338,18 @@ export async function initializeState() {
             'groupState', 
             'cachedVideos', 
             'currentTabId', 
-            'posterCache', 
-            'posterCacheVersion',
+            'posterCache',
             'mediaInfoCache', 
-            'mediaInfoCacheVersion',
             'streamMetadataCache',
-            'streamMetadataCacheVersion'
+            CACHE_VERSION_KEY // Use consistent version key
         ]);
+
+        // Check if we have a version mismatch and log it
+        if (localData[CACHE_VERSION_KEY] !== CACHE_VERSION) {
+            logDebug('Cache version mismatch - stored:', localData[CACHE_VERSION_KEY], 'current:', CACHE_VERSION);
+        } else {
+            logDebug('Cache version match:', CACHE_VERSION);
+        }
         
         // Set theme based on user preference or system preference
         const prefersDarkMode = window.matchMedia('(prefers-color-scheme: dark)').matches;
@@ -363,8 +380,17 @@ export async function initializeState() {
                         video.version = CACHE_VERSION;
                     }
                     
-                    const mediaInfo = mediaInfoCache.get(video.url);
-                    return mediaInfo ? { ...video, mediaInfo } : video;
+                    // If video doesn't have metadata but we have it in the cache, add it
+                    if (!video.mediaInfo) {
+                        const mediaInfo = mediaInfoCache.get(video.url);
+                        if (mediaInfo) {
+                            video.mediaInfo = typeof mediaInfo === 'object' && mediaInfo.data ? 
+                                mediaInfo.data : mediaInfo;
+                            logDebug('Added missing mediaInfo to video from cache:', video.url);
+                        }
+                    }
+                    
+                    return video;
                 });
                 
                 // Apply size limit 
@@ -380,7 +406,10 @@ export async function initializeState() {
         }
         
         // Store current tab ID
-        chrome.storage.local.set({ currentTabId: currentTab.id }).catch(error => {
+        chrome.storage.local.set({ 
+            currentTabId: currentTab.id,
+            [CACHE_VERSION_KEY]: CACHE_VERSION // Always store the current version
+        }).catch(error => {
             handleError('Storage', 'setting current tab ID', error);
         });
         
@@ -408,11 +437,10 @@ export async function initializeState() {
 function restorePosterCache(localData) {
     if (localData.posterCache) {
         try {
-            // Check version
-            if (localData.posterCacheVersion !== CACHE_VERSION) {
-                logDebug('Poster cache version mismatch, resetting');
-                posterCache = new Map();
-                return;
+            // Check version - use consistent version key
+            if (localData[CACHE_VERSION_KEY] !== CACHE_VERSION) {
+                logDebug('Poster cache version mismatch, but will attempt to use existing data');
+                // Instead of resetting, we'll try to use the existing data
             }
             
             posterCache = new Map(JSON.parse(localData.posterCache));
@@ -427,11 +455,10 @@ function restorePosterCache(localData) {
 function restoreMediaInfoCache(localData) {
     if (localData.mediaInfoCache) {
         try {
-            // Check version
-            if (localData.mediaInfoCacheVersion !== CACHE_VERSION) {
-                logDebug('Media info cache version mismatch, resetting');
-                mediaInfoCache = new Map();
-                return;
+            // Check version - use consistent version key
+            if (localData[CACHE_VERSION_KEY] !== CACHE_VERSION) {
+                logDebug('Media info cache version mismatch, but will attempt to use existing data');
+                // Instead of resetting, we'll try to use the existing data
             }
             
             mediaInfoCache = new Map(JSON.parse(localData.mediaInfoCache));
@@ -446,11 +473,10 @@ function restoreMediaInfoCache(localData) {
 function restoreStreamMetadataCache(localData) {
     if (localData.streamMetadataCache) {
         try {
-            // Check version
-            if (localData.streamMetadataCacheVersion !== CACHE_VERSION) {
-                logDebug('Stream metadata cache version mismatch, resetting');
-                streamMetadataCache.clear();
-                return;
+            // Check version - use consistent version key
+            if (localData[CACHE_VERSION_KEY] !== CACHE_VERSION) {
+                logDebug('Stream metadata cache version mismatch, but will attempt to use existing data');
+                // Instead of resetting, we'll try to use the existing data
             }
             
             const parsedCache = JSON.parse(localData.streamMetadataCache);
@@ -462,8 +488,10 @@ function restoreStreamMetadataCache(localData) {
                     data.lastAccessed = data.timestamp;
                 }
                 
-                // Only restore non-expired entries with current version
+                // Only restore non-expired entries
                 if (Date.now() - data.timestamp <= CACHE_TTL) {
+                    // Update version to current
+                    data.version = CACHE_VERSION;
                     streamMetadataCache.set(url, data);
                 }
             }

@@ -445,8 +445,19 @@ export function createVideoElement(video) {
     const resolutionInfo = document.createElement('div');
     resolutionInfo.className = 'resolution-info';
     
-    // Use enhanced resolution formatting with codec info
-    if (video.resolution) {
+    // Get resolution info from media info if available, otherwise use video.resolution
+    if (video.mediaInfo && (video.mediaInfo.width || video.mediaInfo.height)) {
+        // Use media info for resolution
+        const resolutionText = formatResolution(
+            video.mediaInfo.width,
+            video.mediaInfo.height,
+            video.mediaInfo.fps,
+            video.mediaInfo.bitrate,
+            video.mediaInfo
+        );
+        resolutionInfo.textContent = resolutionText;
+    } else if (video.resolution) {
+        // Fall back to video.resolution
         const resolutionText = formatResolution(
             video.resolution.width,
             video.resolution.height,

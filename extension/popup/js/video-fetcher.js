@@ -206,8 +206,10 @@ async function processHLSRelationships(video, tabId) {
 /**
  * Update the video list, either from cache or by fetching new videos
  * @param {boolean} forceRefresh - Whether to force refresh even if cached videos exist
+ * @param {number} tabId - Optional tab ID for the active tab
+ * @returns {Array} The current videos list
  */
-export async function updateVideoList(forceRefresh = false) {
+export async function updateVideoList(forceRefresh = false, tabId = null) {
     const container = document.getElementById('videos');
     logDebug('Updating video list, force refresh:', forceRefresh);
     
@@ -226,10 +228,26 @@ export async function updateVideoList(forceRefresh = false) {
     const cachedVideos = getCachedVideos();
     logDebug('Got cached videos:', cachedVideos?.length || 0);
     
-    if (!forceRefresh && cachedVideos) {
+    // Define a reasonable cache freshness threshold - 2 minutes
+    const CACHE_FRESHNESS_THRESHOLD_MS = 2 * 60 * 1000; // 2 minutes
+    
+    // Get the cache timestamp if available
+    let cacheTimestamp = 0;
+    try {
+        const storageData = await chrome.storage.local.get(['videosCacheTimestamp']);
+        cacheTimestamp = storageData.videosCacheTimestamp || 0;
+    } catch (e) {
+        logDebug('Error getting cache timestamp:', e);
+    }
+    
+    const cacheAge = Date.now() - cacheTimestamp;
+    const isCacheFresh = cacheAge < CACHE_FRESHNESS_THRESHOLD_MS;
+    logDebug('Cache age:', cacheAge, 'ms, is fresh:', isCacheFresh);
+    
+    if (!forceRefresh && cachedVideos && isCacheFresh) {
         // Apply additional validation to cached videos
         const filteredCachedVideos = validateAndFilterVideos(cachedVideos);
-        logDebug('Filtered cached videos:', filteredCachedVideos.length);
+        logDebug('Using fresh cached videos:', filteredCachedVideos.length);
         
         renderVideos(filteredCachedVideos);
         
@@ -238,20 +256,26 @@ export async function updateVideoList(forceRefresh = false) {
             setCachedVideos(filteredCachedVideos);
         }
         
-        // Still fetch in background to update stale entries
-        refreshInBackground(filteredCachedVideos);
-        return;
+        return filteredCachedVideos;
     }
     
+    // If cache exists but is stale, render it first while we fetch fresh data
+    if (!forceRefresh && cachedVideos) {
+        logDebug('Using stale cached videos while refreshing');
+        renderVideos(validateAndFilterVideos(cachedVideos));
+    } 
     // Only show loader if there are no videos currently displayed
-    if (!cachedVideos) {
+    else if (!cachedVideos) {
         showLoader(container);
     }
     
     try {
-        // Get current tab
-        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-        logDebug('Current tab:', tab.id);
+        // Get current tab if tab ID not provided
+        if (!tabId) {
+            const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+            tabId = tab.id;
+        }
+        logDebug('Current tab:', tabId);
         
         const videos = [];
         let contentScriptError = null;
@@ -271,7 +295,7 @@ export async function updateVideoList(forceRefresh = false) {
         // Get videos from content script
         try {
             logDebug('Requesting videos from content script');
-            const response = await chrome.tabs.sendMessage(tab.id, { action: 'findVideos' });
+            const response = await chrome.tabs.sendMessage(tabId, { action: 'findVideos' });
             if (response && response.length) {
                 logDebug('Got videos from content script:', response.length);
                 // Add additional filtering here before merging
@@ -289,7 +313,7 @@ export async function updateVideoList(forceRefresh = false) {
             logDebug('Requesting videos from background script');
             const backgroundVideos = await chrome.runtime.sendMessage({ 
                 action: 'getVideos', 
-                tabId: tab.id 
+                tabId: tabId 
             });
             
             if (backgroundVideos && backgroundVideos.length) {
@@ -310,19 +334,25 @@ export async function updateVideoList(forceRefresh = false) {
         
         // No videos found after filtering
         if (videos.length === 0) {
+            // If we have cached videos, keep showing those instead of an error message
+            if (cachedVideos && cachedVideos.length > 0) {
+                logDebug('No new videos found, keeping cached videos');
+                return cachedVideos;
+            }
+            
             logDebug('No valid videos found after filtering');
             container.innerHTML = `
                 <div class="initial-message">
                     No valid videos found on this page. Try playing a video first or refreshing.
                 </div>
             `;
-            return;
+            return [];
         }
         
         // Process all videos first to establish relationships
         const processedVideos = [];
         for (const video of videos) {
-            const processed = await processHLSRelationships(video, tab.id);
+            const processed = await processHLSRelationships(video, tabId);
             if (processed) {
                 processedVideos.push(processed);
             }
@@ -336,17 +366,39 @@ export async function updateVideoList(forceRefresh = false) {
         // Group and cache the videos
         const groupedVideos = processVideos(processedVideos);
         logDebug('Videos after grouping:', groupedVideos.length);
+        
+        // Store current timestamp with the cache
+        try {
+            await chrome.storage.local.set({ 'videosCacheTimestamp': Date.now() });
+        } catch (e) {
+            logDebug('Error setting cache timestamp:', e);
+        }
+        
         setCachedVideos(groupedVideos);
         
         // Render and start fetching details
         renderVideos(groupedVideos);
-        fetchVideoInfo(processedVideos, tab.id);
+        
+        // Only fetch video info for videos that need it
+        const videosNeedingInfo = processedVideos.filter(video => {
+            // Check if we already have media info in the cache
+            const cachedMediaInfo = getMediaInfoFromCache(video.url);
+            return !cachedMediaInfo;
+        });
+        
+        if (videosNeedingInfo.length > 0) {
+            logDebug('Fetching media info for', videosNeedingInfo.length, 'videos');
+            fetchVideoInfo(videosNeedingInfo, tabId);
+        }
+        
+        return groupedVideos;
         
     } catch (error) {
         logDebug('Failed to get videos:', error);
         if (!getCachedVideos()) {
             showErrorMessage(container, error.message);
         }
+        return [];
     }
 }
 
@@ -425,12 +477,22 @@ export async function refreshInBackground(videos) {
 
 /**
  * Fetch resolution information for videos in the background
+ * Only fetch for videos that don't already have mediaInfo
  * @param {Array} videos - Videos to fetch information for
  * @param {number} tabId - Tab ID
  */
 export async function fetchVideoInfo(videos, tabId) {
-    // Process all videos in parallel
-    Promise.all(videos.map(async (video) => {
+    // Process videos with missing mediaInfo in parallel
+    const videosNeedingInfo = videos.filter(video => !video.mediaInfo);
+    
+    if (videosNeedingInfo.length === 0) {
+        logDebug('All videos already have mediaInfo, skipping fetch');
+        return;
+    }
+    
+    logDebug(`Fetching media info for ${videosNeedingInfo.length} videos without metadata`);
+    
+    Promise.all(videosNeedingInfo.map(async (video) => {
         try {
             // Check if we already have this video's media info in the cache
             const cachedMediaInfo = getMediaInfoFromCache(video.url);
@@ -457,7 +519,7 @@ export async function fetchVideoInfo(videos, tabId) {
             }
 
             // No cached info, fetch from native host
-            console.log('Fetching info for:', video.url);
+            logDebug('Fetching info for:', video.url);
             const response = await chrome.runtime.sendMessage({
                 type: 'getHLSQualities',
                 url: video.url,

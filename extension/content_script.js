@@ -699,11 +699,11 @@ function findVideos() {
     return sources;
 }
 
-// Initialize
+// Override init() function for proactive video scanning
 function init() {
     if (isInitialized) return;
     
-    console.log('Initializing video detection...');
+    console.log('Initializing video detection proactively...');
     
     // Setup listeners immediately
     setupNetworkListeners();
@@ -761,6 +761,15 @@ function init() {
             isInitialized = true;
             console.log('Content script initialized successfully');
             
+            // Immediately perform an initial scan for videos - don't wait for popup to open
+            setTimeout(() => {
+                const videos = findVideos();
+                if (videos && videos.length > 0) {
+                    notifyBackground(videos);
+                    console.log('Initial video scan found videos:', videos.length);
+                }
+            }, 500);
+            
         } catch (error) {
             console.error('Failed to setup message listener:', error);
             // Retry setup after a short delay if it fails
@@ -771,22 +780,21 @@ function init() {
     setupMessageListener();
 }
 
-// Ensure initialization happens at the right time
-if (document.readyState === 'complete' || document.readyState === 'interactive') {
-    init();
-} else {
+// Start initialization immediately when content script loads
+if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);
-    // Fallback in case DOMContentLoaded was missed
-    window.addEventListener('load', init);
+} else {
+    // Page already loaded (rare with document_start but possible)
+    init();
 }
 
-// Additional fallback - check initialization after a delay
+// Additional fallback - ensure initialization happens
 setTimeout(() => {
     if (!isInitialized) {
         console.log('Fallback initialization...');
         init();
     }
-}, 1000);
+}, 500);
 
 // Enhanced video detection with MutationObserver
 function setupEnhancedDetection() {

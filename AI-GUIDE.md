@@ -1,6 +1,7 @@
 # Video Downloader Browser Extension (Manifest V3)
 
 ## Table of Contents
+
 - [Project Overview](#project-overview)
 - [Architecture](#architecture)
 - [Entry Points](#entry-points)
@@ -230,24 +231,28 @@ This Chrome/Firefox extension detects and downloads videos from websites, suppor
 The native host implements a sophisticated progress tracking system using the strategy pattern to provide accurate download progress for different media types:
 
 1. **Progress Tracker** (`native_host/lib/progress-tracker.js`):
+
    - Core component that manages different progress calculation strategies
    - Selects the optimal strategy based on media type and available information
    - Falls back gracefully between strategies when needed
    - Provides consistent progress reporting to the UI
 
 2. **Content Length Strategy** (`native_host/lib/progress/content-length-strategy.js`):
+
    - Makes a HEAD request to obtain the total file size from Content-Length header
    - Calculates progress as a percentage of downloaded bytes vs. total size
    - Used primarily for direct media files (MP4, WebM, etc.)
    - High confidence level for accurate progress reporting
 
 3. **Segment Tracking Strategy** (`native_host/lib/progress/segment-tracking-strategy.js`):
+
    - Analyzes HLS/DASH manifests to count total segments
    - Tracks segment downloads from FFmpeg output
    - Uses hybrid approach combining segment counting and byte-based tracking
    - Adapts to different manifest formats and structures
 
 4. **Adaptive Bitrate Strategy** (`native_host/lib/progress/adaptive-bitrate-strategy.js`):
+
    - Used for streaming media when segment tracking isn't available
    - Estimates total size based on duration and bitrate information
    - Dynamically adjusts estimations based on actual download data
@@ -265,24 +270,28 @@ The system continuously monitors confidence levels in its calculations and can s
 The extension utilizes a robust cache and state management system that ensures efficient operation while minimizing memory usage:
 
 1. **Centralized State Management** (`popup/js/state.js`):
+
    - Provides a single source of truth for application state
    - Manages caching of videos, posters, and media information
    - Handles user preferences persistence
    - Controls UI state like theme settings and group collapsing
 
 2. **Memory-Optimized Caching**:
+
    - Implements size limits for all cache types to prevent memory bloat
    - Uses LRU (Least Recently Used) eviction policy for efficient cache management
    - Tracks access patterns to prioritize frequently used items
    - Automatically purges expired or outdated cache entries
 
 3. **Versioned Cache Structures**:
+
    - Includes version information with all cached data
    - Provides migration paths between different cache versions
    - Ensures forward compatibility when cache schema changes
    - Gracefully handles cache invalidation when necessary
 
 4. **Robust Error Handling**:
+
    - Implements comprehensive error recovery mechanisms
    - Provides fallback values when cache operations fail
    - Categorizes and logs errors for diagnostics
@@ -320,6 +329,7 @@ This system significantly enhances the extension's ability to detect videos that
 ### Installation
 
 1. **Extension Setup**:
+
    ```
    cd extension
    # Load the unpacked extension in Chrome:
@@ -359,15 +369,18 @@ This system significantly enhances the extension's ability to detect videos that
 ### Key Files for Common Tasks
 
 - **Adding a new video source type**:
+
   - Modify `content_script.js` to detect the new source
   - Update `video-processor.js` to handle the new format
 
 - **Modifying download functionality**:
+
   - Update `native_host/commands/download.js` for the download process
   - Modify `extension/popup/js/download.js` for the UI interaction
 
 - **Updating progress reporting**:
-  - Add/modify strategies in `native_host/lib/progress/` 
+
+  - Add/modify strategies in `native_host/lib/progress/`
   - Update the progress selection logic in `progress-tracker.js`
 
 - **Changing the user interface**:
@@ -379,16 +392,19 @@ This system significantly enhances the extension's ability to detect videos that
 ### Common Issues
 
 1. **Native Host Connection Failures**:
+
    - Verify the host is properly installed with `./install.sh`
    - Check browser console for connection errors
    - Ensure the manifest paths are correct for your OS
 
 2. **Video Detection Problems**:
+
    - Cross-origin restrictions might be limiting detection
    - Check the Network tab in DevTools to confirm requests are visible
    - Try enabling advanced detection options
 
 3. **Download Failures**:
+
    - Verify FFmpeg is installed and accessible
    - Check if the URL is accessible (may require authentication)
    - Examine native host logs for detailed error information
