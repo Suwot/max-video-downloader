@@ -1,0 +1,303 @@
+{
+  "extension": {
+    "background.js": {
+      "description": "Background service worker that coordinates extension functionality",
+      "functions": {
+        "initialize": "Sets up message listeners and initializes state",
+        "handleVideoDetection": "Processes video URLs from content script",
+        "connectToNativeHost": "Establishes connection with native messaging host",
+        "manageTabContext": "Tracks active tabs and their associated videos"
+      },
+      "responsibilities": [
+        "State management across the extension",
+        "Communication with content scripts",
+        "Native host connection management",
+        "Video categorization and filtering"
+      ]
+    },
+    "content_script.js": {
+      "description": "Injected into web pages to detect videos",
+      "functions": {
+        "scanDom": "Searches for video elements in the page",
+        "monitorNetworkRequests": "Intercepts network requests for video files",
+        "extractUrlsFromQueryParams": "Finds embedded video URLs in tracking pixels",
+        "normalizeVideoUrls": "Standardizes URLs for deduplication"
+      },
+      "responsibilities": [
+        "Video URL detection through multiple methods",
+        "DOM observation for dynamically loaded content",
+        "Network request monitoring",
+        "URL normalization and validation"
+      ]
+    },
+    "js/native-host-service.js": {
+      "description": "Interface for communicating with native host",
+      "functions": {
+        "connect": "Establishes connection to native host",
+        "sendMessage": "Transmits message to native host",
+        "disconnect": "Terminates native host connection",
+        "handleResponse": "Processes responses from native host"
+      },
+      "responsibilities": [
+        "Native messaging protocol implementation",
+        "Connection lifecycle management",
+        "Message serialization and deserialization",
+        "Error handling for native host communication"
+      ]
+    },
+    "popup/js/state.js": {
+      "description": "Manages application state for popup UI",
+      "functions": {
+        "initializeState": "Restores state from storage",
+        "getCachedVideos": "Retrieves and validates video cache",
+        "setCachedVideos": "Updates video cache with TTL validation",
+        "addMediaInfoToCache": "Stores media metadata with version tracking",
+        "enforceMapCacheLimit": "Implements LRU eviction policy for caches",
+        "purgeExpiredCaches": "Cleans up expired cache entries"
+      },
+      "responsibilities": [
+        "Centralized state management",
+        "Cache lifecycle management with versioning",
+        "Memory optimization with size limits",
+        "Error handling with fallbacks",
+        "User preference persistence"
+      ]
+    },
+    "popup/js/download.js": {
+      "description": "Handles download operations and progress tracking",
+      "functions": {
+        "initiateDownload": "Starts download process for selected video",
+        "monitorProgress": "Tracks download progress from native host",
+        "handleDownloadComplete": "Processes completion events",
+        "cancelDownload": "Aborts active downloads"
+      },
+      "responsibilities": [
+        "Download request formatting",
+        "Progress UI updates",
+        "Download cancellation",
+        "Error state management"
+      ]
+    },
+    "popup/js/video-processor.js": {
+      "description": "Video metadata and quality analysis",
+      "functions": {
+        "analyzeVideo": "Extracts metadata from video sources",
+        "getQualities": "Determines available resolution options",
+        "extractThumbnail": "Generates preview images",
+        "categorizeVideo": "Identifies video type and format"
+      },
+      "responsibilities": [
+        "Video format detection",
+        "Metadata extraction",
+        "Quality option parsing",
+        "Preview generation coordination"
+      ]
+    },
+    "popup/js/video-renderer.js": {
+      "description": "UI components for video display",
+      "functions": {
+        "renderVideoList": "Creates video list UI elements",
+        "createVideoCard": "Builds individual video card component",
+        "updateProgressUI": "Refreshes download progress display",
+        "showQualitySelector": "Displays quality options dialog"
+      },
+      "responsibilities": [
+        "Video presentation in UI",
+        "Interactive element creation",
+        "Progress visualization",
+        "Dynamic UI updates"
+      ]
+    },
+    "popup/js/ui.js": {
+      "description": "UI interaction handlers and components",
+      "functions": {
+        "setupEventListeners": "Binds event handlers to UI elements",
+        "toggleGroup": "Expands/collapses video type groups",
+        "handleThemeToggle": "Switches between light/dark themes",
+        "showNotification": "Displays user notifications"
+      },
+      "responsibilities": [
+        "User interaction handling",
+        "Theme management",
+        "UI state transitions",
+        "Notification system"
+      ]
+    },
+    "popup/js/manifest-parser.js": {
+      "description": "HLS/DASH manifest parsing utilities",
+      "functions": {
+        "parseHlsManifest": "Extracts info from HLS playlist",
+        "parseDashManifest": "Processes DASH MPD structure",
+        "extractBandwidthInfo": "Determines video bitrates",
+        "identifyVariants": "Maps available quality variants"
+      },
+      "responsibilities": [
+        "Streaming manifest analysis",
+        "Quality variant identification",
+        "Segment information extraction",
+        "Bitrate calculation"
+      ]
+    }
+  },
+  "native_host": {
+    "index.js": {
+      "description": "Main entry point for native host application",
+      "functions": {
+        "main": "Initializes native host process",
+        "setupMessageHandler": "Configures message processing pipeline",
+        "handleShutdown": "Manages clean termination"
+      },
+      "responsibilities": [
+        "Process initialization",
+        "Native messaging protocol establishment",
+        "Command routing",
+        "Process lifecycle management"
+      ]
+    },
+    "lib/command-runner.js": {
+      "description": "Command pattern implementation for processing requests",
+      "functions": {
+        "executeCommand": "Routes commands to appropriate handlers",
+        "registerCommands": "Maps command names to implementations",
+        "validateCommand": "Ensures command requests are properly formed"
+      },
+      "responsibilities": [
+        "Command dispatch",
+        "Request validation",
+        "Response formatting",
+        "Command lifecycle management"
+      ]
+    },
+    "commands/download.js": {
+      "description": "FFmpeg-based video download implementation",
+      "functions": {
+        "execute": "Processes download command",
+        "setupDownload": "Configures download parameters",
+        "launchFfmpeg": "Starts FFmpeg process",
+        "monitorProgress": "Tracks download status"
+      },
+      "responsibilities": [
+        "Download process management",
+        "FFmpeg parameter configuration",
+        "Progress tracking initialization",
+        "Error handling and recovery"
+      ]
+    },
+    "lib/progress-tracker.js": {
+      "description": "Download progress management and reporting",
+      "functions": {
+        "selectStrategy": "Chooses optimal progress tracking strategy",
+        "trackProgress": "Monitors download progress",
+        "reportProgress": "Sends updates to UI",
+        "handleStrategyFailover": "Falls back to alternative strategies"
+      },
+      "responsibilities": [
+        "Progress calculation coordination",
+        "Strategy selection and fallback",
+        "Progress data normalization",
+        "UI update throttling"
+      ]
+    },
+    "lib/progress/base-strategy.js": {
+      "description": "Abstract base class for progress tracking strategies",
+      "functions": {
+        "initialize": "Sets up strategy with configuration",
+        "update": "Processes new progress data",
+        "processOutput": "Parses FFmpeg output",
+        "sendProgress": "Formats and dispatches progress updates"
+      },
+      "responsibilities": [
+        "Common progress tracking interface",
+        "Basic progress calculation",
+        "Progress data smoothing",
+        "Strategy pattern implementation"
+      ]
+    },
+    "lib/progress/content-length-strategy.js": {
+      "description": "Progress tracking based on HTTP Content-Length header",
+      "functions": {
+        "initialize": "Gets Content-Length via HEAD request",
+        "getContentLength": "Retrieves file size from HTTP header",
+        "update": "Calculates progress based on downloaded bytes"
+      },
+      "responsibilities": [
+        "HTTP header inspection",
+        "File size determination",
+        "Byte-based progress calculation",
+        "High-accuracy progress for direct media"
+      ]
+    },
+    "lib/progress/segment-tracking-strategy.js": {
+      "description": "Progress tracking based on HLS/DASH segment counting",
+      "functions": {
+        "initialize": "Analyzes manifest to count segments",
+        "update": "Tracks segment download progress",
+        "processOutput": "Extracts segment info from FFmpeg output"
+      },
+      "responsibilities": [
+        "Manifest segment analysis",
+        "Segment download tracking",
+        "Hybrid progress calculation",
+        "Streaming-optimized progress reporting"
+      ]
+    },
+    "lib/progress/adaptive-bitrate-strategy.js": {
+      "description": "Progress tracking for variable bitrate content",
+      "functions": {
+        "initialize": "Extracts bitrate information",
+        "estimateProgress": "Calculates progress based on bitrate and time",
+        "adjustEstimation": "Refines estimates based on actual data"
+      },
+      "responsibilities": [
+        "Bitrate-based size estimation",
+        "Adaptive refinement of estimates",
+        "Progress calculation for streams without segments",
+        "Confidence scoring"
+      ]
+    },
+    "lib/progress/time-based-strategy.js": {
+      "description": "Progress tracking based on media duration",
+      "functions": {
+        "initialize": "Determines media duration",
+        "update": "Calculates progress based on elapsed time",
+        "extractDuration": "Gets total duration from metadata"
+      },
+      "responsibilities": [
+        "Duration-based progress estimation",
+        "Last-resort fallback strategy",
+        "Minimum progress feedback guarantee",
+        "Time position tracking"
+      ]
+    },
+    "services/ffmpeg.js": {
+      "description": "FFmpeg wrapper and utilities",
+      "functions": {
+        "findFfmpegPath": "Locates FFmpeg executable",
+        "executeCommand": "Runs FFmpeg with parameters",
+        "buildCommandArgs": "Constructs command line arguments",
+        "parseOutput": "Processes FFmpeg stdout/stderr"
+      },
+      "responsibilities": [
+        "FFmpeg process management",
+        "Command construction",
+        "Output parsing and routing",
+        "Error detection and handling"
+      ]
+    },
+    "utils/logger.js": {
+      "description": "Logging functionality",
+      "functions": {
+        "log": "Records general log messages",
+        "logDebug": "Records debug-level information",
+        "logError": "Records error information",
+        "configureLogger": "Sets up logging destinations"
+      },
+      "responsibilities": [
+        "Log categorization",
+        "Output formatting",
+        "Log file management",
+        "Debug level filtering"
+      ]
+    }
+  }
+}
