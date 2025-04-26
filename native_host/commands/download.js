@@ -210,11 +210,25 @@ class DownloadCommand extends BaseCommand {
                             
                             // Calculate progress based on time if we have duration
                             let progress;
-                            if (totalDuration) {
-                                progress = Math.min(99, Math.round((currentTime / totalDuration) * 100));
+                            if (totalDuration && totalDuration > 0) {
+                                // Ensure we don't go beyond 99% until the download is actually complete
+                                // and properly handle videos with very long durations
+                                progress = Math.min(99, Math.max(0, Math.floor((currentTime / totalDuration) * 100)));
+                                
+                                // Log the actual calculation values for debugging
+                                logDebug(`Progress calculation: currentTime=${currentTime}, totalDuration=${totalDuration}, result=${progress}%`);
                             } else {
-                                // Fallback to a time-based estimate
-                                progress = Math.min(99, Math.round((currentTime / 10) * 100));
+                                // If we don't have a duration, use the download start time for a rough estimate
+                                // This provides a more gradual progress indication
+                                const elapsedSecs = (now - downloadStartTime) / 1000;
+                                if (elapsedSecs > 0) {
+                                    // Use a logarithmic scale for better user experience on unknown durations
+                                    // Start slow, accelerate in the middle, but never reach 100%
+                                    progress = Math.min(95, Math.floor(20 * Math.log10(1 + 9 * elapsedSecs / 60)));
+                                } else {
+                                    progress = 0;
+                                }
+                                logDebug(`Progress estimation (no duration): elapsed=${elapsedSecs}s, result=${progress}%`);
                             }
                             
                             // Send progress update
