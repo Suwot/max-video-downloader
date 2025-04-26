@@ -1,5 +1,16 @@
 # Video Downloader Browser Extension (Manifest V3)
 
+## Table of Contents
+- [Project Overview](#project-overview)
+- [Architecture](#architecture)
+- [Entry Points](#entry-points)
+- [Key Workflows](#key-workflows)
+- [Extension Structure](#extension-structure)
+- [Key Features and Capabilities](#key-features-and-capabilities)
+- [Getting Started](#getting-started)
+- [Development Workflow](#development-workflow)
+- [Troubleshooting](#troubleshooting)
+
 ## Project Overview
 
 This Chrome/Firefox extension detects and downloads videos from websites, supporting various formats including HLS streams, DASH manifests, MP4 videos, and other media formats. It uses a native host application for advanced functionality like downloading encrypted streams using FFmpeg.
@@ -91,7 +102,7 @@ This Chrome/Firefox extension detects and downloads videos from websites, suppor
 
 ### Native Host Entry Points
 
-1. **Host Process** (`native_host/host.js`):
+1. **Host Process** (`native_host/index.js`):
 
    - **Entry Point Type**: Process Startup
    - **Description**: Node.js process that handles native operations
@@ -219,28 +230,24 @@ This Chrome/Firefox extension detects and downloads videos from websites, suppor
 The native host implements a sophisticated progress tracking system using the strategy pattern to provide accurate download progress for different media types:
 
 1. **Progress Tracker** (`native_host/lib/progress-tracker.js`):
-
    - Core component that manages different progress calculation strategies
    - Selects the optimal strategy based on media type and available information
    - Falls back gracefully between strategies when needed
    - Provides consistent progress reporting to the UI
 
 2. **Content Length Strategy** (`native_host/lib/progress/content-length-strategy.js`):
-
    - Makes a HEAD request to obtain the total file size from Content-Length header
    - Calculates progress as a percentage of downloaded bytes vs. total size
    - Used primarily for direct media files (MP4, WebM, etc.)
    - High confidence level for accurate progress reporting
 
 3. **Segment Tracking Strategy** (`native_host/lib/progress/segment-tracking-strategy.js`):
-
    - Analyzes HLS/DASH manifests to count total segments
    - Tracks segment downloads from FFmpeg output
    - Uses hybrid approach combining segment counting and byte-based tracking
    - Adapts to different manifest formats and structures
 
 4. **Adaptive Bitrate Strategy** (`native_host/lib/progress/adaptive-bitrate-strategy.js`):
-
    - Used for streaming media when segment tracking isn't available
    - Estimates total size based on duration and bitrate information
    - Dynamically adjusts estimations based on actual download data
@@ -252,19 +259,6 @@ The native host implements a sophisticated progress tracking system using the st
    - Less accurate but ensures some progress feedback is always available
 
 The system continuously monitors confidence levels in its calculations and can switch between strategies if better data becomes available. This ensures users always receive the most accurate progress information possible during downloads, regardless of media type or source.
-
-### URL Extraction System
-
-The extension implements a sophisticated URL extraction system that can identify legitimate video URLs embedded in query parameters of tracking pixels. This system:
-
-1. **Detection**: Identifies potential tracking pixels like ping.gif that might contain video URLs
-2. **Extraction**: Parses query parameters to find legitimate HLS or DASH manifest URLs
-3. **Validation**: Applies multiple validation checks to ensure extracted URLs are genuine video sources
-4. **Flagging**: Marks extracted URLs with `foundFromQueryParam` for special handling
-5. **Normalization**: Applies URL normalization to prevent duplicates between original and extracted URLs
-6. **Visual Indication**: Displays an "Extracted" badge in the UI for URLs found via this method
-
-This system significantly enhances the extension's ability to detect videos that would otherwise be missed.
 
 ### Cache and State Management System
 
@@ -301,3 +295,112 @@ The extension utilizes a robust cache and state management system that ensures e
    - Provides clear documentation for storage usage patterns
 
 This sophisticated state management approach ensures the extension remains responsive and reliable even when processing large numbers of videos or when used across multiple browsing sessions.
+
+### URL Extraction System
+
+The extension implements a sophisticated URL extraction system that can identify legitimate video URLs embedded in query parameters of tracking pixels. This system:
+
+1. **Detection**: Identifies potential tracking pixels like ping.gif that might contain video URLs
+2. **Extraction**: Parses query parameters to find legitimate HLS or DASH manifest URLs
+3. **Validation**: Applies multiple validation checks to ensure extracted URLs are genuine video sources
+4. **Flagging**: Marks extracted URLs with `foundFromQueryParam` for special handling
+5. **Normalization**: Applies URL normalization to prevent duplicates between original and extracted URLs
+6. **Visual Indication**: Displays an "Extracted" badge in the UI for URLs found via this method
+
+This system significantly enhances the extension's ability to detect videos that would otherwise be missed.
+
+## Getting Started
+
+### Prerequisites
+
+- Node.js (v14 or higher)
+- FFmpeg installed on the system
+- Chrome or Firefox browser
+
+### Installation
+
+1. **Extension Setup**:
+   ```
+   cd extension
+   # Load the unpacked extension in Chrome:
+   # 1. Open chrome://extensions
+   # 2. Enable "Developer mode"
+   # 3. Click "Load unpacked" and select the extension folder
+   ```
+
+2. **Native Host Installation**:
+   ```
+   cd native_host
+   npm install
+   # Run the installer script
+   ./install.sh
+   ```
+
+### Development Environment
+
+- **Browser Developer Tools**: For debugging the extension
+- **Native Host Logging**: Check logs in `~/.config/video-downloader/logs/` (Linux/Mac) or `%APPDATA%\video-downloader\logs\` (Windows)
+- **Test Host**: Use `native_host/test-host.js` for isolated testing of native host functionality
+
+## Development Workflow
+
+### Making Changes to the Extension
+
+1. Modify the extension files
+2. Reload the extension in Chrome (go to chrome://extensions and click the reload icon)
+3. Test your changes
+
+### Making Changes to the Native Host
+
+1. Modify the native host files
+2. Run `./update.sh` to update the installed version
+3. Test your changes
+
+### Key Files for Common Tasks
+
+- **Adding a new video source type**:
+  - Modify `content_script.js` to detect the new source
+  - Update `video-processor.js` to handle the new format
+
+- **Modifying download functionality**:
+  - Update `native_host/commands/download.js` for the download process
+  - Modify `extension/popup/js/download.js` for the UI interaction
+
+- **Updating progress reporting**:
+  - Add/modify strategies in `native_host/lib/progress/` 
+  - Update the progress selection logic in `progress-tracker.js`
+
+- **Changing the user interface**:
+  - Modify `popup.html` and `popup.css` for layout changes
+  - Update `ui.js` for interactive behavior
+
+## Troubleshooting
+
+### Common Issues
+
+1. **Native Host Connection Failures**:
+   - Verify the host is properly installed with `./install.sh`
+   - Check browser console for connection errors
+   - Ensure the manifest paths are correct for your OS
+
+2. **Video Detection Problems**:
+   - Cross-origin restrictions might be limiting detection
+   - Check the Network tab in DevTools to confirm requests are visible
+   - Try enabling advanced detection options
+
+3. **Download Failures**:
+   - Verify FFmpeg is installed and accessible
+   - Check if the URL is accessible (may require authentication)
+   - Examine native host logs for detailed error information
+
+4. **Progress Tracking Issues**:
+   - Check which strategy is being selected
+   - Some formats may not provide reliable progress information
+   - Verify confidence levels in debug logs
+
+### Debugging Tips
+
+- Enable debug logs in both extension and native host
+- Use the browser's Extension Developer Tools
+- Check the native host logs for detailed error information
+- Run the native host manually with test commands for isolated troubleshooting
