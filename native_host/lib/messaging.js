@@ -119,8 +119,28 @@ class MessagingService {
             // Only rate limit progress messages
             const now = Date.now();
             if (responseWithId.type === 'progress' && now - this.lastResponseTime < this.MIN_RESPONSE_INTERVAL) {
-                return;
+                // For progress messages, only drop if very recent to avoid flooding
+                // But ensure significant changes always go through
+                const lastProgress = this.lastProgressSent || 0;
+                const currentProgress = responseWithId.progress || 0;
+                
+                // Always send if it's a significant change or at key milestones
+                if (Math.abs(currentProgress - lastProgress) >= 5 || 
+                    currentProgress % 10 === 0 ||
+                    currentProgress === 100) {
+                    // Important update - send it anyway
+                    logDebug(`Sending priority progress update: ${currentProgress}%`);
+                } else {
+                    // Otherwise, respect rate limiting
+                    return;
+                }
             }
+            
+            // Update last progress sent if this is a progress message
+            if (responseWithId.type === 'progress') {
+                this.lastProgressSent = responseWithId.progress || 0;
+            }
+            
             this.lastResponseTime = now;
             
             const messageStr = JSON.stringify(responseWithId);

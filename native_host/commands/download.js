@@ -19,6 +19,7 @@ const { spawn } = require('child_process');
 const BaseCommand = require('./base-command');
 const { logDebug } = require('../utils/logger');
 const { getFullEnv } = require('../utils/resources');
+const ProgressTracker = require('../lib/progress-tracker');
 
 /**
  * Command for downloading videos
@@ -110,30 +111,44 @@ class DownloadCommand extends BaseCommand {
             logDebug('FFmpeg command:', ffmpegService.getFFmpegPath(), ffmpegArgs.join(' '));
 
             return new Promise((resolve, reject) => {
+                // Create progress tracker for this download
+                const progressTracker = new ProgressTracker({
+                    onProgress: (data) => {
+                        this.sendProgress(data);
+                    },
+                    updateInterval: 200, // Update every 200ms
+                    debug: true // Enable detailed progress logging
+                });
+                
+                // Register default strategies
+                ProgressTracker.registerDefaultStrategies(progressTracker);
+                
+                // Initialize progress tracker with file info
+                progressTracker.initialize({
+                    url,
+                    type: videoType
+                }).catch(error => {
+                    logDebug('Error initializing progress tracker:', error);
+                });
+
                 const ffmpeg = spawn(ffmpegService.getFFmpegPath(), ffmpegArgs, { 
                     env: getFullEnv()
                 });
 
                 let errorOutput = '';
-                let progressOutput = '';
-                let lastProgressUpdate = 0;
-                let downloadStartTime = Date.now();
+                let hasError = false;
                 let lastBytes = 0;
                 let totalDuration = null;
-                let hasError = false;
-                let sentProgressUpdates = 0;  // Track number of updates
 
-                // Send initial progress
+                // Send initial progress update
                 this.sendProgress({
                     progress: 0,
                     speed: 0,
                     downloaded: 0,
                     size: 0
                 });
-                sentProgressUpdates++;
-                logDebug('Sent initial progress update (0%)');
 
-                // Try to get duration first
+                // Try to get duration first with FFprobe
                 const ffprobe = spawn(ffmpegService.getFFprobePath(), [
                     '-v', 'quiet',
                     '-print_format', 'json',
@@ -147,109 +162,31 @@ class DownloadCommand extends BaseCommand {
                         if (info.format && info.format.duration) {
                             totalDuration = parseFloat(info.format.duration);
                             logDebug('Got total duration:', totalDuration);
+                            
+                            // Update progress tracker with duration
+                            progressTracker.update({
+                                totalDuration: totalDuration
+                            });
                         }
                     } catch (e) {
                         logDebug('Error parsing ffprobe output:', e);
                     }
                 });
 
-                // More comprehensive regex patterns for different FFmpeg output formats
+                // Process FFmpeg output for progress tracking
                 ffmpeg.stderr.on('data', (data) => {
                     if (hasError) return;
                     
                     const output = data.toString();
                     errorOutput += output;
-                    progressOutput += output;
                     
-                    // Log raw output for debugging
-                    logDebug('FFmpeg progress raw output: ' + output.replace(/\n/g, '\\n').substring(0, 100) + (output.length > 100 ? '...' : ''));
-                    
-                    const now = Date.now();
-                    if (now - lastProgressUpdate > 200) { // Reduced to 200ms for more frequent updates
-                        lastProgressUpdate = now;
-                        
-                        // Try multiple patterns for time
-                        let timeMatch = progressOutput.match(/time=(\d+):(\d+):(\d+.\d+)/);
-                        if (!timeMatch) {
-                            timeMatch = progressOutput.match(/time=(\d+).(\d+)/); // Alternative format
-                        }
-                        
-                        // Try multiple patterns for size
-                        let sizeMatch = progressOutput.match(/size=\s*(\d+)kB/);
-                        if (!sizeMatch) {
-                            sizeMatch = progressOutput.match(/size=\s*(\d+(\.\d+)?)([kM])B/); // Alternative format with MB
-                        }
-                        
-                        // If we have time info, we can calculate progress
-                        if (timeMatch) {
-                            let currentTime;
-                            
-                            // Parse time based on format
-                            if (timeMatch[3]) { // HH:MM:SS.MS format
-                                const [_, hours, minutes, seconds] = timeMatch;
-                                currentTime = parseInt(hours) * 3600 + parseInt(minutes) * 60 + parseFloat(seconds);
-                            } else { // Seconds.ms format
-                                currentTime = parseFloat(timeMatch[1] + '.' + timeMatch[2]);
-                            }
-                            
-                            // Get bytes downloaded if available
-                            let currentBytes = lastBytes;
-                            if (sizeMatch) {
-                                if (sizeMatch[3] === 'M') {
-                                    currentBytes = parseFloat(sizeMatch[1]) * 1024 * 1024;
-                                } else {
-                                    currentBytes = parseInt(sizeMatch[1]) * 1024;
-                                }
-                            }
-                            
-                            // Calculate speed
-                            const elapsedTime = (now - downloadStartTime) / 1000;
-                            const bytesPerSecond = currentBytes / elapsedTime;
-                            const instantSpeed = (currentBytes - lastBytes) * 4;
-                            lastBytes = currentBytes;
-                            
-                            // Calculate progress based on time if we have duration
-                            let progress;
-                            if (totalDuration && totalDuration > 0) {
-                                // Ensure we don't go beyond 99% until the download is actually complete
-                                // and properly handle videos with very long durations
-                                progress = Math.min(99, Math.max(0, Math.floor((currentTime / totalDuration) * 100)));
-                                
-                                // Log the actual calculation values for debugging
-                                logDebug(`Progress calculation: currentTime=${currentTime}, totalDuration=${totalDuration}, result=${progress}%`);
-                            } else {
-                                // If we don't have a duration, use the download start time for a rough estimate
-                                // This provides a more gradual progress indication
-                                const elapsedSecs = (now - downloadStartTime) / 1000;
-                                if (elapsedSecs > 0) {
-                                    // Use a logarithmic scale for better user experience on unknown durations
-                                    // Start slow, accelerate in the middle, but never reach 100%
-                                    progress = Math.min(95, Math.floor(20 * Math.log10(1 + 9 * elapsedSecs / 60)));
-                                } else {
-                                    progress = 0;
-                                }
-                                logDebug(`Progress estimation (no duration): elapsed=${elapsedSecs}s, result=${progress}%`);
-                            }
-                            
-                            // Send progress update
-                            this.sendProgress({
-                                progress,
-                                speed: instantSpeed > 0 ? instantSpeed : bytesPerSecond,
-                                downloaded: currentBytes,
-                                currentTime,
-                                totalDuration
-                            });
-                            
-                            sentProgressUpdates++;
-                            logDebug(`Sent progress update (${progress}%)`);
-                            progressOutput = ''; // Clear processed output
-                        }
-                    }
+                    // Feed output to progress tracker
+                    progressTracker.processOutput(output);
                 });
 
                 ffmpeg.on('close', (code) => {
                     if (code === 0 && !hasError) {
-                        logDebug(`Download completed successfully. Sent ${sentProgressUpdates} progress updates.`);
+                        logDebug('Download completed successfully.');
                         // Send final progress
                         this.sendProgress({
                             progress: 100,
