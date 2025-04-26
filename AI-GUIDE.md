@@ -147,28 +147,62 @@ This Chrome/Firefox extension detects and downloads videos from websites, suppor
 
 - **background.js**: Service worker for state management and coordination
 - **content_script.js**: Injected script for video detection on web pages
+- **manifest.json**: Extension manifest defining permissions and resources
+- **icons/**: Extension icon resources
+  - **128.png**, **16.png**, **48.png**: Extension icons in various sizes
+  - **video-placeholder.png**: Default placeholder for videos without thumbnails
+- **js/**: Shared JavaScript modules
+  - **native-host-service.js**: Interface for communicating with native host
 - **popup/**: User interface components
+  - **popup.html**: Main popup interface HTML structure
+  - **popup.css**: Styling for the popup interface
   - **js/**: UI logic and API modules
     - **download.js**: Download operation and progress handling
-    - **video-processor.js**: Video metadata and quality analysis
+    - **index.js**: Main entry point for popup initialization
     - **manifest-parser.js**: HLS/DASH manifest parsing
-    - **video-renderer.js**: UI components for video display
+    - **preview.js**: Video preview/thumbnail generation
     - **state.js**: Application state management
     - **ui.js**: UI interaction handlers and components
-    - **preview.js**: Video preview/thumbnail generation
+    - **utilities.js**: Shared utility functions
     - **video-fetcher.js**: Retrieves and validates video sources from background
+    - **video-processor.js**: Video metadata and quality analysis
+    - **video-renderer.js**: UI components for video display
 
 ### native_host/
 
+- **host**: Executable entry point for native host
+- **index.js**: Main node.js process entry point
+- **manifest.json**: Native host manifest for browser registration
+- **package.json**: Node.js package configuration
+- **install.sh**: Script to install native host on user's system
+- **update.sh**: Script to update existing native host installation
 - **commands/**: Command implementation files
+  - **base-command.js**: Abstract base class for all commands
   - **download.js**: FFmpeg-based video download implementation
-  - **get-qualities.js**: Video metadata extraction
-  - **generate-preview.js**: Thumbnail creation
+  - **generate-preview.js**: Thumbnail creation functionality
+  - **get-download-status.js**: Progress reporting implementation
+  - **get-qualities.js**: Video metadata and quality extraction
+  - **heartbeat.js**: Connection verification command
+  - **index.js**: Command registration and routing
 - **lib/**: Core libraries
   - **command-runner.js**: Command pattern implementation
+  - **error-handler.js**: Standardized error handling
   - **messaging.js**: Chrome native messaging protocol
+  - **progress-tracker.js**: Download progress management
+  - **progress/**: Progress calculation strategies
+    - **base-strategy.js**: Abstract base progress strategy
+    - **content-length-strategy.js**: Progress tracking via file size
+    - **segment-tracking-strategy.js**: HLS/DASH segment tracking
+    - **adaptive-bitrate-strategy.js**: Bitrate-based estimation
+    - **time-based-strategy.js**: Duration-based fallback strategy
+    - **manifest-parser.js**: Media manifest analysis utilities
 - **services/**: Shared services
+  - **config.js**: Configuration management
   - **ffmpeg.js**: FFmpeg wrapper and utilities
+  - **index.js**: Service initialization and registration
+- **utils/**: Utility modules
+  - **logger.js**: Logging functionality
+  - **resources.js**: Resource path management
 
 ## Key Features and Capabilities
 
@@ -179,6 +213,45 @@ This Chrome/Firefox extension detects and downloads videos from websites, suppor
 - **DASH Manifests**: Adaptive streaming technology (.mpd files)
 - **Blob URLs**: In-memory browser media resources
 - **Embedded URLs**: Video URLs extracted from tracking pixel query parameters
+
+### Advanced Progress Tracking System
+
+The native host implements a sophisticated progress tracking system using the strategy pattern to provide accurate download progress for different media types:
+
+1. **Progress Tracker** (`native_host/lib/progress-tracker.js`):
+
+   - Core component that manages different progress calculation strategies
+   - Selects the optimal strategy based on media type and available information
+   - Falls back gracefully between strategies when needed
+   - Provides consistent progress reporting to the UI
+
+2. **Content Length Strategy** (`native_host/lib/progress/content-length-strategy.js`):
+
+   - Makes a HEAD request to obtain the total file size from Content-Length header
+   - Calculates progress as a percentage of downloaded bytes vs. total size
+   - Used primarily for direct media files (MP4, WebM, etc.)
+   - High confidence level for accurate progress reporting
+
+3. **Segment Tracking Strategy** (`native_host/lib/progress/segment-tracking-strategy.js`):
+
+   - Analyzes HLS/DASH manifests to count total segments
+   - Tracks segment downloads from FFmpeg output
+   - Uses hybrid approach combining segment counting and byte-based tracking
+   - Adapts to different manifest formats and structures
+
+4. **Adaptive Bitrate Strategy** (`native_host/lib/progress/adaptive-bitrate-strategy.js`):
+
+   - Used for streaming media when segment tracking isn't available
+   - Estimates total size based on duration and bitrate information
+   - Dynamically adjusts estimations based on actual download data
+   - Provides reasonable progress estimation for variable bitrate content
+
+5. **Time Based Strategy** (`native_host/lib/progress/time-based-strategy.js`):
+   - Last-resort fallback when other strategies aren't applicable
+   - Calculates progress based on video duration and elapsed time
+   - Less accurate but ensures some progress feedback is always available
+
+The system continuously monitors confidence levels in its calculations and can switch between strategies if better data becomes available. This ensures users always receive the most accurate progress information possible during downloads, regardless of media type or source.
 
 ### URL Extraction System
 
