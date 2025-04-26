@@ -34,6 +34,70 @@ function logDebug(...args) {
     console.log('[Video Fetcher]', new Date().toISOString(), ...args);
 }
 
+/**
+ * Additional validation to ensure tracking pixels don't make it to the popup
+ * @param {Array} videos - Videos to validate
+ * @returns {Array} Filtered videos
+ */
+function validateAndFilterVideos(videos) {
+    if (!videos || !Array.isArray(videos)) return [];
+    
+    return videos.filter(video => {
+        // Validate that we have a URL
+        if (!video || !video.url) return false;
+        
+        // If this video was found in a query parameter, trust that the content script has 
+        // already validated it properly - don't apply additional filtering
+        if (video.foundFromQueryParam) {
+            return true;
+        }
+        
+        // If it's an HLS or DASH video, we can safely assume it's valid 
+        // as these were already validated by content_script.js's getVideoType function
+        if (video.type === 'hls' || video.type === 'dash') {
+            return true;
+        }
+        
+        try {
+            const urlObj = new URL(video.url);
+            
+            // Filter out known tracking pixel and analytics URLs
+            if (video.url.includes('ping.gif') || video.url.includes('jwpltx.com')) {
+                logDebug('Filtering out tracking URL:', video.url);
+                return false;
+            }
+            
+            // Check for image extensions that shouldn't be treated as videos
+            if (/\.(gif|png|jpg|jpeg|webp|bmp|svg)(\?|$)/i.test(urlObj.pathname)) {
+                logDebug('Filtering out image URL:', video.url);
+                return false;
+            }
+            
+            // Known analytics endpoints
+            const trackingPatterns = [
+                /\/ping/i,
+                /\/track/i,
+                /\/pixel/i,
+                /\/analytics/i,
+                /\/telemetry/i,
+                /\/stats/i,
+                /\/metrics/i
+            ];
+            
+            if (trackingPatterns.some(pattern => pattern.test(urlObj.pathname))) {
+                logDebug('Filtering out analytics endpoint:', video.url);
+                return false;
+            }
+            
+            // If we got here, it's probably a valid video
+            return true;
+        } catch (e) {
+            logDebug('Error validating URL:', e, video.url);
+            return false;
+        }
+    });
+}
+
 // Keep track of master playlists we've seen
 const knownMasterPlaylists = new Map();
 
@@ -75,6 +139,20 @@ async function fetchHLSManifest(url, tabId) {
  * @param {number} tabId - Tab ID
  */
 async function processHLSRelationships(video, tabId) {
+    // Early rejection of tracking URLs
+    if (!video || !video.url) return null;
+    
+    // Don't filter if this URL was extracted from a query parameter
+    // or if this is a validated HLS/DASH URL
+    if (!video.foundFromQueryParam && video.type !== 'hls' && video.type !== 'dash') {
+        // Specific check for the ping.gif issue mentioned in the request
+        if (video.url.includes('ping.gif') || video.url.includes('jwpltx.com')) {
+            logDebug('Rejecting tracking URL in processHLSRelationships:', video.url);
+            return null;
+        }
+    }
+    
+    // Skip non-HLS videos
     if (video.type !== 'hls') return video;
 
     // First check if this URL is a known variant of a master playlist
@@ -140,10 +218,19 @@ export async function updateVideoList(forceRefresh = false) {
     logDebug('Got cached videos:', cachedVideos?.length || 0);
     
     if (!forceRefresh && cachedVideos) {
-        logDebug('Using cached videos');
-        renderVideos(cachedVideos);
+        // Apply additional validation to cached videos
+        const filteredCachedVideos = validateAndFilterVideos(cachedVideos);
+        logDebug('Filtered cached videos:', filteredCachedVideos.length);
+        
+        renderVideos(filteredCachedVideos);
+        
+        // Update cache if filtering removed videos
+        if (filteredCachedVideos.length !== cachedVideos.length) {
+            setCachedVideos(filteredCachedVideos);
+        }
+        
         // Still fetch in background to update stale entries
-        refreshInBackground(cachedVideos);
+        refreshInBackground(filteredCachedVideos);
         return;
     }
     
@@ -178,7 +265,10 @@ export async function updateVideoList(forceRefresh = false) {
             const response = await chrome.tabs.sendMessage(tab.id, { action: 'findVideos' });
             if (response && response.length) {
                 logDebug('Got videos from content script:', response.length);
-                videos.push(...response);
+                // Add additional filtering here before merging
+                const filteredResponse = validateAndFilterVideos(response);
+                logDebug('After filtering content script videos:', filteredResponse.length);
+                videos.push(...filteredResponse);
             }
         } catch (error) {
             logDebug('Content script error:', error);
@@ -195,7 +285,10 @@ export async function updateVideoList(forceRefresh = false) {
             
             if (backgroundVideos && backgroundVideos.length) {
                 logDebug('Got videos from background script:', backgroundVideos.length);
-                mergeVideos(videos, backgroundVideos);
+                // Apply filtering to background videos before merging
+                const filteredBackgroundVideos = validateAndFilterVideos(backgroundVideos);
+                logDebug('After filtering background videos:', filteredBackgroundVideos.length);
+                mergeVideos(videos, filteredBackgroundVideos);
             }
         } catch (error) {
             logDebug('Background script error:', error);
@@ -204,7 +297,18 @@ export async function updateVideoList(forceRefresh = false) {
 
         clearTimeout(searchTimeout);
         
-        logDebug('Total videos after merge:', videos.length);
+        logDebug('Total videos after merge and filtering:', videos.length);
+        
+        // No videos found after filtering
+        if (videos.length === 0) {
+            logDebug('No valid videos found after filtering');
+            container.innerHTML = `
+                <div class="initial-message">
+                    No valid videos found on this page. Try playing a video first or refreshing.
+                </div>
+            `;
+            return;
+        }
         
         // Process all videos first to establish relationships
         const processedVideos = [];
@@ -278,7 +382,13 @@ export async function refreshInBackground(videos) {
         const response = await chrome.tabs.sendMessage(tabId, { action: 'findVideos' });
         if (response && response.length) {
             logDebug('Found new videos in background:', response.length);
-            const newVideos = response.filter(newVideo => 
+            
+            // Filter response first with our enhanced validation
+            const filteredResponse = validateAndFilterVideos(response);
+            logDebug('After filtering new videos:', filteredResponse.length);
+            
+            // Then check for videos we don't already have
+            const newVideos = filteredResponse.filter(newVideo => 
                 !videos.some(existing => existing.url === newVideo.url)
             );
 

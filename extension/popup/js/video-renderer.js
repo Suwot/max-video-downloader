@@ -23,11 +23,76 @@ import { showQualityDialog } from './ui.js';
 import { getStreamQualities } from './video-processor.js';
 
 /**
+ * Final validation to ensure tracking pixels and similar unwanted content isn't rendered
+ * @param {Object} video - Video object to validate
+ * @returns {boolean} Whether the video is valid for rendering
+ */
+function isValidVideoForRendering(video) {
+    if (!video || !video.url) return false;
+    
+    // If the video was explicitly found from a query parameter, trust it regardless
+    // This means content_script.js already validated it as a legitimate video URL
+    if (video.foundFromQueryParam) {
+        return true;
+    }
+    
+    try {
+        // Skip blob URLs which should already be properly validated
+        if (video.url.startsWith('blob:')) return true;
+        
+        const urlObj = new URL(video.url);
+        
+        // Check for image extensions that shouldn't be rendered as videos
+        const badExtensions = /\.(gif|png|jpg|jpeg|webp|bmp|svg)(\?|$)/i;
+        if (badExtensions.test(urlObj.pathname)) {
+            // Don't reject m3u8 and mpd files that happen to be in query params of image URLs
+            if (video.type === 'hls' || video.type === 'dash') {
+                return true;
+            }
+            return false;
+        }
+        
+        // Known tracking/analytics endpoints that shouldn't be rendered
+        const trackingPatterns = [
+            /\/ping/i, 
+            /\/track/i, 
+            /\/pixel/i, 
+            /\/telemetry/i,
+            /\/analytics/i,
+            /\/stats/i,
+            /\/metrics/i,
+            /jwpltx/i
+        ];
+        
+        // Only apply tracking pattern check if this isn't a specific video type we trust
+        if (video.type !== 'hls' && video.type !== 'dash' && 
+            trackingPatterns.some(pattern => 
+                pattern.test(urlObj.pathname) || pattern.test(urlObj.hostname)
+            )) {
+            return false;
+        }
+        
+        // Special case for ping.gif - only filter if it's not already processed as HLS/DASH
+        if (video.url.includes('ping.gif') && video.type !== 'hls' && video.type !== 'dash') {
+            return false;
+        }
+        
+        return true;
+    } catch (e) {
+        console.error('Error validating video for rendering:', e, video);
+        return false;
+    }
+}
+
+/**
  * Render a list of videos in the UI
  * @param {Array} videos - Videos to render
  */
 export function renderVideos(videos) {
     const container = document.getElementById('videos');
+    
+    // Apply final validation filter to ensure we don't show invalid videos
+    videos = videos ? videos.filter(isValidVideoForRendering) : [];
     
     if (!videos || videos.length === 0) {
         container.innerHTML = `
@@ -54,6 +119,26 @@ export function renderVideos(videos) {
     
     container.innerHTML = '';
     container.appendChild(fragment);
+    
+    // Add CSS for the extracted badge if it doesn't exist
+    if (!document.getElementById('extracted-badge-style')) {
+        const style = document.createElement('style');
+        style.id = 'extracted-badge-style';
+        style.textContent = `
+            .badge.extracted {
+                display: inline-block;
+                background-color: #2196F3;
+                color: white;
+                font-size: 10px;
+                padding: 2px 6px;
+                border-radius: 10px;
+                margin-left: 8px;
+                vertical-align: middle;
+                font-weight: 500;
+            }
+        `;
+        document.head.appendChild(style);
+    }
     
     // Restore scroll position
     restoreScrollPosition(container, getScrollPosition());
@@ -241,6 +326,14 @@ export function createVideoElement(video) {
     const title = document.createElement('h3');
     title.className = 'video-title';
     title.textContent = video.title || getFilenameFromUrl(video.url);
+    
+    // Add extracted badge for videos found in query parameters
+    if (video.foundFromQueryParam) {
+        const extractedBadge = document.createElement('span');
+        extractedBadge.className = 'badge extracted';
+        extractedBadge.innerHTML = '🔎 Extracted';
+        title.appendChild(extractedBadge);
+    }
     
     const copyButton = document.createElement('button');
     copyButton.className = 'copy-button';

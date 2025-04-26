@@ -93,11 +93,33 @@ function processPendingMetadata(batchSize = 3) {
     const processPromises = entries.map(([url, info]) => {
         return new Promise(async (resolve) => {
             pendingMetadataQueue.delete(url);
-            
+
+            // Determine video type using getVideoType
+            const typeInfo = getVideoType(url);
+
+            // Skip ignored types
+            if (typeInfo === 'ignored' || (typeof typeInfo === 'object' && typeInfo.type === 'ignored')) {
+                return resolve(); // Skip sending ignored URLs
+            }
+
+            let finalUrl = url;
+            let finalType = info.source || info.type; // Default to source or type from info
+            let foundFromQueryParam = false;
+
+            // If getVideoType returns an object with URL and type, use those
+            if (typeof typeInfo === 'object' && typeInfo.url && typeInfo.type) {
+                finalUrl = typeInfo.url;
+                finalType = typeInfo.type;
+                foundFromQueryParam = typeInfo.foundFromQueryParam || false;
+            } else if (typeInfo !== 'ignored' && typeInfo !== 'unknown') {
+                finalType = typeInfo; // Use the type detected by getVideoType
+            }
+
             // Send to background with enhanced metadata
-            await sendVideoToBackground(url, info.type, {
+            await sendVideoToBackground(finalUrl, finalType, {
                 contentType: info.contentType,
-                headers: info.responseHeaders
+                headers: info.responseHeaders,
+                foundFromQueryParam: foundFromQueryParam
             });
             resolve();
         });
@@ -244,26 +266,43 @@ function isVideoRelatedUrl(url, contentType) {
 
 // Send a detected video to the background script
 function sendVideoToBackground(url, source, additionalInfo = {}) {
+    // Determine type from URL
+    const typeInfo = getVideoType(url);
+    let type = source;
+    let foundFromQueryParam = additionalInfo.foundFromQueryParam || false;
+    
+    // If getVideoType returns an object, use its values
+    if (typeof typeInfo === 'object' && typeInfo.url && typeInfo.type) {
+        url = typeInfo.url;
+        type = typeInfo.type;
+        foundFromQueryParam = typeInfo.foundFromQueryParam || foundFromQueryParam;
+    } else if (typeInfo !== 'ignored' && typeInfo !== 'unknown') {
+        type = typeInfo; // Use the type detected by getVideoType
+    }
+
+    // Early skip if type is ignored
+    if (type === 'ignored') {
+        return;
+    }
+
     // Normalize URL to avoid duplicates
     const normalizedUrl = normalizeUrl(url);
-    
+
     // Skip if already detected
     if (detectedVideos.has(normalizedUrl)) {
         return;
     }
-    
+
     // Add to detected videos
     detectedVideos.add(normalizedUrl);
-    
-    // Determine type from URL
-    const type = getVideoType(url);
-    
+
     // Send to background
     chrome.runtime.sendMessage({
         action: 'addVideo',
         url: url,
         source: source,
         type: type,
+        foundFromQueryParam: foundFromQueryParam,
         ...additionalInfo
     });
 }
@@ -276,7 +315,7 @@ function getVideoType(url) {
     
     try {
         const urlObj = new URL(url);
-        
+                
         // Early rejection: skip tracking images and known bad extensions
         const badExtensions = /\.(gif|png|jpg|jpeg|webp|bmp|svg)(\?|$)/i;
         if (badExtensions.test(urlObj.pathname)) {
@@ -287,10 +326,11 @@ function getVideoType(url) {
                     if (decoded.match(/\.m3u8(\?|$)/) || decoded.match(/\.mpd(\?|$)/)) {
                         // Only consider it if it looks like an actual URL
                         if (decoded.includes('http') || decoded.startsWith('/') || decoded.includes('://')) {
-                            // Return both the embedded URL and its type
+                            // Return both the embedded URL and its type, plus a flag indicating it was found in a query param
                             return {
                                 url: decoded,
-                                type: decoded.match(/\.m3u8(\?|$)/) ? 'hls' : 'dash'
+                                type: decoded.match(/\.m3u8(\?|$)/) ? 'hls' : 'dash',
+                                foundFromQueryParam: true
                             };
                         }
                     }
@@ -385,10 +425,11 @@ function getVideoType(url) {
                         // Additional validation to prevent false positives:
                         // It should look like an actual URL path, not just text containing "m3u8"
                         (decoded.includes('/') || decoded.match(/^https?:\/\//))) {
-                        // Return both the embedded URL and its type
+                        // Return both the embedded URL and its type, plus a flag indicating it was found in a query param
                         return {
                             url: decoded,
-                            type: 'hls'
+                            type: 'hls',
+                            foundFromQueryParam: true
                         };
                     }
                 }
@@ -397,10 +438,11 @@ function getVideoType(url) {
                     // Similar validation for DASH manifests
                     if ((decoded.includes('http') || decoded.startsWith('/') || decoded.includes('://')) &&
                         (decoded.includes('/') || decoded.match(/^https?:\/\//))) {
-                        // Return both the embedded URL and its type
+                        // Return both the embedded URL and its type, plus a flag indicating it was found in a query param
                         return {
                             url: decoded,
-                            type: 'dash'
+                            type: 'dash',
+                            foundFromQueryParam: true
                         };
                     }
                 }
@@ -430,14 +472,122 @@ function normalizeUrl(url) {
     
     try {
         const urlObj = new URL(url);
+        
         // Remove common tracking or cache-busting parameters
         urlObj.searchParams.delete('_t');
         urlObj.searchParams.delete('_r');
         urlObj.searchParams.delete('cache');
+        urlObj.searchParams.delete('_');
+        urlObj.searchParams.delete('time');
+        urlObj.searchParams.delete('timestamp');
+        urlObj.searchParams.delete('random');
+        
+        // For HLS manifest URLs, canonicalize some common patterns
+        if (url.includes('.m3u8') || url.includes('/hls/')) {
+            // Remove common HLS-specific transient params
+            urlObj.searchParams.delete('seq');
+            urlObj.searchParams.delete('segment');
+            urlObj.searchParams.delete('cmsid');
+            urlObj.searchParams.delete('v');
+            urlObj.searchParams.delete('session');
+            
+            // Special case for manifests with media IDs - keep the core URL
+            const pathname = urlObj.pathname.toLowerCase();
+            if (pathname.includes('/manifest') || pathname.includes('/playlist') || 
+                pathname.includes('/master.m3u8') || pathname.includes('/index.m3u8')) {
+                // Try to create a canonical form for better duplicate detection
+                return urlObj.origin + urlObj.pathname;
+            }
+        }
+        
         return urlObj.toString();
     } catch {
         return url;
     }
+}
+
+// After the normalizeUrl function
+
+/**
+ * Validate video URL to filter out tracking pixels and other non-video content
+ * @param {string} url - URL to validate
+ * @return {boolean} True if the URL is a valid video, false otherwise
+ */
+function isValidVideoUrl(url) {
+    try {
+        // Skip blob URLs as they're handled separately
+        if (url.startsWith('blob:')) {
+            return true;
+        }
+        
+        const urlObj = new URL(url);
+        
+        // Early rejection: skip tracking images and known bad extensions
+        const badExtensions = /\.(gif|png|jpg|jpeg|webp|bmp|svg)(\?|$)/i;
+        if (badExtensions.test(urlObj.pathname)) {
+            return false;
+        }
+        
+        // Define patterns for tracking/analytics URLs
+        const ignoredPathPatterns = [
+            /\.gif$/i,                  // tracking pixels
+            /\/ping/i,                  // ping endpoints
+            /\/track/i, /\/pixel/i,
+            /\/stats/i, /\/metric/i,
+            /\/telemetry/i,
+            /\/analytics/i,
+            /jwpltx/, /\/tracking/
+        ];
+
+        // Check if URL matches ignored patterns
+        if (ignoredPathPatterns.some(pattern => pattern.test(urlObj.pathname) || pattern.test(urlObj.hostname))) {
+            return false;
+        }
+        
+        return true;
+    } catch (e) {
+        console.error('Error validating URL:', e);
+        return false;
+    }
+}
+
+/**
+ * Validate video info object and determine if it should be processed
+ * @param {Object} videoInfo - Video information object
+ * @return {Object|null} Valid video info or null if invalid
+ */
+function validateVideoInfo(videoInfo) {
+    if (!videoInfo || !videoInfo.url) {
+        return null;
+    }
+    
+    // Skip invalid URLs
+    if (!isValidVideoUrl(videoInfo.url)) {
+        return null;
+    }
+    
+    // Get and validate type
+    const typeInfo = getVideoType(videoInfo.url);
+    
+    if (typeInfo === 'ignored' || 
+        (typeof typeInfo === 'object' && typeInfo.type === 'ignored')) {
+        return null; 
+    }
+    
+    // If type is an object with URL and type, update videoInfo
+    if (typeof typeInfo === 'object' && typeInfo.url && typeInfo.type) {
+        videoInfo.url = typeInfo.url;
+        videoInfo.type = typeInfo.type;
+        
+        // Propagate foundFromQueryParam flag if present
+        if (typeInfo.foundFromQueryParam) {
+            videoInfo.foundFromQueryParam = true;
+        }
+    } else if (typeInfo !== 'unknown') {
+        videoInfo.type = typeInfo;
+    }
+    
+    return videoInfo;
 }
 
 // Find all video elements and their sources
@@ -446,26 +596,30 @@ function findVideos() {
     
     // Find direct video elements
     document.querySelectorAll('video').forEach(video => {
-        // Check direct src attribute (can be blob or direct)
+        // Check direct src attribute
         if (video.src) {
-            const info = extractVideoInfo(video);
-            if (info) {
-                sources.push(info);
-                detectedVideos.add(normalizeUrl(info.url));
+            const videoInfo = extractVideoInfo(video);
+            if (videoInfo) {
+                sources.push(videoInfo);
+                detectedVideos.add(normalizeUrl(videoInfo.url));
             }
         }
-        
+
         // Check source elements inside the video
         video.querySelectorAll('source').forEach(source => {
             if (source.src) {
-                sources.push({
+                const videoInfo = {
                     url: source.src,
-                    type: getVideoType(source.src),
                     poster: video.poster || null,
                     title: getVideoTitle(video),
                     timestamp: Date.now()
-                });
-                detectedVideos.add(normalizeUrl(source.src));
+                };
+                
+                const validVideo = validateVideoInfo(videoInfo);
+                if (validVideo) {
+                    sources.push(validVideo);
+                    detectedVideos.add(normalizeUrl(validVideo.url));
+                }
             }
         });
     });
@@ -671,32 +825,43 @@ function extractVideoInfo(videoElement) {
     
     if (!src) return null;
     
-    return {
+    // Create basic video info
+    const videoInfo = {
         url: src,
-        type: getVideoType(src),
         poster: videoElement.poster || null,
         title: getVideoTitle(videoElement),
         timestamp: Date.now()
     };
+    
+    // Validate and return
+    return validateVideoInfo(videoInfo);
 }
 
 // Notify background script of new videos
 function notifyBackground(videos) {
     if (!videos || videos.length === 0) return;
-    
-    // Send each video to background
-    videos.forEach(video => {
+
+    // Apply consistent validation to all videos
+    const validVideos = videos
+        .map(video => validateVideoInfo(video))
+        .filter(video => video !== null && video.type !== 'ignored');
+
+    if (validVideos.length === 0) return;
+
+    // Send each valid video to background
+    validVideos.forEach(video => {
         sendVideoToBackground(video.url, video.type, {
             poster: video.poster,
-            title: video.title
+            title: video.title,
+            foundFromQueryParam: video.foundFromQueryParam || false
         });
     });
-    
-    // If popup is open, also notify it directly
+
+    // If popup is open, also notify it directly with cleaned and normalized videos
     if (isPopupOpen) {
         chrome.runtime.sendMessage({
             action: 'newVideoDetected',
-            videos: videos
+            videos: validVideos
         });
     }
 }

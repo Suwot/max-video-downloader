@@ -448,10 +448,31 @@ function normalizeUrl(url) {
     
     try {
         const urlObj = new URL(url);
+        
         // Remove common parameters that don't affect the content
         urlObj.searchParams.delete('_t');
         urlObj.searchParams.delete('_r');
         urlObj.searchParams.delete('cache');
+        urlObj.searchParams.delete('_');
+        urlObj.searchParams.delete('time');
+        urlObj.searchParams.delete('timestamp');
+        urlObj.searchParams.delete('random');
+        
+        // For HLS and DASH, keep a more canonical form
+        if (url.includes('.m3u8') || url.includes('.mpd')) {
+            // Remove common streaming parameters
+            urlObj.searchParams.delete('seq');
+            urlObj.searchParams.delete('segment');
+            urlObj.searchParams.delete('session');
+            urlObj.searchParams.delete('cmsid');
+            
+            // For manifest files, simply use the path for better duplicate detection
+            if (url.includes('/manifest') || url.includes('/playlist') ||
+                url.includes('/master.m3u8') || url.includes('/index.m3u8')) {
+                return urlObj.origin + urlObj.pathname;
+            }
+        }
+        
         return urlObj.origin + urlObj.pathname + urlObj.search;
     } catch {
         return url;
@@ -482,11 +503,18 @@ function addVideoToTab(tabId, videoInfo) {
             qualities: existingVideo.qualities || [],
             // Update only if new data is present
             poster: videoInfo.poster || existingVideo.poster,
-            title: videoInfo.title || existingVideo.title
+            title: videoInfo.title || existingVideo.title,
+            // Preserve or update foundFromQueryParam flag
+            foundFromQueryParam: videoInfo.foundFromQueryParam || existingVideo.foundFromQueryParam
         };
     } else {
         logDebug('Adding new video:', normalizedUrl);
         videoInfo.timestamp = Date.now();
+    }
+    
+    // Log if this is a URL extracted from query parameters
+    if (videoInfo.foundFromQueryParam) {
+        logDebug('Video URL extracted from query parameters:', videoInfo.url);
     }
     
     videosPerTab[tabId].set(normalizedUrl, videoInfo);
