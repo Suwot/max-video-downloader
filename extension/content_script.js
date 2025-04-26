@@ -235,6 +235,31 @@ function getVideoTitle(videoElement) {
 
 // Check if a URL is likely to be video content
 function isVideoRelatedUrl(url, contentType) {
+    try {
+        // First, quickly check for obvious tracking pixels to avoid processing them further
+        const urlObj = new URL(url);
+        
+        // Early rejection for known tracking pixels
+        if (url.includes('ping.gif') || url.includes('jwpltx.com') || 
+            urlObj.pathname.includes('/pixel') || urlObj.pathname.includes('/track')) {
+            
+            // However, check first if it contains a video URL in query params
+            for (const [key, value] of urlObj.searchParams.entries()) {
+                try {
+                    const decoded = decodeURIComponent(value);
+                    if ((decoded.includes('.m3u8') || decoded.includes('.mpd')) &&
+                        (decoded.includes('http') || decoded.startsWith('/') || decoded.includes('://'))) {
+                        // If we find a video URL embedded, allow this to be processed further
+                        return true;
+                    }
+                } catch {}
+            }
+            
+            // No embedded video URL found, reject this tracking pixel
+            return false;
+        }
+    } catch {}
+    
     // Known video extensions and manifest formats
     const videoPatterns = [
         /\.(mp4|webm|ogg|mov|avi|mkv|flv)(\?|$)/i,   // Direct video files
@@ -473,6 +498,30 @@ function normalizeUrl(url) {
     try {
         const urlObj = new URL(url);
         
+        // Special case for tracking pixels with embedded URLs:
+        // If this is a tracking pixel with video URLs in parameters,
+        // we want to avoid duplicate detection between the original and extracted URL
+        if (url.includes('ping.gif') || url.includes('jwpltx.com') || urlObj.pathname.includes('/pixel')) {
+            // Look for embedded video URLs in query parameters
+            for (const [key, value] of urlObj.searchParams.entries()) {
+                try {
+                    const decoded = decodeURIComponent(value);
+                    if ((decoded.includes('.m3u8') || decoded.includes('.mpd')) &&
+                        (decoded.includes('http') || decoded.startsWith('/') || decoded.includes('://'))) {
+                        // Use the embedded URL for normalization to prevent duplicate detection
+                        try {
+                            // Handle relative URLs
+                            const fullUrl = decoded.startsWith('/') ? 
+                                (urlObj.origin + decoded) : decoded;
+                            return normalizeUrl(fullUrl); // Recursively normalize the extracted URL
+                        } catch (e) {
+                            // If we can't parse the extracted URL, fall back to default normalization
+                        }
+                    }
+                } catch {}
+            }
+        }
+        
         // Remove common tracking or cache-busting parameters
         urlObj.searchParams.delete('_t');
         urlObj.searchParams.delete('_r');
@@ -561,27 +610,35 @@ function validateVideoInfo(videoInfo) {
         return null;
     }
     
-    // Skip invalid URLs
-    if (!isValidVideoUrl(videoInfo.url)) {
-        return null;
-    }
-    
-    // Get and validate type
+    // Get and validate type - this may also change the URL if it's extracted from a query param
     const typeInfo = getVideoType(videoInfo.url);
     
+    // If type is ignored, skip this video
     if (typeInfo === 'ignored' || 
         (typeof typeInfo === 'object' && typeInfo.type === 'ignored')) {
         return null; 
     }
     
-    // If type is an object with URL and type, update videoInfo
+    // If URL wasn't validated by getVideoType, do a secondary check
+    if (typeof typeInfo !== 'object' && typeInfo !== 'ignored') {
+        // Skip invalid URLs
+        if (!isValidVideoUrl(videoInfo.url)) {
+            return null;
+        }
+    }
+    
+    // If type is an object with URL and type, update videoInfo with extracted URL
     if (typeof typeInfo === 'object' && typeInfo.url && typeInfo.type) {
+        // Original URL might be needed for debugging, so store it
+        videoInfo.originalUrl = videoInfo.url;
+        // Replace with the extracted URL
         videoInfo.url = typeInfo.url;
         videoInfo.type = typeInfo.type;
         
         // Propagate foundFromQueryParam flag if present
         if (typeInfo.foundFromQueryParam) {
             videoInfo.foundFromQueryParam = true;
+            console.log('Found URL in query parameter:', typeInfo.url, 'from', videoInfo.originalUrl);
         }
     } else if (typeInfo !== 'unknown') {
         videoInfo.type = typeInfo;

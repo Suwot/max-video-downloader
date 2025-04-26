@@ -139,20 +139,25 @@ async function fetchHLSManifest(url, tabId) {
  * @param {number} tabId - Tab ID
  */
 async function processHLSRelationships(video, tabId) {
-    // Early rejection of tracking URLs
+    // Early rejection check for null or missing URL
     if (!video || !video.url) return null;
     
-    // Don't filter if this URL was extracted from a query parameter
-    // or if this is a validated HLS/DASH URL
-    if (!video.foundFromQueryParam && video.type !== 'hls' && video.type !== 'dash') {
-        // Specific check for the ping.gif issue mentioned in the request
+    // Always keep videos that were found in query parameters - 
+    // they've already been validated and the URL is the extracted one
+    if (video.foundFromQueryParam) {
+        return video;
+    }
+    
+    // For regular videos, apply filtering for tracking pixels
+    if (video.type !== 'hls' && video.type !== 'dash') {
+        // Specific check for known tracking pixels
         if (video.url.includes('ping.gif') || video.url.includes('jwpltx.com')) {
             logDebug('Rejecting tracking URL in processHLSRelationships:', video.url);
             return null;
         }
     }
     
-    // Skip non-HLS videos
+    // Skip non-HLS videos for manifest parsing
     if (video.type !== 'hls') return video;
 
     // First check if this URL is a known variant of a master playlist

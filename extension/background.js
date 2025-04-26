@@ -486,10 +486,27 @@ function addVideoToTab(tabId, videoInfo) {
         videosPerTab[tabId] = new Map();
     }
     
+    // Skip known ping/tracking URLs that don't have extracted video URLs
+    if ((videoInfo.url.includes('ping.gif') || videoInfo.url.includes('jwpltx.com')) && !videoInfo.foundFromQueryParam) {
+        logDebug('Skipping tracking URL without embedded video URL:', videoInfo.url);
+        return;
+    }
+
     const normalizedUrl = normalizeUrl(videoInfo.url);
     
     // Get existing video info if any
     const existingVideo = videosPerTab[tabId].get(normalizedUrl);
+    
+    // For URLs extracted from query params, use them for deduplication
+    if (videoInfo.foundFromQueryParam) {
+        // Log the original source URL that contained this video URL
+        if (videoInfo.originalUrl) {
+            logDebug('Using extracted URL instead of original tracking URL:', videoInfo.url, 
+                    'extracted from:', videoInfo.originalUrl);
+        } else {
+            logDebug('Found video URL in query parameter:', videoInfo.url);
+        }
+    }
     
     // Merge with existing data if present
     if (existingVideo) {
@@ -512,11 +529,7 @@ function addVideoToTab(tabId, videoInfo) {
         videoInfo.timestamp = Date.now();
     }
     
-    // Log if this is a URL extracted from query parameters
-    if (videoInfo.foundFromQueryParam) {
-        logDebug('Video URL extracted from query parameters:', videoInfo.url);
-    }
-    
+    // Store video info
     videosPerTab[tabId].set(normalizedUrl, videoInfo);
     logDebug('Current video count for tab', tabId, ':', videosPerTab[tabId].size);
     

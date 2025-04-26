@@ -30,9 +30,9 @@ import { getStreamQualities } from './video-processor.js';
 function isValidVideoForRendering(video) {
     if (!video || !video.url) return false;
     
-    // If the video was explicitly found from a query parameter, trust it regardless
-    // This means content_script.js already validated it as a legitimate video URL
-    if (video.foundFromQueryParam) {
+    // If the video was explicitly found from a query parameter, always trust it
+    // This means content_script.js already extracted a legitimate video URL from a tracking pixel
+    if (video.foundFromQueryParam === true) {
         return true;
     }
     
@@ -42,10 +42,15 @@ function isValidVideoForRendering(video) {
         
         const urlObj = new URL(video.url);
         
+        // Reject ping.gif and other tracking pixels directly
+        if (video.url.includes('ping.gif') || video.url.includes('jwpltx.com')) {
+            return false;
+        }
+        
         // Check for image extensions that shouldn't be rendered as videos
         const badExtensions = /\.(gif|png|jpg|jpeg|webp|bmp|svg)(\?|$)/i;
         if (badExtensions.test(urlObj.pathname)) {
-            // Don't reject m3u8 and mpd files that happen to be in query params of image URLs
+            // Only allow HLS and DASH videos that were already validated
             if (video.type === 'hls' || video.type === 'dash') {
                 return true;
             }
@@ -69,11 +74,6 @@ function isValidVideoForRendering(video) {
             trackingPatterns.some(pattern => 
                 pattern.test(urlObj.pathname) || pattern.test(urlObj.hostname)
             )) {
-            return false;
-        }
-        
-        // Special case for ping.gif - only filter if it's not already processed as HLS/DASH
-        if (video.url.includes('ping.gif') && video.type !== 'hls' && video.type !== 'dash') {
             return false;
         }
         
