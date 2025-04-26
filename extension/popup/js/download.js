@@ -54,12 +54,35 @@ export async function handleDownload(button, url, type) {
                 // Update button background to show progress
                 button.style.backgroundImage = `linear-gradient(to right, #1565C0 ${progress}%, #1976D2 ${progress}%)`;
                 
-                // Update text with progress and speed
-                let text = `${progress}%`;
+                // Update text with enhanced information
+                let text = `${Math.round(progress)}%`;
+                
+                // Add segment information if available
+                if (response.segmentProgress) {
+                    text += ` (${response.segmentProgress})`;
+                }
+                
+                // Add speed information
                 if (response.speed) {
                     text += ` • ${formatSpeed(response.speed)}`;
                 }
+                
+                // Add ETA if available
+                if (response.eta && response.eta > 0 && progress < 100) {
+                    text += ` • ETA: ${formatTime(response.eta)}`;
+                }
+                
                 button.querySelector('span').textContent = text;
+                
+                // Adjust confidence through color saturation if available
+                if (response.confidence !== undefined && response.confidence !== null) {
+                    // Higher confidence = more vivid blue
+                    const saturation = 50 + Math.round(response.confidence * 50);
+                    const lightness = 50 - Math.round(response.confidence * 10);
+                    const startColor = `hsl(210, ${saturation}%, ${lightness}%)`;
+                    const endColor = `hsl(210, ${saturation-10}%, ${lightness+5}%)`;
+                    button.style.backgroundImage = `linear-gradient(to right, ${startColor} ${progress}%, ${endColor} ${progress}%)`;
+                }
                 
             } else if (response?.success) {
                 // Show complete state
@@ -85,7 +108,8 @@ export async function handleDownload(button, url, type) {
         // Send download request
         chrome.runtime.sendMessage({
             type: type === 'hls' ? 'downloadHLS' : 'download',
-            url: url
+            url: url,
+            manifestUrl: url // Pass the manifest URL for better segment tracking
         });
         
     } catch (error) {

@@ -216,17 +216,36 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     // Create response handler
     const responseHandler = (response) => {
       if (response && response.type === 'progress' && !hasError) {
+        // Ensure all progress data is passed through, including confidence levels,
+        // segment tracking, ETA, and other enhanced tracking metrics
+        const enhancedResponse = {
+          ...response,
+          type: 'progress',
+          // Format filename if available
+          filename: response.filename || msg.filename || getFilenameFromUrl(msg.url)
+        };
+        
         // Update notification less frequently
         if (response.progress % 10 === 0) {
+          let message = `Downloading: ${Math.round(response.progress)}%`;
+          
+          // Add segment info if available
+          if (response.segmentProgress) {
+            message += ` (Segment: ${response.segmentProgress})`;
+          }
+          
           chrome.notifications.update(notificationId, {
-            message: `Downloading: ${response.progress}%`
+            message: message
           });
         }
+        
+        // Debug log to help track what's being passed to UI
+        console.log('Forwarding progress data to UI:', enhancedResponse);
         
         // Forward progress to all connected popups
         ports.forEach(port => {
           try {
-            port.postMessage(response);
+            port.postMessage(enhancedResponse);
           } catch (e) {
             console.error('Error sending progress to port:', e);
           }
@@ -247,13 +266,14 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       message: 'Starting download...'
     });
 
-    // Send to native host using our service
+    // Send to native host using our service with enhanced parameters
     nativeHostService.sendMessage({
       type: 'download',
       url: msg.url,
       filename: msg.filename || 'video.mp4',
       savePath: msg.savePath,
-      quality: msg.quality
+      quality: msg.quality,
+      manifestUrl: msg.manifestUrl || msg.url // Pass manifest URL for better progress tracking
     }, responseHandler).catch(error => {
       handleDownloadError(error.message, notificationId, ports);
     });

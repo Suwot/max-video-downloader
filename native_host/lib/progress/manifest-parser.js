@@ -27,28 +27,50 @@ class ManifestParser {
      */
     async parse(url, type) {
         if (!url) {
+            logDebug('MANIFEST-PARSER ERROR: No URL provided');
             return null;
         }
 
         try {
             logDebug(`Fetching ${type} manifest from ${url}`);
+            
+            // Validate URL format before fetching
+            try {
+                new URL(url);
+            } catch (urlError) {
+                logDebug(`MANIFEST-PARSER ERROR: Invalid URL format: ${url}`, urlError);
+                return null;
+            }
+            
             const content = await this.fetchManifest(url);
             
             if (!content) {
-                logDebug('Failed to fetch manifest');
+                logDebug(`MANIFEST-PARSER ERROR: Failed to fetch manifest content from ${url}`);
                 return null;
             }
+            
+            // Log the first 200 characters of content to verify it's valid
+            logDebug(`MANIFEST-PARSER: Content preview: ${content.substring(0, 200)}${content.length > 200 ? '...' : ''}`);
 
             if (type === 'hls') {
-                return this.parseHLS(content, url);
+                const result = this.parseHLS(content, url);
+                if (!result.segmentCount && !result.totalDuration) {
+                    logDebug(`MANIFEST-PARSER ERROR: HLS parsing failed to extract segments or duration from ${url}`);
+                }
+                return result;
             } else if (type === 'dash') {
-                return this.parseDASH(content, url);
+                const result = this.parseDASH(content, url);
+                if (!result.segmentCount && !result.totalDuration) {
+                    logDebug(`MANIFEST-PARSER ERROR: DASH parsing failed to extract segments or duration from ${url}`);
+                }
+                return result;
             } else {
-                logDebug('Unknown manifest type:', type);
+                logDebug(`MANIFEST-PARSER ERROR: Unknown manifest type: ${type}`);
                 return null;
             }
         } catch (error) {
-            logDebug('Error parsing manifest:', error.message);
+            logDebug('MANIFEST-PARSER ERROR: Exception during parsing:', error.message);
+            logDebug('MANIFEST-PARSER ERROR: Stack trace:', error.stack);
             return null;
         }
     }
@@ -64,6 +86,8 @@ class ManifestParser {
                 const urlObj = new URL(url);
                 const protocol = urlObj.protocol === 'https:' ? https : http;
                 
+                logDebug(`MANIFEST-PARSER: Fetching from ${urlObj.protocol}//${urlObj.hostname}${urlObj.pathname}${urlObj.search}`);
+                
                 const options = {
                     method: 'GET',
                     hostname: urlObj.hostname,
@@ -71,13 +95,19 @@ class ManifestParser {
                     port: urlObj.port || (urlObj.protocol === 'https:' ? 443 : 80),
                     timeout: 10000, // 10 second timeout
                     headers: {
-                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                        'Accept': '*/*',
+                        'Accept-Encoding': 'gzip, deflate, br',
+                        'Connection': 'keep-alive'
                     }
                 };
                 
                 const req = protocol.request(options, (res) => {
+                    logDebug(`MANIFEST-PARSER: Response status: HTTP ${res.statusCode}`);
+                    logDebug(`MANIFEST-PARSER: Response headers:`, JSON.stringify(res.headers, null, 2));
+                    
                     if (res.statusCode !== 200) {
-                        logDebug(`Failed to fetch manifest: HTTP ${res.statusCode}`);
+                        logDebug(`MANIFEST-PARSER ERROR: Failed to fetch manifest: HTTP ${res.statusCode} from ${url}`);
                         resolve(null);
                         return;
                     }
@@ -89,25 +119,28 @@ class ManifestParser {
                     });
                     
                     res.on('end', () => {
+                        logDebug(`MANIFEST-PARSER: Successfully fetched manifest, size: ${data.length} bytes`);
                         resolve(data);
                     });
                 });
                 
                 req.on('error', (error) => {
-                    logDebug('Error fetching manifest:', error.message);
+                    logDebug(`MANIFEST-PARSER ERROR: Error fetching manifest: ${error.message}`);
+                    logDebug(`MANIFEST-PARSER ERROR: Network error details:`, error.stack || '(No stack trace)');
                     resolve(null);
                 });
                 
                 req.on('timeout', () => {
                     req.destroy();
-                    logDebug('Manifest request timed out');
+                    logDebug(`MANIFEST-PARSER ERROR: Request timed out after 10 seconds for ${url}`);
                     resolve(null);
                 });
                 
                 req.end();
                 
             } catch (error) {
-                logDebug('Error in fetch manifest:', error.message);
+                logDebug(`MANIFEST-PARSER ERROR: Exception in fetch manifest: ${error.message}`);
+                logDebug(`MANIFEST-PARSER ERROR: Stack trace:`, error.stack || '(No stack trace)');
                 resolve(null);
             }
         });

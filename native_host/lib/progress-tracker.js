@@ -103,23 +103,29 @@ class ProgressTracker {
         if (type === 'hls' || type === 'dash') {
             logDebug(`Streaming media (${type}) detected, skipping content-length strategy`);
             
-            // For streaming media, try adaptive bitrate first
-            if (await this.tryStrategy('adaptive-bitrate', { url, type })) {
-                logDebug('Using adaptive bitrate strategy for streaming media');
-                return;
-            }
-            
-            // Then try segment tracking if available
+            // Important: Try segment tracking FIRST for streaming media
+            logDebug(`STRATEGY: Attempting to use segment tracking strategy first for ${type}`);
             if (await this.tryStrategy('segment', { url, type })) {
-                logDebug('Using segment tracking strategy for streaming media');
+                logDebug('STRATEGY: Successfully initialized segment tracking strategy');
                 return;
             }
+            logDebug('STRATEGY: Segment tracking strategy failed or unavailable');
             
-            // Fall back to time-based
-            if (await this.tryStrategy('time-based', { url, type })) {
-                logDebug('Using time-based strategy for streaming media');
+            // Then try adaptive bitrate as fallback
+            logDebug(`STRATEGY: Falling back to adaptive bitrate strategy for ${type}`);
+            if (await this.tryStrategy('adaptive-bitrate', { url, type })) {
+                logDebug('STRATEGY: Using adaptive bitrate strategy for streaming media');
                 return;
             }
+            logDebug('STRATEGY: Adaptive bitrate strategy failed or unavailable');
+            
+            // Last resort: time-based
+            logDebug(`STRATEGY: Falling back to time-based strategy for ${type}`);
+            if (await this.tryStrategy('time-based', { url, type })) {
+                logDebug('STRATEGY: Using time-based strategy for streaming media');
+                return;
+            }
+            logDebug('STRATEGY: All strategies failed for streaming media');
         } else {
             // For non-streaming media, try content-length first
             if (await this.tryStrategy('content-length', { url, type })) {
@@ -153,19 +159,33 @@ class ProgressTracker {
      */
     async tryStrategy(name, options) {
         if (!this.strategies[name]) {
+            logDebug(`STRATEGY: Strategy '${name}' not registered`);
             return false;
         }
         
+        logDebug(`STRATEGY: Attempting to initialize '${name}' strategy`);
+        
         try {
             const success = this.setStrategy(name, options);
-            if (success && this.strategy.initialize) {
-                // The key fix: return the result of initialize()
-                const initResult = await this.strategy.initialize(options);
-                return initResult;
+            if (!success) {
+                logDebug(`STRATEGY: Failed to set '${name}' strategy`);
+                return false;
+            }
+            
+            if (this.strategy.initialize) {
+                logDebug(`STRATEGY: Calling initialize() for '${name}' strategy`);
+                try {
+                    const initResult = await this.strategy.initialize(options);
+                    logDebug(`STRATEGY: Initialize '${name}' returned: ${initResult}`);
+                    return initResult;
+                } catch (initError) {
+                    logDebug(`STRATEGY: Error during '${name}' initialization:`, initError);
+                    return false;
+                }
             }
             return success;
         } catch (error) {
-            logDebug(`Error initializing strategy '${name}':`, error);
+            logDebug(`STRATEGY: Error creating '${name}' strategy:`, error);
             return false;
         }
     }

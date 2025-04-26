@@ -37,18 +37,34 @@ class SegmentTrackingStrategy extends BaseProgressStrategy {
      * @returns {Promise<boolean>} True if successful
      */
     async initialize(options = {}) {
-        if (!this.url || !this.type || (this.type !== 'hls' && this.type !== 'dash')) {
+        if (!this.url) {
+            logDebug('SEGMENT-TRACKING ERROR: No URL provided');
+            return false;
+        }
+        
+        if (!this.type) {
+            logDebug('SEGMENT-TRACKING ERROR: No media type provided');
+            return false;
+        }
+        
+        if (this.type !== 'hls' && this.type !== 'dash') {
+            logDebug(`SEGMENT-TRACKING ERROR: Unsupported media type: ${this.type}, must be 'hls' or 'dash'`);
             return false;
         }
         
         try {
+            logDebug(`SEGMENT-TRACKING: Initializing for ${this.type} manifest at ${this.url}`);
+            
             const parser = new ManifestParser();
             this.manifestInfo = await parser.parse(this.url, this.type);
             
             if (!this.manifestInfo) {
-                logDebug('Failed to parse manifest, segment tracking not available');
+                logDebug('SEGMENT-TRACKING ERROR: Manifest parser returned null, likely failed to fetch or parse manifest');
                 return false;
             }
+            
+            // Log all manifest info for debugging
+            logDebug('SEGMENT-TRACKING: Manifest info received:', JSON.stringify(this.manifestInfo, null, 2));
             
             // For master playlists, we need to parse the highest quality variant
             if (this.manifestInfo.isMaster && this.manifestInfo.variants && this.manifestInfo.variants.length > 0) {
@@ -56,12 +72,13 @@ class SegmentTrackingStrategy extends BaseProgressStrategy {
                 const sortedVariants = this.manifestInfo.variants.sort((a, b) => b.bandwidth - a.bandwidth);
                 const highestQualityVariant = sortedVariants[0];
                 
-                logDebug(`Using highest quality variant with bandwidth ${highestQualityVariant.bandwidth}`);
+                logDebug(`SEGMENT-TRACKING: Using highest quality variant with bandwidth ${highestQualityVariant.bandwidth}`);
+                logDebug(`SEGMENT-TRACKING: Variant URL: ${highestQualityVariant.url}`);
                 
                 // Parse the highest quality variant
                 this.manifestInfo = await parser.parse(highestQualityVariant.url, this.type);
                 if (!this.manifestInfo) {
-                    logDebug('Failed to parse variant manifest');
+                    logDebug('SEGMENT-TRACKING ERROR: Failed to parse variant manifest');
                     return false;
                 }
             }
@@ -69,7 +86,7 @@ class SegmentTrackingStrategy extends BaseProgressStrategy {
             // For success, we need either segment count or duration + bandwidth
             if (this.manifestInfo.segmentCount > 0) {
                 this.totalSegments = this.manifestInfo.segmentCount;
-                logDebug(`Segment tracking initialized with ${this.totalSegments} segments`);
+                logDebug(`SEGMENT-TRACKING: Successfully initialized with ${this.totalSegments} segments`);
                 this.confidenceLevel = 0.8; // High confidence with segment count
                 return true;
             }
@@ -79,15 +96,30 @@ class SegmentTrackingStrategy extends BaseProgressStrategy {
                 this.totalDuration = this.manifestInfo.totalDuration;
                 this.estimatedTotalSize = (this.manifestInfo.totalDuration * this.manifestInfo.bandwidth) / 8; // Convert bits to bytes
                 
-                logDebug(`Segment tracking initialized with duration ${this.totalDuration}s and bitrate ${this.manifestInfo.bandwidth/1000}kbps`);
+                logDebug(`SEGMENT-TRACKING: Initialized with duration ${this.totalDuration}s and bitrate ${this.manifestInfo.bandwidth/1000}kbps`);
+                logDebug(`SEGMENT-TRACKING: Estimated total size: ${this.estimatedTotalSize} bytes (${Math.round(this.estimatedTotalSize/1024/1024)}MB)`);
                 this.confidenceLevel = 0.7; // Good confidence with duration and bitrate
                 return true;
             }
             
-            logDebug('Insufficient information for segment tracking');
+            logDebug('SEGMENT-TRACKING ERROR: Insufficient information for segment tracking');
+            logDebug('SEGMENT-TRACKING ERROR: Need either segment count or both duration and bandwidth');
+            
+            // Report what was missing
+            if (this.manifestInfo.segmentCount <= 0) {
+                logDebug('SEGMENT-TRACKING ERROR: Missing segment count in manifest');
+            }
+            if (this.manifestInfo.totalDuration <= 0) {
+                logDebug('SEGMENT-TRACKING ERROR: Missing or invalid duration in manifest');
+            }
+            if (this.manifestInfo.bandwidth <= 0) {
+                logDebug('SEGMENT-TRACKING ERROR: Missing or invalid bandwidth in manifest');
+            }
+            
             return false;
         } catch (error) {
-            logDebug('Error initializing segment tracking strategy:', error);
+            logDebug('SEGMENT-TRACKING ERROR: Exception during initialization:', error.message);
+            logDebug('SEGMENT-TRACKING ERROR: Stack trace:', error.stack);
             return false;
         }
     }
