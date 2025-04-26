@@ -45,6 +45,10 @@ export function initializeUI() {
     const refreshContainer = document.createElement('div');
     refreshContainer.className = 'refresh-container';
     
+    // Create left button container for action buttons
+    const leftButtonsContainer = document.createElement('div');
+    leftButtonsContainer.className = 'left-buttons-container';
+    
     // Create refresh button
     const refreshButton = document.createElement('button');
     refreshButton.className = 'refresh-button';
@@ -53,21 +57,17 @@ export function initializeUI() {
         <svg viewBox="0 0 24 24" width="16" height="16">
             <path d="M17.65 6.35A7.958 7.958 0 0012 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0112 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
         </svg>
-        Refresh
+        <span>Refresh</span>
     `;
     
     // Add direct event listener for UI feedback
     refreshButton.addEventListener('click', async function() {
         const button = this;
-        const originalText = button.innerHTML;
+        const originalText = button.querySelector('span').textContent;
         
         // Update button text and add loading class
-        button.innerHTML = `
-            <svg viewBox="0 0 24 24" width="16" height="16" class="spinning">
-                <path d="M17.65 6.35A7.958 7.958 0 0012 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0112 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
-            </svg>
-            Refreshing...
-        `;
+        button.querySelector('svg').classList.add('spinning');
+        button.querySelector('span').textContent = 'Refreshing';
         button.classList.add('loading');
         button.disabled = true;
         
@@ -84,11 +84,71 @@ export function initializeUI() {
             console.error('Error refreshing videos:', error);
         } finally {
             // Restore button text and remove loading class
-            button.innerHTML = originalText;
+            button.querySelector('svg').classList.remove('spinning');
+            button.querySelector('span').textContent = originalText;
             button.classList.remove('loading');
             button.disabled = false;
         }
     });
+    
+    // Create clear cache button
+    const clearCacheButton = document.createElement('button');
+    clearCacheButton.className = 'clear-cache-button';
+    clearCacheButton.id = 'clear-cache-button';
+    clearCacheButton.innerHTML = `
+        <svg viewBox="0 0 24 24" width="16" height="16">
+            <path d="M15 16h4v2h-4zm0-8h7v2h-7zm0 4h6v2h-6zM3 18c0 1.1.9 2 2 2h6c1.1 0 2-.9 2-2V8H3v10zm2-8h6v8H5v-8zm5-6H6L5 5H2v2h12V5h-3z"/>
+        </svg>
+        <span>Clear Cache</span>
+    `;
+    
+    // Add event listener for clear cache button
+    clearCacheButton.addEventListener('click', async function() {
+        const button = this;
+        const originalText = button.querySelector('span').textContent;
+        
+        // Update button text and add loading class
+        button.querySelector('svg').classList.add('spinning');
+        button.querySelector('span').textContent = 'Clearing';
+        button.classList.add('loading');
+        button.disabled = true;
+        
+        try {
+            // Import and call the clearAllCaches function
+            const { clearAllCaches } = await import('./state.js');
+            await clearAllCaches();
+            
+            // Force a full refresh with forceRefresh=true
+            const { updateVideoList } = await import('./video-fetcher.js');
+            await updateVideoList(true);
+            
+            // Show confirmation tooltip
+            const tooltip = document.createElement('div');
+            tooltip.className = 'tooltip';
+            tooltip.textContent = 'Cache cleared!';
+            button.appendChild(tooltip);
+            
+            setTimeout(() => {
+                tooltip.remove();
+            }, 2000);
+            
+        } catch (error) {
+            console.error('Error clearing cache:', error);
+        } finally {
+            // Restore button text and remove loading class
+            button.querySelector('svg').classList.remove('spinning');
+            button.querySelector('span').textContent = originalText;
+            button.classList.remove('loading');
+            button.disabled = false;
+        }
+    });
+    
+    // Add buttons to left container
+    leftButtonsContainer.append(refreshButton, clearCacheButton);
+    
+    // Create right container for theme toggle
+    const rightButtonsContainer = document.createElement('div');
+    rightButtonsContainer.className = 'right-buttons-container';
     
     // Create theme toggle button
     const themeToggle = document.createElement('button');
@@ -102,7 +162,13 @@ export function initializeUI() {
         applyTheme(newTheme);
     });
     
-    refreshContainer.append(refreshButton, themeToggle);
+    // Add theme toggle to right container
+    rightButtonsContainer.appendChild(themeToggle);
+    
+    // Add both containers to the refresh container
+    refreshContainer.appendChild(leftButtonsContainer);
+    refreshContainer.appendChild(rightButtonsContainer);
+    
     container.parentElement.insertBefore(refreshContainer, container);
     
     // Save scroll position on scroll
@@ -113,6 +179,7 @@ export function initializeUI() {
     return {
         container,
         refreshButton,
+        clearCacheButton,
         themeToggle,
         refreshContainer
     };

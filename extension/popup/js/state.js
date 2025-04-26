@@ -715,3 +715,41 @@ export function purgeExpiredCaches() {
         return false;
     }
 }
+
+/**
+ * Clear all caches for a fresh start
+ * This completely resets all cached data for testing purposes
+ * @returns {Promise<boolean>} True if caches were cleared successfully
+ */
+export async function clearAllCaches() {
+    try {
+        logDebug('Clearing all extension caches for fresh testing');
+        
+        // Reset all in-memory caches
+        cachedVideos = null;
+        resolutionCache.clear();
+        posterCache.clear();
+        mediaInfoCache.clear();
+        streamMetadataCache.clear();
+        
+        // Clear all storage caches
+        await chrome.storage.local.remove([
+            'cachedVideos',
+            'videosCacheTimestamp',
+            'posterCache',
+            'mediaInfoCache',
+            'streamMetadataCache',
+            'resolutionCache',
+            CACHE_VERSION_KEY
+        ]);
+        
+        // Set fresh cache version marker
+        await chrome.storage.local.set({ [CACHE_VERSION_KEY]: CACHE_VERSION });
+        
+        logDebug('All caches cleared successfully');
+        return true;
+    } catch (error) {
+        handleError('Cache', 'clearing all caches', error);
+        return false;
+    }
+}
