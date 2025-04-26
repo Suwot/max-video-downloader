@@ -633,12 +633,16 @@ export function getMediaInfoFromCache(url) {
     try {
         const cached = mediaInfoCache.get(url);
         if (cached) {
-            // Update lastAccessed for LRU if it's an object
-            if (typeof cached === 'object' && !cached.lastAccessed) {
+            // Update lastAccessed for LRU if it's an object with timestamp
+            if (typeof cached === 'object' && cached.timestamp) {
                 cached.lastAccessed = Date.now();
                 mediaInfoCache.set(url, cached);
+                
+                // Ensure we return the unwrapped data
+                return cached.data;
             }
-            return cached.data || cached;
+            // For direct objects (legacy cache format)
+            return cached;
         }
         return null;
     } catch (error) {

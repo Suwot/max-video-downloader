@@ -74,13 +74,15 @@ document.addEventListener('DOMContentLoaded', async () => {
             console.log('Error notifying content script:', e);
         }
 
-        // Always update from background script for fresh data
-        console.log('Requesting fresh videos from background...');
-        const freshVideos = await updateVideoList(true, activeTabId);
+        // Only force refresh if we don't have cached videos or if they're stale
+        // This is crucial to preserve metadata on popup reopens
+        const forceRefresh = !hasCachedVideos;
+        console.log(hasCachedVideos ? 'Using cached videos, requesting background refresh' : 'Requesting fresh videos from background...');
+        const freshVideos = await updateVideoList(forceRefresh, activeTabId);
         
         // Hide loading state if we have videos
         if (freshVideos && freshVideos.length > 0) {
-            console.log('Received fresh videos from background:', freshVideos.length);
+            console.log('Received videos from background:', freshVideos.length);
             hideLoadingState();
         } else if (!hasCachedVideos) {
             // If no cached videos and no fresh videos, show "no videos" message
