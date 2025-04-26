@@ -265,3 +265,39 @@ The extension implements a sophisticated URL extraction system that can identify
 6. **Visual Indication**: Displays an "Extracted" badge in the UI for URLs found via this method
 
 This system significantly enhances the extension's ability to detect videos that would otherwise be missed.
+
+### Cache and State Management System
+
+The extension utilizes a robust cache and state management system that ensures efficient operation while minimizing memory usage:
+
+1. **Centralized State Management** (`popup/js/state.js`):
+   - Provides a single source of truth for application state
+   - Manages caching of videos, posters, and media information
+   - Handles user preferences persistence
+   - Controls UI state like theme settings and group collapsing
+
+2. **Memory-Optimized Caching**:
+   - Implements size limits for all cache types to prevent memory bloat
+   - Uses LRU (Least Recently Used) eviction policy for efficient cache management
+   - Tracks access patterns to prioritize frequently used items
+   - Automatically purges expired or outdated cache entries
+
+3. **Versioned Cache Structures**:
+   - Includes version information with all cached data
+   - Provides migration paths between different cache versions
+   - Ensures forward compatibility when cache schema changes
+   - Gracefully handles cache invalidation when necessary
+
+4. **Robust Error Handling**:
+   - Implements comprehensive error recovery mechanisms
+   - Provides fallback values when cache operations fail
+   - Categorizes and logs errors for diagnostics
+   - Ensures the UI remains responsive even during storage failures
+
+5. **Storage Strategy**:
+   - Uses `chrome.storage.sync` for user preferences that should sync across devices
+   - Uses `chrome.storage.local` for larger caches and app-specific data
+   - Optimizes storage operations to stay within Chrome's quota limits
+   - Provides clear documentation for storage usage patterns
+
+This sophisticated state management approach ensures the extension remains responsive and reliable even when processing large numbers of videos or when used across multiple browsing sessions.
