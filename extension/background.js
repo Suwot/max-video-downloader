@@ -9,6 +9,10 @@
  * - Handles native host communication via Native Host Service
  * - Implements browser action icon and badge functionality  
  * - Provides centralized video metadata storage for popup UI
+ * - Filters tracking pixels while preserving legitimate video URLs
+ * - Processes URLs extracted from query parameters with proper metadata
+ * - Maintains the foundFromQueryParam flag throughout the video pipeline
+ * - Deduplicates videos using smart URL normalization
  */
 
 // background.js - Service worker for the extension

@@ -9,6 +9,10 @@
  * - Manages video item interaction states
  * - Provides context menu functionality for video items
  * - Handles responsive layout for different screen sizes
+ * - Filters out tracking pixels while preserving extracted media URLs
+ * - Displays visual indicator for videos extracted from query parameters
+ * - Applies consistent validation rules for video rendering
+ * - Provides specialized UI for different video types and formats
  */
 
 // popup/js/video-renderer.js

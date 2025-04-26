@@ -9,6 +9,10 @@
  * - Supports various video source types (direct, HLS, DASH)
  * - Coordinates with background script for cross-tab operation
  * - Provides normalized video objects to the UI components
+ * - Properly handles URLs extracted from query parameters
+ * - Filters tracking pixels while preserving embedded video URLs
+ * - Applies consistent validation for video sources
+ * - Processes HLS relationships while respecting extracted URLs
  */
 
 // Import all from single source

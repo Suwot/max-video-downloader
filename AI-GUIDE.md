@@ -12,6 +12,7 @@ This Chrome/Firefox extension detects and downloads videos from websites, suppor
 - **Content Script**: Injects into web pages to detect videos through DOM inspection and network monitoring
 - **Popup UI**: User interface for displaying detected videos and initiating downloads
 - **Native Host Communication**: Bridge between extension and native processing capabilities
+- **URL Extraction System**: Identifies and extracts legitimate video URLs from query parameters
 
 ### Native Host Components
 
@@ -111,6 +112,16 @@ This Chrome/Firefox extension detects and downloads videos from websites, suppor
 3. Background script processes and categorizes videos
 4. Popup displays videos when user opens extension
 
+### URL Extraction from Query Parameters
+
+1. Content script intercepts tracking pixel URLs (like ping.gif) with query parameters
+2. System analyzes query parameters for embedded video URLs (HLS or DASH manifests)
+3. When a legitimate video URL is found, it's extracted and flagged with `foundFromQueryParam: true`
+4. The extracted URL completely replaces the original tracking pixel URL
+5. The URL is normalized for efficient duplicate detection
+6. The extraction metadata is preserved throughout the pipeline
+7. Popup displays the extracted video with a visual "Extracted" badge
+
 ### Video Download
 
 1. User selects video from popup
@@ -126,6 +137,9 @@ This Chrome/Firefox extension detects and downloads videos from websites, suppor
 - **Cross-Origin Limitations**: Content script uses multiple detection strategies due to cross-origin restrictions
 - **Media Types**: Different approaches are used for different formats (HLS, DASH, direct, blob URLs)
 - **CORS**: Some video requests may be affected by CORS policy
+- **Tracking Pixels**: System handles tracking pixels like ping.gif that may contain legitimate video URLs
+- **URL Normalization**: Enhanced normalization ensures proper deduplication of extracted URLs
+- **Metadata Preservation**: The `foundFromQueryParam` flag is maintained throughout the pipeline to ensure proper handling
 
 ## Extension Structure
 
@@ -142,6 +156,7 @@ This Chrome/Firefox extension detects and downloads videos from websites, suppor
     - **state.js**: Application state management
     - **ui.js**: UI interaction handlers and components
     - **preview.js**: Video preview/thumbnail generation
+    - **video-fetcher.js**: Retrieves and validates video sources from background
 
 ### native_host/
 
@@ -154,3 +169,26 @@ This Chrome/Firefox extension detects and downloads videos from websites, suppor
   - **messaging.js**: Chrome native messaging protocol
 - **services/**: Shared services
   - **ffmpeg.js**: FFmpeg wrapper and utilities
+
+## Key Features and Capabilities
+
+### Video Source Types
+
+- **Direct Video Files**: MP4, WebM, Ogg and other direct video formats
+- **HLS Streams**: Dynamic streaming with quality variants (.m3u8 files)
+- **DASH Manifests**: Adaptive streaming technology (.mpd files)
+- **Blob URLs**: In-memory browser media resources
+- **Embedded URLs**: Video URLs extracted from tracking pixel query parameters
+
+### URL Extraction System
+
+The extension implements a sophisticated URL extraction system that can identify legitimate video URLs embedded in query parameters of tracking pixels. This system:
+
+1. **Detection**: Identifies potential tracking pixels like ping.gif that might contain video URLs
+2. **Extraction**: Parses query parameters to find legitimate HLS or DASH manifest URLs
+3. **Validation**: Applies multiple validation checks to ensure extracted URLs are genuine video sources
+4. **Flagging**: Marks extracted URLs with `foundFromQueryParam` for special handling
+5. **Normalization**: Applies URL normalization to prevent duplicates between original and extracted URLs
+6. **Visual Indication**: Displays an "Extracted" badge in the UI for URLs found via this method
+
+This system significantly enhances the extension's ability to detect videos that would otherwise be missed.

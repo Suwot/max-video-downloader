@@ -9,6 +9,10 @@
  * - Intercepts media player initialization
  * - Reports detected videos to background service
  * - Maintains real-time monitoring of video content
+ * - Extracts legitimate video URLs from query parameters
+ * - Filters out tracking pixels while preserving embedded media URLs
+ * - Normalizes URLs for efficient duplicate detection
+ * - Propagates metadata about URL extraction origins
  */
 
 // content_script.js
