@@ -721,3 +721,45 @@ export async function getStreamResolution(url, type, tabId = null) {
     }
     return 'Resolution unknown';
 }
+
+/**
+ * Preserve metadata from current videos before refresh
+ * This ensures metadata is not lost during a refresh operation
+ * @returns {Promise<boolean>} True if metadata was preserved
+ */
+export async function preserveMetadata() {
+    const videos = getCachedVideos();
+    if (!videos || videos.length === 0) {
+        return false;
+    }
+    
+    logDebug('Preserving metadata for', videos.length, 'videos before refresh');
+    
+    // For each video with metadata, ensure it's properly stored in the cache
+    let metadataCount = 0;
+    for (const video of videos) {
+        if (video.mediaInfo) {
+            addMediaInfoToCache(video.url, video.mediaInfo);
+            metadataCount++;
+        }
+        
+        if (video.resolution) {
+            addResolutionToCache(video.url, formatResolution(
+                video.resolution.width,
+                video.resolution.height,
+                video.resolution.fps,
+                video.resolution.bitrate,
+                video.mediaInfo
+            ));
+        }
+        
+        if (video.previewUrl) {
+            addPosterToCache(video.url, video.previewUrl);
+        } else if (video.poster) {
+            addPosterToCache(video.url, video.poster);
+        }
+    }
+    
+    logDebug('Preserved metadata for', metadataCount, 'videos');
+    return metadataCount > 0;
+}

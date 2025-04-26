@@ -59,21 +59,32 @@ export function initializeUI() {
     // Add direct event listener for UI feedback
     refreshButton.addEventListener('click', async function() {
         const button = this;
-        const originalText = button.textContent;
+        const originalText = button.innerHTML;
         
         // Update button text and add loading class
-        button.textContent = 'Refreshing...';
+        button.innerHTML = `
+            <svg viewBox="0 0 24 24" width="16" height="16" class="spinning">
+                <path d="M17.65 6.35A7.958 7.958 0 0012 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0112 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
+            </svg>
+            Refreshing...
+        `;
         button.classList.add('loading');
         button.disabled = true;
         
         try {
-            // Force a full refresh which will clear the manifest relationships
-            await updateVideoList(true);
+            // Instead of forcing a complete refresh, we'll get current videos
+            // and ensure their metadata is preserved during the refresh
+            const { preserveMetadata } = await import('./video-fetcher.js');
+            await preserveMetadata();
+            
+            // Use forceRefresh=false to avoid discarding metadata
+            // This will still refresh the videos but keep metadata
+            await updateVideoList(false);
         } catch (error) {
             console.error('Error refreshing videos:', error);
         } finally {
             // Restore button text and remove loading class
-            button.textContent = originalText;
+            button.innerHTML = originalText;
             button.classList.remove('loading');
             button.disabled = false;
         }
