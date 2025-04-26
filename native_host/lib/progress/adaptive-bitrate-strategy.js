@@ -126,23 +126,39 @@ class AdaptiveBitrateStrategy extends BaseProgressStrategy {
             const safeTime = Math.min(currentTime, totalDuration);
             const timeProgress = (safeTime / totalDuration) * 100;
             
-            // If we have a bitrate estimate, we can be more accurate
+            // If we have a bitrate estimate, we can be more accurate with a hybrid approach
             if (this.avgBitrate && this.avgBitrate > 0 && downloaded > 0) {
                 this.estimatedTotalSize = totalDuration * this.avgBitrate;
                 const sizeProgress = (downloaded / this.estimatedTotalSize) * 100;
                 
-                // Weighted average with more weight on size-based progress as we get more data
-                const timeWeight = Math.max(0.1, 1.0 - (currentTime / totalDuration));
+                // Improved weighting formula that gives more weight to time early on
+                // and transitions to size-based progress as we download more
+                // This creates a more natural and consistent progress experience
+                
+                // Weight formula: Start with emphasis on time-based progress (80/20)
+                // and gradually transition to a more balanced approach (40/60)
+                // as we get further into the download
+                const downloadRatio = safeTime / totalDuration;
+                const timeWeight = Math.max(0.4, 0.8 - (downloadRatio * 0.4));
                 const sizeWeight = 1.0 - timeWeight;
                 
+                // Calculate weighted progress
                 progress = (timeProgress * timeWeight) + (sizeProgress * sizeWeight);
-                this.confidenceLevel = Math.min(0.85, 0.5 + (currentTime / totalDuration) * 0.35);
                 
-                logDebug(`Adaptive progress: ${Math.round(progress)}%, time: ${Math.round(timeProgress)}%, size: ${Math.round(sizeProgress)}%, confidence: ${this.confidenceLevel.toFixed(2)}`);
+                // Higher confidence when we have both time and size data
+                this.confidenceLevel = Math.min(0.9, 0.6 + (currentTime / totalDuration) * 0.3);
+                
+                // Debug log for weighted progress
+                logDebug(`Adaptive progress: time=${Math.round(timeProgress)}%, size=${Math.round(sizeProgress)}%, ` +
+                         `weighted=${Math.round(progress)}%, weights=[time:${timeWeight.toFixed(2)}, size:${sizeWeight.toFixed(2)}], ` +
+                         `confidence=${this.confidenceLevel.toFixed(2)}`);
             } else {
                 // Fall back to time-based progress if we don't have a good bitrate estimate
                 progress = timeProgress;
-                this.confidenceLevel = Math.min(0.6, 0.3 + (currentTime / totalDuration) * 0.3);
+                
+                // Slightly higher confidence since we have duration
+                this.confidenceLevel = Math.min(0.75, 0.5 + (currentTime / totalDuration) * 0.25);
+                logDebug(`Time-based progress: ${Math.round(progress)}%, confidence=${this.confidenceLevel.toFixed(2)}`);
             }
         }
         // If we don't have duration but have downloaded bytes and bitrate, estimate progress
@@ -150,23 +166,25 @@ class AdaptiveBitrateStrategy extends BaseProgressStrategy {
             // Use elapsed time since start to estimate progress
             const elapsedSecs = (Date.now() - this.startTime) / 1000;
             if (elapsedSecs > 5) { // Only use this method after 5 seconds
-                // Estimate total download time based on bitrate
-                const estimatedTotalTime = (downloaded / this.avgBitrate) * 2; // Multiply by 2 to be conservative
+                // Improved estimation formula that's more conservative
+                const estimatedTotalTime = (downloaded / this.avgBitrate) * 1.5; // Reduced multiplier from 2 to 1.5
                 progress = Math.min(95, (elapsedSecs / estimatedTotalTime) * 100);
-                this.confidenceLevel = 0.4; // Lower confidence without duration
+                this.confidenceLevel = 0.5; // Moderate confidence without duration
+                logDebug(`Bitrate estimation progress: ${Math.round(progress)}%, confidence=0.5`);
             } else {
                 // In the first 5 seconds, use a logarithmic scale for better UX
                 progress = Math.min(30, 10 * Math.log10(1 + 9 * elapsedSecs / 5));
-                this.confidenceLevel = 0.2;
+                this.confidenceLevel = 0.3;
             }
         }
         // Last resort: use time elapsed since start
         else {
             const elapsedSecs = (Date.now() - this.startTime) / 1000;
             // Logarithmic scale gives a better sense of progress
-            // Start slow, accelerate in the middle, but never reach 100%
-            progress = Math.min(95, 20 * Math.log10(1 + 9 * elapsedSecs / 60));
+            // Faster initial progress to give better feedback
+            progress = Math.min(95, 30 * Math.log10(1 + 9 * elapsedSecs / 60));
             this.confidenceLevel = 0.3;
+            logDebug(`Elapsed time progress: ${Math.round(progress)}%, elapsed=${Math.round(elapsedSecs)}s, confidence=0.3`);
         }
         
         // Never exceed 99.9% until we're actually done

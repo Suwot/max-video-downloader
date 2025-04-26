@@ -156,6 +156,7 @@ class DownloadCommand extends BaseCommand {
                     url
                 ], { env: getFullEnv() });
                 
+                // When FFprobe detects duration, pass it to the progress tracker immediately
                 ffprobe.stdout.on('data', data => {
                     try {
                         const info = JSON.parse(data.toString());
@@ -163,10 +164,14 @@ class DownloadCommand extends BaseCommand {
                             totalDuration = parseFloat(info.format.duration);
                             logDebug('Got total duration:', totalDuration);
                             
-                            // Update progress tracker with duration
+                            // Update progress tracker with duration immediately
                             progressTracker.update({
-                                totalDuration: totalDuration
+                                totalDuration: totalDuration,
+                                currentTime: 0 // Start at beginning
                             });
+                            
+                            // Higher initial confidence since we have duration
+                            progressTracker.confidenceLevel = 0.6;
                         }
                     } catch (e) {
                         logDebug('Error parsing ffprobe output:', e);
