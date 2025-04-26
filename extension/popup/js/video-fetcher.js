@@ -25,7 +25,9 @@ import {
     getResolutionFromCache,
     addResolutionToCache,
     getMediaInfoFromCache, 
-    addMediaInfoToCache
+    addMediaInfoToCache,
+    addPosterToCache,
+    getPosterFromCache
 } from './state.js';
 import { showLoader, showErrorMessage, restoreScrollPosition } from './ui.js';
 import { groupVideos, processVideos, clearHLSRelationships } from './video-processor.js';
