@@ -32,9 +32,10 @@ class DownloadCommand extends BaseCommand {
      * @param {string} params.filename Filename to save as
      * @param {string} params.savePath Path to save file to
      * @param {string} params.quality Video quality to download
+     * @param {string} params.manifestUrl Optional manifest URL for streaming media
      */
     async execute(params) {
-        const { url, filename, savePath, quality = 'best' } = params;
+        const { url, filename, savePath, quality = 'best', manifestUrl } = params;
         logDebug('Starting download:', { url, filename, savePath, quality });
         
         try {
@@ -114,7 +115,11 @@ class DownloadCommand extends BaseCommand {
                 // Create progress tracker for this download
                 const progressTracker = new ProgressTracker({
                     onProgress: (data) => {
-                        this.sendProgress(data);
+                        // Add file info to progress updates
+                        this.sendProgress({
+                            ...data,
+                            filename: path.basename(uniqueOutput)
+                        });
                     },
                     updateInterval: 200, // Update every 200ms
                     debug: true // Enable detailed progress logging
@@ -123,13 +128,21 @@ class DownloadCommand extends BaseCommand {
                 // Register default strategies
                 ProgressTracker.registerDefaultStrategies(progressTracker);
                 
+                // Prepare file info for progress tracker
+                const fileInfo = {
+                    url: manifestUrl || url, // Use manifest URL if available for better segment tracking
+                    type: videoType,
+                    outputPath: uniqueOutput
+                };
+                
                 // Initialize progress tracker with file info
-                progressTracker.initialize({
-                    url,
-                    type: videoType
-                }).catch(error => {
-                    logDebug('Error initializing progress tracker:', error);
-                });
+                progressTracker.initialize(fileInfo)
+                    .then(() => {
+                        logDebug('Progress tracker initialized successfully');
+                    })
+                    .catch(error => {
+                        logDebug('Error initializing progress tracker:', error);
+                    });
 
                 const ffmpeg = spawn(ffmpegService.getFFmpegPath(), ffmpegArgs, { 
                     env: getFullEnv()
@@ -145,37 +158,24 @@ class DownloadCommand extends BaseCommand {
                     progress: 0,
                     speed: 0,
                     downloaded: 0,
-                    size: 0
+                    size: 0,
+                    filename: path.basename(uniqueOutput)
                 });
 
-                // Try to get duration first with FFprobe
-                const ffprobe = spawn(ffmpegService.getFFprobePath(), [
-                    '-v', 'quiet',
-                    '-print_format', 'json',
-                    '-show_format',
-                    url
-                ], { env: getFullEnv() });
-                
-                // When FFprobe detects duration, pass it to the progress tracker immediately
-                ffprobe.stdout.on('data', data => {
-                    try {
-                        const info = JSON.parse(data.toString());
-                        if (info.format && info.format.duration) {
-                            totalDuration = parseFloat(info.format.duration);
-                            logDebug('Got total duration:', totalDuration);
-                            
-                            // Update progress tracker with duration immediately
-                            progressTracker.update({
-                                totalDuration: totalDuration,
-                                currentTime: 0 // Start at beginning
-                            });
-                            
-                            // Higher initial confidence since we have duration
-                            progressTracker.confidenceLevel = 0.6;
-                        }
-                    } catch (e) {
-                        logDebug('Error parsing ffprobe output:', e);
+                // Try to get duration first with FFprobe for more accurate initial progress
+                this.probeMediaDuration(ffmpegService, url).then(duration => {
+                    if (duration) {
+                        totalDuration = duration;
+                        logDebug('Got total duration from probe:', totalDuration);
+                        
+                        // Update progress tracker with duration immediately
+                        progressTracker.update({
+                            totalDuration: totalDuration,
+                            currentTime: 0 // Start at beginning
+                        });
                     }
+                }).catch(error => {
+                    logDebug('Error probing duration:', error);
                 });
 
                 // Process FFmpeg output for progress tracking
@@ -196,7 +196,8 @@ class DownloadCommand extends BaseCommand {
                         this.sendProgress({
                             progress: 100,
                             downloaded: lastBytes,
-                            speed: 0
+                            speed: 0,
+                            filename: path.basename(uniqueOutput)
                         });
                         
                         // Small delay to ensure progress is received first
@@ -227,6 +228,54 @@ class DownloadCommand extends BaseCommand {
             this.sendError(err.message);
             throw err;
         }
+    }
+
+    /**
+     * Probe media to get duration
+     * @param {Object} ffmpegService FFmpeg service instance
+     * @param {string} url Media URL
+     * @returns {Promise<number|null>} Duration in seconds or null if not available
+     */
+    async probeMediaDuration(ffmpegService, url) {
+        return new Promise(resolve => {
+            try {
+                const ffprobe = spawn(ffmpegService.getFFprobePath(), [
+                    '-v', 'quiet',
+                    '-print_format', 'json',
+                    '-show_format',
+                    url
+                ], { env: getFullEnv(), timeout: 10000 });
+                
+                let probeOutput = '';
+                
+                ffprobe.stdout.on('data', data => {
+                    probeOutput += data.toString();
+                });
+                
+                ffprobe.on('close', () => {
+                    try {
+                        const info = JSON.parse(probeOutput);
+                        if (info.format && info.format.duration) {
+                            resolve(parseFloat(info.format.duration));
+                        } else {
+                            resolve(null);
+                        }
+                    } catch (e) {
+                        logDebug('Error parsing ffprobe output:', e);
+                        resolve(null);
+                    }
+                });
+                
+                ffprobe.on('error', () => {
+                    resolve(null);
+                });
+                
+                // Ensure we don't hang waiting for ffprobe
+                setTimeout(() => resolve(null), 10000);
+            } catch (e) {
+                resolve(null);
+            }
+        });
     }
 }
 

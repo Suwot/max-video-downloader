@@ -250,6 +250,7 @@ class ProgressTracker {
         const ContentLengthStrategy = require('./progress/content-length-strategy');
         const AdaptiveBitrateStrategy = require('./progress/adaptive-bitrate-strategy');
         const TimeBasedStrategy = require('./progress/time-based-strategy');
+        const SegmentTrackingStrategy = require('./progress/segment-tracking-strategy');
         
         // Create a simple default strategy that just passes through progress data
         class DefaultStrategy {
@@ -275,6 +276,7 @@ class ProgressTracker {
         // Register strategies
         tracker.registerStrategy('content-length', ContentLengthStrategy);
         tracker.registerStrategy('adaptive-bitrate', AdaptiveBitrateStrategy);
+        tracker.registerStrategy('segment', SegmentTrackingStrategy);
         tracker.registerStrategy('time-based', TimeBasedStrategy);
         tracker.registerStrategy('default', DefaultStrategy);
         

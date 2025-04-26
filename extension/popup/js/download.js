@@ -233,7 +233,7 @@ export async function startDownload(video) {
             port.onMessage.addListener((msg) => {
                 if (msg.type === 'progress') {
                     // Update progress UI
-                    updateDownloadProgress(video, msg.progress);
+                    updateDownloadProgress(video, msg.progress, msg);
                 } else if (msg.success) {
                     resolve(msg);
                     port.disconnect();
@@ -262,30 +262,157 @@ export async function startDownload(video) {
 }
 
 /**
- * Update download progress UI
+ * Update download progress UI with enhanced information
  * @param {Object} video - Video being downloaded
  * @param {number} progress - Download progress (0-100)
+ * @param {Object} progressData - Additional progress data
  */
-function updateDownloadProgress(video, progress) {
+function updateDownloadProgress(video, progress, progressData = {}) {
     const downloadBtn = document.querySelector(`[data-url="${video.url}"]`);
     if (!downloadBtn) return;
 
     // Ensure progress is between 0 and 100
-    progress = Math.max(0, Math.min(100, progress));
+    progress = Math.max(0, Math.min(100, Math.round(progress)));
     
-    // Log the progress update to debug
-    console.log(`Updating progress for ${video.url}: ${progress}%`);
-    
-    // Update button text
-    downloadBtn.textContent = `Downloading ${Math.round(progress)}%`;
-    
-    // Update button style to show progress
-    if (progress < 100) {
-        downloadBtn.style.backgroundImage = `linear-gradient(to right, #1565C0 ${progress}%, #1976D2 ${progress}%)`;
-    } else {
-        downloadBtn.style.backgroundImage = 'none';
-        downloadBtn.style.backgroundColor = '#43A047';
-        downloadBtn.textContent = 'Download Complete';
-        downloadBtn.classList.add('complete');
+    // Create progress container if it doesn't exist
+    let progressContainer = downloadBtn.querySelector('.progress-container');
+    if (!progressContainer) {
+        // Replace button content with progress UI
+        downloadBtn.innerHTML = '';
+        
+        progressContainer = document.createElement('div');
+        progressContainer.className = 'progress-container';
+        
+        // Create main progress bar
+        const progressBar = document.createElement('div');
+        progressBar.className = 'progress-bar';
+        
+        // Create progress fill
+        const progressFill = document.createElement('div');
+        progressFill.className = 'progress-fill';
+        progressBar.appendChild(progressFill);
+        
+        // Create progress text
+        const progressText = document.createElement('div');
+        progressText.className = 'progress-text';
+        
+        // Create progress info
+        const progressInfo = document.createElement('div');
+        progressInfo.className = 'progress-info';
+        
+        // Add elements to container
+        progressContainer.appendChild(progressBar);
+        progressContainer.appendChild(progressText);
+        progressContainer.appendChild(progressInfo);
+        downloadBtn.appendChild(progressContainer);
+        
+        // Add progress styles if not already added
+        if (!document.getElementById('progress-styles')) {
+            const style = document.createElement('style');
+            style.id = 'progress-styles';
+            style.textContent = `
+                .progress-container {
+                    width: 100%;
+                    display: flex;
+                    flex-direction: column;
+                    gap: 4px;
+                }
+                .progress-bar {
+                    width: 100%;
+                    height: 8px;
+                    background: rgba(255, 255, 255, 0.2);
+                    border-radius: 4px;
+                    overflow: hidden;
+                }
+                .progress-fill {
+                    height: 100%;
+                    background: #90CAF9;
+                    border-radius: 4px;
+                    width: 0%;
+                    transition: width 0.3s ease;
+                }
+                .progress-text {
+                    font-weight: bold;
+                    text-align: center;
+                    color: white;
+                    font-size: 14px;
+                }
+                .progress-info {
+                    display: flex;
+                    justify-content: space-between;
+                    font-size: 12px;
+                    color: rgba(255, 255, 255, 0.8);
+                }
+                .download-complete .progress-fill {
+                    background: #81C784;
+                }
+            `;
+            document.head.appendChild(style);
+        }
     }
+    
+    // Get progress elements
+    const progressFill = progressContainer.querySelector('.progress-fill');
+    const progressText = progressContainer.querySelector('.progress-text');
+    const progressInfo = progressContainer.querySelector('.progress-info');
+    
+    // Update progress bar
+    progressFill.style.width = `${progress}%`;
+    
+    // Format progress text
+    let statusText = `Downloading ${progress}%`;
+    if (progress >= 100) {
+        statusText = 'Download Complete';
+        downloadBtn.classList.add('download-complete');
+    } else if (progressData.segmentProgress) {
+        // Add segment information if available
+        statusText += ` (Segment: ${progressData.segmentProgress})`;
+    }
+    
+    progressText.textContent = statusText;
+    
+    // Format detailed progress information
+    let speedText = '';
+    let etaText = '';
+    
+    if (progressData.speed) {
+        speedText = formatSpeed(progressData.speed);
+    }
+    
+    if (progressData.eta && progressData.eta > 0 && progress < 100) {
+        etaText = formatTime(progressData.eta);
+    }
+    
+    // Update detailed info
+    if (speedText || etaText) {
+        progressInfo.innerHTML = '';
+        if (speedText) {
+            const speedElement = document.createElement('span');
+            speedElement.textContent = speedText;
+            progressInfo.appendChild(speedElement);
+        }
+        
+        if (etaText) {
+            const etaElement = document.createElement('span');
+            etaElement.textContent = `ETA: ${etaText}`;
+            progressInfo.appendChild(etaElement);
+        }
+    }
+    
+    // Add confidence indicator if available (for debugging)
+    if (progressData.confidence !== undefined && progressData.confidence !== null) {
+        // Higher confidence = more saturated color
+        const saturation = 50 + Math.round(progressData.confidence * 50);
+        progressFill.style.background = `hsl(210, ${saturation}%, 60%)`;
+    }
+    
+    // Log detailed progress update (for debugging)
+    console.log('Progress update:', {
+        progress,
+        speed: progressData.speed,
+        eta: progressData.eta,
+        confidence: progressData.confidence,
+        downloaded: progressData.downloaded && formatSize(progressData.downloaded),
+        size: progressData.size && formatSize(progressData.size)
+    });
 }

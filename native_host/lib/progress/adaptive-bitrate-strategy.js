@@ -27,6 +27,9 @@ class AdaptiveBitrateStrategy extends BaseProgressStrategy {
         this.lastTimeReported = 0;
         this.lastSizeReported = 0;
         this.avgBitrate = null;
+        this.lastNetworkSpeedCheck = Date.now();
+        this.networkSpeedSamples = [];
+        this.confidenceAdjustment = 1.0; // Multiplier for confidence based on consistency
     }
 
     /**
@@ -131,27 +134,31 @@ class AdaptiveBitrateStrategy extends BaseProgressStrategy {
                 this.estimatedTotalSize = totalDuration * this.avgBitrate;
                 const sizeProgress = (downloaded / this.estimatedTotalSize) * 100;
                 
-                // Improved weighting formula that gives more weight to time early on
-                // and transitions to size-based progress as we download more
-                // This creates a more natural and consistent progress experience
-                
-                // Weight formula: Start with emphasis on time-based progress (80/20)
-                // and gradually transition to a more balanced approach (40/60)
-                // as we get further into the download
+                // Enhanced dynamic weighting algorithm
+                // 1. Base weights on download ratio (time elapsed / total duration)
+                // 2. Consider network stability (more stable = more weight on size-based)
+                // 3. Smooth transition from time to size-based as download progresses
                 const downloadRatio = safeTime / totalDuration;
-                const timeWeight = Math.max(0.4, 0.8 - (downloadRatio * 0.4));
+                
+                // Calculate network stability factor (0-1)
+                const networkStability = this.calculateNetworkStability();
+                
+                // Enhanced weight calculation with network stability factor
+                // Start with more emphasis on time (more reliable early on)
+                // Gradually shift to size-based as we progress and if network is stable
+                const timeWeight = Math.max(0.3, 0.8 - (downloadRatio * 0.5) - (networkStability * 0.2));
                 const sizeWeight = 1.0 - timeWeight;
                 
                 // Calculate weighted progress
                 progress = (timeProgress * timeWeight) + (sizeProgress * sizeWeight);
                 
-                // Higher confidence when we have both time and size data
-                this.confidenceLevel = Math.min(0.9, 0.6 + (currentTime / totalDuration) * 0.3);
+                // Higher confidence when we have both time and size data, adjusted by network stability
+                this.confidenceLevel = Math.min(0.95, (0.6 + (downloadRatio * 0.3)) * this.confidenceAdjustment);
                 
                 // Debug log for weighted progress
-                logDebug(`Adaptive progress: time=${Math.round(timeProgress)}%, size=${Math.round(sizeProgress)}%, ` +
+                logDebug(`Enhanced adaptive progress: time=${Math.round(timeProgress)}%, size=${Math.round(sizeProgress)}%, ` +
                          `weighted=${Math.round(progress)}%, weights=[time:${timeWeight.toFixed(2)}, size:${sizeWeight.toFixed(2)}], ` +
-                         `confidence=${this.confidenceLevel.toFixed(2)}`);
+                         `networkStability=${networkStability.toFixed(2)}, confidence=${this.confidenceLevel.toFixed(2)}`);
             } else {
                 // Fall back to time-based progress if we don't have a good bitrate estimate
                 progress = timeProgress;
@@ -166,11 +173,19 @@ class AdaptiveBitrateStrategy extends BaseProgressStrategy {
             // Use elapsed time since start to estimate progress
             const elapsedSecs = (Date.now() - this.startTime) / 1000;
             if (elapsedSecs > 5) { // Only use this method after 5 seconds
-                // Improved estimation formula that's more conservative
-                const estimatedTotalTime = (downloaded / this.avgBitrate) * 1.5; // Reduced multiplier from 2 to 1.5
+                // Improved estimation formula with adaptive multiplier
+                // The multiplier decreases as we download more, making our estimate more confident
+                const progressRatio = Math.min(0.9, elapsedSecs / 180); // Max out at 3 minutes (180 sec)
+                const estimationMultiplier = 1.8 - (progressRatio * 0.6); // Starts at 1.8, decreases to 1.2
+                
+                const estimatedTotalTime = (downloaded / this.avgBitrate) * estimationMultiplier;
                 progress = Math.min(95, (elapsedSecs / estimatedTotalTime) * 100);
-                this.confidenceLevel = 0.5; // Moderate confidence without duration
-                logDebug(`Bitrate estimation progress: ${Math.round(progress)}%, confidence=0.5`);
+                
+                // Increase confidence as we progress
+                this.confidenceLevel = Math.min(0.7, 0.4 + (progressRatio * 0.3));
+                
+                logDebug(`Enhanced bitrate estimation: progress=${Math.round(progress)}%, ` +
+                        `multiplier=${estimationMultiplier.toFixed(2)}, confidence=${this.confidenceLevel.toFixed(2)}`);
             } else {
                 // In the first 5 seconds, use a logarithmic scale for better UX
                 progress = Math.min(30, 10 * Math.log10(1 + 9 * elapsedSecs / 5));
@@ -180,9 +195,9 @@ class AdaptiveBitrateStrategy extends BaseProgressStrategy {
         // Last resort: use time elapsed since start
         else {
             const elapsedSecs = (Date.now() - this.startTime) / 1000;
-            // Logarithmic scale gives a better sense of progress
-            // Faster initial progress to give better feedback
-            progress = Math.min(95, 30 * Math.log10(1 + 9 * elapsedSecs / 60));
+            // Enhanced logarithmic scale gives a better sense of progress
+            // More responsive in the beginning, slows down after initial burst
+            progress = Math.min(95, 25 * Math.log10(1 + 10 * elapsedSecs / 60));
             this.confidenceLevel = 0.3;
             logDebug(`Elapsed time progress: ${Math.round(progress)}%, elapsed=${Math.round(elapsedSecs)}s, confidence=0.3`);
         }
@@ -204,6 +219,8 @@ class AdaptiveBitrateStrategy extends BaseProgressStrategy {
         
         // Calculate bitrates between consecutive data points
         const bitrates = [];
+        let totalVariation = 0;
+        let lastBitrate = null;
         
         for (let i = 1; i < this.dataPoints.length; i++) {
             const prev = this.dataPoints[i-1];
@@ -214,15 +231,46 @@ class AdaptiveBitrateStrategy extends BaseProgressStrategy {
             
             if (timeDiff > 0) {
                 const bitrate = bytesDiff / timeDiff;
-                // Filter out obvious outliers (sudden huge increases)
-                if (bitrate > 0 && (bitrates.length === 0 || bitrate < 10 * (bitrates[bitrates.length-1] || bitrate))) {
+                
+                // Enhanced outlier detection
+                // 1. Absolute maximum cap (100MB/s is unreasonable for most connections)
+                const maxReasonableBitrate = 100 * 1024 * 1024; // 100MB/s
+                
+                // 2. Relative to previous values with adaptive threshold
+                const isOutlier = 
+                    bitrate <= 0 || 
+                    bitrate > maxReasonableBitrate ||
+                    (bitrates.length > 0 && bitrate > 5 * Math.max(...bitrates)) ||
+                    (lastBitrate && (bitrate > lastBitrate * 10 || bitrate < lastBitrate * 0.1));
+                
+                if (!isOutlier) {
                     bitrates.push(bitrate);
+                    
+                    // Calculate variation for network stability
+                    if (lastBitrate) {
+                        const variation = Math.abs(bitrate - lastBitrate) / Math.max(bitrate, lastBitrate);
+                        totalVariation += variation;
+                    }
+                    
+                    lastBitrate = bitrate;
+                } else {
+                    logDebug(`Filtered outlier bitrate: ${(bitrate / 1024 / 1024).toFixed(2)}MB/s`);
                 }
             }
         }
         
         if (bitrates.length > 0) {
-            // Calculate weighted average (more recent values have higher weight)
+            // Calculate weighted average with emphasis on more recent points
+            // but also taking overall trend into account
+            const recentWeight = 0.7; // 70% weight on recent samples
+            const trendWeight = 0.3;  // 30% weight on overall trend
+            
+            // Recent average (last 30% of samples)
+            const recentCount = Math.max(1, Math.ceil(bitrates.length * 0.3));
+            const recentBitrates = bitrates.slice(-recentCount);
+            const recentAvg = recentBitrates.reduce((a, b) => a + b, 0) / recentBitrates.length;
+            
+            // Overall trend with weighted average
             const totalWeight = bitrates.length * (bitrates.length + 1) / 2;
             let weightedSum = 0;
             
@@ -231,10 +279,77 @@ class AdaptiveBitrateStrategy extends BaseProgressStrategy {
                 weightedSum += bitrate * weight;
             });
             
-            this.avgBitrate = weightedSum / totalWeight;
+            const trendAvg = weightedSum / totalWeight;
             
-            logDebug(`Calculated average bitrate: ${(this.avgBitrate / 1024).toFixed(1)} KB/s from ${bitrates.length} data points`);
+            // Combine recent and trend
+            this.avgBitrate = (recentAvg * recentWeight) + (trendAvg * trendWeight);
+            
+            // Update network speed samples for stability calculation
+            this.updateNetworkSpeedSamples(this.avgBitrate);
+            
+            // Calculate confidence adjustment based on bitrate variation
+            if (bitrates.length > 1) {
+                const avgVariation = totalVariation / (bitrates.length - 1);
+                // Lower confidence if there's high variation
+                this.confidenceAdjustment = Math.max(0.8, 1.0 - avgVariation);
+            }
+            
+            logDebug(`Enhanced average bitrate: ${(this.avgBitrate / 1024).toFixed(1)} KB/s from ${bitrates.length} points. ` +
+                     `Recent: ${(recentAvg / 1024).toFixed(1)} KB/s, Trend: ${(trendAvg / 1024).toFixed(1)} KB/s, ` +
+                     `Confidence adjustment: ${this.confidenceAdjustment.toFixed(2)}`);
         }
+    }
+    
+    /**
+     * Update network speed samples for stability calculation
+     * @param {number} speed Current speed in bytes/second
+     */
+    updateNetworkSpeedSamples(speed) {
+        const now = Date.now();
+        
+        // Only sample once every 2 seconds to avoid noise
+        if (now - this.lastNetworkSpeedCheck < 2000) {
+            return;
+        }
+        
+        this.lastNetworkSpeedCheck = now;
+        this.networkSpeedSamples.push(speed);
+        
+        // Keep history limited
+        if (this.networkSpeedSamples.length > 10) {
+            this.networkSpeedSamples.shift();
+        }
+    }
+    
+    /**
+     * Calculate network stability factor (0-1)
+     * Higher value means more stable network speed
+     * @returns {number} Stability factor between 0-1
+     */
+    calculateNetworkStability() {
+        if (this.networkSpeedSamples.length < 3) {
+            return 0.5; // Default to medium stability with few samples
+        }
+        
+        // Calculate coefficient of variation (standard deviation / mean)
+        const mean = this.networkSpeedSamples.reduce((a, b) => a + b, 0) / this.networkSpeedSamples.length;
+        
+        if (mean === 0) return 0.5;
+        
+        const variance = this.networkSpeedSamples.reduce((acc, speed) => {
+            const diff = speed - mean;
+            return acc + (diff * diff);
+        }, 0) / this.networkSpeedSamples.length;
+        
+        const stdDev = Math.sqrt(variance);
+        const cv = stdDev / mean; // Coefficient of variation
+        
+        // Convert to stability (lower cv = higher stability)
+        // cv of 0 means perfect stability (1.0)
+        // cv of 1 or higher means poor stability (0.0)
+        const stability = Math.max(0, Math.min(1, 1 - cv));
+        
+        return stability;
     }
     
     /**
@@ -261,10 +376,29 @@ class AdaptiveBitrateStrategy extends BaseProgressStrategy {
             this.update(updateData);
         }
         
-        // Try to extract duration information
+        // Try to extract duration information with improved regex patterns
         if (!this.totalDuration) {
-            const durationMatch = output.match(/Duration: (\d+):(\d+):(\d+\.\d+)/);
-            if (durationMatch) {
+            // Standard format: Duration: 00:12:34.56
+            let durationMatch = output.match(/Duration:\s*(\d+):(\d+):(\d+\.\d+)/);
+            
+            // Alternative formats
+            if (!durationMatch) {
+                // Format: duration=123.45
+                durationMatch = output.match(/duration=(\d+\.\d+)/);
+                if (durationMatch) {
+                    this.totalDuration = parseFloat(durationMatch[1]);
+                    logDebug('Found duration (alt format 1):', this.totalDuration, 'seconds');
+                    return;
+                }
+                
+                // Format: Duration: 123.45 s
+                durationMatch = output.match(/Duration:\s*(\d+\.\d+)\s*s/);
+                if (durationMatch) {
+                    this.totalDuration = parseFloat(durationMatch[1]);
+                    logDebug('Found duration (alt format 2):', this.totalDuration, 'seconds');
+                    return;
+                }
+            } else {
                 const hours = parseInt(durationMatch[1], 10);
                 const minutes = parseInt(durationMatch[2], 10);
                 const seconds = parseFloat(durationMatch[3]);
