@@ -84,6 +84,9 @@ class DownloadCommand extends BaseCommand {
             // Build FFmpeg args based on video type
             let ffmpegArgs = [];
             
+            // Force progress output format by adding -stats and -progress pipe:2
+            ffmpegArgs.push('-stats', '-progress', 'pipe:2');
+            
             // Common input parameters for all types
             if (videoType === 'hls' || videoType === 'dash') {
                 // Streaming protocol support for HLS/DASH
@@ -96,7 +99,7 @@ class DownloadCommand extends BaseCommand {
                 ffmpegArgs.push('-i', url);
             }
             
-            // Output parameters - try to copy streams when possible
+            // Output parameters - try to copy streams without re-encoding
             ffmpegArgs = ffmpegArgs.concat([
                 '-c', 'copy',            // Copy streams without re-encoding
                 '-bsf:a', 'aac_adtstoasc', // Fix for certain audio streams
@@ -118,6 +121,7 @@ class DownloadCommand extends BaseCommand {
                 let lastBytes = 0;
                 let totalDuration = null;
                 let hasError = false;
+                let sentProgressUpdates = 0;  // Track number of updates
 
                 // Send initial progress
                 this.sendProgress({
@@ -126,6 +130,8 @@ class DownloadCommand extends BaseCommand {
                     downloaded: 0,
                     size: 0
                 });
+                sentProgressUpdates++;
+                logDebug('Sent initial progress update (0%)');
 
                 // Try to get duration first
                 const ffprobe = spawn(ffmpegService.getFFprobePath(), [
@@ -147,6 +153,7 @@ class DownloadCommand extends BaseCommand {
                     }
                 });
 
+                // More comprehensive regex patterns for different FFmpeg output formats
                 ffmpeg.stderr.on('data', (data) => {
                     if (hasError) return;
                     
@@ -154,17 +161,46 @@ class DownloadCommand extends BaseCommand {
                     errorOutput += output;
                     progressOutput += output;
                     
+                    // Log raw output for debugging
+                    logDebug('FFmpeg progress raw output: ' + output.replace(/\n/g, '\\n').substring(0, 100) + (output.length > 100 ? '...' : ''));
+                    
                     const now = Date.now();
-                    if (now - lastProgressUpdate > 250) {
+                    if (now - lastProgressUpdate > 200) { // Reduced to 200ms for more frequent updates
                         lastProgressUpdate = now;
                         
-                        const timeMatch = progressOutput.match(/time=(\d+):(\d+):(\d+.\d+)/);
-                        const sizeMatch = progressOutput.match(/size=\s*(\d+)kB/);
+                        // Try multiple patterns for time
+                        let timeMatch = progressOutput.match(/time=(\d+):(\d+):(\d+.\d+)/);
+                        if (!timeMatch) {
+                            timeMatch = progressOutput.match(/time=(\d+).(\d+)/); // Alternative format
+                        }
                         
-                        if (timeMatch && sizeMatch) {
-                            const [_, hours, minutes, seconds] = timeMatch;
-                            const currentTime = parseInt(hours) * 3600 + parseInt(minutes) * 60 + parseFloat(seconds);
-                            const currentBytes = parseInt(sizeMatch[1]) * 1024;
+                        // Try multiple patterns for size
+                        let sizeMatch = progressOutput.match(/size=\s*(\d+)kB/);
+                        if (!sizeMatch) {
+                            sizeMatch = progressOutput.match(/size=\s*(\d+(\.\d+)?)([kM])B/); // Alternative format with MB
+                        }
+                        
+                        // If we have time info, we can calculate progress
+                        if (timeMatch) {
+                            let currentTime;
+                            
+                            // Parse time based on format
+                            if (timeMatch[3]) { // HH:MM:SS.MS format
+                                const [_, hours, minutes, seconds] = timeMatch;
+                                currentTime = parseInt(hours) * 3600 + parseInt(minutes) * 60 + parseFloat(seconds);
+                            } else { // Seconds.ms format
+                                currentTime = parseFloat(timeMatch[1] + '.' + timeMatch[2]);
+                            }
+                            
+                            // Get bytes downloaded if available
+                            let currentBytes = lastBytes;
+                            if (sizeMatch) {
+                                if (sizeMatch[3] === 'M') {
+                                    currentBytes = parseFloat(sizeMatch[1]) * 1024 * 1024;
+                                } else {
+                                    currentBytes = parseInt(sizeMatch[1]) * 1024;
+                                }
+                            }
                             
                             // Calculate speed
                             const elapsedTime = (now - downloadStartTime) / 1000;
@@ -190,6 +226,8 @@ class DownloadCommand extends BaseCommand {
                                 totalDuration
                             });
                             
+                            sentProgressUpdates++;
+                            logDebug(`Sent progress update (${progress}%)`);
                             progressOutput = ''; // Clear processed output
                         }
                     }
@@ -197,7 +235,7 @@ class DownloadCommand extends BaseCommand {
 
                 ffmpeg.on('close', (code) => {
                     if (code === 0 && !hasError) {
-                        logDebug('Download completed successfully');
+                        logDebug(`Download completed successfully. Sent ${sentProgressUpdates} progress updates.`);
                         // Send final progress
                         this.sendProgress({
                             progress: 100,

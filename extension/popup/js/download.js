@@ -270,26 +270,22 @@ function updateDownloadProgress(video, progress) {
     const downloadBtn = document.querySelector(`[data-url="${video.url}"]`);
     if (!downloadBtn) return;
 
+    // Ensure progress is between 0 and 100
+    progress = Math.max(0, Math.min(100, progress));
+    
+    // Log the progress update to debug
+    console.log(`Updating progress for ${video.url}: ${progress}%`);
+    
     // Update button text
     downloadBtn.textContent = `Downloading ${Math.round(progress)}%`;
     
-    // Update progress bar
-    const progressContainer = downloadBtn.closest('.video-item').querySelector('.progress-container');
-    if (progressContainer) {
-        progressContainer.style.display = 'block';
-        const progressBar = progressContainer.querySelector('.progress-bar');
-        if (progressBar) {
-            progressBar.style.width = `${progress}%`;
-        }
-    }
-
-    if (progress >= 100) {
+    // Update button style to show progress
+    if (progress < 100) {
+        downloadBtn.style.backgroundImage = `linear-gradient(to right, #1565C0 ${progress}%, #1976D2 ${progress}%)`;
+    } else {
+        downloadBtn.style.backgroundImage = 'none';
+        downloadBtn.style.backgroundColor = '#43A047';
         downloadBtn.textContent = 'Download Complete';
         downloadBtn.classList.add('complete');
-        setTimeout(() => {
-            if (progressContainer) {
-                progressContainer.style.display = 'none';
-            }
-        }, 2000);
     }
 }
