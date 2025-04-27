@@ -41,7 +41,6 @@ function logDebug(...args) {
 let previewGenerationQueue = new Map();
 const videosPerTab = {};
 const playlistsPerTab = {};
-const downloadPorts = new Map();
 const metadataProcessingQueue = new Map();
 const manifestRelationships = new Map();
 
@@ -194,23 +193,52 @@ chrome.tabs.onRemoved.addListener((tabId) => {
         logDebug('Cleaning up videos for tab:', tabId, 'Count:', videosPerTab[tabId].size);
         delete videosPerTab[tabId];
     }
-});
-
-chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-    if (changeInfo.status === 'loading') {
-        logDebug('Tab reloading:', tabId);
-        if (videosPerTab[tabId]) {
-            logDebug('Cleaning up videos for reloaded tab:', tabId, 'Count:', videosPerTab[tabId].size);
-            delete videosPerTab[tabId];
+    
+    // Clean up any active downloads associated with the closed tab
+    for (const [url, downloadInfo] of activeDownloads.entries()) {
+        if (downloadInfo.tabId === tabId) {
+            logDebug('Cleaning up download for closed tab:', url);
+            activeDownloads.delete(url);
         }
     }
 });
+
+// Keep track of active downloads by URL
+const activeDownloads = new Map(); // key = url, value = { progress, tabId, notificationId, lastUpdated, filename, etc. }
+const downloadPorts = new Map(); // key = portId, value = port object
 
 // Handle port connections from popup
 chrome.runtime.onConnect.addListener(port => {
     if (port.name === 'download_progress') {
         const portId = Date.now().toString();
         downloadPorts.set(portId, port);
+        
+        // Set up message listener for this port
+        port.onMessage.addListener((message) => {
+            // Handle registration for specific download updates
+            if (message.action === 'registerForDownload' && message.downloadUrl) {
+                const downloadInfo = activeDownloads.get(message.downloadUrl);
+                
+                // If we have info about this download, send it immediately
+                if (downloadInfo) {
+                    logDebug('Sending immediate download state for URL:', message.downloadUrl);
+                    port.postMessage({
+                        type: 'progress',
+                        progress: downloadInfo.progress || 0,
+                        url: message.downloadUrl,
+                        filename: downloadInfo.filename || getFilenameFromUrl(message.downloadUrl),
+                        speed: downloadInfo.speed,
+                        eta: downloadInfo.eta,
+                        segmentProgress: downloadInfo.segmentProgress,
+                        confidence: downloadInfo.confidence,
+                        downloaded: downloadInfo.downloaded,
+                        size: downloadInfo.size
+                    });
+                }
+            }
+        });
+        
+        // Handle port disconnection
         port.onDisconnect.addListener(() => {
             downloadPorts.delete(portId);
         });
@@ -412,8 +440,25 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
           ...response,
           type: 'progress',
           // Format filename if available
-          filename: response.filename || request.filename || getFilenameFromUrl(request.url)
+          filename: response.filename || request.filename || getFilenameFromUrl(request.url),
+          // Add URL for tracking
+          url: request.url
         };
+        
+        // Store in activeDownloads map for reconnecting popups
+        activeDownloads.set(request.url, {
+          tabId: sender?.tab?.id || request.tabId || -1,
+          notificationId: notificationId,
+          progress: response.progress || 0,
+          filename: enhancedResponse.filename,
+          lastUpdated: Date.now(),
+          speed: response.speed,
+          eta: response.eta,
+          segmentProgress: response.segmentProgress,
+          confidence: response.confidence,
+          downloaded: response.downloaded,
+          size: response.size
+        });
         
         // Update notification less frequently
         if (response.progress % 10 === 0) {
@@ -430,7 +475,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         }
         
         // Debug log to help track what's being passed to UI
-        console.log('Forwarding progress data to UI:', enhancedResponse);
+        logDebug('Forwarding progress data to UI:', enhancedResponse);
         
         // Forward progress to all connected popups
         ports.forEach(port => {
@@ -441,8 +486,12 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
           }
         });
       } else if (response && response.success && !hasError) {
+        // On success, remove from active downloads
+        activeDownloads.delete(request.url);
         handleDownloadSuccess(response, notificationId, ports);
       } else if (response && response.error && !hasError) {
+        // On error, remove from active downloads
+        activeDownloads.delete(request.url);
         hasError = true;
         handleDownloadError(response.error, notificationId, ports);
       }
@@ -1085,8 +1134,25 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
               ...response,
               type: 'progress',
               // Format filename if available
-              filename: response.filename || request.filename || getFilenameFromUrl(request.url)
+              filename: response.filename || request.filename || getFilenameFromUrl(request.url),
+              // Add URL for tracking
+              url: request.url
             };
+            
+            // Store in activeDownloads map for reconnecting popups
+            activeDownloads.set(request.url, {
+              tabId: sender?.tab?.id || request.tabId || -1,
+              notificationId: notificationId,
+              progress: response.progress || 0,
+              filename: enhancedResponse.filename,
+              lastUpdated: Date.now(),
+              speed: response.speed,
+              eta: response.eta,
+              segmentProgress: response.segmentProgress,
+              confidence: response.confidence,
+              downloaded: response.downloaded,
+              size: response.size
+            });
             
             // Update notification less frequently
             if (response.progress % 10 === 0) {
@@ -1103,7 +1169,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             }
             
             // Debug log to help track what's being passed to UI
-            console.log('Forwarding progress data to UI:', enhancedResponse);
+            logDebug('Forwarding progress data to UI:', enhancedResponse);
             
             // Forward progress to all connected popups
             ports.forEach(port => {
@@ -1114,8 +1180,12 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
               }
             });
           } else if (response && response.success && !hasError) {
+            // On success, remove from active downloads
+            activeDownloads.delete(request.url);
             handleDownloadSuccess(response, notificationId, ports);
           } else if (response && response.error && !hasError) {
+            // On error, remove from active downloads
+            activeDownloads.delete(request.url);
             hasError = true;
             handleDownloadError(response.error, notificationId, ports);
           }

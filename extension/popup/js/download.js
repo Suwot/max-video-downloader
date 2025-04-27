@@ -44,9 +44,20 @@ export async function handleDownload(button, url, type) {
         // Create a new port connection
         downloadPort = chrome.runtime.connect({ name: 'download_progress' });
         
+        // Immediately register interest in this download URL
+        downloadPort.postMessage({
+            action: 'registerForDownload',
+            downloadUrl: url
+        });
+        
         // Set up message listener
         downloadPort.onMessage.addListener((response) => {
             console.log('Download progress:', response); // Debug log
+            
+            // Make sure this message is for our URL
+            if (response?.url !== url) {
+                return; // Ignore messages for other URLs
+            }
             
             if (response?.type === 'progress') {
                 const progress = response.progress || 0;
@@ -109,7 +120,8 @@ export async function handleDownload(button, url, type) {
         chrome.runtime.sendMessage({
             type: type === 'hls' ? 'downloadHLS' : 'download',
             url: url,
-            manifestUrl: url // Pass the manifest URL for better segment tracking
+            manifestUrl: url, // Pass the manifest URL for better segment tracking
+            tabId: await getCurrentTabId() // Pass tabId for proper tracking
         });
         
     } catch (error) {
@@ -127,6 +139,17 @@ export async function handleDownload(button, url, type) {
         button.style.backgroundImage = 'none';
         button.style.backgroundColor = '#1976D2';
         button.innerHTML = originalText;
+    }
+}
+
+// Helper function to get current tab ID
+async function getCurrentTabId() {
+    try {
+        const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+        return tabs[0]?.id || -1;
+    } catch (e) {
+        console.error('Error getting current tab ID:', e);
+        return -1;
     }
 }
 
