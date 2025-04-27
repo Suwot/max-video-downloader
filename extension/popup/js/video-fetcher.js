@@ -27,7 +27,12 @@ import {
     getMediaInfoFromCache, 
     addMediaInfoToCache,
     addPosterToCache,
-    getPosterFromCache
+    getPosterFromCache,
+    // Import master playlist cache functions
+    getMasterPlaylist,
+    addMasterPlaylist,
+    getMasterPlaylistForVariant,
+    clearMasterPlaylists
 } from './state.js';
 import { showLoader, showErrorMessage, restoreScrollPosition } from './ui.js';
 import { groupVideos, processVideos, clearHLSRelationships } from './video-processor.js';
@@ -42,8 +47,7 @@ function logDebug(...args) {
     console.log('[Video Fetcher]', new Date().toISOString(), ...args);
 }
 
-// Keep track of master playlists we've seen
-const knownMasterPlaylists = new Map();
+// Remove the local knownMasterPlaylists Map as we're now using the centralized one in state.js
 
 /**
  * Fetch and process HLS manifest content
@@ -103,13 +107,20 @@ async function processHLSRelationships(video, tabId) {
     // Skip non-HLS videos for manifest parsing
     if (video.type !== 'hls') return video;
 
-    // First check if this URL is a known variant of a master playlist
-    const masterPlaylist = Array.from(knownMasterPlaylists.values())
-        .find(master => master.qualityVariants?.some(v => v.url === video.url));
+    // First check if this URL is a known variant of a master playlist using the centralized cache
+    const masterPlaylist = getMasterPlaylistForVariant(video.url);
     
     if (masterPlaylist) {
         // Skip this video as it will be handled by its master playlist
+        logDebug('Skipping variant URL that belongs to master playlist:', video.url);
         return null;
+    }
+
+    // Check if this URL is already a known master playlist
+    const existingMaster = getMasterPlaylist(video.url);
+    if (existingMaster) {
+        logDebug('Found existing master playlist in cache:', video.url);
+        return existingMaster;
     }
 
     // Fetch and check the manifest content
@@ -133,8 +144,9 @@ async function processHLSRelationships(video, tabId) {
             }))
         };
         
-        // Store in our known master playlists map
-        knownMasterPlaylists.set(video.url, enhancedVideo);
+        // Store in our centralized master playlist cache
+        logDebug('Adding master playlist to centralized cache:', video.url);
+        addMasterPlaylist(video.url, enhancedVideo);
         
         return enhancedVideo;
     }
@@ -156,6 +168,7 @@ export async function updateVideoList(forceRefresh = false, tabId = null) {
     if (forceRefresh) {
         logDebug('Clearing HLS relationships');
         clearHLSRelationships();
+        clearMasterPlaylists(); // Clear the centralized master playlist cache
     }
     
     // Save current scroll position

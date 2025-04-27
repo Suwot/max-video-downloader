@@ -8,6 +8,7 @@
  * - Stores resolution and media info caches
  * - Maintains scroll position between UI updates
  * - Coordinates state persistence across extension sessions
+ * - Manages HLS master playlist relationships
  */
 
 // popup/js/state.js
@@ -23,6 +24,7 @@ const MAX_POSTER_CACHE_SIZE = 50;
 const MAX_MEDIA_INFO_CACHE_SIZE = 100;
 const MAX_RESOLUTION_CACHE_SIZE = 100;
 const MAX_STREAM_METADATA_CACHE_SIZE = 50;
+const MAX_MASTER_PLAYLISTS_CACHE_SIZE = 50; // New size limit for master playlists
 
 /**
  * Chrome Storage Usage:
@@ -45,6 +47,7 @@ let posterCache = new Map();
 let currentTheme = 'dark'; 
 let mediaInfoCache = new Map();
 const streamMetadataCache = new Map();
+const masterPlaylistCache = new Map(); // New cache for HLS master playlists
 
 // Debug logging helper
 function logDebug(...args) {
@@ -326,6 +329,161 @@ function saveMediaInfoCache() {
 }
 
 /**
+ * Add a master playlist to the cache
+ * @param {string} playlistUrl - URL of the master playlist 
+ * @param {Object} playlistData - Playlist information including variants
+ */
+export function addMasterPlaylist(playlistUrl, playlistData) {
+    try {
+        // Add access timestamp for LRU
+        masterPlaylistCache.set(playlistUrl, {
+            data: playlistData,
+            timestamp: Date.now(),
+            lastAccessed: Date.now(),
+            version: CACHE_VERSION
+        });
+        
+        // Enforce cache size limit (LRU eviction)
+        enforceMapCacheLimit(masterPlaylistCache, MAX_MASTER_PLAYLISTS_CACHE_SIZE);
+        
+        saveMasterPlaylistCache();
+    } catch (error) {
+        handleError('Cache', 'adding master playlist', error);
+    }
+}
+
+/**
+ * Get a master playlist from the cache if it exists and is valid
+ * @param {string} playlistUrl - URL of the master playlist
+ * @returns {Object|null} The master playlist data or null if not found/valid
+ */
+export function getMasterPlaylist(playlistUrl) {
+    try {
+        const cached = masterPlaylistCache.get(playlistUrl);
+        if (!cached) return null;
+        
+        // Version check
+        if (cached.version !== CACHE_VERSION) {
+            masterPlaylistCache.delete(playlistUrl);
+            return null;
+        }
+        
+        // TTL check
+        if (Date.now() - cached.timestamp > CACHE_TTL) {
+            masterPlaylistCache.delete(playlistUrl);
+            return null;
+        }
+        
+        // Update last accessed time for LRU algorithm
+        cached.lastAccessed = Date.now();
+        masterPlaylistCache.set(playlistUrl, cached);
+        
+        return cached.data;
+    } catch (error) {
+        return handleError('Cache', 'getting master playlist', error, null);
+    }
+}
+
+/**
+ * Check if a URL is a known variant of a master playlist
+ * @param {string} variantUrl - The variant URL to check
+ * @returns {Object|null} The master playlist containing this variant, or null if not found
+ */
+export function getMasterPlaylistForVariant(variantUrl) {
+    try {
+        // Loop through all master playlists
+        for (const [url, cacheEntry] of masterPlaylistCache.entries()) {
+            // Skip invalid entries
+            if (!cacheEntry || !cacheEntry.data || !cacheEntry.data.qualityVariants) {
+                continue;
+            }
+            
+            // TTL check
+            if (Date.now() - cacheEntry.timestamp > CACHE_TTL) {
+                masterPlaylistCache.delete(url);
+                continue;
+            }
+            
+            // Check if this variant URL is in the master's quality variants
+            const master = cacheEntry.data;
+            if (master.qualityVariants.some(variant => variant.url === variantUrl)) {
+                // Update last accessed time
+                cacheEntry.lastAccessed = Date.now();
+                masterPlaylistCache.set(url, cacheEntry);
+                return master;
+            }
+        }
+        return null;
+    } catch (error) {
+        return handleError('Cache', 'finding master playlist for variant', error, null);
+    }
+}
+
+/**
+ * Get all known master playlists
+ * @returns {Map} Map of all valid master playlists
+ */
+export function getAllMasterPlaylists() {
+    try {
+        const result = new Map();
+        const now = Date.now();
+        
+        // Filter out expired entries
+        for (const [url, cacheEntry] of masterPlaylistCache.entries()) {
+            // Skip invalid entries
+            if (!cacheEntry || !cacheEntry.data) {
+                continue;
+            }
+            
+            // Check if expired
+            if (now - cacheEntry.timestamp > CACHE_TTL) {
+                masterPlaylistCache.delete(url);
+                continue;
+            }
+            
+            // Add to result
+            result.set(url, cacheEntry.data);
+        }
+        
+        return result;
+    } catch (error) {
+        return handleError('Cache', 'getting all master playlists', error, new Map());
+    }
+}
+
+/**
+ * Clear all master playlist relationships
+ */
+export function clearMasterPlaylists() {
+    try {
+        masterPlaylistCache.clear();
+        chrome.storage.local.remove('masterPlaylistCache').catch(error => {
+            handleError('Storage', 'removing master playlist cache', error);
+        });
+        logDebug('Cleared master playlist cache');
+    } catch (error) {
+        handleError('Cache', 'clearing master playlists', error);
+    }
+}
+
+/**
+ * Save master playlist cache to persistent storage
+ */
+function saveMasterPlaylistCache() {
+    try {
+        const cacheData = JSON.stringify(Array.from(masterPlaylistCache.entries()));
+        chrome.storage.local.set({ 
+            masterPlaylistCache: cacheData,
+            [CACHE_VERSION_KEY]: CACHE_VERSION
+        }).catch(error => {
+            handleError('Storage', 'saving master playlist cache', error);
+        });
+    } catch (error) {
+        handleError('Storage', 'preparing master playlist cache for storage', error);
+    }
+}
+
+/**
  * Initialize state from storage
  */
 export async function initializeState() {
@@ -341,6 +499,7 @@ export async function initializeState() {
             'posterCache',
             'mediaInfoCache', 
             'streamMetadataCache',
+            'masterPlaylistCache', // Add master playlist cache to storage retrieval
             CACHE_VERSION_KEY // Use consistent version key
         ]);
 
@@ -369,6 +528,7 @@ export async function initializeState() {
         restorePosterCache(localData);
         restoreMediaInfoCache(localData);
         restoreStreamMetadataCache(localData);
+        restoreMasterPlaylistCache(localData); // Add master playlist cache restoration
         
         // Handle videos cache
         const [currentTab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -500,6 +660,43 @@ function restoreStreamMetadataCache(localData) {
         } catch (e) {
             handleError('Cache', 'restoring stream metadata cache', e);
             streamMetadataCache.clear(); // Reset on error
+        }
+    }
+}
+
+/**
+ * Restore master playlist cache from storage
+ */
+function restoreMasterPlaylistCache(localData) {
+    if (localData.masterPlaylistCache) {
+        try {
+            // Check version - use consistent version key
+            if (localData[CACHE_VERSION_KEY] !== CACHE_VERSION) {
+                logDebug('Master playlist cache version mismatch, but will attempt to use existing data');
+            }
+            
+            const parsedCache = JSON.parse(localData.masterPlaylistCache);
+            masterPlaylistCache.clear();
+            
+            for (const [url, data] of parsedCache) {
+                // Add lastAccessed if missing (for LRU)
+                if (!data.lastAccessed) {
+                    data.lastAccessed = data.timestamp;
+                }
+                
+                // Only restore non-expired entries
+                if (Date.now() - data.timestamp <= CACHE_TTL) {
+                    // Update version to current
+                    data.version = CACHE_VERSION;
+                    masterPlaylistCache.set(url, data);
+                }
+            }
+            
+            enforceMapCacheLimit(masterPlaylistCache, MAX_MASTER_PLAYLISTS_CACHE_SIZE);
+            logDebug(`Restored ${masterPlaylistCache.size} master playlists from cache`);
+        } catch (e) {
+            handleError('Cache', 'restoring master playlist cache', e);
+            masterPlaylistCache.clear(); // Reset on error
         }
     }
 }
@@ -703,11 +900,13 @@ export function purgeExpiredCaches() {
         cleanMapCache(mediaInfoCache, 'media info');
         cleanMapCache(streamMetadataCache, 'stream metadata');
         cleanMapCache(resolutionCache, 'resolution');
+        cleanMapCache(masterPlaylistCache, 'master playlist'); // Add cleaning for master playlists
         
         // Save cleaned caches
         saveStreamMetadataCache();
         savePosterCache();
         saveMediaInfoCache();
+        saveMasterPlaylistCache(); // Add saving master playlist cache
         
         return true;
     } catch (error) {
@@ -731,6 +930,7 @@ export async function clearAllCaches() {
         posterCache.clear();
         mediaInfoCache.clear();
         streamMetadataCache.clear();
+        masterPlaylistCache.clear(); // Add clearing master playlist cache
         
         // Clear all storage caches
         await chrome.storage.local.remove([
@@ -740,6 +940,7 @@ export async function clearAllCaches() {
             'mediaInfoCache',
             'streamMetadataCache',
             'resolutionCache',
+            'masterPlaylistCache', // Add removing master playlist cache
             CACHE_VERSION_KEY
         ]);
         
