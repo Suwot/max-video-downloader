@@ -438,7 +438,9 @@ async function handlePortMessage(message, port, portId) {
             startTime: Date.now(),
             filename: message.filename || getFilenameFromUrl(message.url),
             tabId: message.tabId || -1,
-            type: message.type === 'downloadHLS' ? 'hls' : 'direct'
+            type: message.type === 'downloadHLS' ? 'hls' : 'direct',
+            quality: message.quality || null,
+            originalUrl: message.originalUrl || message.url
         });
         
         // Send download ID back to popup
@@ -608,6 +610,9 @@ async function handlePortMessage(message, port, portId) {
             }
         };
         
+        // CRITICAL FIX: Actually send the download request to the native host service
+        console.log('🔄 Forwarding download request to native host:', message.url);
+        
         // Send to native host using our service with enhanced parameters
         nativeHostService.sendMessage({
             type: 'download',
@@ -617,6 +622,8 @@ async function handlePortMessage(message, port, portId) {
             quality: message.quality,
             manifestUrl: message.manifestUrl || message.url // Pass manifest URL for better progress tracking
         }, responseHandler).catch(error => {
+            console.error('❌ Native host error:', error);
+            
             // Update download status
             const download = downloads.get(downloadId);
             if (download) {
@@ -643,6 +650,31 @@ async function handlePortMessage(message, port, portId) {
                 }
             }
         });
+    }
+    
+    // Handle stream qualities request
+    else if (message.type === 'getHLSQualities') {
+        console.log('🎥 Requesting media info from native host for:', message.url);
+        
+        try {
+            const response = await nativeHostService.sendMessage({
+                type: 'getQualities',
+                url: message.url
+            });
+            
+            port.postMessage({
+                type: 'qualitiesResponse',
+                url: message.url,
+                ...response
+            });
+        } catch (error) {
+            console.error('Error getting media info:', error);
+            port.postMessage({
+                type: 'qualitiesResponse',
+                url: message.url,
+                error: error.message
+            });
+        }
     }
     
     // Handle manifest-related operations
@@ -677,6 +709,28 @@ async function handlePortMessage(message, port, portId) {
             variantUrl: message.variantUrl,
             relationship: relationship
         });
+    }
+
+    // Handle download details request - NEW
+    else if (message.action === 'getDownloadDetails' && message.downloadId) {
+        const download = downloads.get(message.downloadId);
+        if (download) {
+            port.postMessage({
+                type: 'downloadDetails',
+                downloadId: message.downloadId,
+                url: download.url,
+                originalUrl: download.originalUrl || download.url,
+                progress: download.progress || 0,
+                status: download.status,
+                quality: download.quality,
+                filename: download.filename
+            });
+        } else {
+            port.postMessage({
+                type: 'downloadNotFound',
+                downloadId: message.downloadId
+            });
+        }
     }
 
     // Handle active downloads list request
