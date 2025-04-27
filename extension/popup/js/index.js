@@ -43,28 +43,44 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
         const activeTabId = tabs[0].id;
         
-        // Check if we already have videos in background script before showing loading state
-        let backgroundVideos = [];
+        // First check for pre-processed videos from background script storage
+        // These are videos that have been fully processed while the popup was closed
+        let hasPreProcessedVideos = false;
         try {
-            backgroundVideos = await chrome.runtime.sendMessage({ 
-                action: 'getVideos', 
-                tabId: activeTabId 
-            });
-            console.log('Got videos from background script:', backgroundVideos?.length || 0);
+            const storageKey = `processedVideos_${activeTabId}`;
+            const result = await chrome.storage.local.get(storageKey);
+            if (result[storageKey] && result[storageKey].length > 0) {
+                console.log('Found pre-processed videos from background storage:', result[storageKey].length);
+                renderVideos(result[storageKey]);
+                hasPreProcessedVideos = true;
+            }
         } catch (e) {
-            console.error('Error fetching videos from background:', e);
+            console.error('Error retrieving pre-processed videos:', e);
         }
         
-        // Attempt to render cached videos immediately
-        let hasCachedVideos = false;
-        if (state.cachedVideos && state.cachedVideos.length > 0) {
+        // If we don't have pre-processed videos, try regular background videos
+        if (!hasPreProcessedVideos) {
+            try {
+                const backgroundVideos = await chrome.runtime.sendMessage({ 
+                    action: 'getVideos', 
+                    tabId: activeTabId 
+                });
+                
+                if (backgroundVideos && backgroundVideos.length > 0) {
+                    console.log('Got videos from background script:', backgroundVideos.length);
+                    renderVideos(backgroundVideos);
+                    hasPreProcessedVideos = true;
+                }
+            } catch (e) {
+                console.error('Error fetching videos from background:', e);
+            }
+        }
+        
+        // Attempt to render cached videos as a fallback
+        let hasCachedVideos = hasPreProcessedVideos;
+        if (!hasCachedVideos && state.cachedVideos && state.cachedVideos.length > 0) {
             console.log('Found cached videos, rendering immediately:', state.cachedVideos.length);
             renderVideos(state.cachedVideos);
-            hasCachedVideos = true;
-        } else if (backgroundVideos && backgroundVideos.length > 0) {
-            // Render background videos if no cached videos
-            console.log('Rendering videos from background script:', backgroundVideos.length);
-            renderVideos(backgroundVideos);
             hasCachedVideos = true;
         }
         
@@ -102,7 +118,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             console.log('Error notifying content script:', e);
         }
 
-        // Only force refresh if we don't have cached videos or if they're stale
+        // Force refresh if we don't have any videos yet
         const forceRefresh = !hasCachedVideos;
         console.log(hasCachedVideos ? 'Using cached videos, requesting background refresh' : 'Requesting fresh videos from background...');
         const freshVideos = await updateVideoList(forceRefresh, activeTabId);

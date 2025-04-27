@@ -916,7 +916,7 @@ function notifyBackground(videos) {
 
     if (validVideos.length === 0) return;
 
-    // Send each valid video to background
+    // First, send each valid video to background script for storage
     validVideos.forEach(video => {
         sendVideoToBackground(video.url, video.type, {
             poster: video.poster,
@@ -925,9 +925,14 @@ function notifyBackground(videos) {
         });
     });
 
-    // Always notify about new videos, regardless of popup state
+    // Then, notify about new videos as a batch - this will immediately update
+    // any open popups AND the background script will also be notified
     chrome.runtime.sendMessage({
         action: 'newVideoDetected',
-        videos: validVideos
+        videos: validVideos,
+        timestamp: Date.now()
+    }).catch(err => {
+        // Suppress errors when popup is not open
+        // This is expected behavior
     });
 }

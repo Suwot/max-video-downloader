@@ -109,6 +109,7 @@ export async function updateVideoList(forceRefresh = false, tabId = null) {
         logDebug('Clearing HLS relationships');
         clearHLSRelationships();
         clearMasterPlaylists(); // Clear the centralized master playlist cache
+        clearManifestCaches(); // Clear manifest service caches
     }
     
     // Save current scroll position
@@ -116,12 +117,136 @@ export async function updateVideoList(forceRefresh = false, tabId = null) {
         setScrollPosition(container.scrollTop);
     }
     
+    // Check if we already have a tab ID, otherwise get the current tab
+    if (!tabId) {
+        try {
+            const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+            tabId = tab.id;
+        } catch (e) {
+            logDebug('Error getting current tab:', e);
+        }
+    }
+    logDebug('Using tab ID:', tabId);
+    
+    // PRIORITY 1: Check for pre-processed videos stored in local storage
+    // These were stored by the background script when videos were detected while popup was closed
+    if (!forceRefresh) {
+        try {
+            const storageData = await chrome.storage.local.get([
+                `processedVideos_${tabId}`,
+                `processedVideosTimestamp_${tabId}`
+            ]);
+            
+            const processedVideos = storageData[`processedVideos_${tabId}`];
+            const timestamp = storageData[`processedVideosTimestamp_${tabId}`];
+            
+            // Define a reasonable cache freshness threshold - 5 minutes
+            const CACHE_FRESHNESS_THRESHOLD_MS = 5 * 60 * 1000;
+            const isCacheFresh = timestamp && (Date.now() - timestamp < CACHE_FRESHNESS_THRESHOLD_MS);
+            
+            if (processedVideos && processedVideos.length > 0 && isCacheFresh) {
+                logDebug('Found fresh pre-processed videos in local storage:', processedVideos.length);
+                
+                // These videos are already processed, so just render them immediately
+                renderVideos(processedVideos);
+                
+                // Update our runtime cache
+                setCachedVideos(processedVideos);
+                
+                // Restore scroll position if available
+                restoreScrollPosition();
+                
+                // Start the background refresh loop for updates
+                startBackgroundRefreshLoop(3000, tabId);
+                
+                // Enhance videos with additional metadata if needed
+                const videosNeedingInfo = processedVideos.filter(video => !video.mediaInfo);
+                if (videosNeedingInfo.length > 0) {
+                    logDebug('Fetching media info for', videosNeedingInfo.length, 'videos');
+                    fetchVideoInfo(videosNeedingInfo, tabId);
+                }
+                
+                return processedVideos;
+            }
+            
+            logDebug('No fresh pre-processed videos in local storage, continuing with normal flow');
+        } catch (e) {
+            logDebug('Error checking local storage for pre-processed videos:', e);
+        }
+    }
+    
+    // PRIORITY 2: Check for videos from the background script's runtime memory
+    try {
+        const backgroundVideos = await chrome.runtime.sendMessage({ 
+            action: 'getVideos', 
+            tabId: tabId 
+        });
+        
+        if (backgroundVideos && backgroundVideos.length) {
+            logDebug('Got videos from background script:', backgroundVideos.length);
+            
+            // Apply filtering to ensure valid videos
+            const filteredBackgroundVideos = validateAndFilterVideos(backgroundVideos);
+            logDebug('After filtering background videos:', filteredBackgroundVideos.length);
+            
+            if (filteredBackgroundVideos.length > 0) {
+                // Process these videos to ensure they're ready for display
+                const processedVideos = [];
+                for (const video of filteredBackgroundVideos) {
+                    const processed = await processHLSRelationships(video, tabId);
+                    if (processed) {
+                        processedVideos.push(processed);
+                    }
+                }
+                
+                // Group and cache the videos
+                const groupedVideos = processVideos(processedVideos);
+                logDebug('Background videos after grouping:', groupedVideos.length);
+                
+                // Update the cache
+                setCachedVideos(groupedVideos);
+                
+                // Render videos immediately
+                renderVideos(groupedVideos);
+                
+                // Restore scroll position if available
+                restoreScrollPosition();
+                
+                // Store the processed videos in local storage for future use
+                try {
+                    await chrome.storage.local.set({
+                        [`processedVideos_${tabId}`]: groupedVideos,
+                        [`processedVideosTimestamp_${tabId}`]: Date.now()
+                    });
+                } catch (e) {
+                    logDebug('Error storing processed videos in local storage:', e);
+                }
+                
+                // If we're not forcing a refresh, we can return these videos
+                if (!forceRefresh) {
+                    // Start fetching additional details in the background
+                    const videosNeedingInfo = processedVideos.filter(video => !video.mediaInfo);
+                    if (videosNeedingInfo.length > 0) {
+                        logDebug('Fetching media info for', videosNeedingInfo.length, 'videos');
+                        fetchVideoInfo(videosNeedingInfo, tabId);
+                    }
+                    
+                    // Start the background refresh loop
+                    startBackgroundRefreshLoop(3000, tabId);
+                    return groupedVideos;
+                }
+            }
+        }
+    } catch (e) {
+        logDebug('Error getting videos from background script:', e);
+    }
+    
     // Check if cached videos are still valid
     const cachedVideos = getCachedVideos();
     logDebug('Got cached videos:', cachedVideos?.length || 0);
     
-    // Define a reasonable cache freshness threshold - 2 minutes
-    const CACHE_FRESHNESS_THRESHOLD_MS = 2 * 60 * 1000; // 2 minutes
+    // Define a reasonable cache freshness threshold - 5 minutes (increased from 2 minutes)
+    const CACHE_FRESHNESS_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
     
     // Get the cache timestamp if available
     let cacheTimestamp = 0;
@@ -148,6 +273,8 @@ export async function updateVideoList(forceRefresh = false, tabId = null) {
             setCachedVideos(filteredCachedVideos);
         }
         
+        // Start the background refresh loop
+        startBackgroundRefreshLoop(3000, tabId);
         return filteredCachedVideos;
     }
     
@@ -166,13 +293,6 @@ export async function updateVideoList(forceRefresh = false, tabId = null) {
     }
     
     try {
-        // Get current tab if tab ID not provided
-        if (!tabId) {
-            const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-            tabId = tab.id;
-        }
-        logDebug('Current tab:', tabId);
-        
         const videos = [];
         let contentScriptError = null;
         let backgroundScriptError = null;
@@ -204,7 +324,7 @@ export async function updateVideoList(forceRefresh = false, tabId = null) {
             contentScriptError = error;
         }
 
-        // Get videos from background script
+        // Get videos from background script again to merge with any newly found videos
         try {
             logDebug('Requesting videos from background script');
             const backgroundVideos = await chrome.runtime.sendMessage({ 
@@ -233,6 +353,9 @@ export async function updateVideoList(forceRefresh = false, tabId = null) {
             // If we have cached videos, keep showing those instead of an error message
             if (cachedVideos && cachedVideos.length > 0) {
                 logDebug('No new videos found, keeping cached videos');
+                
+                // Start the background refresh loop
+                startBackgroundRefreshLoop(3000, tabId);
                 return cachedVideos;
             }
             
@@ -286,6 +409,8 @@ export async function updateVideoList(forceRefresh = false, tabId = null) {
             fetchVideoInfo(videosNeedingInfo, tabId);
         }
         
+        // Start the background refresh loop
+        startBackgroundRefreshLoop(3000, tabId);
         return groupedVideos;
         
     } catch (error) {

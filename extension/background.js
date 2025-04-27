@@ -44,7 +44,8 @@ const downloadPorts = new Map();
 const metadataProcessingQueue = new Map();
 const manifestRelationships = new Map();
 
-// NEW: Add a way to broadcast videos to all open popups
+// Improved broadcast function that also stores processed videos for instant access
+// when popup opens
 function broadcastVideoUpdate(tabId) {
     if (!videosPerTab[tabId]) return;
     
@@ -52,8 +53,16 @@ function broadcastVideoUpdate(tabId) {
     const videos = Array.from(videosPerTab[tabId].values());
     videos.sort((a, b) => b.timestamp - a.timestamp);
     
-    // Apply proper grouping and filtering
+    // Apply proper grouping and filtering - FULLY process videos
     const processedVideos = processVideosForBroadcast(videos);
+    
+    // Important: Store the processed videos for instant access when popup opens
+    chrome.storage.local.set({
+        [`processedVideos_${tabId}`]: processedVideos,
+        [`processedVideosTimestamp_${tabId}`]: Date.now()
+    }).catch(err => {
+        console.error('Failed to store processed videos:', err);
+    });
     
     // Send update to any open popups
     chrome.runtime.sendMessage({
@@ -65,7 +74,7 @@ function broadcastVideoUpdate(tabId) {
     });
 }
 
-// Process videos before broadcasting to make sure they're properly grouped
+// Process videos for sending to popup - fully prepare videos for instant display
 function processVideosForBroadcast(videos) {
     // First apply validation filter to remove unwanted videos
     const validatedVideos = validateAndFilterVideos(videos);
@@ -86,7 +95,7 @@ function processVideosForBroadcast(videos) {
         }
     });
     
-    // Second pass: include only non-variant videos
+    // Second pass: include only non-variant videos or master playlists
     validatedVideos.forEach(video => {
         const normalizedUrl = normalizeUrl(video.url);
         
@@ -95,8 +104,83 @@ function processVideosForBroadcast(videos) {
             return;
         }
         
+        // Add additional information needed for immediate display
+        const enhancedVideo = {
+            ...video,
+            // Add additional metadata needed by UI
+            timestamp: video.timestamp || Date.now(),
+            processed: true,
+            // Ensure video has all necessary fields for display
+            title: video.title || getFilenameFromUrl(video.url),
+            poster: video.poster || video.previewUrl || null,
+            downloadable: true,
+            // Add source information to track where the video came from
+            source: video.source || 'background',
+            // Track if this was added via background processing while popup was closed
+            detectedWhilePopupClosed: true
+        };
+        
+        // If we have stream info, ensure it's mapped to mediaInfo for the popup
+        if (video.streamInfo && !video.mediaInfo) {
+            enhancedVideo.mediaInfo = {
+                hasVideo: video.streamInfo.hasVideo,
+                hasAudio: video.streamInfo.hasAudio,
+                videoCodec: video.streamInfo.videoCodec,
+                audioCodec: video.streamInfo.audioCodec,
+                format: video.streamInfo.format,
+                container: video.streamInfo.container,
+                duration: video.streamInfo.duration,
+                sizeBytes: video.streamInfo.sizeBytes,
+                width: video.streamInfo.width,
+                height: video.streamInfo.height,
+                fps: video.streamInfo.fps,
+                bitrate: video.streamInfo.videoBitrate || video.streamInfo.totalBitrate
+            };
+        }
+        
+        // If we have resolution info from the stream but not as a separate field,
+        // add it for immediate display in the popup
+        if (!video.resolution && video.streamInfo) {
+            enhancedVideo.resolution = {
+                width: video.streamInfo.width,
+                height: video.streamInfo.height,
+                fps: video.streamInfo.fps,
+                bitrate: video.streamInfo.videoBitrate || video.streamInfo.totalBitrate
+            };
+        }
+        
+        // Ensure we have a preview URL for rendering in the UI
+        if (!enhancedVideo.previewUrl && enhancedVideo.poster) {
+            enhancedVideo.previewUrl = enhancedVideo.poster;
+        }
+        
+        // If this is an HLS video, pre-compute some indicators for the UI
+        if (video.type === 'hls' && video.url.includes('.m3u8')) {
+            enhancedVideo.isHLS = true;
+            
+            // If this is a master playlist with variants, mark it as such
+            if (video.qualityVariants && video.qualityVariants.length > 0) {
+                enhancedVideo.isMasterPlaylist = true;
+                enhancedVideo.qualityCount = video.qualityVariants.length;
+                
+                // Find the highest quality variant for preview
+                const highestQuality = [...video.qualityVariants].sort((a, b) => {
+                    return (b.bandwidth || 0) - (a.bandwidth || 0);
+                })[0];
+                
+                if (highestQuality) {
+                    enhancedVideo.highestQualityInfo = {
+                        width: highestQuality.width,
+                        height: highestQuality.height,
+                        bandwidth: highestQuality.bandwidth,
+                        fps: highestQuality.fps
+                    };
+                }
+            }
+        }
+        
         // Include this video in the final output
-        processedVideos.push(video);
+        processedVideos.push(enhancedVideo);
     });
     
     return processedVideos;
@@ -906,3 +990,337 @@ async function fetchHLSManifest(url, tabId) {
         return null;
     }
 }
+
+// Store detected videos in local storage for immediate access by popup
+async function storeProcessedVideosInStorage(videos, tabId) {
+    // Process videos for immediate display
+    const processedVideos = processVideosForBroadcast(videos);
+    
+    if (processedVideos && processedVideos.length > 0) {
+        try {
+            // Store both the videos and a timestamp
+            await chrome.storage.local.set({
+                [`processedVideos_${tabId}`]: processedVideos,
+                [`processedVideosTimestamp_${tabId}`]: Date.now()
+            });
+            
+            console.log(`[Background] Stored ${processedVideos.length} processed videos for tab ${tabId} in local storage`);
+        } catch (error) {
+            console.error('[Background] Error storing processed videos in local storage:', error);
+        }
+    }
+}
+
+// When videos are detected, process them immediately and store
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+    // Handle video detection messages
+    if (request.action === 'videoSourceFound' || request.action === 'foundVideos') {
+        const tabId = sender.tab?.id;
+        if (!tabId) {
+            console.error('[Background] No tab ID in sender:', sender);
+            return;
+        }
+        
+        console.log(`[Background] Received ${request.videos?.length || 0} videos from tab ${tabId}`);
+        
+        // Update the videos map for this tab
+        const videos = request.videos || [];
+        if (videos.length > 0) {
+            detectionsPerTab.set(tabId, videos);
+            
+            // Process and store videos in local storage for instant access by popup
+            storeProcessedVideosInStorage(videos, tabId);
+            
+            // Broadcast to any open popups to refresh
+            chrome.runtime.sendMessage({
+                action: 'videoUpdated',
+                tabId: tabId,
+                count: videos.length
+            }).catch(error => {
+                // This error is expected if no popup is listening
+                if (!error.message.includes('Receiving end does not exist')) {
+                    console.error('[Background] Error broadcasting video update:', error);
+                }
+            });
+        }
+    }
+    
+    // Handle other message types...
+    if (msg.action === 'newVideoDetected' && msg.videos && msg.videos.length > 0) {
+        const tabId = sender?.tab?.id;
+        if (!tabId) return false;
+        
+        console.log(`Received ${msg.videos.length} new videos from content script for tab ${tabId}`);
+        
+        // Process each video through the same pipeline
+        msg.videos.forEach(video => {
+          addVideoToTab(tabId, {
+            url: video.url,
+            type: video.type,
+            source: 'contentScript',
+            poster: video.poster,
+            title: video.title,
+            foundFromQueryParam: video.foundFromQueryParam || false,
+          });
+        });
+        
+        return false;
+      }
+      
+      // Handle download requests
+      if (msg.type === 'downloadHLS' || msg.type === 'download') {
+        const notificationId = `download-${Date.now()}`;
+        let hasError = false;
+        
+        // Get all active download ports
+        const ports = Array.from(downloadPorts.values());
+    
+        // Create response handler
+        const responseHandler = (response) => {
+          if (response && response.type === 'progress' && !hasError) {
+            // Ensure all progress data is passed through, including confidence levels,
+            // segment tracking, ETA, and other enhanced tracking metrics
+            const enhancedResponse = {
+              ...response,
+              type: 'progress',
+              // Format filename if available
+              filename: response.filename || msg.filename || getFilenameFromUrl(msg.url)
+            };
+            
+            // Update notification less frequently
+            if (response.progress % 10 === 0) {
+              let message = `Downloading: ${Math.round(response.progress)}%`;
+              
+              // Add segment info if available
+              if (response.segmentProgress) {
+                message += ` (Segment: ${response.segmentProgress})`;
+              }
+              
+              chrome.notifications.update(notificationId, {
+                message: message
+              });
+            }
+            
+            // Debug log to help track what's being passed to UI
+            console.log('Forwarding progress data to UI:', enhancedResponse);
+            
+            // Forward progress to all connected popups
+            ports.forEach(port => {
+              try {
+                port.postMessage(enhancedResponse);
+              } catch (e) {
+                console.error('Error sending progress to port:', e);
+              }
+            });
+          } else if (response && response.success && !hasError) {
+            handleDownloadSuccess(response, notificationId, ports);
+          } else if (response && response.error && !hasError) {
+            hasError = true;
+            handleDownloadError(response.error, notificationId, ports);
+          }
+        };
+    
+        // Show initial notification
+        chrome.notifications.create(notificationId, {
+          type: 'basic',
+          iconUrl: 'icons/48.png',
+          title: 'Downloading Video',
+          message: 'Starting download...'
+        });
+    
+        // Send to native host using our service with enhanced parameters
+        nativeHostService.sendMessage({
+          type: 'download',
+          url: msg.url,
+          filename: msg.filename || 'video.mp4',
+          savePath: msg.savePath,
+          quality: msg.quality,
+          manifestUrl: msg.manifestUrl || msg.url // Pass manifest URL for better progress tracking
+        }, responseHandler).catch(error => {
+          handleDownloadError(error.message, notificationId, ports);
+        });
+    
+        return true; // Keep channel open for progress updates
+      }
+    
+      // Handle video detection from content script
+      if (msg.action === 'addVideo') {
+        const tabId = sender.tab?.id;
+        if (tabId && tabId > 0) {
+          addVideoToTab(tabId, msg);
+        }
+        return false;
+      }
+    
+      // Handle stored playlists request
+      if (msg.action === 'getStoredPlaylists') {
+        const playlists = playlistsPerTab[msg.tabId] 
+          ? Array.from(playlistsPerTab[msg.tabId])
+          : [];
+        sendResponse(playlists);
+        return true;
+      }
+    
+      // Handle videos list request
+      if (msg.action === 'getVideos') {
+        const tabId = msg.tabId;
+        
+        if (!videosPerTab[tabId] || videosPerTab[tabId].size === 0) {
+          sendResponse([]);
+          return true;
+        }
+        
+        // Convert Map to Array for sending
+        const videos = Array.from(videosPerTab[tabId].values());
+        videos.sort((a, b) => b.timestamp - a.timestamp);
+        sendResponse(videos);
+        return true;
+      }
+    
+      // Handle preview generation
+      if (msg.type === 'generatePreview') {
+        // Check if we're already generating this preview
+        const cacheKey = msg.url;
+        if (previewGenerationQueue.has(cacheKey)) {
+          // If we are, wait for the existing promise
+          previewGenerationQueue.get(cacheKey).then(sendResponse);
+          return true;
+        }
+    
+        // Create new preview generation promise
+        const previewPromise = new Promise(resolve => {
+          nativeHostService.sendMessage({
+            type: 'generatePreview',
+            url: msg.url
+          }).then(response => {
+            previewGenerationQueue.delete(cacheKey);
+            
+            // If we successfully generated a preview, cache it with the video
+            if (response && response.previewUrl && msg.tabId && videosPerTab[msg.tabId]) {
+              const normalizedUrl = normalizeUrl(msg.url);
+              const videoInfo = videosPerTab[msg.tabId].get(normalizedUrl);
+              if (videoInfo) {
+                videoInfo.previewUrl = response.previewUrl;
+                videosPerTab[msg.tabId].set(normalizedUrl, videoInfo);
+              }
+            }
+            
+            resolve(response);
+          }).catch(error => {
+            previewGenerationQueue.delete(cacheKey);
+            resolve({ error: error.message });
+          });
+        });
+    
+        // Store the promise
+        previewGenerationQueue.set(cacheKey, previewPromise);
+        
+        // Wait for the preview and send it
+        previewPromise.then(sendResponse);
+        return true;
+      }
+    
+      // Handle stream qualities request
+      if (msg.type === 'getHLSQualities') {
+        // Create promise for quality detection
+        const qualityPromise = new Promise(resolve => {
+          console.log('🎥 Requesting media info from native host for:', msg.url);
+          
+          nativeHostService.sendMessage({
+            type: 'getQualities',
+            url: msg.url
+          }).then(response => {
+            if (response?.streamInfo) {
+              console.group('📊 Received media info from native host:');
+              console.log('URL:', msg.url);
+              
+              // Log video info if available
+              if (response.streamInfo.hasVideo) {
+                console.log('Video:', {
+                  codec: response.streamInfo.videoCodec.name,
+                  resolution: `${response.streamInfo.width}x${response.streamInfo.height}`,
+                  fps: response.streamInfo.fps,
+                  bitrate: response.streamInfo.videoBitrate ? 
+                      `${(response.streamInfo.videoBitrate / 1000000).toFixed(2)} Mbps` : 'unknown'
+                });
+              }
+              
+              // Log audio info if available
+              if (response.streamInfo.hasAudio) {
+                console.log('Audio:', {
+                  codec: response.streamInfo.audioCodec.name,
+                  channels: response.streamInfo.audioCodec.channels,
+                  sampleRate: response.streamInfo.audioCodec.sampleRate ? 
+                      `${response.streamInfo.audioCodec.sampleRate}Hz` : 'unknown'
+                });
+              }
+              
+              // Log duration and container info
+              if (response.streamInfo.duration) {
+                const minutes = Math.floor(response.streamInfo.duration / 60);
+                const seconds = Math.floor(response.streamInfo.duration % 60);
+                console.log('Duration:', `${minutes}:${seconds.toString().padStart(2, '0')}`);
+              }
+              console.log('Container:', response.streamInfo.container);
+              
+              // Process stream variants
+              if (response.streamInfo.variants && response.streamInfo.variants.length > 0) {
+                console.log('Available qualities:', response.streamInfo.variants.length);
+                response.streamInfo.variants.forEach((variant, index) => {
+                  console.log(`Quality ${index + 1}:`, {
+                    resolution: variant.resolution || `${variant.width}x${variant.height}`,
+                    bitrate: variant.bandwidth ? 
+                        `${(variant.bandwidth / 1000000).toFixed(2)} Mbps` : 'unknown',
+                    codecs: variant.codecs || 'unknown'
+                  });
+                });
+              }
+              
+              console.groupEnd();
+              resolve({ streamInfo: response.streamInfo });
+            } else {
+              console.warn('❌ Failed to get media info:', response?.error || 'Unknown error');
+              resolve(response);
+            }
+          }).catch(error => {
+            console.error('Error getting media info:', error);
+            resolve({ error: error.message });
+          });
+        });
+        
+        // Wait for quality info and send response
+        qualityPromise.then(sendResponse);
+        return true;
+      }
+    
+      // Handle manifest fetching
+      if (msg.type === 'fetchManifest') {
+        fetchManifestContent(msg.url).then(content => {
+            sendResponse({ content });
+        });
+        return true;
+      }
+    
+      // Handle manifest relationship storage
+      if (msg.type === 'storeManifestRelationship') {
+        msg.variants.forEach(variant => {
+            manifestRelationships.set(variant.url, {
+                playlistUrl: msg.playlistUrl,
+                bandwidth: variant.bandwidth,
+                resolution: variant.resolution,
+                codecs: variant.codecs,
+                fps: variant.fps
+            });
+        });
+        sendResponse({ success: true });
+        return true;
+      }
+    
+      // Handle manifest relationship lookup
+      if (msg.type === 'getManifestRelationship') {
+        sendResponse(manifestRelationships.get(msg.variantUrl) || null);
+        return true;
+      }
+    
+      return false;
+    });
