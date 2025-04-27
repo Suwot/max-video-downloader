@@ -780,3 +780,50 @@ export async function preserveMetadata() {
     logDebug('Preserved metadata for', metadataCount, 'videos');
     return metadataCount > 0;
 }
+
+// Track the background refresh interval
+let backgroundRefreshInterval = null;
+
+/**
+ * Start a periodic background refresh loop
+ * @param {number} intervalMs - Refresh interval in milliseconds
+ * @param {number} tabId - Current tab ID
+ */
+export function startBackgroundRefreshLoop(intervalMs = 3000, tabId = null) {
+    // Clear any existing interval
+    stopBackgroundRefreshLoop();
+    
+    // Set up a new interval - check every 3 seconds by default
+    backgroundRefreshInterval = setInterval(async () => {
+        // Get the tab ID if not provided
+        if (!tabId) {
+            try {
+                const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+                tabId = tab?.id;
+            } catch (e) {
+                console.error('Error getting current tab:', e);
+                return;
+            }
+        }
+        
+        if (tabId) {
+            // Just request videos from the background to trigger an update
+            await chrome.runtime.sendMessage({
+                action: 'getVideos', 
+                tabId: tabId
+            });
+        }
+    }, intervalMs);
+    
+    return backgroundRefreshInterval;
+}
+
+/**
+ * Stop background refresh loop
+ */
+export function stopBackgroundRefreshLoop() {
+    if (backgroundRefreshInterval) {
+        clearInterval(backgroundRefreshInterval);
+        backgroundRefreshInterval = null;
+    }
+}

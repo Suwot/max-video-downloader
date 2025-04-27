@@ -20,6 +20,7 @@
 // Add at the top of the file
 import { parseHLSManifest, parseDASHManifest } from './popup/js/manifest-parser.js';
 import nativeHostService from './js/native-host-service.js';
+import { validateAndFilterVideos } from './js/utilities/video-validator.js';
 
 // Debug logging helper
 function logDebug(...args) {
@@ -32,6 +33,27 @@ const playlistsPerTab = {};
 const downloadPorts = new Map();
 const metadataProcessingQueue = new Map();
 const manifestRelationships = new Map();
+
+// NEW: Add a way to broadcast videos to all open popups
+function broadcastVideoUpdate(tabId) {
+    if (!videosPerTab[tabId]) return;
+    
+    // Convert Map to Array for sending
+    const videos = Array.from(videosPerTab[tabId].values());
+    videos.sort((a, b) => b.timestamp - a.timestamp);
+    
+    // Apply final validation to the videos
+    const validatedVideos = validateAndFilterVideos(videos);
+    
+    // Send update to any open popups
+    chrome.runtime.sendMessage({
+        action: 'videoStateUpdated',
+        tabId: tabId,
+        videos: validatedVideos
+    }).catch(() => {
+        // Suppress errors - popup may not be open
+    });
+}
 
 // Track tab updates and removal
 chrome.tabs.onRemoved.addListener((tabId) => {
@@ -204,6 +226,28 @@ function resolveUrl(base, relative) {
 // Single message listener for all messages
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   console.log('Message received:', msg);
+  
+  // NEW: Handle newVideoDetected events from content script
+  if (msg.action === 'newVideoDetected' && msg.videos && msg.videos.length > 0) {
+    const tabId = sender?.tab?.id;
+    if (!tabId) return false;
+    
+    console.log(`Received ${msg.videos.length} new videos from content script for tab ${tabId}`);
+    
+    // Process each video through the same pipeline
+    msg.videos.forEach(video => {
+      addVideoToTab(tabId, {
+        url: video.url,
+        type: video.type,
+        source: 'contentScript',
+        poster: video.poster,
+        title: video.title,
+        foundFromQueryParam: video.foundFromQueryParam || false,
+      });
+    });
+    
+    return false;
+  }
   
   // Handle download requests
   if (msg.type === 'downloadHLS' || msg.type === 'download') {
@@ -532,6 +576,9 @@ function addVideoToTab(tabId, videoInfo) {
         }
     }
     
+    // Check if this is actually a new video
+    const isNewVideo = !existingVideo;
+    
     // Merge with existing data if present
     if (existingVideo) {
         logDebug('Updating existing video:', normalizedUrl);
@@ -576,6 +623,11 @@ function addVideoToTab(tabId, videoInfo) {
     }
     
     console.log(`Added ${videoInfo.type} video to tab ${tabId}:`, videoInfo.url);
+    
+    // Broadcast videos to open popups when we add a new video
+    if (isNewVideo) {
+        broadcastVideoUpdate(tabId);
+    }
 }
 
 // Extract filename from URL

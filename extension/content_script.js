@@ -24,7 +24,6 @@ console.log('Content script loading...');
 // Track detected videos to avoid duplicates
 const detectedVideos = new Set();
 const blobUrls = new Map();
-let isPopupOpen = false;
 let autoDetectionEnabled = true;
 let isInitialized = false;
 let pendingMetadataQueue = new Map();
@@ -738,7 +737,6 @@ function init() {
                 }
                 
                 if (message.action === 'popupOpened') {
-                    isPopupOpen = true;
                     // Run an immediate video check when popup opens
                     const videos = findVideos();
                     if (videos && videos.length > 0) {
@@ -749,7 +747,6 @@ function init() {
                 }
                 
                 if (message.action === 'popupClosed') {
-                    isPopupOpen = false;
                     sendResponse({ status: 'ok' });
                     return true;
                 }
@@ -928,11 +925,9 @@ function notifyBackground(videos) {
         });
     });
 
-    // If popup is open, also notify it directly with cleaned and normalized videos
-    if (isPopupOpen) {
-        chrome.runtime.sendMessage({
-            action: 'newVideoDetected',
-            videos: validVideos
-        });
-    }
+    // Always notify about new videos, regardless of popup state
+    chrome.runtime.sendMessage({
+        action: 'newVideoDetected',
+        videos: validVideos
+    });
 }

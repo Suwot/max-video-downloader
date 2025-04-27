@@ -55,14 +55,24 @@ document.addEventListener('DOMContentLoaded', async () => {
             hideLoadingState();
         }
         
-        // Setup message listener for new videos from content script
+        // Setup message listener for video updates from both content script and background script
         chrome.runtime.onMessage.addListener((message) => {
-            if (message.action === 'newVideoDetected') {
+            // Handle new videos from content script
+            if (message.action === 'newVideoDetected' && message.videos && message.videos.length > 0) {
                 console.log('Received new videos from content script:', message.videos.length);
-                if (message.videos && message.videos.length > 0) {
-                    renderVideos(message.videos);
-                    hideLoadingState();
-                }
+                renderVideos(message.videos);
+                hideLoadingState();
+            }
+            
+            // Handle video state updates from background script
+            if (message.action === 'videoStateUpdated' && 
+                message.tabId === activeTabId && 
+                message.videos && 
+                message.videos.length > 0) {
+                
+                console.log('Received video state update from background script:', message.videos.length);
+                renderVideos(message.videos);
+                hideLoadingState();
             }
         });
 
@@ -75,10 +85,18 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
 
         // Only force refresh if we don't have cached videos or if they're stale
-        // This is crucial to preserve metadata on popup reopens
         const forceRefresh = !hasCachedVideos;
         console.log(hasCachedVideos ? 'Using cached videos, requesting background refresh' : 'Requesting fresh videos from background...');
         const freshVideos = await updateVideoList(forceRefresh, activeTabId);
+        
+        // Start background refresh to automatically get new videos every 3 seconds
+        const { startBackgroundRefreshLoop, stopBackgroundRefreshLoop } = await import('./video-fetcher.js');
+        startBackgroundRefreshLoop(3000, activeTabId);
+        
+        // Stop the refresh loop when popup closes
+        window.addEventListener('unload', () => {
+            stopBackgroundRefreshLoop();
+        });
         
         // Hide loading state if we have videos
         if (freshVideos && freshVideos.length > 0) {
