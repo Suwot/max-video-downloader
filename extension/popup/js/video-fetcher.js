@@ -31,7 +31,6 @@ import {
     // Import master playlist cache functions
     getMasterPlaylist,
     addMasterPlaylist,
-    getMasterPlaylistForVariant,
     clearMasterPlaylists
 } from './state.js';
 import { showLoader, showErrorMessage, restoreScrollPosition } from './ui.js';
@@ -42,44 +41,20 @@ import { parseHLSManifest } from './manifest-parser.js';
 // Import centralized validation logic
 import { validateAndFilterVideos, isValidVideo, isValidVideoUrl } from '../../js/utilities/video-validator.js';
 
+// Import the manifest service
+import {
+    processVideoRelationships,
+    isVariantOfMasterPlaylist,
+    getMasterPlaylistForVariant,
+    clearCaches as clearManifestCaches
+} from '../../js/manifest-service.js';
+
 // Debug logging helper
 function logDebug(...args) {
     console.log('[Video Fetcher]', new Date().toISOString(), ...args);
 }
 
 // Remove the local knownMasterPlaylists Map as we're now using the centralized one in state.js
-
-/**
- * Fetch and process HLS manifest content
- * @param {string} url - Manifest URL
- * @param {number} tabId - Tab ID
- * @returns {Promise<Object>} Manifest info with variants
- */
-async function fetchHLSManifest(url, tabId) {
-    try {
-        const response = await chrome.runtime.sendMessage({
-            type: 'fetchManifest',
-            url: url,
-            tabId: tabId
-        });
-        
-        if (response?.content) {
-            const manifestInfo = parseHLSManifest(response.content, url);
-            if (manifestInfo.isPlaylist) {
-                // Store the relationship between playlist and variants
-                await chrome.runtime.sendMessage({
-                    type: 'storeManifestRelationship',
-                    playlistUrl: url,
-                    variants: manifestInfo.variants
-                });
-            }
-            return manifestInfo;
-        }
-    } catch (error) {
-        console.error('Failed to fetch HLS manifest:', error);
-    }
-    return null;
-}
 
 /**
  * Process video for HLS relationships
@@ -107,54 +82,16 @@ async function processHLSRelationships(video, tabId) {
         return video;
     }
     
-    // Skip non-HLS videos for manifest parsing
-    if (video.type !== 'hls') return video;
-
-    // First check if this URL is a known variant of a master playlist using the centralized cache
-    const masterPlaylist = getMasterPlaylistForVariant(video.url);
-    
-    if (masterPlaylist) {
-        // Skip this video as it will be handled by its master playlist
-        logDebug('Skipping variant URL that belongs to master playlist:', video.url);
-        return null;
+    // Use the centralized manifest service to check relationships and enhance the video
+    try {
+        // This will check if the video is a variant, master playlist, or standalone video
+        // It will also fetch and parse the manifest if needed
+        const processedVideo = await processVideoRelationships(video);
+        return processedVideo;
+    } catch (error) {
+        console.error('Error processing video relationships:', error);
+        return video;
     }
-
-    // Check if this URL is already a known master playlist
-    const existingMaster = getMasterPlaylist(video.url);
-    if (existingMaster) {
-        logDebug('Found existing master playlist in cache:', video.url);
-        return existingMaster;
-    }
-
-    // Fetch and check the manifest content
-    const manifestInfo = await fetchHLSManifest(video.url, tabId);
-    if (!manifestInfo) return video;
-
-    // Update video with manifest info
-    video.isPlaylist = manifestInfo.isPlaylist;
-    
-    // If this is a master playlist, store it and add its variants
-    if (manifestInfo.isPlaylist && manifestInfo.variants?.length > 0) {
-        const enhancedVideo = {
-            ...video,
-            qualityVariants: manifestInfo.variants.map(v => ({
-                url: v.url,
-                width: v.width,
-                height: v.height,
-                fps: v.fps,
-                bandwidth: v.bandwidth,
-                codecs: v.codecs
-            }))
-        };
-        
-        // Store in our centralized master playlist cache
-        logDebug('Adding master playlist to centralized cache:', video.url);
-        addMasterPlaylist(video.url, enhancedVideo);
-        
-        return enhancedVideo;
-    }
-    
-    return video;
 }
 
 /**

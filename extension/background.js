@@ -18,13 +18,19 @@
 // background.js - Service worker for the extension
 
 // Add at the top of the file
-import { parseHLSManifest, parseDASHManifest } from './popup/js/manifest-parser.js';
+import { 
+    fetchAndParseManifest, 
+    processVideoRelationships, 
+    isVariantOfMasterPlaylist, 
+    clearCaches as clearManifestCaches 
+} from './js/manifest-service.js';
 import nativeHostService from './js/native-host-service.js';
 import { validateAndFilterVideos } from './js/utilities/video-validator.js';
 
 // For automatic processing of HLS relationships
-let manifestRelationsCache = new Map();
-let masterPlaylistCache = new Map();
+// Remove these redundant caches as they're now in manifest-service.js
+// let manifestRelationsCache = new Map();
+// let masterPlaylistCache = new Map();
 
 // Debug logging helper
 function logDebug(...args) {
@@ -659,38 +665,25 @@ async function addVideoToTab(tabId, videoInfo) {
     videosPerTab[tabId].set(normalizedUrl, videoInfo);
     logDebug('Current video count for tab', tabId, ':', videosPerTab[tabId].size);
     
-    // IMPORTANT NEW CODE: Check if this is a variant of an existing master playlist
-    if (videoInfo.type === 'hls' && !videoInfo.isVariant && !videoInfo.isMasterPlaylist) {
-        const variantInfo = manifestRelationsCache.get(normalizedUrl);
-        if (variantInfo) {
-            // This is a variant stream, mark it as such and add reference to master
-            logDebug('Found variant relationship for:', videoInfo.url, 'Master:', variantInfo.masterUrl);
-            videoInfo.isVariant = true;
-            videoInfo.masterUrl = variantInfo.masterUrl;
-        } 
-        // If not a variant, check if it's potentially a master playlist
-        else if (videoInfo.url.includes('.m3u8')) {
-            // Process HLS manifest to check for variants
-            try {
-                logDebug('Checking if URL is master playlist:', videoInfo.url);
-                const masterInfo = await fetchHLSManifest(videoInfo.url, tabId);
+    // Use the centralized manifest service to check for and process relationships
+    if (!videoInfo.isVariant && !videoInfo.isMasterPlaylist && 
+        (videoInfo.type === 'hls' || videoInfo.type === 'dash')) {
+        try {
+            // Process this video to check for master-variant relationships
+            const processedVideo = await processVideoRelationships(videoInfo);
+            
+            // If the video was enhanced with relationship info, update it
+            if (processedVideo !== videoInfo) {
+                logDebug('Video was processed and enhanced with relationship data:', 
+                         processedVideo.isVariant ? 'Is variant' : 
+                         processedVideo.isMasterPlaylist ? 'Is master playlist' : 'No relationships');
                 
-                if (masterInfo) {
-                    logDebug('Confirmed URL is master HLS playlist with variants:', videoInfo.url);
-                    // Update with master playlist info
-                    videoInfo = {
-                        ...videoInfo,
-                        isPlaylist: true,
-                        isMasterPlaylist: true,
-                        qualityVariants: masterInfo.qualityVariants
-                    };
-                    
-                    // Update in collection
-                    videosPerTab[tabId].set(normalizedUrl, videoInfo);
-                }
-            } catch (error) {
-                console.error('Error checking for master playlist:', error);
+                // Update in collection
+                videosPerTab[tabId].set(normalizedUrl, processedVideo);
+                videoInfo = processedVideo;
             }
+        } catch (error) {
+            console.error('Error processing video relationships:', error);
         }
     }
     
