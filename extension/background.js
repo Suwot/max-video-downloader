@@ -64,14 +64,34 @@ function broadcastVideoUpdate(tabId) {
         console.error('Failed to store processed videos:', err);
     });
     
-    // Send update to any open popups
-    chrome.runtime.sendMessage({
-        action: 'videoStateUpdated',
-        tabId: tabId,
-        videos: processedVideos
-    }).catch(() => {
-        // Suppress errors - popup may not be open
-    });
+    // First try to send to connected popups via port
+    let portMessageSent = false;
+    for (const [portId, port] of popupPorts.entries()) {
+        try {
+            port.postMessage({
+                action: 'videoStateUpdated',
+                tabId: tabId,
+                videos: processedVideos
+            });
+            portMessageSent = true;
+        } catch (e) {
+            console.error('Error sending to popup port:', e);
+            // Clean up dead ports
+            popupPorts.delete(portId);
+        }
+    }
+    
+    // Fall back to one-time message if no ports are connected
+    // This maintains backward compatibility
+    if (!portMessageSent) {
+        chrome.runtime.sendMessage({
+            action: 'videoStateUpdated',
+            tabId: tabId,
+            videos: processedVideos
+        }).catch(() => {
+            // Suppress errors - popup may not be open
+        });
+    }
 }
 
 // Process videos for sending to popup - fully prepare videos for instant display
@@ -207,10 +227,16 @@ chrome.tabs.onRemoved.addListener((tabId) => {
 const activeDownloads = new Map(); // key = url, value = { progress, tabId, notificationId, lastUpdated, filename, etc. }
 const downloadPorts = new Map(); // key = portId, value = port object
 
+// Track all popup connections for universal communication
+const popupPorts = new Map(); // key = portId, value = port object
+
 // Handle port connections from popup
 chrome.runtime.onConnect.addListener(port => {
+    // Create unique port ID
+    const portId = Date.now().toString();
+    
     if (port.name === 'download_progress') {
-        const portId = Date.now().toString();
+        // Store in download-specific port collection
         downloadPorts.set(portId, port);
 
         // Set up message listener for this port
@@ -245,10 +271,181 @@ chrome.runtime.onConnect.addListener(port => {
         // Handle port disconnection
         port.onDisconnect.addListener(() => {
             downloadPorts.delete(portId);
-            logDebug('Port disconnected and removed:', portId);
+            logDebug('Download port disconnected and removed:', portId);
+        });
+    } else if (port.name === 'popup') {
+        // Store in general popup port collection
+        popupPorts.set(portId, port);
+        logDebug('Popup connected with port ID:', portId);
+        
+        // Set up message listener for general popup communication
+        port.onMessage.addListener((message) => {
+            handlePortMessage(message, port, portId);
+        });
+        
+        // Handle port disconnection
+        port.onDisconnect.addListener(() => {
+            popupPorts.delete(portId);
+            logDebug('Popup port disconnected and removed:', portId);
         });
     }
 });
+
+// Handle messages coming through port connection
+async function handlePortMessage(message, port, portId) {
+    logDebug('Received port message:', message);
+    
+    // Handle video list request
+    if (message.action === 'getVideos') {
+        const tabId = message.tabId;
+        
+        if (!videosPerTab[tabId] || videosPerTab[tabId].size === 0) {
+            port.postMessage({
+                action: 'videoListResponse',
+                videos: []
+            });
+            return;
+        }
+        
+        // Convert Map to Array for sending
+        const videos = Array.from(videosPerTab[tabId].values());
+        videos.sort((a, b) => b.timestamp - a.timestamp);
+        
+        port.postMessage({
+            action: 'videoListResponse',
+            videos: videos
+        });
+    }
+    
+    // Handle stored playlists request
+    else if (message.action === 'getStoredPlaylists') {
+        const playlists = playlistsPerTab[message.tabId] 
+            ? Array.from(playlistsPerTab[message.tabId])
+            : [];
+            
+        port.postMessage({
+            action: 'storedPlaylistsResponse',
+            playlists: playlists
+        });
+    }
+    
+    // Handle preview generation
+    else if (message.type === 'generatePreview') {
+        // Check if we're already generating this preview
+        const cacheKey = message.url;
+        if (previewGenerationQueue.has(cacheKey)) {
+            // If we are, wait for the existing promise
+            const response = await previewGenerationQueue.get(cacheKey);
+            port.postMessage({
+                type: 'previewResponse',
+                ...response,
+                requestUrl: message.url
+            });
+            return;
+        }
+
+        // Create new preview generation promise
+        const previewPromise = new Promise(resolve => {
+            nativeHostService.sendMessage({
+                type: 'generatePreview',
+                url: message.url
+            }).then(response => {
+                previewGenerationQueue.delete(cacheKey);
+                
+                // If we successfully generated a preview, cache it with the video
+                if (response && response.previewUrl && message.tabId && videosPerTab[message.tabId]) {
+                    const normalizedUrl = normalizeUrl(message.url);
+                    const videoInfo = videosPerTab[message.tabId].get(normalizedUrl);
+                    if (videoInfo) {
+                        videoInfo.previewUrl = response.previewUrl;
+                        videosPerTab[message.tabId].set(normalizedUrl, videoInfo);
+                    }
+                }
+                
+                resolve(response);
+            }).catch(error => {
+                previewGenerationQueue.delete(cacheKey);
+                resolve({ error: error.message });
+            });
+        });
+
+        // Store the promise
+        previewGenerationQueue.set(cacheKey, previewPromise);
+        
+        // Wait for the preview and send it
+        const response = await previewPromise;
+        port.postMessage({
+            type: 'previewResponse',
+            ...response,
+            requestUrl: message.url
+        });
+    }
+    
+    // Handle download request
+    else if (message.type === 'download' || message.type === 'downloadHLS') {
+        // This is handled through the one-time message listener for now
+        // We'll keep this compatibility during the transition period
+    }
+    
+    // Handle stream qualities request
+    else if (message.type === 'getHLSQualities') {
+        console.log('🎥 Requesting media info from native host for:', message.url);
+        
+        try {
+            const response = await nativeHostService.sendMessage({
+                type: 'getQualities',
+                url: message.url
+            });
+            
+            port.postMessage({
+                type: 'qualitiesResponse',
+                url: message.url,
+                ...response
+            });
+        } catch (error) {
+            console.error('Error getting media info:', error);
+            port.postMessage({
+                type: 'qualitiesResponse',
+                url: message.url,
+                error: error.message
+            });
+        }
+    }
+    
+    // Handle manifest-related operations
+    else if (message.type === 'fetchManifest') {
+        const content = await fetchManifestContent(message.url);
+        port.postMessage({
+            type: 'manifestContent',
+            url: message.url,
+            content: content
+        });
+    }
+    else if (message.type === 'storeManifestRelationship') {
+        message.variants.forEach(variant => {
+            manifestRelationships.set(variant.url, {
+                playlistUrl: message.playlistUrl,
+                bandwidth: variant.bandwidth,
+                resolution: variant.resolution,
+                codecs: variant.codecs,
+                fps: variant.fps
+            });
+        });
+        
+        port.postMessage({
+            type: 'manifestRelationshipStored',
+            success: true
+        });
+    }
+    else if (message.type === 'getManifestRelationship') {
+        const relationship = manifestRelationships.get(message.variantUrl) || null;
+        port.postMessage({
+            type: 'manifestRelationshipResponse',
+            variantUrl: message.variantUrl,
+            relationship: relationship
+        });
+    }
+}
 
 // Helper function to extract stream metadata
 async function getStreamMetadata(url) {

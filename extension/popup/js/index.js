@@ -17,10 +17,115 @@ import { applyTheme, initializeUI, setupScrollPersistence, scrollToLastPosition,
 import { updateVideoList } from './video-fetcher.js';
 import { renderVideos } from './video-renderer.js';
 
+// Global port connection for communicating with the background script
+let backgroundPort = null;
+
+/**
+ * Establish a connection to the background script
+ * @returns {Port} The connection port object
+ */
+export function getBackgroundPort() {
+    if (!backgroundPort) {
+        try {
+            backgroundPort = chrome.runtime.connect({ name: 'popup' });
+            console.log('Connected to background script via port');
+            
+            // Set up disconnect handler
+            backgroundPort.onDisconnect.addListener(() => {
+                console.log('Port disconnected from background script');
+                backgroundPort = null;
+            });
+            
+            // Set up message handler
+            backgroundPort.onMessage.addListener(handlePortMessage);
+        } catch (e) {
+            console.error('Failed to connect to background script:', e);
+            return null;
+        }
+    }
+    return backgroundPort;
+}
+
+/**
+ * Handle messages received via the port connection
+ * @param {Object} message - Message received from background script
+ */
+function handlePortMessage(message) {
+    console.log('Received port message:', message);
+    
+    // Handle video list responses
+    if (message.action === 'videoListResponse' && message.videos) {
+        console.log('Received video list via port:', message.videos.length);
+        renderVideos(message.videos);
+        hideLoadingState();
+    }
+    
+    // Handle video state updates
+    else if (message.action === 'videoStateUpdated' && message.videos) {
+        console.log('Received video state update via port:', message.videos.length);
+        renderVideos(message.videos);
+        hideLoadingState();
+    }
+    
+    // Handle manifest responses
+    else if (message.type === 'manifestContent') {
+        console.log('Received manifest content via port');
+        document.dispatchEvent(new CustomEvent('manifest-content', { 
+            detail: message 
+        }));
+    }
+    
+    // Handle preview responses
+    else if (message.type === 'previewResponse') {
+        console.log('Received preview data via port');
+        document.dispatchEvent(new CustomEvent('preview-generated', { 
+            detail: message 
+        }));
+    }
+    
+    // Handle quality responses
+    else if (message.type === 'qualitiesResponse') {
+        console.log('Received qualities data via port');
+        document.dispatchEvent(new CustomEvent('qualities-response', { 
+            detail: message 
+        }));
+    }
+}
+
+/**
+ * Send a message to the background script using the port connection
+ * @param {Object} message - Message to send to the background script
+ * @returns {Boolean} - Success status
+ */
+export function sendPortMessage(message) {
+    const port = getBackgroundPort();
+    if (port) {
+        try {
+            port.postMessage(message);
+            return true;
+        } catch (e) {
+            console.error('Error sending message via port:', e);
+            return false;
+        }
+    }
+    
+    // Fall back to one-time message if port isn't available
+    try {
+        chrome.runtime.sendMessage(message);
+        return true;
+    } catch (e) {
+        console.error('Error sending one-time message:', e);
+        return false;
+    }
+}
+
 // Initialize when DOM is ready
 document.addEventListener('DOMContentLoaded', async () => {
     try {
         console.log('Popup initializing...');
+        
+        // Connect to background script via port
+        getBackgroundPort();
         
         // Wait for chrome.storage to be available
         if (!chrome.storage) {
@@ -58,16 +163,23 @@ document.addEventListener('DOMContentLoaded', async () => {
             console.error('Error retrieving pre-processed videos:', e);
         }
         
-        // If we don't have pre-processed videos, try regular background videos
+        // If we don't have pre-processed videos, try getting videos through port
         if (!hasPreProcessedVideos) {
             try {
+                // First try using port connection
+                sendPortMessage({ 
+                    action: 'getVideos', 
+                    tabId: activeTabId 
+                });
+                
+                // Also try one-time message as fallback
                 const backgroundVideos = await chrome.runtime.sendMessage({ 
                     action: 'getVideos', 
                     tabId: activeTabId 
                 });
                 
                 if (backgroundVideos && backgroundVideos.length > 0) {
-                    console.log('Got videos from background script:', backgroundVideos.length);
+                    console.log('Got videos from background script via one-time message:', backgroundVideos.length);
                     renderVideos(backgroundVideos);
                     hasPreProcessedVideos = true;
                 }
@@ -130,6 +242,16 @@ document.addEventListener('DOMContentLoaded', async () => {
         // Stop the refresh loop when popup closes
         window.addEventListener('unload', () => {
             stopBackgroundRefreshLoop();
+            
+            // Disconnect port when popup closes
+            if (backgroundPort) {
+                try {
+                    backgroundPort.disconnect();
+                    backgroundPort = null;
+                } catch (e) {
+                    // Suppress errors during unload
+                }
+            }
         });
         
         // Hide loading state if we have videos
@@ -185,4 +307,14 @@ window.addEventListener('unload', () => {
             }
         }
     });
+    
+    // Disconnect port
+    if (backgroundPort) {
+        try {
+            backgroundPort.disconnect();
+            backgroundPort = null;
+        } catch (e) {
+            // Suppress errors during unload
+        }
+    }
 });
