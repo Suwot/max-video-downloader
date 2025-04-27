@@ -96,12 +96,15 @@ async function processHLSRelationships(video, tabId) {
         return video;
     }
     
-    // For regular videos, apply filtering for tracking pixels using the centralized utility
+    // For non-HLS/DASH videos, validate using the shared validation function
     if (video.type !== 'hls' && video.type !== 'dash') {
+        // Use the centralized validation utility instead of duplicating logic
         if (!isValidVideoUrl(video.url)) {
             logDebug('Rejecting invalid URL in processHLSRelationships:', video.url);
             return null;
         }
+        // Non-HLS videos don't need relationship processing
+        return video;
     }
     
     // Skip non-HLS videos for manifest parsing
