@@ -343,11 +343,10 @@ export async function updateVideoList(forceRefresh = false, tabId = null) {
             }
             
             logDebug('No valid videos found after filtering');
-            container.innerHTML = `
-                <div class="initial-message">
-                    No valid videos found on this page. Try playing a video first or refreshing.
-                </div>
-            `;
+            // Use the dedicated no videos message function instead of setting HTML directly
+            // This ensures proper theming and icon display
+            const { showNoVideosMessage } = await import('./ui.js');
+            showNoVideosMessage();
             return [];
         }
         
@@ -484,8 +483,41 @@ export async function refreshInBackground(videos) {
  * @param {number} tabId - Tab ID
  */
 export async function fetchVideoInfo(videos, tabId) {
-    // Process videos with missing mediaInfo in parallel
-    const videosNeedingInfo = videos.filter(video => !video.mediaInfo);
+    // Process videos with missing mediaInfo in parallel - but skip blob URLs
+    const videosNeedingInfo = videos.filter(video => {
+        // Skip blob URLs as they can't be analyzed by the native host
+        if (video.url.startsWith('blob:')) {
+            // For blob URLs, set placeholder media info to prevent repeated fetch attempts
+            const placeholderInfo = {
+                hasVideo: true,
+                hasAudio: true,
+                format: 'blob',
+                container: 'blob',
+                width: 0,
+                height: 0,
+                fps: 0,
+                bitrate: 0
+            };
+            
+            // Cache the placeholder info
+            addMediaInfoToCache(video.url, placeholderInfo);
+            
+            // Update UI with blob-specific message
+            updateVideoResolution(video.url, {
+                ...placeholderInfo,
+                width: null,
+                height: null,
+                duration: null,
+                videoCodec: { name: 'N/A for blob URL' },
+                audioCodec: { name: 'N/A for blob URL' }
+            });
+            
+            return false; // Skip this video
+        }
+        
+        // Include video if it doesn't have mediaInfo
+        return !video.mediaInfo;
+    });
     
     if (videosNeedingInfo.length === 0) {
         logDebug('All videos already have mediaInfo, skipping fetch');
@@ -570,7 +602,37 @@ export async function fetchVideoInfo(videos, tabId) {
                 }
             }
         } catch (error) {
-            console.error('Error fetching info for video:', video.url, error);
+            // Don't show errors for blob URLs - they're expected to fail
+            if (!video.url.startsWith('blob:')) {
+                console.error('Error fetching info for video:', video.url, error);
+            }
+            
+            // For any failed fetches, add placeholder info to prevent repeated attempts
+            const placeholderInfo = {
+                hasVideo: true,
+                hasAudio: true,
+                format: 'unknown',
+                container: 'unknown',
+                width: null,
+                height: null,
+                fps: null,
+                bitrate: null
+            };
+            
+            addMediaInfoToCache(video.url, placeholderInfo);
+            
+            // Update UI to show we're done trying
+            const resolutionInfo = document.querySelector(`.video-item[data-url="${video.url}"] .resolution-info`);
+            if (resolutionInfo && resolutionInfo.classList.contains('loading')) {
+                resolutionInfo.classList.remove('loading');
+                resolutionInfo.textContent = 'Resolution unavailable';
+            }
+            
+            const codecInfo = document.querySelector(`.video-item[data-url="${video.url}"] .codec-info`);
+            if (codecInfo && codecInfo.classList.contains('loading')) {
+                codecInfo.classList.remove('loading');
+                codecInfo.textContent = 'Codec information unavailable';
+            }
         }
     })).catch(error => {
         console.error('Error in parallel video info fetching:', error);

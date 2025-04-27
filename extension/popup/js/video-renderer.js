@@ -92,18 +92,17 @@ function isValidVideoForRendering(video) {
  * Render a list of videos in the UI
  * @param {Array} videos - Videos to render
  */
-export function renderVideos(videos) {
+export async function renderVideos(videos) {
     const container = document.getElementById('videos');
     
     // Apply final validation filter to ensure we don't show invalid videos
     videos = videos ? videos.filter(isValidVideoForRendering) : [];
     
     if (!videos || videos.length === 0) {
-        container.innerHTML = `
-            <div class="initial-message">
-                No videos found on this page. Try playing a video first or refreshing.
-            </div>
-        `;
+        // Use the shared function for showing "no videos" message
+        // This ensures consistent UI and proper theming
+        const { showNoVideosMessage } = await import('./ui.js');
+        showNoVideosMessage();
         return;
     }
     
@@ -409,7 +408,7 @@ export function createVideoElement(video) {
     
     let mediaIcon = '';
     if (mediaContentType === "Audio Only") {
-        mediaIcon = '<path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>';
+        mediaIcon = '<path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4s4-1.79 4-4V7h4V3h-6z"/>';
     } else if (mediaContentType === "Video Only") {
         mediaIcon = '<path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/>';
     } else {
@@ -428,14 +427,20 @@ export function createVideoElement(video) {
     mediaTypeContainer.className = 'media-type-container';
     mediaTypeContainer.appendChild(mediaTypeInfo);
     
-    // Add codec details if available
+    // Always create codec-info element even if we don't have codec details yet
+    // This ensures the element exists for later updates via updateVideoResolution()
+    const codecInfo = document.createElement('div');
+    codecInfo.className = 'codec-info';
+    
     if (codecDetails.length > 0) {
-        const codecInfo = document.createElement('div');
-        codecInfo.className = 'codec-info';
         codecInfo.textContent = codecDetails.join(' • ');
-        mediaTypeContainer.appendChild(codecInfo);
+    } else {
+        // Add a placeholder that will be replaced when metadata is loaded
+        codecInfo.textContent = 'Loading codec info...';
+        codecInfo.classList.add('loading');
     }
     
+    mediaTypeContainer.appendChild(codecInfo);
     fileInfo.appendChild(mediaTypeContainer);
     
     // Resolution info
@@ -467,7 +472,9 @@ export function createVideoElement(video) {
         );
         resolutionInfo.textContent = resolutionText;
     } else {
-        resolutionInfo.textContent = 'Resolution unknown';
+        // Add a placeholder for resolution that will be updated later
+        resolutionInfo.textContent = 'Resolution loading...';
+        resolutionInfo.classList.add('loading');
     }
     
     resolutionContainer.appendChild(resolutionInfo);
