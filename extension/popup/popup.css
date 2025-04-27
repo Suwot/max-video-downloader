@@ -68,11 +68,13 @@ body.theme-light {
 
 /* Initial states */
 .initial-loader,
-.initial-message {
+.initial-message,
+.no-videos-message {
     display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
-    height: 200px;
+    height: 300px;
     text-align: center;
     font-size: 14px;
     padding: 16px;
@@ -80,13 +82,32 @@ body.theme-light {
 }
 
 .theme-dark .initial-loader,
-.theme-dark .initial-message {
+.theme-dark .initial-message,
+.theme-dark .no-videos-message {
     color: #aaa;
 }
 
 .theme-light .initial-loader,
-.theme-light .initial-message {
+.theme-light .initial-message,
+.theme-light .no-videos-message {
     color: #757575;
+}
+
+.no-videos-message svg {
+    margin-bottom: 16px;
+    opacity: 0.7;
+}
+
+.theme-dark .no-videos-message svg {
+    fill: #aaa;
+}
+
+.theme-light .no-videos-message svg {
+    fill: #757575;
+}
+
+.no-videos-message p {
+    margin: 4px 0;
 }
 
 .initial-loader {
