@@ -78,6 +78,25 @@
         "Error state management"
       ]
     },
+    "popup/js/video-fetcher.js": {
+      "description": "Video source detection and metadata retrieval",
+      "functions": {
+        "updateVideoList": "Fetches and updates the video list from cache or fresh sources",
+        "refreshInBackground": "Refreshes video information in the background",
+        "fetchVideoInfo": "Gets video metadata like resolution, codec info",
+        "updateVideoResolution": "Updates UI with video resolution information",
+        "getStreamResolution": "Gets stream resolution from background script",
+        "preserveMetadata": "Preserves metadata before refreshing"
+      },
+      "responsibilities": [
+        "Retrieves detected videos from background script",
+        "Manages video source prioritization and filtering",
+        "Handles video metadata enrichment and formatting", 
+        "Implements cache and refresh mechanisms for video sources",
+        "Supports various video source types (direct, HLS, DASH)",
+        "Filters tracking pixels while preserving embedded video URLs"
+      ]
+    },
     "popup/js/video-processor.js": {
       "description": "Video metadata and quality analysis",
       "functions": {
@@ -137,6 +156,51 @@
         "Segment information extraction",
         "Bitrate calculation"
       ]
+    },
+    "popup/js/preview.js": {
+      "description": "Generates and manages video thumbnails and previews",
+      "functions": {
+        "generatePreview": "Requests thumbnail generation from native host",
+        "handlePreviewErrors": "Provides fallback when preview generation fails"
+      },
+      "responsibilities": [
+        "Thumbnail generation coordination",
+        "Preview image caching",
+        "UI preview display handling",
+        "Fallback mechanisms for failed previews",
+        "Optimization of preview loading"
+      ]
+    },
+    "popup/js/utilities.js": {
+      "description": "General utility functions used across the extension",
+      "functions": {
+        "formatResolution": "Formats video resolution for display",
+        "formatDuration": "Formats video duration in readable format",
+        "getFilenameFromUrl": "Extracts filename from video URL",
+        "normalizeUrl": "Standardizes URLs for comparison",
+        "debounce": "Limits function call frequency"
+      },
+      "responsibilities": [
+        "Formatting helpers for video metadata",
+        "URL parsing and normalization",
+        "Filename generation and sanitization",
+        "Time and duration formatting",
+        "Data conversion and transformation"
+      ]
+    },
+    "popup/js/index.js": {
+      "description": "Main entry point for popup functionality",
+      "functions": {
+        "initialize": "Sets up popup UI and state",
+        "handleDOMContentLoaded": "Initializes components on DOM ready",
+        "setupEventHandlers": "Wires up UI interactions"
+      },
+      "responsibilities": [
+        "Popup initialization coordination",
+        "Component orchestration",
+        "User interaction routing",
+        "State initialization"
+      ]
     }
   },
   "native_host": {
@@ -168,6 +232,56 @@
         "Command lifecycle management"
       ]
     },
+    "lib/messaging.js": {
+      "description": "Handles Chrome native messaging protocol implementation",
+      "functions": {
+        "initialize": "Sets up message handling functionality",
+        "handleIncomingData": "Processes data received from stdin",
+        "processMessages": "Parses complete messages from buffer",
+        "sendResponse": "Sends formatted responses to extension",
+        "startHeartbeatMonitor": "Monitors connection health"
+      },
+      "responsibilities": [
+        "Chrome native messaging protocol implementation",
+        "Message serialization/deserialization",
+        "Message size and multi-part handling",
+        "Error handling for corrupted messages",
+        "Connection health monitoring"
+      ]
+    },
+    "lib/error-handler.js": {
+      "description": "Centralized error handling system for the native host",
+      "functions": {
+        "handleUncaughtException": "Processes unhandled exceptions",
+        "handleUnhandledRejection": "Handles unhandled promise rejections",
+        "handleCommandError": "Processes command execution errors",
+        "handleMessageError": "Manages messaging protocol errors"
+      },
+      "responsibilities": [
+        "Structured error handling and reporting",
+        "Error format standardization",
+        "Error logging and categorization",
+        "Recovery strategy management",
+        "Consistent error responses"
+      ]
+    },
+    "commands/base-command.js": {
+      "description": "Foundation class for all native host commands",
+      "functions": {
+        "getService": "Retrieves a required service instance",
+        "sendProgress": "Transmits progress updates",
+        "sendSuccess": "Sends success response",
+        "sendError": "Sends error response",
+        "execute": "Command implementation method"
+      },
+      "responsibilities": [
+        "Common structure for command implementations",
+        "Messaging between host and extension",
+        "Standardized response methods",
+        "Service access and dependency injection",
+        "Consistent execution pattern"
+      ]
+    },
     "commands/download.js": {
       "description": "FFmpeg-based video download implementation",
       "functions": {
@@ -181,6 +295,48 @@
         "FFmpeg parameter configuration",
         "Progress tracking initialization",
         "Error handling and recovery"
+      ]
+    },
+    "commands/generate-preview.js": {
+      "description": "Video thumbnail generator",
+      "functions": {
+        "execute": "Processes preview generation request",
+        "extractFrame": "Uses FFmpeg to extract video frame",
+        "convertToDataUrl": "Converts image to base64 data URL"
+      },
+      "responsibilities": [
+        "Thumbnail extraction from video URLs",
+        "FFmpeg integration for frame capture",
+        "Base64 encoding for data URL generation",
+        "Temporary file management",
+        "Preview optimization for UI display"
+      ]
+    },
+    "commands/get-qualities.js": {
+      "description": "Analyzes video streams to determine available qualities",
+      "functions": {
+        "execute": "Processes quality analysis request",
+        "analyzeStream": "Extracts stream information",
+        "parseManifest": "Processes HLS/DASH manifest content"
+      },
+      "responsibilities": [
+        "Media format detection",
+        "Stream quality analysis",
+        "Container and codec identification",
+        "Bitrate and resolution information extraction"
+      ]
+    },
+    "commands/heartbeat.js": {
+      "description": "Connection health monitoring command",
+      "functions": {
+        "execute": "Processes heartbeat request",
+        "checkStatus": "Verifies system status"
+      },
+      "responsibilities": [
+        "Connection health verification",
+        "System status reporting",
+        "Resource availability checking",
+        "Process monitoring"
       ]
     },
     "lib/progress-tracker.js": {
@@ -284,6 +440,34 @@
         "Error detection and handling"
       ]
     },
+    "services/config.js": {
+      "description": "Configuration management for native host",
+      "functions": {
+        "getConfig": "Retrieves configuration settings",
+        "saveConfig": "Persists configuration changes",
+        "getDefaults": "Provides default configuration values"
+      },
+      "responsibilities": [
+        "Configuration storage and retrieval",
+        "Default settings management",
+        "User preferences handling",
+        "Configuration validation"
+      ]
+    },
+    "services/index.js": {
+      "description": "Service registry and dependency management",
+      "functions": {
+        "registerService": "Adds service to the registry",
+        "getService": "Retrieves service instance",
+        "initializeServices": "Sets up all required services"
+      },
+      "responsibilities": [
+        "Service lifecycle management",
+        "Dependency injection",
+        "Service discovery",
+        "Initialization coordination"
+      ]
+    },
     "utils/logger.js": {
       "description": "Logging functionality",
       "functions": {
@@ -297,6 +481,20 @@
         "Output formatting",
         "Log file management",
         "Debug level filtering"
+      ]
+    },
+    "utils/resources.js": {
+      "description": "Resource management utilities",
+      "functions": {
+        "getResourcePath": "Resolves paths to application resources",
+        "getFullEnv": "Builds complete environment configuration",
+        "cleanupResources": "Manages temporary resource cleanup"
+      },
+      "responsibilities": [
+        "Path resolution for application resources",
+        "Environment variable management",
+        "Temporary file handling",
+        "Resource lifecycle tracking"
       ]
     }
   }
