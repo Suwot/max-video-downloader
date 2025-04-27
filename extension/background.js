@@ -26,6 +26,7 @@ import {
 } from './js/manifest-service.js';
 import nativeHostService from './js/native-host-service.js';
 import { validateAndFilterVideos } from './js/utilities/video-validator.js';
+import { parseHLSManifest, parseDASHManifest } from './popup/js/manifest-parser.js';
 
 // For automatic processing of HLS relationships
 // Remove these redundant caches as they're now in manifest-service.js
@@ -369,18 +370,18 @@ function resolveUrl(base, relative) {
 }
 
 // Single message listener for all messages
-chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-  console.log('Message received:', msg);
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  console.log('Message received:', request);
   
   // NEW: Handle newVideoDetected events from content script
-  if (msg.action === 'newVideoDetected' && msg.videos && msg.videos.length > 0) {
+  if (request.action === 'newVideoDetected' && request.videos && request.videos.length > 0) {
     const tabId = sender?.tab?.id;
     if (!tabId) return false;
     
-    console.log(`Received ${msg.videos.length} new videos from content script for tab ${tabId}`);
+    console.log(`Received ${request.videos.length} new videos from content script for tab ${tabId}`);
     
     // Process each video through the same pipeline
-    msg.videos.forEach(video => {
+    request.videos.forEach(video => {
       addVideoToTab(tabId, {
         url: video.url,
         type: video.type,
@@ -395,7 +396,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
   
   // Handle download requests
-  if (msg.type === 'downloadHLS' || msg.type === 'download') {
+  if (request.type === 'downloadHLS' || request.type === 'download') {
     const notificationId = `download-${Date.now()}`;
     let hasError = false;
     
@@ -411,7 +412,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           ...response,
           type: 'progress',
           // Format filename if available
-          filename: response.filename || msg.filename || getFilenameFromUrl(msg.url)
+          filename: response.filename || request.filename || getFilenameFromUrl(request.url)
         };
         
         // Update notification less frequently
@@ -458,11 +459,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     // Send to native host using our service with enhanced parameters
     nativeHostService.sendMessage({
       type: 'download',
-      url: msg.url,
-      filename: msg.filename || 'video.mp4',
-      savePath: msg.savePath,
-      quality: msg.quality,
-      manifestUrl: msg.manifestUrl || msg.url // Pass manifest URL for better progress tracking
+      url: request.url,
+      filename: request.filename || 'video.mp4',
+      savePath: request.savePath,
+      quality: request.quality,
+      manifestUrl: request.manifestUrl || request.url // Pass manifest URL for better progress tracking
     }, responseHandler).catch(error => {
       handleDownloadError(error.message, notificationId, ports);
     });
@@ -471,26 +472,26 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
 
   // Handle video detection from content script
-  if (msg.action === 'addVideo') {
+  if (request.action === 'addVideo') {
     const tabId = sender.tab?.id;
     if (tabId && tabId > 0) {
-      addVideoToTab(tabId, msg);
+      addVideoToTab(tabId, request);
     }
     return false;
   }
 
   // Handle stored playlists request
-  if (msg.action === 'getStoredPlaylists') {
-    const playlists = playlistsPerTab[msg.tabId] 
-      ? Array.from(playlistsPerTab[msg.tabId])
+  if (request.action === 'getStoredPlaylists') {
+    const playlists = playlistsPerTab[request.tabId] 
+      ? Array.from(playlistsPerTab[request.tabId])
       : [];
     sendResponse(playlists);
     return true;
   }
 
   // Handle videos list request
-  if (msg.action === 'getVideos') {
-    const tabId = msg.tabId;
+  if (request.action === 'getVideos') {
+    const tabId = request.tabId;
     
     if (!videosPerTab[tabId] || videosPerTab[tabId].size === 0) {
       sendResponse([]);
@@ -505,9 +506,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
 
   // Handle preview generation
-  if (msg.type === 'generatePreview') {
+  if (request.type === 'generatePreview') {
     // Check if we're already generating this preview
-    const cacheKey = msg.url;
+    const cacheKey = request.url;
     if (previewGenerationQueue.has(cacheKey)) {
       // If we are, wait for the existing promise
       previewGenerationQueue.get(cacheKey).then(sendResponse);
@@ -518,17 +519,17 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     const previewPromise = new Promise(resolve => {
       nativeHostService.sendMessage({
         type: 'generatePreview',
-        url: msg.url
+        url: request.url
       }).then(response => {
         previewGenerationQueue.delete(cacheKey);
         
         // If we successfully generated a preview, cache it with the video
-        if (response && response.previewUrl && msg.tabId && videosPerTab[msg.tabId]) {
-          const normalizedUrl = normalizeUrl(msg.url);
-          const videoInfo = videosPerTab[msg.tabId].get(normalizedUrl);
+        if (response && response.previewUrl && request.tabId && videosPerTab[request.tabId]) {
+          const normalizedUrl = normalizeUrl(request.url);
+          const videoInfo = videosPerTab[request.tabId].get(normalizedUrl);
           if (videoInfo) {
             videoInfo.previewUrl = response.previewUrl;
-            videosPerTab[msg.tabId].set(normalizedUrl, videoInfo);
+            videosPerTab[request.tabId].set(normalizedUrl, videoInfo);
           }
         }
         
@@ -548,18 +549,18 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
 
   // Handle stream qualities request
-  if (msg.type === 'getHLSQualities') {
+  if (request.type === 'getHLSQualities') {
     // Create promise for quality detection
     const qualityPromise = new Promise(resolve => {
-      console.log('🎥 Requesting media info from native host for:', msg.url);
+      console.log('🎥 Requesting media info from native host for:', request.url);
       
       nativeHostService.sendMessage({
         type: 'getQualities',
-        url: msg.url
+        url: request.url
       }).then(response => {
         if (response?.streamInfo) {
           console.group('📊 Received media info from native host:');
-          console.log('URL:', msg.url);
+          console.log('URL:', request.url);
           
           // Log video info if available
           if (response.streamInfo.hasVideo) {
@@ -621,18 +622,18 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
 
   // Handle manifest fetching
-  if (msg.type === 'fetchManifest') {
-    fetchManifestContent(msg.url).then(content => {
+  if (request.type === 'fetchManifest') {
+    fetchManifestContent(request.url).then(content => {
         sendResponse({ content });
     });
     return true;
   }
 
   // Handle manifest relationship storage
-  if (msg.type === 'storeManifestRelationship') {
-    msg.variants.forEach(variant => {
+  if (request.type === 'storeManifestRelationship') {
+    request.variants.forEach(variant => {
         manifestRelationships.set(variant.url, {
-            playlistUrl: msg.playlistUrl,
+            playlistUrl: request.playlistUrl,
             bandwidth: variant.bandwidth,
             resolution: variant.resolution,
             codecs: variant.codecs,
@@ -644,8 +645,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
 
   // Handle manifest relationship lookup
-  if (msg.type === 'getManifestRelationship') {
-    sendResponse(manifestRelationships.get(msg.variantUrl) || null);
+  if (request.type === 'getManifestRelationship') {
+    sendResponse(manifestRelationships.get(request.variantUrl) || null);
     return true;
   }
 
@@ -1046,14 +1047,14 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     }
     
     // Handle other message types...
-    if (msg.action === 'newVideoDetected' && msg.videos && msg.videos.length > 0) {
+    if (request.action === 'newVideoDetected' && request.videos && request.videos.length > 0) {
         const tabId = sender?.tab?.id;
         if (!tabId) return false;
         
-        console.log(`Received ${msg.videos.length} new videos from content script for tab ${tabId}`);
+        console.log(`Received ${request.videos.length} new videos from content script for tab ${tabId}`);
         
         // Process each video through the same pipeline
-        msg.videos.forEach(video => {
+        request.videos.forEach(video => {
           addVideoToTab(tabId, {
             url: video.url,
             type: video.type,
@@ -1068,7 +1069,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       }
       
       // Handle download requests
-      if (msg.type === 'downloadHLS' || msg.type === 'download') {
+      if (request.type === 'downloadHLS' || request.type === 'download') {
         const notificationId = `download-${Date.now()}`;
         let hasError = false;
         
@@ -1084,7 +1085,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
               ...response,
               type: 'progress',
               // Format filename if available
-              filename: response.filename || msg.filename || getFilenameFromUrl(msg.url)
+              filename: response.filename || request.filename || getFilenameFromUrl(request.url)
             };
             
             // Update notification less frequently
@@ -1131,11 +1132,11 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         // Send to native host using our service with enhanced parameters
         nativeHostService.sendMessage({
           type: 'download',
-          url: msg.url,
-          filename: msg.filename || 'video.mp4',
-          savePath: msg.savePath,
-          quality: msg.quality,
-          manifestUrl: msg.manifestUrl || msg.url // Pass manifest URL for better progress tracking
+          url: request.url,
+          filename: request.filename || 'video.mp4',
+          savePath: request.savePath,
+          quality: request.quality,
+          manifestUrl: request.manifestUrl || request.url // Pass manifest URL for better progress tracking
         }, responseHandler).catch(error => {
           handleDownloadError(error.message, notificationId, ports);
         });
@@ -1144,26 +1145,26 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       }
     
       // Handle video detection from content script
-      if (msg.action === 'addVideo') {
+      if (request.action === 'addVideo') {
         const tabId = sender.tab?.id;
         if (tabId && tabId > 0) {
-          addVideoToTab(tabId, msg);
+          addVideoToTab(tabId, request);
         }
         return false;
       }
     
       // Handle stored playlists request
-      if (msg.action === 'getStoredPlaylists') {
-        const playlists = playlistsPerTab[msg.tabId] 
-          ? Array.from(playlistsPerTab[msg.tabId])
+      if (request.action === 'getStoredPlaylists') {
+        const playlists = playlistsPerTab[request.tabId] 
+          ? Array.from(playlistsPerTab[request.tabId])
           : [];
         sendResponse(playlists);
         return true;
       }
     
       // Handle videos list request
-      if (msg.action === 'getVideos') {
-        const tabId = msg.tabId;
+      if (request.action === 'getVideos') {
+        const tabId = request.tabId;
         
         if (!videosPerTab[tabId] || videosPerTab[tabId].size === 0) {
           sendResponse([]);
@@ -1178,9 +1179,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       }
     
       // Handle preview generation
-      if (msg.type === 'generatePreview') {
+      if (request.type === 'generatePreview') {
         // Check if we're already generating this preview
-        const cacheKey = msg.url;
+        const cacheKey = request.url;
         if (previewGenerationQueue.has(cacheKey)) {
           // If we are, wait for the existing promise
           previewGenerationQueue.get(cacheKey).then(sendResponse);
@@ -1191,17 +1192,17 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         const previewPromise = new Promise(resolve => {
           nativeHostService.sendMessage({
             type: 'generatePreview',
-            url: msg.url
+            url: request.url
           }).then(response => {
             previewGenerationQueue.delete(cacheKey);
             
             // If we successfully generated a preview, cache it with the video
-            if (response && response.previewUrl && msg.tabId && videosPerTab[msg.tabId]) {
-              const normalizedUrl = normalizeUrl(msg.url);
-              const videoInfo = videosPerTab[msg.tabId].get(normalizedUrl);
+            if (response && response.previewUrl && request.tabId && videosPerTab[request.tabId]) {
+              const normalizedUrl = normalizeUrl(request.url);
+              const videoInfo = videosPerTab[request.tabId].get(normalizedUrl);
               if (videoInfo) {
                 videoInfo.previewUrl = response.previewUrl;
-                videosPerTab[msg.tabId].set(normalizedUrl, videoInfo);
+                videosPerTab[request.tabId].set(normalizedUrl, videoInfo);
               }
             }
             
@@ -1221,18 +1222,18 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       }
     
       // Handle stream qualities request
-      if (msg.type === 'getHLSQualities') {
+      if (request.type === 'getHLSQualities') {
         // Create promise for quality detection
         const qualityPromise = new Promise(resolve => {
-          console.log('🎥 Requesting media info from native host for:', msg.url);
+          console.log('🎥 Requesting media info from native host for:', request.url);
           
           nativeHostService.sendMessage({
             type: 'getQualities',
-            url: msg.url
+            url: request.url
           }).then(response => {
             if (response?.streamInfo) {
               console.group('📊 Received media info from native host:');
-              console.log('URL:', msg.url);
+              console.log('URL:', request.url);
               
               // Log video info if available
               if (response.streamInfo.hasVideo) {
@@ -1294,18 +1295,18 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       }
     
       // Handle manifest fetching
-      if (msg.type === 'fetchManifest') {
-        fetchManifestContent(msg.url).then(content => {
+      if (request.type === 'fetchManifest') {
+        fetchManifestContent(request.url).then(content => {
             sendResponse({ content });
         });
         return true;
       }
     
       // Handle manifest relationship storage
-      if (msg.type === 'storeManifestRelationship') {
-        msg.variants.forEach(variant => {
+      if (request.type === 'storeManifestRelationship') {
+        request.variants.forEach(variant => {
             manifestRelationships.set(variant.url, {
-                playlistUrl: msg.playlistUrl,
+                playlistUrl: request.playlistUrl,
                 bandwidth: variant.bandwidth,
                 resolution: variant.resolution,
                 codecs: variant.codecs,
@@ -1317,8 +1318,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       }
     
       // Handle manifest relationship lookup
-      if (msg.type === 'getManifestRelationship') {
-        sendResponse(manifestRelationships.get(msg.variantUrl) || null);
+      if (request.type === 'getManifestRelationship') {
+        sendResponse(manifestRelationships.get(request.variantUrl) || null);
         return true;
       }
     

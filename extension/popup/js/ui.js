@@ -192,7 +192,7 @@ export function initializeUI() {
  */
 export function restoreScrollPosition(container, scrollPosition) {
     setTimeout(() => {
-        if (container.scrollHeight > container.clientHeight) {
+        if (container && container.scrollHeight > container.clientHeight) {
             container.scrollTop = scrollPosition;
         }
     }, 50);
