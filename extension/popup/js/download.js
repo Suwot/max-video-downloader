@@ -16,8 +16,10 @@ import { showError } from './utilities.js';
 import { debounce } from './utilities.js';
 import { showQualityDialog } from './ui.js';
 import { getStreamQualities } from './video-processor.js';
+import { getBackgroundPort } from './index.js';
 
 let downloadPort = null;
+let activeDownloadId = null;
 
 /**
  * Handle download button click
@@ -41,25 +43,62 @@ export async function handleDownload(button, url, type) {
             return;
         }
         
-        // Create a new port connection
+        // Create a new port connection for download progress
         downloadPort = chrome.runtime.connect({ name: 'download_progress' });
+
+        // Check if we have a stored download ID for this URL
+        const storedDownloadId = localStorage.getItem('activeDownloadId');
         
-        // Immediately register interest in this download URL
-        downloadPort.postMessage({
-            action: 'registerForDownload',
-            downloadUrl: url
-        });
+        if (storedDownloadId) {
+            console.log('Found stored download ID, attempting to reconnect:', storedDownloadId);
+            // Try to reconnect to existing download
+            downloadPort.postMessage({
+                action: 'reconnectToDownload',
+                downloadId: storedDownloadId
+            });
+        } else {
+            // Immediately register interest in this download URL
+            downloadPort.postMessage({
+                action: 'registerForDownload',
+                downloadUrl: url
+            });
+        }
         
         // Set up message listener
         downloadPort.onMessage.addListener((response) => {
-            console.log('Download progress:', response); // Debug log
+            console.log('Download message:', response); // Debug log
             
-            // Make sure this message is for our URL
-            if (response?.url !== url) {
-                return; // Ignore messages for other URLs
+            // Handle download not found (when reconnecting with ID)
+            if (response?.type === 'download_not_found') {
+                console.log('Download not found for ID:', response.downloadId);
+                localStorage.removeItem('activeDownloadId');
+                // Proceed with new download request
+                registerNewDownload(url, type, button);
+                return;
             }
             
+            // Handle download initiated message
+            if (response?.type === 'downloadInitiated') {
+                console.log('Download initiated with ID:', response.downloadId);
+                // Store the download ID for persistence
+                activeDownloadId = response.downloadId;
+                localStorage.setItem('activeDownloadId', response.downloadId);
+                return;
+            }
+            
+            // Handle progress updates
             if (response?.type === 'progress') {
+                // If this message has a downloadId, store it
+                if (response.downloadId && !activeDownloadId) {
+                    activeDownloadId = response.downloadId;
+                    localStorage.setItem('activeDownloadId', response.downloadId);
+                }
+                
+                // If we have an active download ID, make sure this message is for our download
+                if (activeDownloadId && response.downloadId !== activeDownloadId) {
+                    return; // Ignore messages for other downloads
+                }
+                
                 const progress = response.progress || 0;
                 
                 // Update button background to show progress
@@ -101,11 +140,20 @@ export async function handleDownload(button, url, type) {
                 button.style.backgroundColor = '#43A047';
                 button.querySelector('span').textContent = 'Complete!';
                 
+                // Clear stored download ID
+                localStorage.removeItem('activeDownloadId');
+                activeDownloadId = null;
+                
                 // Reset after delay
                 setTimeout(() => resetDownloadState(), 2000);
                 
             } else if (response?.error) {
                 showError(response.error);
+                
+                // Clear stored download ID on error
+                localStorage.removeItem('activeDownloadId');
+                activeDownloadId = null;
+                
                 resetDownloadState();
             }
         });
@@ -116,13 +164,10 @@ export async function handleDownload(button, url, type) {
             resetDownloadState();
         });
         
-        // Send download request
-        chrome.runtime.sendMessage({
-            type: type === 'hls' ? 'downloadHLS' : 'download',
-            url: url,
-            manifestUrl: url, // Pass the manifest URL for better segment tracking
-            tabId: await getCurrentTabId() // Pass tabId for proper tracking
-        });
+        // If we don't have a stored download ID, initiate a new download
+        if (!storedDownloadId) {
+            registerNewDownload(url, type, button);
+        }
         
     } catch (error) {
         console.error('Download failed:', error);
@@ -139,6 +184,40 @@ export async function handleDownload(button, url, type) {
         button.style.backgroundImage = 'none';
         button.style.backgroundColor = '#1976D2';
         button.innerHTML = originalText;
+    }
+}
+
+/**
+ * Register a new download with the background script
+ */
+async function registerNewDownload(url, type, button) {
+    try {
+        // Get the port connection to the background script
+        const port = getBackgroundPort();
+        
+        // If we have a port connection to background, use it
+        if (port) {
+            console.log('Initiating download via port connection');
+            port.postMessage({
+                type: type === 'hls' ? 'downloadHLS' : 'download',
+                url: url,
+                manifestUrl: url, // Pass the manifest URL for better segment tracking
+                tabId: await getCurrentTabId() // Pass tabId for proper tracking
+            });
+        } else {
+            // Fall back to one-time message
+            console.log('Initiating download via one-time message');
+            chrome.runtime.sendMessage({
+                type: type === 'hls' ? 'downloadHLS' : 'download',
+                url: url,
+                manifestUrl: url, // Pass the manifest URL for better segment tracking
+                tabId: await getCurrentTabId() // Pass tabId for proper tracking
+            });
+        }
+    } catch (error) {
+        console.error('Failed to register new download:', error);
+        showError('Failed to start download');
+        throw error;
     }
 }
 
@@ -278,33 +357,89 @@ export async function startDownload(video) {
         // Set up progress handling
         return new Promise((resolve, reject) => {
             port.onMessage.addListener((msg) => {
-                if (msg.type === 'progress') {
+                if (msg.type === 'downloadInitiated') {
+                    // Store download ID for persistence
+                    activeDownloadId = msg.downloadId;
+                    localStorage.setItem('activeDownloadId', msg.downloadId);
+                }
+                else if (msg.type === 'progress') {
                     // Update progress UI
                     updateDownloadProgress(video, msg.progress, msg);
                 } else if (msg.success) {
+                    // Clear stored download ID on completion
+                    localStorage.removeItem('activeDownloadId');
+                    activeDownloadId = null;
+                    
                     resolve(msg);
                     port.disconnect();
                 } else if (msg.error) {
+                    // Clear stored download ID on error
+                    localStorage.removeItem('activeDownloadId');
+                    activeDownloadId = null;
+                    
                     reject(new Error(msg.error));
                     port.disconnect();
                 }
             });
             
-            // Start download
-            chrome.runtime.sendMessage({
-                type: video.type === 'hls' ? 'downloadHLS' : 'download',
-                url: downloadUrl,
-                filename: video.filename,
-                quality: quality ? {
-                    resolution: quality.resolution,
-                    codecs: quality.codecs,
-                    bitrate: quality.bandwidth || quality.videoBitrate
-                } : null
-            });
+            // Get the port connection to the background script
+            const backgroundPort = getBackgroundPort();
+            
+            // Start download using background port if available, otherwise use one-time message
+            if (backgroundPort) {
+                backgroundPort.postMessage({
+                    type: video.type === 'hls' ? 'downloadHLS' : 'download',
+                    url: downloadUrl,
+                    filename: video.filename,
+                    quality: quality ? {
+                        resolution: quality.resolution,
+                        codecs: quality.codecs,
+                        bitrate: quality.bandwidth || quality.videoBitrate
+                    } : null,
+                    tabId: getCurrentTabId()
+                });
+            } else {
+                chrome.runtime.sendMessage({
+                    type: video.type === 'hls' ? 'downloadHLS' : 'download',
+                    url: downloadUrl,
+                    filename: video.filename,
+                    quality: quality ? {
+                        resolution: quality.resolution,
+                        codecs: quality.codecs,
+                        bitrate: quality.bandwidth || quality.videoBitrate
+                    } : null
+                });
+            }
         });
     } catch (error) {
         showError(`Failed to start download: ${error.message}`);
         throw error;
+    }
+}
+
+/**
+ * Check for active downloads when popup opens
+ * This should be called when the popup is initialized
+ */
+export function checkForActiveDownloads() {
+    // Check if we have a stored download ID
+    const storedDownloadId = localStorage.getItem('activeDownloadId');
+    
+    if (storedDownloadId) {
+        console.log('Found stored download ID, requesting active downloads list');
+        
+        // Get the port connection to the background script
+        const port = getBackgroundPort();
+        
+        if (port) {
+            // Request active downloads list
+            port.postMessage({
+                action: 'getActiveDownloads'
+            });
+            
+            // Listen for the response (add this to the main port message handler)
+            // This will be handled in index.js's port message handler
+        }
     }
 }
 
@@ -455,6 +590,7 @@ function updateDownloadProgress(video, progress, progressData = {}) {
     
     // Log detailed progress update (for debugging)
     console.log('Progress update:', {
+        downloadId: progressData.downloadId,
         progress,
         speed: progressData.speed,
         eta: progressData.eta,
