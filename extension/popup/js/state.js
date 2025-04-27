@@ -9,14 +9,13 @@
  * - Maintains scroll position between UI updates
  * - Coordinates state persistence across extension sessions
  * - Manages HLS master playlist relationships
+ * - Uses factory pattern for consistent cache management
  */
 
 // popup/js/state.js
 
-// State management
-const CACHE_TTL = 30 * 60 * 1000; // 30 minutes
-const CACHE_VERSION = "1.0"; // Version of the cache schema - increment when cache structure changes
-const CACHE_VERSION_KEY = "cacheVersion"; // Single consistent key for all cache versions
+// Import cache management system
+import { CacheFactory, CACHE_TTL, CACHE_VERSION, CACHE_VERSION_KEY } from './cache-factory.js';
 
 // Cache size limits
 const MAX_VIDEOS_CACHE_SIZE = 100;
@@ -24,7 +23,7 @@ const MAX_POSTER_CACHE_SIZE = 50;
 const MAX_MEDIA_INFO_CACHE_SIZE = 100;
 const MAX_RESOLUTION_CACHE_SIZE = 100;
 const MAX_STREAM_METADATA_CACHE_SIZE = 50;
-const MAX_MASTER_PLAYLISTS_CACHE_SIZE = 50; // New size limit for master playlists
+const MAX_MASTER_PLAYLISTS_CACHE_SIZE = 50;
 
 /**
  * Chrome Storage Usage:
@@ -37,17 +36,20 @@ const MAX_MASTER_PLAYLISTS_CACHE_SIZE = 50; // New size limit for master playlis
  *   Use for: caches, current session data, larger objects, non-critical data
  */
 
+// Cache instances using the factory
+const mediaInfoCache = CacheFactory.createMediaInfoCache(MAX_MEDIA_INFO_CACHE_SIZE);
+const posterCache = CacheFactory.createPosterCache(MAX_POSTER_CACHE_SIZE);
+const streamMetadataCache = CacheFactory.createStreamMetadataCache(MAX_STREAM_METADATA_CACHE_SIZE);
+const resolutionCache = CacheFactory.createCache('resolutionCache', MAX_RESOLUTION_CACHE_SIZE);
+const masterPlaylistCache = CacheFactory.createMasterPlaylistCache(MAX_MASTER_PLAYLISTS_CACHE_SIZE);
+
 // State variables
 let cachedVideos = null;
-let resolutionCache = new Map();
 let scrollPosition = 0;
 let videoGroups = {};
 let groupState = {}; 
-let posterCache = new Map(); 
-let currentTheme = 'dark'; 
-let mediaInfoCache = new Map();
-const streamMetadataCache = new Map();
-const masterPlaylistCache = new Map(); // New cache for HLS master playlists
+let currentTheme = 'dark';
+let currentUrl = null; // Track current URL to detect page navigation
 
 // Debug logging helper
 function logDebug(...args) {
@@ -81,18 +83,7 @@ function handleError(category, operation, error, fallback = null) {
  */
 export function addStreamMetadata(url, metadata) {
     try {
-        // Add access timestamp for LRU
-        streamMetadataCache.set(url, {
-            data: metadata,
-            timestamp: Date.now(),
-            lastAccessed: Date.now(),
-            version: CACHE_VERSION
-        });
-        
-        // Enforce cache size limit (LRU eviction)
-        enforceMapCacheLimit(streamMetadataCache, MAX_STREAM_METADATA_CACHE_SIZE);
-        
-        saveStreamMetadataCache();
+        streamMetadataCache.set(url, metadata);
     } catch (error) {
         handleError('Cache', 'adding stream metadata', error);
     }
@@ -103,54 +94,10 @@ export function addStreamMetadata(url, metadata) {
  */
 export function getStreamMetadata(url) {
     try {
-        const cached = streamMetadataCache.get(url);
-        if (!cached) return null;
-        
-        // Version check
-        if (cached.version !== CACHE_VERSION) {
-            streamMetadataCache.delete(url);
-            return null;
-        }
-        
-        // TTL check
-        if (Date.now() - cached.timestamp > CACHE_TTL) {
-            streamMetadataCache.delete(url);
-            return null;
-        }
-        
-        // Update last accessed time for LRU algorithm
-        cached.lastAccessed = Date.now();
-        streamMetadataCache.set(url, cached);
-        
-        return cached.data;
+        return streamMetadataCache.get(url);
     } catch (error) {
         return handleError('Cache', 'getting stream metadata', error, null);
     }
-}
-
-/**
- * Helper function to enforce Map cache size limits using LRU eviction
- */
-function enforceMapCacheLimit(cache, maxSize) {
-    if (cache.size <= maxSize) return;
-    
-    // Convert to array for sorting
-    const entries = Array.from(cache.entries());
-    
-    // Sort by last accessed (oldest first)
-    entries.sort((a, b) => {
-        const aAccess = a[1].lastAccessed || a[1].timestamp || 0;
-        const bAccess = b[1].lastAccessed || b[1].timestamp || 0;
-        return aAccess - bAccess;
-    });
-    
-    // Remove oldest entries until we're at the limit
-    const entriesToRemove = entries.slice(0, entries.length - maxSize);
-    entriesToRemove.forEach(entry => {
-        cache.delete(entry[0]);
-    });
-    
-    logDebug(`Removed ${entriesToRemove.length} old entries from cache (LRU eviction)`);
 }
 
 /**
@@ -285,49 +232,6 @@ export function setCachedVideos(videos) {
     }
 }
 
-// Storage management functions
-function saveStreamMetadataCache() {
-    try {
-        const cacheData = JSON.stringify(Array.from(streamMetadataCache.entries()));
-        chrome.storage.local.set({ 
-            streamMetadataCache: cacheData,
-            [CACHE_VERSION_KEY]: CACHE_VERSION // Use consistent version key
-        }).catch(error => {
-            handleError('Storage', 'saving stream metadata cache', error);
-        });
-    } catch (error) {
-        handleError('Storage', 'preparing stream metadata for storage', error);
-    }
-}
-
-function savePosterCache() {
-    try {
-        const posterData = JSON.stringify(Array.from(posterCache.entries()));
-        chrome.storage.local.set({ 
-            posterCache: posterData,
-            [CACHE_VERSION_KEY]: CACHE_VERSION // Use consistent version key
-        }).catch(error => {
-            handleError('Storage', 'saving poster cache', error);
-        });
-    } catch (error) {
-        handleError('Storage', 'preparing poster cache for storage', error);
-    }
-}
-
-function saveMediaInfoCache() {
-    try {
-        const mediaInfoData = JSON.stringify(Array.from(mediaInfoCache.entries()));
-        chrome.storage.local.set({ 
-            mediaInfoCache: mediaInfoData,
-            [CACHE_VERSION_KEY]: CACHE_VERSION // Use consistent version key
-        }).catch(error => {
-            handleError('Storage', 'saving media info cache', error);
-        });
-    } catch (error) {
-        handleError('Storage', 'preparing media info for storage', error);
-    }
-}
-
 /**
  * Add a master playlist to the cache
  * @param {string} playlistUrl - URL of the master playlist 
@@ -335,18 +239,7 @@ function saveMediaInfoCache() {
  */
 export function addMasterPlaylist(playlistUrl, playlistData) {
     try {
-        // Add access timestamp for LRU
-        masterPlaylistCache.set(playlistUrl, {
-            data: playlistData,
-            timestamp: Date.now(),
-            lastAccessed: Date.now(),
-            version: CACHE_VERSION
-        });
-        
-        // Enforce cache size limit (LRU eviction)
-        enforceMapCacheLimit(masterPlaylistCache, MAX_MASTER_PLAYLISTS_CACHE_SIZE);
-        
-        saveMasterPlaylistCache();
+        masterPlaylistCache.set(playlistUrl, playlistData);
     } catch (error) {
         handleError('Cache', 'adding master playlist', error);
     }
@@ -359,26 +252,7 @@ export function addMasterPlaylist(playlistUrl, playlistData) {
  */
 export function getMasterPlaylist(playlistUrl) {
     try {
-        const cached = masterPlaylistCache.get(playlistUrl);
-        if (!cached) return null;
-        
-        // Version check
-        if (cached.version !== CACHE_VERSION) {
-            masterPlaylistCache.delete(playlistUrl);
-            return null;
-        }
-        
-        // TTL check
-        if (Date.now() - cached.timestamp > CACHE_TTL) {
-            masterPlaylistCache.delete(playlistUrl);
-            return null;
-        }
-        
-        // Update last accessed time for LRU algorithm
-        cached.lastAccessed = Date.now();
-        masterPlaylistCache.set(playlistUrl, cached);
-        
-        return cached.data;
+        return masterPlaylistCache.get(playlistUrl);
     } catch (error) {
         return handleError('Cache', 'getting master playlist', error, null);
     }
@@ -391,26 +265,19 @@ export function getMasterPlaylist(playlistUrl) {
  */
 export function getMasterPlaylistForVariant(variantUrl) {
     try {
-        // Loop through all master playlists
-        for (const [url, cacheEntry] of masterPlaylistCache.entries()) {
+        // Get all valid master playlists
+        const allPlaylists = masterPlaylistCache.getAllValid();
+        
+        // Check each playlist for the variant
+        for (const [url, masterData] of allPlaylists.entries()) {
             // Skip invalid entries
-            if (!cacheEntry || !cacheEntry.data || !cacheEntry.data.qualityVariants) {
-                continue;
-            }
-            
-            // TTL check
-            if (Date.now() - cacheEntry.timestamp > CACHE_TTL) {
-                masterPlaylistCache.delete(url);
+            if (!masterData || !masterData.qualityVariants) {
                 continue;
             }
             
             // Check if this variant URL is in the master's quality variants
-            const master = cacheEntry.data;
-            if (master.qualityVariants.some(variant => variant.url === variantUrl)) {
-                // Update last accessed time
-                cacheEntry.lastAccessed = Date.now();
-                masterPlaylistCache.set(url, cacheEntry);
-                return master;
+            if (masterData.qualityVariants.some(variant => variant.url === variantUrl)) {
+                return masterData;
             }
         }
         return null;
@@ -425,27 +292,7 @@ export function getMasterPlaylistForVariant(variantUrl) {
  */
 export function getAllMasterPlaylists() {
     try {
-        const result = new Map();
-        const now = Date.now();
-        
-        // Filter out expired entries
-        for (const [url, cacheEntry] of masterPlaylistCache.entries()) {
-            // Skip invalid entries
-            if (!cacheEntry || !cacheEntry.data) {
-                continue;
-            }
-            
-            // Check if expired
-            if (now - cacheEntry.timestamp > CACHE_TTL) {
-                masterPlaylistCache.delete(url);
-                continue;
-            }
-            
-            // Add to result
-            result.set(url, cacheEntry.data);
-        }
-        
-        return result;
+        return masterPlaylistCache.getAllValid();
     } catch (error) {
         return handleError('Cache', 'getting all master playlists', error, new Map());
     }
@@ -457,29 +304,9 @@ export function getAllMasterPlaylists() {
 export function clearMasterPlaylists() {
     try {
         masterPlaylistCache.clear();
-        chrome.storage.local.remove('masterPlaylistCache').catch(error => {
-            handleError('Storage', 'removing master playlist cache', error);
-        });
         logDebug('Cleared master playlist cache');
     } catch (error) {
         handleError('Cache', 'clearing master playlists', error);
-    }
-}
-
-/**
- * Save master playlist cache to persistent storage
- */
-function saveMasterPlaylistCache() {
-    try {
-        const cacheData = JSON.stringify(Array.from(masterPlaylistCache.entries()));
-        chrome.storage.local.set({ 
-            masterPlaylistCache: cacheData,
-            [CACHE_VERSION_KEY]: CACHE_VERSION
-        }).catch(error => {
-            handleError('Storage', 'saving master playlist cache', error);
-        });
-    } catch (error) {
-        handleError('Storage', 'preparing master playlist cache for storage', error);
     }
 }
 
@@ -495,12 +322,13 @@ export async function initializeState() {
         const localData = await chrome.storage.local.get([
             'groupState', 
             'cachedVideos', 
-            'currentTabId', 
+            'currentTabId',
+            'currentTabUrl', // Add URL tracking
             'posterCache',
             'mediaInfoCache', 
             'streamMetadataCache',
-            'masterPlaylistCache', // Add master playlist cache to storage retrieval
-            CACHE_VERSION_KEY // Use consistent version key
+            'masterPlaylistCache', 
+            CACHE_VERSION_KEY
         ]);
 
         // Check if we have a version mismatch and log it
@@ -524,15 +352,26 @@ export async function initializeState() {
             unknown: false 
         };
         
-        // Restore caches with version checking and size enforcement
-        restorePosterCache(localData);
-        restoreMediaInfoCache(localData);
-        restoreStreamMetadataCache(localData);
-        restoreMasterPlaylistCache(localData); // Add master playlist cache restoration
+        // Restore caches with the new cache system
+        posterCache.restore(localData);
+        mediaInfoCache.restore(localData);
+        streamMetadataCache.restore(localData);
+        masterPlaylistCache.restore(localData);
+        resolutionCache.restore(localData);
         
         // Handle videos cache
         const [currentTab] = await chrome.tabs.query({ active: true, currentWindow: true });
-        if (localData.cachedVideos && localData.currentTabId === currentTab.id) {
+        
+        // Get the current tab's URL
+        currentUrl = currentTab.url;
+        logDebug('Current tab URL:', currentUrl);
+        
+        // Only use cached videos if we're on the same tab AND same URL
+        if (localData.cachedVideos && 
+            localData.currentTabId === currentTab.id && 
+            localData.currentTabUrl === currentTab.url) {
+            
+            logDebug('Using cached videos - same tab and URL');
             try {
                 cachedVideos = localData.cachedVideos.map(video => {
                     // Add version info if missing
@@ -542,10 +381,9 @@ export async function initializeState() {
                     
                     // If video doesn't have metadata but we have it in the cache, add it
                     if (!video.mediaInfo) {
-                        const mediaInfo = mediaInfoCache.get(video.url);
+                        const mediaInfo = getMediaInfoFromCache(video.url);
                         if (mediaInfo) {
-                            video.mediaInfo = typeof mediaInfo === 'object' && mediaInfo.data ? 
-                                mediaInfo.data : mediaInfo;
+                            video.mediaInfo = mediaInfo;
                             logDebug('Added missing mediaInfo to video from cache:', video.url);
                         }
                     }
@@ -563,22 +401,31 @@ export async function initializeState() {
                 handleError('Cache', 'restoring cached videos', e);
                 cachedVideos = []; // Fallback to empty array on error
             }
+        } else {
+            // Different tab or URL, don't use cached videos
+            if (localData.currentTabUrl !== currentTab.url) {
+                logDebug('URL changed, not using cached videos. Old:', localData.currentTabUrl, 'New:', currentTab.url);
+            } else {
+                logDebug('Tab changed, not using cached videos');
+            }
+            cachedVideos = null;
         }
         
-        // Store current tab ID
+        // Store current tab ID and URL
         chrome.storage.local.set({ 
             currentTabId: currentTab.id,
+            currentTabUrl: currentTab.url, // Store the current URL
             [CACHE_VERSION_KEY]: CACHE_VERSION // Always store the current version
         }).catch(error => {
-            handleError('Storage', 'setting current tab ID', error);
+            handleError('Storage', 'setting current tab ID and URL', error);
         });
         
         return {
             currentTheme,
             cachedVideos,
             groupState,
-            posterCache,
-            currentTabId: currentTab.id
+            currentTabId: currentTab.id,
+            currentTabUrl: currentTab.url
         };
     } catch (error) {
         handleError('State', 'initializing state', error);
@@ -587,117 +434,9 @@ export async function initializeState() {
             currentTheme: 'dark',
             cachedVideos: [],
             groupState: { hls: false, dash: false, direct: false, blob: true, unknown: false },
-            posterCache: new Map(),
-            currentTabId: null
+            currentTabId: null,
+            currentTabUrl: null
         };
-    }
-}
-
-// Helper functions for cache restoration with version checking
-function restorePosterCache(localData) {
-    if (localData.posterCache) {
-        try {
-            // Check version - use consistent version key
-            if (localData[CACHE_VERSION_KEY] !== CACHE_VERSION) {
-                logDebug('Poster cache version mismatch, but will attempt to use existing data');
-                // Instead of resetting, we'll try to use the existing data
-            }
-            
-            posterCache = new Map(JSON.parse(localData.posterCache));
-            enforceMapCacheLimit(posterCache, MAX_POSTER_CACHE_SIZE);
-        } catch (e) {
-            handleError('Cache', 'restoring poster cache', e);
-            posterCache = new Map(); // Reset on error
-        }
-    }
-}
-
-function restoreMediaInfoCache(localData) {
-    if (localData.mediaInfoCache) {
-        try {
-            // Check version - use consistent version key
-            if (localData[CACHE_VERSION_KEY] !== CACHE_VERSION) {
-                logDebug('Media info cache version mismatch, but will attempt to use existing data');
-                // Instead of resetting, we'll try to use the existing data
-            }
-            
-            mediaInfoCache = new Map(JSON.parse(localData.mediaInfoCache));
-            enforceMapCacheLimit(mediaInfoCache, MAX_MEDIA_INFO_CACHE_SIZE);
-        } catch (e) {
-            handleError('Cache', 'restoring media info cache', e);
-            mediaInfoCache = new Map(); // Reset on error
-        }
-    }
-}
-
-function restoreStreamMetadataCache(localData) {
-    if (localData.streamMetadataCache) {
-        try {
-            // Check version - use consistent version key
-            if (localData[CACHE_VERSION_KEY] !== CACHE_VERSION) {
-                logDebug('Stream metadata cache version mismatch, but will attempt to use existing data');
-                // Instead of resetting, we'll try to use the existing data
-            }
-            
-            const parsedCache = JSON.parse(localData.streamMetadataCache);
-            streamMetadataCache.clear();
-            
-            for (const [url, data] of parsedCache) {
-                // Add lastAccessed if missing (for LRU)
-                if (!data.lastAccessed) {
-                    data.lastAccessed = data.timestamp;
-                }
-                
-                // Only restore non-expired entries
-                if (Date.now() - data.timestamp <= CACHE_TTL) {
-                    // Update version to current
-                    data.version = CACHE_VERSION;
-                    streamMetadataCache.set(url, data);
-                }
-            }
-            
-            enforceMapCacheLimit(streamMetadataCache, MAX_STREAM_METADATA_CACHE_SIZE);
-        } catch (e) {
-            handleError('Cache', 'restoring stream metadata cache', e);
-            streamMetadataCache.clear(); // Reset on error
-        }
-    }
-}
-
-/**
- * Restore master playlist cache from storage
- */
-function restoreMasterPlaylistCache(localData) {
-    if (localData.masterPlaylistCache) {
-        try {
-            // Check version - use consistent version key
-            if (localData[CACHE_VERSION_KEY] !== CACHE_VERSION) {
-                logDebug('Master playlist cache version mismatch, but will attempt to use existing data');
-            }
-            
-            const parsedCache = JSON.parse(localData.masterPlaylistCache);
-            masterPlaylistCache.clear();
-            
-            for (const [url, data] of parsedCache) {
-                // Add lastAccessed if missing (for LRU)
-                if (!data.lastAccessed) {
-                    data.lastAccessed = data.timestamp;
-                }
-                
-                // Only restore non-expired entries
-                if (Date.now() - data.timestamp <= CACHE_TTL) {
-                    // Update version to current
-                    data.version = CACHE_VERSION;
-                    masterPlaylistCache.set(url, data);
-                }
-            }
-            
-            enforceMapCacheLimit(masterPlaylistCache, MAX_MASTER_PLAYLISTS_CACHE_SIZE);
-            logDebug(`Restored ${masterPlaylistCache.size} master playlists from cache`);
-        } catch (e) {
-            handleError('Cache', 'restoring master playlist cache', e);
-            masterPlaylistCache.clear(); // Reset on error
-        }
     }
 }
 
@@ -759,16 +498,7 @@ export function hasResolutionCache(url) {
 
 export function getResolutionFromCache(url) {
     try {
-        const cacheEntry = resolutionCache.get(url);
-        if (!cacheEntry) return null;
-        
-        // Update last accessed time for LRU
-        if (typeof cacheEntry === 'object') {
-            cacheEntry.lastAccessed = Date.now();
-            resolutionCache.set(url, cacheEntry);
-        }
-        
-        return cacheEntry.data || cacheEntry;
+        return resolutionCache.get(url);
     } catch (error) {
         return handleError('Cache', 'getting resolution from cache', error, null);
     }
@@ -776,15 +506,7 @@ export function getResolutionFromCache(url) {
 
 export function addResolutionToCache(url, resolution) {
     try {
-        resolutionCache.set(url, {
-            data: resolution,
-            timestamp: Date.now(),
-            lastAccessed: Date.now(),
-            version: CACHE_VERSION
-        });
-        
-        // Enforce cache size limit
-        enforceMapCacheLimit(resolutionCache, MAX_RESOLUTION_CACHE_SIZE);
+        resolutionCache.set(url, resolution);
     } catch (error) {
         handleError('Cache', 'adding resolution to cache', error);
     }
@@ -792,17 +514,7 @@ export function addResolutionToCache(url, resolution) {
 
 export function getPosterFromCache(url) {
     try {
-        const cached = posterCache.get(url);
-        if (cached) {
-            // Update lastAccessed for LRU if it's an object
-            if (typeof cached === 'object' && cached.data) {
-                cached.lastAccessed = Date.now();
-                posterCache.set(url, cached);
-                return cached.data;
-            }
-            return cached;
-        }
-        return null;
+        return posterCache.get(url);
     } catch (error) {
         return handleError('Cache', 'getting poster from cache', error, null);
     }
@@ -810,17 +522,7 @@ export function getPosterFromCache(url) {
 
 export function addPosterToCache(videoUrl, posterUrl) {
     try {
-        posterCache.set(videoUrl, {
-            data: posterUrl,
-            timestamp: Date.now(),
-            lastAccessed: Date.now(),
-            version: CACHE_VERSION
-        });
-        
-        // Enforce cache size limit
-        enforceMapCacheLimit(posterCache, MAX_POSTER_CACHE_SIZE);
-        
-        savePosterCache();
+        posterCache.set(videoUrl, posterUrl);
     } catch (error) {
         handleError('Cache', 'adding poster to cache', error);
     }
@@ -828,20 +530,7 @@ export function addPosterToCache(videoUrl, posterUrl) {
 
 export function getMediaInfoFromCache(url) {
     try {
-        const cached = mediaInfoCache.get(url);
-        if (cached) {
-            // Update lastAccessed for LRU if it's an object with timestamp
-            if (typeof cached === 'object' && cached.timestamp) {
-                cached.lastAccessed = Date.now();
-                mediaInfoCache.set(url, cached);
-                
-                // Ensure we return the unwrapped data
-                return cached.data;
-            }
-            // For direct objects (legacy cache format)
-            return cached;
-        }
-        return null;
+        return mediaInfoCache.get(url);
     } catch (error) {
         return handleError('Cache', 'getting media info from cache', error, null);
     }
@@ -849,17 +538,7 @@ export function getMediaInfoFromCache(url) {
 
 export function addMediaInfoToCache(url, mediaInfo) {
     try {
-        mediaInfoCache.set(url, {
-            data: mediaInfo,
-            timestamp: Date.now(),
-            lastAccessed: Date.now(),
-            version: CACHE_VERSION
-        });
-        
-        // Enforce cache size limit
-        enforceMapCacheLimit(mediaInfoCache, MAX_MEDIA_INFO_CACHE_SIZE);
-        
-        saveMediaInfoCache();
+        mediaInfoCache.set(url, mediaInfo);
     } catch (error) {
         handleError('Cache', 'adding media info to cache', error);
     }
@@ -870,11 +549,10 @@ export function addMediaInfoToCache(url, mediaInfo) {
  * Can be called periodically or when the browser is idle
  */
 export function purgeExpiredCaches() {
-    const now = Date.now();
-    
     try {
-        // Clean videos cache
+        // Clean videos cache using direct TTL filtering
         if (cachedVideos) {
+            const now = Date.now();
             const originalLength = cachedVideos.length;
             cachedVideos = cachedVideos.filter(video => now - video.timestamp <= CACHE_TTL);
             if (cachedVideos.length < originalLength) {
@@ -882,31 +560,22 @@ export function purgeExpiredCaches() {
             }
         }
         
-        // Helper function to clean Map caches
-        const cleanMapCache = (cache, name) => {
-            const originalSize = cache.size;
-            for (const [key, value] of cache.entries()) {
-                if (value.timestamp && now - value.timestamp > CACHE_TTL) {
-                    cache.delete(key);
-                }
-            }
-            if (cache.size < originalSize) {
-                logDebug(`Purged ${originalSize - cache.size} expired entries from ${name} cache`);
-            }
-        };
+        // Clean all map-based caches using cache system's purgeExpired method
+        const caches = [
+            { cache: posterCache, name: 'poster' },
+            { cache: mediaInfoCache, name: 'media info' },
+            { cache: streamMetadataCache, name: 'stream metadata' },
+            { cache: resolutionCache, name: 'resolution' },
+            { cache: masterPlaylistCache, name: 'master playlist' }
+        ];
         
-        // Clean all map-based caches
-        cleanMapCache(posterCache, 'poster');
-        cleanMapCache(mediaInfoCache, 'media info');
-        cleanMapCache(streamMetadataCache, 'stream metadata');
-        cleanMapCache(resolutionCache, 'resolution');
-        cleanMapCache(masterPlaylistCache, 'master playlist'); // Add cleaning for master playlists
-        
-        // Save cleaned caches
-        saveStreamMetadataCache();
-        savePosterCache();
-        saveMediaInfoCache();
-        saveMasterPlaylistCache(); // Add saving master playlist cache
+        // Purge all caches
+        for (const { cache, name } of caches) {
+            const count = cache.purgeExpired();
+            if (count > 0) {
+                logDebug(`Purged ${count} expired entries from ${name} cache`);
+            }
+        }
         
         return true;
     } catch (error) {
@@ -930,7 +599,7 @@ export async function clearAllCaches() {
         posterCache.clear();
         mediaInfoCache.clear();
         streamMetadataCache.clear();
-        masterPlaylistCache.clear(); // Add clearing master playlist cache
+        masterPlaylistCache.clear();
         
         // Clear all storage caches
         await chrome.storage.local.remove([
@@ -940,7 +609,7 @@ export async function clearAllCaches() {
             'mediaInfoCache',
             'streamMetadataCache',
             'resolutionCache',
-            'masterPlaylistCache', // Add removing master playlist cache
+            'masterPlaylistCache',
             CACHE_VERSION_KEY
         ]);
         
