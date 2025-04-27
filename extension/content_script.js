@@ -16,6 +16,8 @@
  */
 
 // content_script.js
+// Import shared validation utility
+import { validateAndFilterVideos, isValidVideo, isValidVideoUrl } from './js/utilities/video-validator.js';
 
 console.log('Content script loading...');
 
@@ -623,9 +625,9 @@ function validateVideoInfo(videoInfo) {
         return null; 
     }
     
-    // If URL wasn't validated by getVideoType, do a secondary check
+    // If URL wasn't validated by getVideoType, use our centralized validation
     if (typeof typeInfo !== 'object' && typeInfo !== 'ignored') {
-        // Skip invalid URLs
+        // Skip invalid URLs using the centralized isValidVideoUrl function
         if (!isValidVideoUrl(videoInfo.url)) {
             return null;
         }

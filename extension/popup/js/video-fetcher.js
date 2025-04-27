@@ -34,74 +34,12 @@ import { groupVideos, processVideos, clearHLSRelationships } from './video-proce
 import { renderVideos } from './video-renderer.js';
 import { formatResolution, formatDuration, getFilenameFromUrl } from './utilities.js';
 import { parseHLSManifest } from './manifest-parser.js';
+// Import centralized validation logic
+import { validateAndFilterVideos, isValidVideo, isValidVideoUrl } from '../../js/utilities/video-validator.js';
 
 // Debug logging helper
 function logDebug(...args) {
     console.log('[Video Fetcher]', new Date().toISOString(), ...args);
-}
-
-/**
- * Additional validation to ensure tracking pixels don't make it to the popup
- * @param {Array} videos - Videos to validate
- * @returns {Array} Filtered videos
- */
-function validateAndFilterVideos(videos) {
-    if (!videos || !Array.isArray(videos)) return [];
-    
-    return videos.filter(video => {
-        // Validate that we have a URL
-        if (!video || !video.url) return false;
-        
-        // If this video was found in a query parameter, trust that the content script has 
-        // already validated it properly - don't apply additional filtering
-        if (video.foundFromQueryParam) {
-            return true;
-        }
-        
-        // If it's an HLS or DASH video, we can safely assume it's valid 
-        // as these were already validated by content_script.js's getVideoType function
-        if (video.type === 'hls' || video.type === 'dash') {
-            return true;
-        }
-        
-        try {
-            const urlObj = new URL(video.url);
-            
-            // Filter out known tracking pixel and analytics URLs
-            if (video.url.includes('ping.gif') || video.url.includes('jwpltx.com')) {
-                logDebug('Filtering out tracking URL:', video.url);
-                return false;
-            }
-            
-            // Check for image extensions that shouldn't be treated as videos
-            if (/\.(gif|png|jpg|jpeg|webp|bmp|svg)(\?|$)/i.test(urlObj.pathname)) {
-                logDebug('Filtering out image URL:', video.url);
-                return false;
-            }
-            
-            // Known analytics endpoints
-            const trackingPatterns = [
-                /\/ping/i,
-                /\/track/i,
-                /\/pixel/i,
-                /\/analytics/i,
-                /\/telemetry/i,
-                /\/stats/i,
-                /\/metrics/i
-            ];
-            
-            if (trackingPatterns.some(pattern => pattern.test(urlObj.pathname))) {
-                logDebug('Filtering out analytics endpoint:', video.url);
-                return false;
-            }
-            
-            // If we got here, it's probably a valid video
-            return true;
-        } catch (e) {
-            logDebug('Error validating URL:', e, video.url);
-            return false;
-        }
-    });
 }
 
 // Keep track of master playlists we've seen
@@ -154,11 +92,10 @@ async function processHLSRelationships(video, tabId) {
         return video;
     }
     
-    // For regular videos, apply filtering for tracking pixels
+    // For regular videos, apply filtering for tracking pixels using the centralized utility
     if (video.type !== 'hls' && video.type !== 'dash') {
-        // Specific check for known tracking pixels
-        if (video.url.includes('ping.gif') || video.url.includes('jwpltx.com')) {
-            logDebug('Rejecting tracking URL in processHLSRelationships:', video.url);
+        if (!isValidVideoUrl(video.url)) {
+            logDebug('Rejecting invalid URL in processHLSRelationships:', video.url);
             return null;
         }
     }
