@@ -27,7 +27,8 @@
         "Video URL detection through multiple methods",
         "DOM observation for dynamically loaded content",
         "Network request monitoring",
-        "URL normalization and validation"
+        "URL normalization and validation",
+        "Using centralized validation for consistent video filtering"
       ]
     },
     "js/native-host-service.js": {
@@ -43,6 +44,20 @@
         "Connection lifecycle management",
         "Message serialization and deserialization",
         "Error handling for native host communication"
+      ]
+    },
+    "js/utilities/video-validator.js": {
+      "description": "Centralized video URL validation and filtering utilities",
+      "functions": {
+        "validateAndFilterVideos": "Validates and filters a list of videos, removing tracking pixels and non-video content",
+        "isValidVideo": "Checks if a single video object is valid",
+        "isValidVideoUrl": "Validates a URL to determine if it should be rejected as a tracking pixel"
+      },
+      "responsibilities": [
+        "Providing consistent validation logic for video URLs",
+        "Filtering out tracking pixels, analytics, and non-video URLs",
+        "Handling special cases like URLs from query parameters",
+        "Ensuring only valid video sources are processed"
       ]
     },
     "popup/js/state.js": {
@@ -94,7 +109,8 @@
         "Handles video metadata enrichment and formatting", 
         "Implements cache and refresh mechanisms for video sources",
         "Supports various video source types (direct, HLS, DASH)",
-        "Filters tracking pixels while preserving embedded video URLs"
+        "Filters tracking pixels while preserving embedded video URLs",
+        "Uses centralized validation logic for consistent video filtering"
       ]
     },
     "popup/js/video-processor.js": {

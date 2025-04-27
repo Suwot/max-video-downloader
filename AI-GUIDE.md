@@ -25,6 +25,7 @@ This Chrome/Firefox extension detects and downloads videos from websites, suppor
 - **Popup UI**: User interface for displaying detected videos and initiating downloads
 - **Native Host Communication**: Bridge between extension and native processing capabilities
 - **URL Extraction System**: Identifies and extracts legitimate video URLs from query parameters
+- **Centralized Video Validation**: Consistent filtering and validation logic for video URLs across components
 
 ### Native Host Components
 
@@ -152,6 +153,7 @@ This Chrome/Firefox extension detects and downloads videos from websites, suppor
 - **Tracking Pixels**: System handles tracking pixels like ping.gif that may contain legitimate video URLs
 - **URL Normalization**: Enhanced normalization ensures proper deduplication of extracted URLs
 - **Metadata Preservation**: The `foundFromQueryParam` flag is maintained throughout the pipeline to ensure proper handling
+- **Video Validation**: Centralized validation ensures consistent filtering of non-video content across all components
 
 ## Extension Structure
 
@@ -165,6 +167,8 @@ This Chrome/Firefox extension detects and downloads videos from websites, suppor
   - **video-placeholder.png**: Default placeholder for videos without thumbnails
 - **js/**: Shared JavaScript modules
   - **native-host-service.js**: Interface for communicating with native host
+  - **utilities/**: Shared utility files
+    - **video-validator.js**: Centralized video URL validation and filtering utilities
 - **popup/**: User interface components
   - **popup.html**: Main popup interface HTML structure
   - **popup.css**: Styling for the popup interface
@@ -317,6 +321,36 @@ The extension implements a sophisticated URL extraction system that can identify
 6. **Visual Indication**: Displays an "Extracted" badge in the UI for URLs found via this method
 
 This system significantly enhances the extension's ability to detect videos that would otherwise be missed.
+
+### Centralized Video Validation System
+
+The extension implements a centralized video validation system to ensure consistent filtering of video URLs across all components:
+
+1. **Shared Validation Logic** (`extension/js/utilities/video-validator.js`):
+
+   - Provides standardized validation functions used by content script and popup
+   - Consistently filters out tracking pixels, analytics URLs, and non-video content
+   - Handles special cases like URLs extracted from query parameters
+   - Ensures unified treatment of different video source types (HLS, DASH, direct)
+
+2. **Multiple Validation Functions**:
+
+   - `validateAndFilterVideos()`: Processes arrays of videos for batch validation
+   - `isValidVideo()`: Validates single video objects
+   - `isValidVideoUrl()`: Simple URL-only validation for quick checks
+
+3. **Enhanced Metadata Handling**:
+
+   - Preserves important flags like `foundFromQueryParam` during validation
+   - Maintains special treatment for blob URLs that require different validation rules
+   - Ensures validation consistency across the extension pipeline
+
+4. **Better Code Organization**:
+   - Eliminates duplicated validation logic that previously existed in multiple files
+   - Provides a single source of truth for video URL validation rules
+   - Simplifies maintenance by centralizing validation changes
+
+This centralized approach ensures that any video source that passes validation in one component will be consistently recognized as valid throughout the extension, eliminating inconsistencies and improving reliability.
 
 ## Getting Started
 
