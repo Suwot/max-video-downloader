@@ -212,35 +212,40 @@ chrome.runtime.onConnect.addListener(port => {
     if (port.name === 'download_progress') {
         const portId = Date.now().toString();
         downloadPorts.set(portId, port);
-        
+
         // Set up message listener for this port
         port.onMessage.addListener((message) => {
             // Handle registration for specific download updates
             if (message.action === 'registerForDownload' && message.downloadUrl) {
                 const downloadInfo = activeDownloads.get(message.downloadUrl);
-                
-                // If we have info about this download, send it immediately
+
                 if (downloadInfo) {
                     logDebug('Sending immediate download state for URL:', message.downloadUrl);
-                    port.postMessage({
-                        type: 'progress',
-                        progress: downloadInfo.progress || 0,
-                        url: message.downloadUrl,
-                        filename: downloadInfo.filename || getFilenameFromUrl(message.downloadUrl),
-                        speed: downloadInfo.speed,
-                        eta: downloadInfo.eta,
-                        segmentProgress: downloadInfo.segmentProgress,
-                        confidence: downloadInfo.confidence,
-                        downloaded: downloadInfo.downloaded,
-                        size: downloadInfo.size
-                    });
+                    try {
+                        port.postMessage({
+                            type: 'progress',
+                            progress: downloadInfo.progress || 0,
+                            url: message.downloadUrl,
+                            filename: downloadInfo.filename || getFilenameFromUrl(message.downloadUrl),
+                            speed: downloadInfo.speed,
+                            eta: downloadInfo.eta,
+                            segmentProgress: downloadInfo.segmentProgress,
+                            confidence: downloadInfo.confidence,
+                            downloaded: downloadInfo.downloaded,
+                            size: downloadInfo.size
+                        });
+                    } catch (e) {
+                        console.error('Error sending immediate progress to port:', e);
+                        downloadPorts.delete(portId);
+                    }
                 }
             }
         });
-        
+
         // Handle port disconnection
         port.onDisconnect.addListener(() => {
             downloadPorts.delete(portId);
+            logDebug('Port disconnected and removed:', portId);
         });
     }
 });
@@ -477,14 +482,16 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         // Debug log to help track what's being passed to UI
         logDebug('Forwarding progress data to UI:', enhancedResponse);
         
-        // Forward progress to all connected popups
-        ports.forEach(port => {
+        // Forward progress to all connected popups (live iteration)
+        for (const [portId, port] of downloadPorts.entries()) {
           try {
             port.postMessage(enhancedResponse);
           } catch (e) {
             console.error('Error sending progress to port:', e);
+            downloadPorts.delete(portId);
+            logDebug('Removed dead port after send failure:', portId);
           }
-        });
+        }
       } else if (response && response.success && !hasError) {
         // On success, remove from active downloads
         activeDownloads.delete(request.url);
@@ -919,14 +926,15 @@ function handleDownloadSuccess(response, notificationId, ports) {
     message: `Saved to: ${response.path}`
   });
   
-  // Notify all connected popups
-  ports.forEach(port => {
+  for (const [portId, port] of downloadPorts.entries()) {
     try {
       port.postMessage(response);
     } catch (e) {
       console.error('Error sending success to port:', e);
+      downloadPorts.delete(portId);
+      logDebug('Removed dead port after success failure:', portId);
     }
-  });
+  }
 }
 
 function handleDownloadError(error, notificationId, ports) {
@@ -935,14 +943,15 @@ function handleDownloadError(error, notificationId, ports) {
     message: error
   });
   
-  // Notify all connected popups
-  ports.forEach(port => {
+  for (const [portId, port] of downloadPorts.entries()) {
     try {
       port.postMessage({ success: false, error: error });
     } catch (e) {
       console.error('Error sending error to port:', e);
+      downloadPorts.delete(portId);
+      logDebug('Removed dead port after error failure:', portId);
     }
-  });
+  }
 }
 
 // Helper function to fetch manifest content
