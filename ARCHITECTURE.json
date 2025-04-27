@@ -78,6 +78,26 @@
         "User preference persistence"
       ]
     },
+    "popup/js/cache-factory.js": {
+      "description": "Centralized cache management system for the extension",
+      "functions": {
+        "createCache": "Factory method to create standardized cache instances",
+        "set": "Stores items with TTL and versioning",
+        "get": "Retrieves and validates cached items",
+        "enforceSizeLimit": "Implements LRU eviction when cache exceeds limits",
+        "restore": "Loads cache data from persistent storage",
+        "purgeExpired": "Cleans up expired cache entries"
+      },
+      "responsibilities": [
+        "Providing consistent interface for all cache types",
+        "Handling TTL and versioning for cached data",
+        "Implementing LRU eviction policies",
+        "Managing persistence across browser sessions",
+        "Supporting storage with Chrome APIs",
+        "Optimizing memory usage with size limits",
+        "Factory pattern implementation for specialized caches"
+      ]
+    },
     "popup/js/download.js": {
       "description": "Handles download operations and progress tracking",
       "functions": {
