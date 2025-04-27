@@ -214,13 +214,17 @@ export async function updateVideoList(forceRefresh = false, tabId = null) {
         return filteredCachedVideos;
     }
     
+    // If we already have videos displayed, don't show the loader
+    const alreadyDisplayingVideos = container && !container.querySelector('.initial-loader') && 
+                                   !container.querySelector('.initial-message');
+    
     // If cache exists but is stale, render it first while we fetch fresh data
     if (!forceRefresh && cachedVideos) {
         logDebug('Using stale cached videos while refreshing');
         renderVideos(validateAndFilterVideos(cachedVideos));
     } 
-    // Only show loader if there are no videos currently displayed
-    else if (!cachedVideos) {
+    // Only show loader if there are no videos currently displayed, and we're not already showing videos
+    else if (!cachedVideos && !alreadyDisplayingVideos) {
         showLoader(container);
     }
     

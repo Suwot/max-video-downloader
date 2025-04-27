@@ -22,6 +22,10 @@ import { parseHLSManifest, parseDASHManifest } from './popup/js/manifest-parser.
 import nativeHostService from './js/native-host-service.js';
 import { validateAndFilterVideos } from './js/utilities/video-validator.js';
 
+// For automatic processing of HLS relationships
+let manifestRelationsCache = new Map();
+let masterPlaylistCache = new Map();
+
 // Debug logging helper
 function logDebug(...args) {
     console.log('[Background Debug]', new Date().toISOString(), ...args);
@@ -42,17 +46,54 @@ function broadcastVideoUpdate(tabId) {
     const videos = Array.from(videosPerTab[tabId].values());
     videos.sort((a, b) => b.timestamp - a.timestamp);
     
-    // Apply final validation to the videos
-    const validatedVideos = validateAndFilterVideos(videos);
+    // Apply proper grouping and filtering
+    const processedVideos = processVideosForBroadcast(videos);
     
     // Send update to any open popups
     chrome.runtime.sendMessage({
         action: 'videoStateUpdated',
         tabId: tabId,
-        videos: validatedVideos
+        videos: processedVideos
     }).catch(() => {
         // Suppress errors - popup may not be open
     });
+}
+
+// Process videos before broadcasting to make sure they're properly grouped
+function processVideosForBroadcast(videos) {
+    // First apply validation filter to remove unwanted videos
+    const validatedVideos = validateAndFilterVideos(videos);
+    
+    // Now we need to group videos by identifying master-variant relationships
+    // This avoids showing duplicate entries for variants that belong to a master playlist
+    const processedVideos = [];
+    const variantUrls = new Set();
+    
+    // First pass: identify all variant URLs and master playlists
+    validatedVideos.forEach(video => {
+        if (video.qualityVariants && video.qualityVariants.length > 0) {
+            // This is a master playlist, add variants to our tracking set
+            video.qualityVariants.forEach(variant => {
+                const normalizedVariantUrl = normalizeUrl(variant.url);
+                variantUrls.add(normalizedVariantUrl);
+            });
+        }
+    });
+    
+    // Second pass: include only non-variant videos
+    validatedVideos.forEach(video => {
+        const normalizedUrl = normalizeUrl(video.url);
+        
+        // Skip if this is a variant that belongs to a master playlist we're already showing
+        if (video.isVariant || variantUrls.has(normalizedUrl)) {
+            return;
+        }
+        
+        // Include this video in the final output
+        processedVideos.push(video);
+    });
+    
+    return processedVideos;
 }
 
 // Track tab updates and removal
@@ -138,11 +179,25 @@ async function processMetadataQueue(maxConcurrent = 3, maxRetries = 2) {
                         const normalizedUrl = normalizeUrl(url);
                         const existingVideo = videosPerTab[info.tabId].get(normalizedUrl);
                         if (existingVideo) {
-                            videosPerTab[info.tabId].set(normalizedUrl, {
+                            // Update video with stream info
+                            const updatedVideo = {
                                 ...existingVideo,
                                 streamInfo,
-                                qualities: streamInfo.variants || []
-                            });
+                                mediaInfo: streamInfo, // Add direct mediaInfo reference
+                                qualities: streamInfo.variants || [],
+                                resolution: {
+                                    width: streamInfo.width,
+                                    height: streamInfo.height,
+                                    fps: streamInfo.fps,
+                                    bitrate: streamInfo.videoBitrate || streamInfo.totalBitrate
+                                }
+                            };
+                            
+                            // Store updated video
+                            videosPerTab[info.tabId].set(normalizedUrl, updatedVideo);
+                            
+                            // Broadcast update to popup if open
+                            broadcastVideoUpdate(info.tabId);
                         }
                     }
                     break;
@@ -548,7 +603,7 @@ function normalizeUrl(url) {
 }
 
 // Add video to tab's collection with enhanced metadata handling
-function addVideoToTab(tabId, videoInfo) {
+async function addVideoToTab(tabId, videoInfo) {
     if (!videosPerTab[tabId]) {
         logDebug('Creating new video collection for tab:', tabId);
         videosPerTab[tabId] = new Map();
@@ -604,6 +659,41 @@ function addVideoToTab(tabId, videoInfo) {
     videosPerTab[tabId].set(normalizedUrl, videoInfo);
     logDebug('Current video count for tab', tabId, ':', videosPerTab[tabId].size);
     
+    // IMPORTANT NEW CODE: Check if this is a variant of an existing master playlist
+    if (videoInfo.type === 'hls' && !videoInfo.isVariant && !videoInfo.isMasterPlaylist) {
+        const variantInfo = manifestRelationsCache.get(normalizedUrl);
+        if (variantInfo) {
+            // This is a variant stream, mark it as such and add reference to master
+            logDebug('Found variant relationship for:', videoInfo.url, 'Master:', variantInfo.masterUrl);
+            videoInfo.isVariant = true;
+            videoInfo.masterUrl = variantInfo.masterUrl;
+        } 
+        // If not a variant, check if it's potentially a master playlist
+        else if (videoInfo.url.includes('.m3u8')) {
+            // Process HLS manifest to check for variants
+            try {
+                logDebug('Checking if URL is master playlist:', videoInfo.url);
+                const masterInfo = await fetchHLSManifest(videoInfo.url, tabId);
+                
+                if (masterInfo) {
+                    logDebug('Confirmed URL is master HLS playlist with variants:', videoInfo.url);
+                    // Update with master playlist info
+                    videoInfo = {
+                        ...videoInfo,
+                        isPlaylist: true,
+                        isMasterPlaylist: true,
+                        qualityVariants: masterInfo.qualityVariants
+                    };
+                    
+                    // Update in collection
+                    videosPerTab[tabId].set(normalizedUrl, videoInfo);
+                }
+            } catch (error) {
+                console.error('Error checking for master playlist:', error);
+            }
+        }
+    }
+    
     // Add to metadata processing queue
     if (!metadataProcessingQueue.has(normalizedUrl)) {
         metadataProcessingQueue.set(normalizedUrl, {
@@ -624,8 +714,9 @@ function addVideoToTab(tabId, videoInfo) {
     
     console.log(`Added ${videoInfo.type} video to tab ${tabId}:`, videoInfo.url);
     
-    // Broadcast videos to open popups when we add a new video
+    // After processing relationships, group videos and broadcast update
     if (isNewVideo) {
+        // Apply automatic grouping and filtering before broadcasting
         broadcastVideoUpdate(tabId);
     }
 }
@@ -748,6 +839,77 @@ async function fetchManifestContent(url) {
         if (error instanceof TypeError && error.message === 'Failed to fetch') {
             console.error('This might be due to CORS restrictions or the server being unavailable');
         }
+        return null;
+    }
+}
+
+// New helper function to fetch and process HLS manifests to identify master-variant relationships
+async function fetchHLSManifest(url, tabId) {
+    try {
+        // Only process HLS URLs
+        if (!url.includes('.m3u8')) return null;
+        
+        // Check cache first
+        const normalizedUrl = normalizeUrl(url);
+        if (masterPlaylistCache.has(normalizedUrl)) {
+            return masterPlaylistCache.get(normalizedUrl);
+        }
+        
+        // Fetch the content
+        const content = await fetchManifestContent(url);
+        if (!content) return null;
+        
+        // Parse manifest
+        const manifestInfo = parseHLSManifest(content, url);
+        
+        // If this is a master playlist with variants, process the relationship
+        if (manifestInfo && manifestInfo.isPlaylist && manifestInfo.variants && manifestInfo.variants.length > 0) {
+            logDebug('Found master HLS playlist with variants:', url, 'Variants:', manifestInfo.variants.length);
+            
+            // Store in cache
+            const enhancedVideo = {
+                url: url,
+                type: 'hls',
+                isPlaylist: true,
+                isMasterPlaylist: true,
+                qualityVariants: manifestInfo.variants.map(v => ({
+                    url: v.url,
+                    width: v.width,
+                    height: v.height,
+                    fps: v.fps,
+                    bandwidth: v.bandwidth,
+                    codecs: v.codecs
+                }))
+            };
+            
+            // Store in master playlist cache
+            masterPlaylistCache.set(normalizedUrl, enhancedVideo);
+            
+            // Also store the relationship between variants and master
+            manifestInfo.variants.forEach(variant => {
+                const variantNormalizedUrl = normalizeUrl(variant.url);
+                manifestRelationsCache.set(variantNormalizedUrl, {
+                    masterUrl: url,
+                    masterNormalizedUrl: normalizedUrl
+                });
+                
+                // If we already have this variant in our collection, mark it as part of a master playlist
+                if (videosPerTab[tabId] && videosPerTab[tabId].has(variantNormalizedUrl)) {
+                    const variantVideo = videosPerTab[tabId].get(variantNormalizedUrl);
+                    variantVideo.isVariant = true;
+                    variantVideo.masterUrl = url;
+                    videosPerTab[tabId].set(variantNormalizedUrl, variantVideo);
+                    
+                    logDebug('Updated existing variant with master relationship:', variant.url);
+                }
+            });
+            
+            return enhancedVideo;
+        }
+        
+        return null;
+    } catch (error) {
+        console.error('Failed to fetch/parse HLS manifest:', error);
         return null;
     }
 }

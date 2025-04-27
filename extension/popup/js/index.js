@@ -36,9 +36,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         // Initialize UI elements
         initializeUI();
         
-        // Show loading state immediately - will be hidden when we get videos
-        showLoadingState('Loading videos...');
-        
         // Get the active tab ID to communicate with background script
         const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
         if (!tabs || !tabs[0] || !tabs[0].id) {
@@ -46,13 +43,34 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
         const activeTabId = tabs[0].id;
         
+        // Check if we already have videos in background script before showing loading state
+        let backgroundVideos = [];
+        try {
+            backgroundVideos = await chrome.runtime.sendMessage({ 
+                action: 'getVideos', 
+                tabId: activeTabId 
+            });
+            console.log('Got videos from background script:', backgroundVideos?.length || 0);
+        } catch (e) {
+            console.error('Error fetching videos from background:', e);
+        }
+        
         // Attempt to render cached videos immediately
         let hasCachedVideos = false;
         if (state.cachedVideos && state.cachedVideos.length > 0) {
             console.log('Found cached videos, rendering immediately:', state.cachedVideos.length);
             renderVideos(state.cachedVideos);
             hasCachedVideos = true;
-            hideLoadingState();
+        } else if (backgroundVideos && backgroundVideos.length > 0) {
+            // Render background videos if no cached videos
+            console.log('Rendering videos from background script:', backgroundVideos.length);
+            renderVideos(backgroundVideos);
+            hasCachedVideos = true;
+        }
+        
+        // Only show loading state if we have no videos at all
+        if (!hasCachedVideos) {
+            showLoadingState('Loading videos...');
         }
         
         // Setup message listener for video updates from both content script and background script
