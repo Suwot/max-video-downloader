@@ -38,12 +38,40 @@ export function getBackgroundPort() {
             
             // Set up message handler
             backgroundPort.onMessage.addListener(handlePortMessage);
+            
+            // Register this popup with tab ID and URL
+            chrome.tabs.query({ active: true, currentWindow: true }, tabs => {
+                if (backgroundPort && tabs[0]) {
+                    // Normalize URL by removing query params and fragments
+                    const normalizedUrl = normalizeUrl(tabs[0].url);
+                    
+                    backgroundPort.postMessage({
+                        action: 'register',
+                        tabId: tabs[0].id,
+                        url: normalizedUrl
+                    });
+                }
+            });
         } catch (e) {
             console.error('Failed to connect to background script:', e);
             return null;
         }
     }
     return backgroundPort;
+}
+
+/**
+ * Normalize URL by removing query params and fragments
+ * @param {string} url - The URL to normalize
+ * @return {string} - Normalized URL
+ */
+function normalizeUrl(url) {
+    try {
+        const urlObj = new URL(url);
+        return `${urlObj.origin}${urlObj.pathname}`;
+    } catch (e) {
+        return url;
+    }
 }
 
 /**

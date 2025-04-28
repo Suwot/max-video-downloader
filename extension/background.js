@@ -66,9 +66,9 @@ function broadcastVideoUpdate(tabId) {
     
     // First try to send to connected popups via port
     let portMessageSent = false;
-    for (const [portId, port] of popupPorts.entries()) {
+    for (const [portId, popupPortData] of popupPorts.entries()) {
         try {
-            port.postMessage({
+            popupPortData.port.postMessage({
                 action: 'videoStateUpdated',
                 tabId: tabId,
                 videos: processedVideos
@@ -228,10 +228,13 @@ const activeDownloads = new Map(); // key = url, value = { progress, tabId, noti
 const downloadPorts = new Map(); // key = portId, value = port object
 
 // Track all popup connections for universal communication
-const popupPorts = new Map(); // key = portId, value = port object
+const popupPorts = new Map(); // key = portId, value = {port, tabId, url}
 
 // Track downloads by ID for better connection persistence
 const downloads = new Map(); // key = downloadId, value = { url, progress, status, startTime, etc. }
+
+// Map to track which URLs are associated with which tabs
+const urlToTabMap = new Map(); // key = normalizedUrl, value = tabId
 
 // Generate a unique download ID
 function generateDownloadId() {
@@ -339,6 +342,26 @@ chrome.runtime.onConnect.addListener(port => {
 // Handle messages coming through port connection
 async function handlePortMessage(message, port, portId) {
     logDebug('Received port message:', message);
+    
+    // Handle popup registration with URL and tab ID
+    if (message.action === 'register' && message.tabId) {
+        // Store both port information and tab/URL mapping
+        popupPorts.set(portId, {
+            port: port,
+            tabId: message.tabId,
+            url: message.url
+        });
+        
+        // Also map URL to tab ID for reverse lookup
+        if (message.url) {
+            urlToTabMap.set(message.url, message.tabId);
+            logDebug(`Registered popup for tab ${message.tabId} with URL: ${message.url}`);
+        } else {
+            logDebug(`Registered popup for tab ${message.tabId} (no URL provided)`);
+        }
+        
+        return;
+    }
     
     // Handle video list request
     if (message.action === 'getVideos') {
