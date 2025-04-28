@@ -535,19 +535,53 @@ function createVideoActions(video) {
         if (!originalMatchesBest) {
             const mainQuality = document.createElement('option');
             mainQuality.value = video.url;
-            mainQuality.textContent = video.resolution ? 
-                `${video.resolution.width}x${video.resolution.height}` + (video.resolution.fps ? ` @${video.resolution.fps}fps` : '') :
-                'Original Quality';
+            
+            // Create more descriptive label
+            let qualityLabel = 'Original Quality';
+            if (video.resolution) {
+                qualityLabel = `${video.resolution.height}p`;
+                if (video.resolution.fps) {
+                    qualityLabel += ` ${video.resolution.fps}fps`;
+                }
+                if (video.mediaInfo?.hasAudio === false) {
+                    qualityLabel += ' (no audio)';
+                }
+            }
+            mainQuality.textContent = qualityLabel;
             qualitySelector.appendChild(mainQuality);
         }
         
-        // Add sorted variant qualities
+        // Add sorted variant qualities with improved labels
         sortedVariants.forEach(variant => {
             const option = document.createElement('option');
             option.value = variant.url;
-            option.textContent = variant.height ? 
-                `${variant.width}x${variant.height}` + (variant.fps ? ` @${variant.fps}fps` : '') :
-                'Alternative Quality';
+            
+            // Create user-friendly quality label
+            let qualityLabel = variant.height ? `${variant.height}p` : 'Alternative Quality';
+            
+            // Add fps if available
+            if (variant.fps) {
+                qualityLabel += ` ${variant.fps}fps`;
+            }
+            
+            // Add bandwidth info for better comparison
+            if (variant.bandwidth) {
+                const mbps = (variant.bandwidth / 1000000).toFixed(1);
+                if (mbps > 0) {
+                    qualityLabel += ` (${mbps} Mbps)`;
+                }
+            }
+            
+            // Add codec info if available
+            if (variant.codecs) {
+                // Extract main codec name without profile details
+                const mainCodec = variant.codecs.split('.')[0];
+                if (mainCodec && !qualityLabel.includes(mainCodec)) {
+                    qualityLabel += ` - ${mainCodec}`;
+                }
+            }
+            
+            option.textContent = qualityLabel;
             qualitySelector.appendChild(option);
         });
 

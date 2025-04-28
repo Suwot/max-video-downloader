@@ -6,6 +6,7 @@
  * - Filters out tracking pixels, analytics, and non-video URLs
  * - Handles special cases like URLs from query parameters
  * - Ensures only valid video sources are processed
+ * - Identifies and filters redundant quality variants
  */
 
 // Debug logging helper - can be replaced with a shared logger
@@ -75,6 +76,89 @@ export function validateAndFilterVideos(videos) {
             return false;
         }
     });
+}
+
+/**
+ * Filters redundant quality variants from a list of videos
+ * @param {Array} videos - Array of videos with potential quality variants
+ * @param {Object} options - Filter options
+ * @param {boolean} options.removeNeighboringQualities - Whether to remove qualities that are very close to each other
+ * @param {number} options.qualityThreshold - Threshold for determining similar qualities (percentage)
+ * @returns {Array} Filtered videos with redundant variants removed
+ */
+export function filterRedundantVariants(videos, options = {}) {
+    if (!videos || !Array.isArray(videos)) return [];
+
+    const {
+        removeNeighboringQualities = true,
+        qualityThreshold = 15 // 15% difference is considered similar
+    } = options;
+
+    // First, find master playlists with variants
+    const mastersWithVariants = videos.filter(v => 
+        v.qualityVariants && v.qualityVariants.length > 1
+    );
+
+    // Process each master playlist to filter variants
+    mastersWithVariants.forEach(master => {
+        if (!master.qualityVariants) return;
+
+        // Sort variants by resolution (height) - highest first
+        const sortedVariants = [...master.qualityVariants].sort((a, b) => {
+            const heightA = a.height || 0;
+            const heightB = b.height || 0;
+            if (heightA === heightB) {
+                // If heights are the same, prefer higher width or bandwidth
+                return ((b.width || 0) - (a.width || 0)) || ((b.bandwidth || 0) - (a.bandwidth || 0));
+            }
+            return heightB - heightA;
+        });
+
+        // Keep track of qualities we want to retain
+        const filteredVariants = [];
+        const seenQualities = new Set();
+
+        sortedVariants.forEach(variant => {
+            // Always include variants without height/width info
+            if (!variant.height && !variant.width) {
+                filteredVariants.push(variant);
+                return;
+            }
+
+            // Normalize quality as height (since it's the most common way to express resolution)
+            const quality = variant.height || 0;
+            
+            // Skip if we've already seen an exact match for this quality
+            if (seenQualities.has(quality)) {
+                logDebug(`Filtering out duplicate ${quality}p variant:`, variant.url);
+                return;
+            }
+            
+            // Filter out neighboring qualities if option is enabled
+            if (removeNeighboringQualities && filteredVariants.length > 0) {
+                const lastVariant = filteredVariants[filteredVariants.length - 1];
+                const lastQuality = lastVariant.height || 0;
+                
+                // If quality is very close to a quality we've already included, skip it
+                if (lastQuality > 0 && quality > 0) {
+                    const percentDifference = Math.abs((lastQuality - quality) / lastQuality) * 100;
+                    if (percentDifference < qualityThreshold) {
+                        logDebug(`Filtering out similar quality variant (${quality}p vs ${lastQuality}p):`, variant.url);
+                        return;
+                    }
+                }
+            }
+
+            // This is a unique quality, keep it
+            seenQualities.add(quality);
+            filteredVariants.push(variant);
+        });
+
+        // Replace variants with filtered list
+        master.qualityVariants = filteredVariants;
+    });
+
+    return videos;
 }
 
 /**

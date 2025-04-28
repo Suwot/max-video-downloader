@@ -5,7 +5,7 @@
 
 // Add static imports at the top
 import nativeHostService from '../../js/native-host-service.js';
-import { validateAndFilterVideos } from '../../js/utilities/video-validator.js';
+import { validateAndFilterVideos, filterRedundantVariants } from '../../js/utilities/video-validator.js';
 import { processVideoRelationships } from '../../js/manifest-service.js';
 
 const videosPerTab = {};
@@ -83,13 +83,20 @@ function processVideosForBroadcast(videos) {
     // First apply validation filter to remove unwanted videos
     const validatedVideos = validateAndFilterVideos ? validateAndFilterVideos(videos) : videos;
     
+    // Apply our variant filtering to reduce redundant quality options
+    // This will keep only distinct quality levels, removing nearly identical variants
+    const filteredVideos = filterRedundantVariants(validatedVideos, {
+        removeNeighboringQualities: true,
+        qualityThreshold: 15 // 15% difference threshold
+    });
+    
     // Now we need to group videos by identifying master-variant relationships
     // This avoids showing duplicate entries for variants that belong to a master playlist
     const processedVideos = [];
     const variantUrls = new Set();
     
     // First pass: identify all variant URLs and master playlists
-    validatedVideos.forEach(video => {
+    filteredVideos.forEach(video => {
         if (video.qualityVariants && video.qualityVariants.length > 0) {
             // This is a master playlist, add variants to our tracking set
             video.qualityVariants.forEach(variant => {
@@ -100,7 +107,7 @@ function processVideosForBroadcast(videos) {
     });
     
     // Second pass: include only non-variant videos or master playlists
-    validatedVideos.forEach(video => {
+    filteredVideos.forEach(video => {
         const normalizedUrl = normalizeUrl(video.url);
         
         // Skip if this is a variant that belongs to a master playlist we're already showing

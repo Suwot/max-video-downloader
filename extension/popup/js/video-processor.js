@@ -9,6 +9,7 @@
  * - Manages video quality variants and resolution info
  * - Provides analysis of video content types
  * - Deduplicates video sources across formats
+ * - Filters out redundant quality variants
  */
 
 // popup/js/video-processor.js
@@ -16,6 +17,8 @@
 import { getBaseUrl } from './utilities.js';
 import { formatQualityLabel, formatQualityDetails } from './utilities.js';
 import { setVideoGroups, addStreamMetadata, getStreamMetadata, getCachedVideos, setCachedVideos } from './state.js';
+// Import the video validation and filtering functions
+import { filterRedundantVariants } from '../../js/utilities/video-validator.js';
 
 // Track HLS relationships globally
 const hlsRelationships = new Map();
@@ -26,8 +29,14 @@ const hlsRelationships = new Map();
  * @returns {Array} Processed and grouped videos
  */
 export function processVideos(videos) {
+    // First apply our variant filtering to reduce redundant quality options
+    const filteredVideos = filterRedundantVariants(videos, {
+        removeNeighboringQualities: true,
+        qualityThreshold: 15 // 15% difference threshold
+    });
+
     // First pass: Identify and store relationships
-    videos.forEach(video => {
+    filteredVideos.forEach(video => {
         if (video.type === 'hls') {
             if (video.isPlaylist && video.qualityVariants?.length > 0) {
                 // Store master playlist relationships
@@ -42,7 +51,7 @@ export function processVideos(videos) {
     });
 
     // Second pass: Filter out variants that belong to masters
-    const processedVideos = videos.filter(video => {
+    const processedVideos = filteredVideos.filter(video => {
         if (video.type === 'hls' && !video.isPlaylist) {
             const relationship = hlsRelationships.get(video.url);
             if (relationship) {
