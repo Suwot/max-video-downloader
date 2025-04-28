@@ -14,7 +14,7 @@
 
 // popup/js/video-processor.js
 
-import { getBaseUrl } from './utilities.js';
+import { normalizeUrl, getBaseUrl, getBaseDirectory } from '../../js/utilities/normalize-url.js';
 import { formatQualityLabel, formatQualityDetails } from './utilities.js';
 import { setVideoGroups, addStreamMetadata, getStreamMetadata, getCachedVideos, setCachedVideos } from './state.js';
 // Import the video validation and filtering functions
@@ -22,50 +22,6 @@ import { filterRedundantVariants } from '../../js/utilities/video-validator.js';
 
 // Track HLS relationships globally
 const hlsRelationships = new Map();
-
-/**
- * Normalize URL to prevent duplicates
- * @param {string} url - URL to normalize
- * @returns {string} Normalized URL
- */
-function normalizeUrl(url) {
-    // Don't normalize blob URLs
-    if (url.startsWith('blob:')) {
-        return url;
-    }
-    
-    try {
-        const urlObj = new URL(url);
-        
-        // Remove common parameters that don't affect the content
-        urlObj.searchParams.delete('_t');
-        urlObj.searchParams.delete('_r');
-        urlObj.searchParams.delete('cache');
-        urlObj.searchParams.delete('_');
-        urlObj.searchParams.delete('time');
-        urlObj.searchParams.delete('timestamp');
-        urlObj.searchParams.delete('random');
-        
-        // For HLS and DASH, keep a more canonical form
-        if (url.includes('.m3u8') || url.includes('.mpd')) {
-            // Remove common streaming parameters
-            urlObj.searchParams.delete('seq');
-            urlObj.searchParams.delete('segment');
-            urlObj.searchParams.delete('session');
-            urlObj.searchParams.delete('cmsid');
-            
-            // For manifest files, simply use the path for better duplicate detection
-            if (url.includes('/manifest') || url.includes('/playlist') ||
-                url.includes('/master.m3u8') || url.includes('/index.m3u8')) {
-                return urlObj.origin + urlObj.pathname;
-            }
-        }
-        
-        return urlObj.origin + urlObj.pathname + urlObj.search;
-    } catch {
-        return url;
-    }
-}
 
 /**
  * Two-pass video processing to ensure proper grouping
@@ -125,16 +81,6 @@ export function processVideos(videos) {
     return groupVideos(dedupedVideos);
 }
 
-// Get base directory for a URL
-function getBaseDirectory(url) {
-    try {
-        const urlObj = new URL(url);
-        return urlObj.origin + urlObj.pathname.substring(0, urlObj.pathname.lastIndexOf('/'));
-    } catch {
-        return '';
-    }
-}
-
 /**
  * Check if two videos have the same HLS base directory
  * @param {Object} video1 - First video
@@ -143,10 +89,8 @@ function getBaseDirectory(url) {
  */
 function shareHLSBaseDirectory(video1, video2) {
     try {
-        const url1 = new URL(video1.url);
-        const url2 = new URL(video2.url);
-        const dir1 = url1.origin + url1.pathname.substring(0, url1.pathname.lastIndexOf('/'));
-        const dir2 = url2.origin + url2.pathname.substring(0, url2.pathname.lastIndexOf('/'));
+        const dir1 = getBaseDirectory(video1.url);
+        const dir2 = getBaseDirectory(video2.url);
         return dir1 === dir2;
     } catch (e) {
         console.error('Error checking HLS directory:', e);

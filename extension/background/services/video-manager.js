@@ -4,6 +4,7 @@
  */
 
 // Add static imports at the top
+import { normalizeUrl, getBaseDirectory } from '../../js/utilities/normalize-url.js';
 import nativeHostService from '../../js/native-host-service.js';
 import { validateAndFilterVideos, filterRedundantVariants } from '../../js/utilities/video-validator.js';
 import { processVideoRelationships } from '../../js/manifest-service.js';
@@ -17,46 +18,6 @@ const previewGenerationQueue = new Map();
 // Debug logging helper
 function logDebug(...args) {
     console.log('[Video Manager]', new Date().toISOString(), ...args);
-}
-
-// Add URL normalization to prevent duplicates
-function normalizeUrl(url) {
-    // Don't normalize blob URLs
-    if (url.startsWith('blob:')) {
-        return url;
-    }
-    
-    try {
-        const urlObj = new URL(url);
-        
-        // Remove common parameters that don't affect the content
-        urlObj.searchParams.delete('_t');
-        urlObj.searchParams.delete('_r');
-        urlObj.searchParams.delete('cache');
-        urlObj.searchParams.delete('_');
-        urlObj.searchParams.delete('time');
-        urlObj.searchParams.delete('timestamp');
-        urlObj.searchParams.delete('random');
-        
-        // For HLS and DASH, keep a more canonical form
-        if (url.includes('.m3u8') || url.includes('.mpd')) {
-            // Remove common streaming parameters
-            urlObj.searchParams.delete('seq');
-            urlObj.searchParams.delete('segment');
-            urlObj.searchParams.delete('session');
-            urlObj.searchParams.delete('cmsid');
-            
-            // For manifest files, simply use the path for better duplicate detection
-            if (url.includes('/manifest') || url.includes('/playlist') ||
-                url.includes('/master.m3u8') || url.includes('/index.m3u8')) {
-                return urlObj.origin + urlObj.pathname;
-            }
-        }
-        
-        return urlObj.origin + urlObj.pathname + urlObj.search;
-    } catch {
-        return url;
-    }
 }
 
 // Extract filename from URL
