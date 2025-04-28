@@ -63,12 +63,35 @@ async function handlePortMessage(message, port, portId) {
     
     // Handle preview generation
     else if (message.type === 'generatePreview') {
-        const response = await generatePreview(message.url, message.tabId);
-        port.postMessage({
-            type: 'previewResponse',
-            ...response,
-            requestUrl: message.url
-        });
+        logDebug(`Generating preview for URL: ${message.url}`);
+        try {
+            const response = await generatePreview(message.url, message.tabId);
+            
+            // If the port is still open, send the response back
+            try {
+                port.postMessage({
+                    type: 'previewResponse',
+                    requestUrl: message.url,
+                    previewUrl: response?.previewUrl,
+                    error: response?.error
+                });
+                logDebug(`Preview response sent for ${message.url}`);
+            } catch (e) {
+                console.error('Error sending preview response:', e);
+            }
+        } catch (error) {
+            logDebug(`Error generating preview: ${error.message}`);
+            // If the port is still open, send error
+            try {
+                port.postMessage({
+                    type: 'previewResponse',
+                    requestUrl: message.url,
+                    error: error.message
+                });
+            } catch (e) {
+                console.error('Error sending preview error response:', e);
+            }
+        }
     }
     
     // Handle download request

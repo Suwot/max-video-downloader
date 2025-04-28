@@ -11,7 +11,7 @@
  */
 
 import { addPosterToCache } from './state.js';
-
+import { sendPortMessage } from './index.js';
 
 /**
  * Generate preview image for a video
@@ -28,35 +28,60 @@ export function generatePreview(url, loader, previewImage, regenerateButton) {
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
         const tabId = tabs[0]?.id;
         
-        chrome.runtime.sendMessage({
+        // Use port communication instead of one-time message
+        sendPortMessage({
             type: 'generatePreview',
             url: url,
             tabId: tabId // Pass tabId for caching
-        }, response => {
-            if (response && response.previewUrl) {
-                // Add load handler before setting src
-                previewImage.onload = () => {
-                    previewImage.classList.remove('placeholder');
-                    previewImage.classList.add('loaded');
-                    loader.style.display = 'none';
-                    regenerateButton.classList.add('hidden');
-                    
-                    // Cache the poster
-                    addPosterToCache(url, response.previewUrl);
-                };
+        });
+        
+        // Set up listener for preview response
+        const previewListener = (event) => {
+            const response = event.detail;
+            
+            // Make sure this is the response for our URL
+            if (response.requestUrl === url) {
+                // Remove listener once we've handled our response
+                document.removeEventListener('preview-generated', previewListener);
                 
-                // Handle load errors
-                previewImage.onerror = () => {
-                    console.error('Failed to load preview image');
+                if (response && response.previewUrl) {
+                    // Add load handler before setting src
+                    previewImage.onload = () => {
+                        previewImage.classList.remove('placeholder');
+                        previewImage.classList.add('loaded');
+                        loader.style.display = 'none';
+                        regenerateButton.classList.add('hidden');
+                        
+                        // Cache the poster
+                        addPosterToCache(url, response.previewUrl);
+                    };
+                    
+                    // Handle load errors
+                    previewImage.onerror = () => {
+                        console.error('Failed to load preview image');
+                        loader.style.display = 'none';
+                        regenerateButton.classList.remove('hidden');
+                    };
+                    
+                    previewImage.src = response.previewUrl;
+                } else {
                     loader.style.display = 'none';
                     regenerateButton.classList.remove('hidden');
-                };
-                
-                previewImage.src = response.previewUrl;
-            } else {
+                }
+            }
+        };
+        
+        // Add listener for the preview response event
+        document.addEventListener('preview-generated', previewListener);
+        
+        // Add timeout to prevent infinite waiting
+        setTimeout(() => {
+            document.removeEventListener('preview-generated', previewListener);
+            if (loader.style.display !== 'none') {
                 loader.style.display = 'none';
                 regenerateButton.classList.remove('hidden');
+                console.error('Preview generation timed out');
             }
-        });
+        }, 30000); // 30 second timeout
     });
 }
