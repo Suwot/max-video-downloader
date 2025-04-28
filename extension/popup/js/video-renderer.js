@@ -315,7 +315,7 @@ export function createVideoElement(video) {
     regenerateButton.addEventListener('click', () => {
         regenerateButton.classList.add('hidden');
         loader.style.display = 'block';
-        generatePreview(video.url, loader, previewImage, regenerateButton);
+        generatePreview(video.url, loader, previewImage, regenerateButton, true); // Use true for forceRegenerate
     });
     
     // Create info column

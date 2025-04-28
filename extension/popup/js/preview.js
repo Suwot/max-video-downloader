@@ -13,14 +13,27 @@
 import { addPosterToCache } from './state.js';
 import { sendPortMessage } from './index.js';
 
+// Track URLs that are currently being processed to prevent duplicate requests
+const pendingPreviewRequests = new Set();
+
 /**
  * Generate preview image for a video
  * @param {string} url - Video URL
  * @param {HTMLElement} loader - Loader element
  * @param {HTMLElement} previewImage - Preview image element
  * @param {HTMLElement} regenerateButton - Regenerate button element
+ * @param {boolean} forceRegenerate - Whether to force regeneration even if request is pending
  */
-export function generatePreview(url, loader, previewImage, regenerateButton) {
+export function generatePreview(url, loader, previewImage, regenerateButton, forceRegenerate = false) {
+    // Skip if this URL is already being processed (unless force regenerate is true)
+    if (pendingPreviewRequests.has(url) && !forceRegenerate) {
+        console.log(`Preview generation already in progress for ${url}, skipping duplicate request`);
+        return;
+    }
+    
+    // Mark this URL as being processed
+    pendingPreviewRequests.add(url);
+    
     // Ensure loader is visible
     loader.style.display = 'block';
     
@@ -43,6 +56,9 @@ export function generatePreview(url, loader, previewImage, regenerateButton) {
             if (response.requestUrl === url) {
                 // Remove listener once we've handled our response
                 document.removeEventListener('preview-generated', previewListener);
+                
+                // Remove from pending requests
+                pendingPreviewRequests.delete(url);
                 
                 if (response && response.previewUrl) {
                     // Add load handler before setting src
@@ -76,11 +92,16 @@ export function generatePreview(url, loader, previewImage, regenerateButton) {
         
         // Add timeout to prevent infinite waiting
         setTimeout(() => {
-            document.removeEventListener('preview-generated', previewListener);
-            if (loader.style.display !== 'none') {
-                loader.style.display = 'none';
-                regenerateButton.classList.remove('hidden');
-                console.error('Preview generation timed out');
+            // If we're still waiting for this URL
+            if (pendingPreviewRequests.has(url)) {
+                document.removeEventListener('preview-generated', previewListener);
+                pendingPreviewRequests.delete(url);
+                
+                if (loader.style.display !== 'none') {
+                    loader.style.display = 'none';
+                    regenerateButton.classList.remove('hidden');
+                    console.error('Preview generation timed out');
+                }
             }
         }, 30000); // 30 second timeout
     });
