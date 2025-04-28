@@ -14,11 +14,11 @@
 // extension/popup/js/index.js
 import { initializeState, getCachedVideos, getCurrentTheme } from './state.js';
 import { applyTheme, initializeUI, setupScrollPersistence, scrollToLastPosition, showLoadingState, hideLoadingState, showNoVideosMessage } from './ui.js';
-import { updateVideoList } from './video-fetcher.js';
 import { renderVideos } from './video-renderer.js';
 
 // Global port connection for communicating with the background script
 let backgroundPort = null;
+let currentTabId = null;
 
 /**
  * Establish a connection to the background script
@@ -44,6 +44,7 @@ export function getBackgroundPort() {
                 if (backgroundPort && tabs[0]) {
                     // Normalize URL by removing query params and fragments
                     const normalizedUrl = normalizeUrl(tabs[0].url);
+                    currentTabId = tabs[0].id;
                     
                     backgroundPort.postMessage({
                         action: 'register',
@@ -86,6 +87,15 @@ function handlePortMessage(message) {
         console.log('Received video list via port:', message.videos.length);
         renderVideos(message.videos);
         hideLoadingState();
+        
+        // Cache videos for future quick access
+        if (currentTabId) {
+            chrome.storage.local.set({
+                [`processedVideos_${currentTabId}`]: message.videos,
+                lastVideoUpdate: Date.now()
+            });
+            console.log('Cached videos for tab', currentTabId);
+        }
     }
     
     // Handle video state updates
@@ -93,6 +103,15 @@ function handlePortMessage(message) {
         console.log('Received video state update via port:', message.videos.length);
         renderVideos(message.videos);
         hideLoadingState();
+        
+        // Cache updated videos
+        if (message.tabId && message.tabId === currentTabId) {
+            chrome.storage.local.set({
+                [`processedVideos_${message.tabId}`]: message.videos,
+                lastVideoUpdate: Date.now()
+            });
+            console.log('Cached updated videos for tab', message.tabId);
+        }
     }
     
     // Handle active downloads list
@@ -151,27 +170,32 @@ export function sendPortMessage(message) {
             return true;
         } catch (e) {
             console.error('Error sending message via port:', e);
+            backgroundPort = null;
             return false;
         }
     }
+    console.warn('No port connection available', message);
+    return false;
+}
+
+/**
+ * Request videos for the current tab
+ * @param {boolean} forceRefresh - Whether to force a refresh from the background
+ */
+function requestVideos(forceRefresh = false) {
+    if (!currentTabId) return;
     
-    // Fall back to one-time message if port isn't available
-    try {
-        chrome.runtime.sendMessage(message);
-        return true;
-    } catch (e) {
-        console.error('Error sending one-time message:', e);
-        return false;
-    }
+    sendPortMessage({ 
+        action: 'getVideos', 
+        tabId: currentTabId,
+        forceRefresh
+    });
 }
 
 // Initialize when DOM is ready
 document.addEventListener('DOMContentLoaded', async () => {
     try {
         console.log('Popup initializing...');
-        
-        // Connect to background script via port
-        getBackgroundPort();
         
         // Wait for chrome.storage to be available
         if (!chrome.storage) {
@@ -187,135 +211,50 @@ document.addEventListener('DOMContentLoaded', async () => {
         // Initialize UI elements
         initializeUI();
         
+        // Connect to background script via port (but don't request videos yet)
+        getBackgroundPort();
+        
+        // Get the active tab ID
+        const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+        if (!tabs || !tabs[0] || !tabs[0].id) {
+            throw new Error('Could not determine active tab');
+        }
+        currentTabId = tabs[0].id;
+        
+        // Show loading state initially
+        showLoadingState('Loading videos...');
+        
+        // STEP 1: Fast render from storage (for immediate display)
+        let hasStoredVideos = false;
+        try {
+            const storageKey = `processedVideos_${currentTabId}`;
+            const result = await chrome.storage.local.get(storageKey);
+            if (result[storageKey] && result[storageKey].length > 0) {
+                console.log('Found stored videos, rendering immediately:', result[storageKey].length);
+                renderVideos(result[storageKey]);
+                hasStoredVideos = true;
+                hideLoadingState();
+            }
+        } catch (e) {
+            console.error('Error retrieving stored videos:', e);
+        }
+        
+        // STEP 2: Request fresh videos through port connection
+        requestVideos(!hasStoredVideos);
+        
         // Check for active downloads from previous popup sessions
         import('./download.js').then(downloadModule => {
-            // Since checkForActiveDownloads is now async, handle it properly
             downloadModule.checkForActiveDownloads().catch(err => {
                 console.error('Error checking for active downloads:', err);
             });
         });
         
-        // Get the active tab ID to communicate with background script
-        const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-        if (!tabs || !tabs[0] || !tabs[0].id) {
-            throw new Error('Could not determine active tab');
-        }
-        const activeTabId = tabs[0].id;
-        
-        // First check for pre-processed videos from background script storage
-        // These are videos that have been fully processed while the popup was closed
-        let hasPreProcessedVideos = false;
-        try {
-            const storageKey = `processedVideos_${activeTabId}`;
-            const result = await chrome.storage.local.get(storageKey);
-            if (result[storageKey] && result[storageKey].length > 0) {
-                console.log('Found pre-processed videos from background storage:', result[storageKey].length);
-                renderVideos(result[storageKey]);
-                hasPreProcessedVideos = true;
-            }
-        } catch (e) {
-            console.error('Error retrieving pre-processed videos:', e);
-        }
-        
-        // If we don't have pre-processed videos, try getting videos through port
-        if (!hasPreProcessedVideos) {
-            try {
-                // First try using port connection
-                sendPortMessage({ 
-                    action: 'getVideos', 
-                    tabId: activeTabId 
-                });
-                
-                // Also try one-time message as fallback
-                const backgroundVideos = await chrome.runtime.sendMessage({ 
-                    action: 'getVideos', 
-                    tabId: activeTabId 
-                });
-                
-                if (backgroundVideos && backgroundVideos.length > 0) {
-                    console.log('Got videos from background script via one-time message:', backgroundVideos.length);
-                    renderVideos(backgroundVideos);
-                    hasPreProcessedVideos = true;
-                }
-            } catch (e) {
-                console.error('Error fetching videos from background:', e);
-            }
-        }
-        
-        // Attempt to render cached videos as a fallback
-        let hasCachedVideos = hasPreProcessedVideos;
-        if (!hasCachedVideos && state.cachedVideos && state.cachedVideos.length > 0) {
-            console.log('Found cached videos, rendering immediately:', state.cachedVideos.length);
-            renderVideos(state.cachedVideos);
-            hasCachedVideos = true;
-        }
-        
-        // Only show loading state if we have no videos at all
-        if (!hasCachedVideos) {
-            showLoadingState('Loading videos...');
-        }
-        
-        // Setup message listener for video updates from both content script and background script
-        chrome.runtime.onMessage.addListener((message) => {
-            // Handle new videos from content script
-            if (message.action === 'newVideoDetected' && message.videos && message.videos.length > 0) {
-                console.log('Received new videos from content script:', message.videos.length);
-                renderVideos(message.videos);
-                hideLoadingState();
-            }
-            
-            // Handle video state updates from background script
-            if (message.action === 'videoStateUpdated' && 
-                message.tabId === activeTabId && 
-                message.videos && 
-                message.videos.length > 0) {
-                
-                console.log('Received video state update from background script:', message.videos.length);
-                renderVideos(message.videos);
-                hideLoadingState();
-            }
-        });
-
         // Notify content script that popup is open
         try {
-            chrome.tabs.sendMessage(activeTabId, { action: 'popupOpened' })
+            chrome.tabs.sendMessage(currentTabId, { action: 'popupOpened' })
                 .catch(err => console.log('Content script not ready yet:', err));
         } catch (e) {
             console.log('Error notifying content script:', e);
-        }
-
-        // Force refresh if we don't have any videos yet
-        const forceRefresh = !hasCachedVideos;
-        console.log(hasCachedVideos ? 'Using cached videos, requesting background refresh' : 'Requesting fresh videos from background...');
-        const freshVideos = await updateVideoList(forceRefresh, activeTabId);
-        
-        // Start background refresh to automatically get new videos every 3 seconds
-        const { startBackgroundRefreshLoop, stopBackgroundRefreshLoop } = await import('./video-fetcher.js');
-        startBackgroundRefreshLoop(3000, activeTabId);
-        
-        // Stop the refresh loop when popup closes
-        window.addEventListener('unload', () => {
-            stopBackgroundRefreshLoop();
-            
-            // Disconnect port when popup closes
-            if (backgroundPort) {
-                try {
-                    backgroundPort.disconnect();
-                    backgroundPort = null;
-                } catch (e) {
-                    // Suppress errors during unload
-                }
-            }
-        });
-        
-        // Hide loading state if we have videos
-        if (freshVideos && freshVideos.length > 0) {
-            console.log('Received videos from background:', freshVideos.length);
-            hideLoadingState();
-        } else if (!hasCachedVideos) {
-            // If no cached videos and no fresh videos, show "no videos" message
-            console.log('No videos found');
-            showNoVideosMessage();
         }
         
         // Watch for system theme changes

@@ -40,6 +40,7 @@ import { formatResolution, formatDuration, getFilenameFromUrl } from './utilitie
 import { parseHLSManifest } from './manifest-parser.js';
 // Import centralized validation logic
 import { validateAndFilterVideos, isValidVideo, isValidVideoUrl } from '../../js/utilities/video-validator.js';
+import { sendPortMessage } from './index.js';
 
 // Import the manifest service
 import {
@@ -128,298 +129,18 @@ export async function updateVideoList(forceRefresh = false, tabId = null) {
     }
     logDebug('Using tab ID:', tabId);
     
-    // PRIORITY 1: Check for pre-processed videos stored in local storage
-    // These were stored by the background script when videos were detected while popup was closed
-    if (!forceRefresh) {
-        try {
-            const storageData = await chrome.storage.local.get([
-                `processedVideos_${tabId}`,
-                `processedVideosTimestamp_${tabId}`
-            ]);
-            
-            const processedVideos = storageData[`processedVideos_${tabId}`];
-            const timestamp = storageData[`processedVideosTimestamp_${tabId}`];
-            
-            // Define a reasonable cache freshness threshold - 5 minutes
-            const CACHE_FRESHNESS_THRESHOLD_MS = 5 * 60 * 1000;
-            const isCacheFresh = timestamp && (Date.now() - timestamp < CACHE_FRESHNESS_THRESHOLD_MS);
-            
-            if (processedVideos && processedVideos.length > 0 && isCacheFresh) {
-                logDebug('Found fresh pre-processed videos in local storage:', processedVideos.length);
-                
-                // These videos are already processed, so just render them immediately
-                renderVideos(processedVideos);
-                
-                // Update our runtime cache
-                setCachedVideos(processedVideos);
-                
-                // Restore scroll position if available
-                restoreScrollPosition();
-                
-                // Start the background refresh loop for updates
-                startBackgroundRefreshLoop(3000, tabId);
-                
-                // Enhance videos with additional metadata if needed
-                const videosNeedingInfo = processedVideos.filter(video => !video.mediaInfo);
-                if (videosNeedingInfo.length > 0) {
-                    logDebug('Fetching media info for', videosNeedingInfo.length, 'videos');
-                    fetchVideoInfo(videosNeedingInfo, tabId);
-                }
-                
-                return processedVideos;
-            }
-            
-            logDebug('No fresh pre-processed videos in local storage, continuing with normal flow');
-        } catch (e) {
-            logDebug('Error checking local storage for pre-processed videos:', e);
-        }
-    }
+    // SIMPLIFIED APPROACH:
+    // 1. Request videos via port connection only
+    // 2. Let the port handler in index.js update the UI
+    logDebug('Requesting videos via port connection');
+    sendPortMessage({
+        action: 'getVideos',
+        tabId,
+        forceRefresh
+    });
     
-    // PRIORITY 2: Check for videos from the background script's runtime memory
-    try {
-        const backgroundVideos = await chrome.runtime.sendMessage({ 
-            action: 'getVideos', 
-            tabId: tabId 
-        });
-        
-        if (backgroundVideos && backgroundVideos.length) {
-            logDebug('Got videos from background script:', backgroundVideos.length);
-            
-            // Apply filtering to ensure valid videos
-            const filteredBackgroundVideos = validateAndFilterVideos(backgroundVideos);
-            logDebug('After filtering background videos:', filteredBackgroundVideos.length);
-            
-            if (filteredBackgroundVideos.length > 0) {
-                // Process these videos to ensure they're ready for display
-                const processedVideos = [];
-                for (const video of filteredBackgroundVideos) {
-                    const processed = await processHLSRelationships(video, tabId);
-                    if (processed) {
-                        processedVideos.push(processed);
-                    }
-                }
-                
-                // Group and cache the videos
-                const groupedVideos = processVideos(processedVideos);
-                logDebug('Background videos after grouping:', groupedVideos.length);
-                
-                // Update the cache
-                setCachedVideos(groupedVideos);
-                
-                // Render videos immediately
-                renderVideos(groupedVideos);
-                
-                // Restore scroll position if available
-                restoreScrollPosition();
-                
-                // Store the processed videos in local storage for future use
-                try {
-                    await chrome.storage.local.set({
-                        [`processedVideos_${tabId}`]: groupedVideos,
-                        [`processedVideosTimestamp_${tabId}`]: Date.now()
-                    });
-                } catch (e) {
-                    logDebug('Error storing processed videos in local storage:', e);
-                }
-                
-                // If we're not forcing a refresh, we can return these videos
-                if (!forceRefresh) {
-                    // Start fetching additional details in the background
-                    const videosNeedingInfo = processedVideos.filter(video => !video.mediaInfo);
-                    if (videosNeedingInfo.length > 0) {
-                        logDebug('Fetching media info for', videosNeedingInfo.length, 'videos');
-                        fetchVideoInfo(videosNeedingInfo, tabId);
-                    }
-                    
-                    // Start the background refresh loop
-                    startBackgroundRefreshLoop(3000, tabId);
-                    return groupedVideos;
-                }
-            }
-        }
-    } catch (e) {
-        logDebug('Error getting videos from background script:', e);
-    }
-    
-    // Check if cached videos are still valid
-    const cachedVideos = getCachedVideos();
-    logDebug('Got cached videos:', cachedVideos?.length || 0);
-    
-    // Define a reasonable cache freshness threshold - 5 minutes (increased from 2 minutes)
-    const CACHE_FRESHNESS_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
-    
-    // Get the cache timestamp if available
-    let cacheTimestamp = 0;
-    try {
-        const storageData = await chrome.storage.local.get(['videosCacheTimestamp']);
-        cacheTimestamp = storageData.videosCacheTimestamp || 0;
-    } catch (e) {
-        logDebug('Error getting cache timestamp:', e);
-    }
-    
-    const cacheAge = Date.now() - cacheTimestamp;
-    const isCacheFresh = cacheAge < CACHE_FRESHNESS_THRESHOLD_MS;
-    logDebug('Cache age:', cacheAge, 'ms, is fresh:', isCacheFresh);
-    
-    if (!forceRefresh && cachedVideos && isCacheFresh) {
-        // Apply additional validation to cached videos
-        const filteredCachedVideos = validateAndFilterVideos(cachedVideos);
-        logDebug('Using fresh cached videos:', filteredCachedVideos.length);
-        
-        renderVideos(filteredCachedVideos);
-        
-        // Update cache if filtering removed videos
-        if (filteredCachedVideos.length !== cachedVideos.length) {
-            setCachedVideos(filteredCachedVideos);
-        }
-        
-        // Start the background refresh loop
-        startBackgroundRefreshLoop(3000, tabId);
-        return filteredCachedVideos;
-    }
-    
-    // If we already have videos displayed, don't show the loader
-    const alreadyDisplayingVideos = container && !container.querySelector('.initial-loader') && 
-                                   !container.querySelector('.initial-message');
-    
-    // If cache exists but is stale, render it first while we fetch fresh data
-    if (!forceRefresh && cachedVideos) {
-        logDebug('Using stale cached videos while refreshing');
-        renderVideos(validateAndFilterVideos(cachedVideos));
-    } 
-    // Only show loader if there are no videos currently displayed, and we're not already showing videos
-    else if (!cachedVideos && !alreadyDisplayingVideos) {
-        showLoader(container);
-    }
-    
-    try {
-        const videos = [];
-        let contentScriptError = null;
-        let backgroundScriptError = null;
-        
-        // Set a timeout for video searching
-        const searchTimeout = setTimeout(() => {
-            if (container.querySelector('.initial-loader')) {
-                container.innerHTML = `
-                    <div class="initial-message">
-                        Search is taking too long. Try refreshing the page or extension.
-                    </div>
-                `;
-            }
-        }, 10000);
-
-        // Get videos from content script
-        try {
-            logDebug('Requesting videos from content script');
-            const response = await chrome.tabs.sendMessage(tabId, { action: 'findVideos' });
-            if (response && response.length) {
-                logDebug('Got videos from content script:', response.length);
-                // Add additional filtering here before merging
-                const filteredResponse = validateAndFilterVideos(response);
-                logDebug('After filtering content script videos:', filteredResponse.length);
-                videos.push(...filteredResponse);
-            }
-        } catch (error) {
-            logDebug('Content script error:', error);
-            contentScriptError = error;
-        }
-
-        // Get videos from background script again to merge with any newly found videos
-        try {
-            logDebug('Requesting videos from background script');
-            const backgroundVideos = await chrome.runtime.sendMessage({ 
-                action: 'getVideos', 
-                tabId: tabId 
-            });
-            
-            if (backgroundVideos && backgroundVideos.length) {
-                logDebug('Got videos from background script:', backgroundVideos.length);
-                // Apply filtering to background videos before merging
-                const filteredBackgroundVideos = validateAndFilterVideos(backgroundVideos);
-                logDebug('After filtering background videos:', filteredBackgroundVideos.length);
-                mergeVideos(videos, filteredBackgroundVideos);
-            }
-        } catch (error) {
-            logDebug('Background script error:', error);
-            backgroundScriptError = error;
-        }
-
-        clearTimeout(searchTimeout);
-        
-        logDebug('Total videos after merge and filtering:', videos.length);
-        
-        // No videos found after filtering
-        if (videos.length === 0) {
-            // If we have cached videos, keep showing those instead of an error message
-            if (cachedVideos && cachedVideos.length > 0) {
-                logDebug('No new videos found, keeping cached videos');
-                
-                // Start the background refresh loop
-                startBackgroundRefreshLoop(3000, tabId);
-                return cachedVideos;
-            }
-            
-            logDebug('No valid videos found after filtering');
-            // Use the dedicated no videos message function instead of setting HTML directly
-            // This ensures proper theming and icon display
-            const { showNoVideosMessage } = await import('./ui.js');
-            showNoVideosMessage();
-            return [];
-        }
-        
-        // Process all videos first to establish relationships
-        const processedVideos = [];
-        for (const video of videos) {
-            const processed = await processHLSRelationships(video, tabId);
-            if (processed) {
-                processedVideos.push(processed);
-            }
-        }
-        
-        logDebug('Videos after processing:', processedVideos.length);
-
-        // Small delay to allow any late-arriving masters to be processed
-        await new Promise(resolve => setTimeout(resolve, 500));
-        
-        // Group and cache the videos
-        const groupedVideos = processVideos(processedVideos);
-        logDebug('Videos after grouping:', groupedVideos.length);
-        
-        // Store current timestamp with the cache
-        try {
-            await chrome.storage.local.set({ 'videosCacheTimestamp': Date.now() });
-        } catch (e) {
-            logDebug('Error setting cache timestamp:', e);
-        }
-        
-        setCachedVideos(groupedVideos);
-        
-        // Render and start fetching details
-        renderVideos(groupedVideos);
-        
-        // Only fetch video info for videos that need it
-        const videosNeedingInfo = processedVideos.filter(video => {
-            // Check if we already have media info in the cache
-            const cachedMediaInfo = getMediaInfoFromCache(video.url);
-            return !cachedMediaInfo;
-        });
-        
-        if (videosNeedingInfo.length > 0) {
-            logDebug('Fetching media info for', videosNeedingInfo.length, 'videos');
-            fetchVideoInfo(videosNeedingInfo, tabId);
-        }
-        
-        // Start the background refresh loop
-        startBackgroundRefreshLoop(3000, tabId);
-        return groupedVideos;
-        
-    } catch (error) {
-        logDebug('Failed to get videos:', error);
-        if (!getCachedVideos()) {
-            showErrorMessage(container, error.message);
-        }
-        return [];
-    }
+    // Return the current cached videos (UI will be updated via port response)
+    return getCachedVideos();
 }
 
 /**
@@ -535,7 +256,7 @@ export async function fetchVideoInfo(videos, tabId) {
         }
         
         // Include video if it doesn't have mediaInfo
-        return !video.mediaInfo;
+        return !video.mediaInfo && !getMediaInfoFromCache(video.url);
     });
     
     if (videosNeedingInfo.length === 0) {
@@ -547,38 +268,38 @@ export async function fetchVideoInfo(videos, tabId) {
     
     Promise.all(videosNeedingInfo.map(async (video) => {
         try {
-            // Check if we already have this video's media info in the cache
-            const cachedMediaInfo = getMediaInfoFromCache(video.url);
-            if (cachedMediaInfo) {
-                // Use cached media info
-                const updatedVideo = {
-                    ...video,
-                    mediaInfo: cachedMediaInfo
-                };
-                
-                // Update UI with cached info
-                updateVideoResolution(video.url, cachedMediaInfo);
-                
-                // Update video in cached videos
-                const cachedVideos = getCachedVideos();
-                if (cachedVideos) {
-                    const index = cachedVideos.findIndex(v => v.url === video.url);
-                    if (index !== -1) {
-                        cachedVideos[index] = updatedVideo;
-                        setCachedVideos(cachedVideos);
-                    }
-                }
-                return;
-            }
-
-            // No cached info, fetch from native host
+            // No cached info, fetch using port connection
             logDebug('Fetching info for:', video.url);
-            const response = await chrome.runtime.sendMessage({
+            
+            // Use port connection for quality requests
+            sendPortMessage({
                 type: 'getHLSQualities',
                 url: video.url,
                 tabId: tabId
             });
-
+            
+            // Listen for the response
+            const qualitiesPromise = new Promise((resolve) => {
+                const listener = (event) => {
+                    const response = event.detail;
+                    
+                    if (response.url === video.url) {
+                        document.removeEventListener('qualities-response', listener);
+                        resolve(response);
+                    }
+                };
+                
+                document.addEventListener('qualities-response', listener);
+                
+                // Set a timeout
+                setTimeout(() => {
+                    document.removeEventListener('qualities-response', listener);
+                    resolve({ url: video.url });
+                }, 15000);
+            });
+            
+            const response = await qualitiesPromise;
+            
             if (response?.streamInfo) {
                 const streamInfo = response.streamInfo;
                 
@@ -700,6 +421,11 @@ export function updateVideoResolution(url, streamInfo) {
                     audioCodec: streamInfo.audioCodec
                 }
             );
+            
+            // Remove loading class if present
+            if (resolutionInfo.classList.contains('loading')) {
+                resolutionInfo.classList.remove('loading');
+            }
         }
         
         // Update media type info
@@ -716,7 +442,7 @@ export function updateVideoResolution(url, streamInfo) {
             
             let mediaIcon = '';
             if (mediaContentType === "Audio Only") {
-                mediaIcon = '<path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>';
+                mediaIcon = '<path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4s4-1.79 4-4V7h4V3h-6z"/>';
             } else if (mediaContentType === "Video Only") {
                 mediaIcon = '<path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/>';
             } else {
@@ -744,25 +470,32 @@ export function updateVideoResolution(url, streamInfo) {
                     details.push(`${streamInfo.audioCodec.channels} channels`);
                 }
             }
-            codecInfo.textContent = details.join(' • ');
+            
+            codecInfo.textContent = details.length > 0 
+                ? details.join(' • ') 
+                : 'Codec information unavailable';
+                
+            // Remove loading class if present
+            if (codecInfo.classList.contains('loading')) {
+                codecInfo.classList.remove('loading');
+            }
         }
     }
 }
 
 /**
- * Get stream resolution from background script
+ * Get stream resolution from background script using port communication
  * @param {string} url - Video URL
- * @param {string} type - Video type
  * @param {number} tabId - Tab ID
- * @returns {string} Resolution string
+ * @returns {Promise<string>} Resolution string
  */
-export async function getStreamResolution(url, type, tabId = null) {
+export async function getStreamResolution(url, tabId = null) {
     // Check cache first
     if (hasResolutionCache(url)) {
         return getResolutionFromCache(url);
     }
     
-    if (type === 'blob') {
+    if (url.startsWith('blob:')) {
         return 'Resolution unavailable for blob';
     }
     
@@ -773,11 +506,34 @@ export async function getStreamResolution(url, type, tabId = null) {
             tabId = tabs[0]?.id;
         }
         
-        const response = await chrome.runtime.sendMessage({
+        // Use port connection for the request
+        sendPortMessage({
             type: 'getHLSQualities',
             url: url,
             tabId: tabId
         });
+        
+        // Create a promise that will be resolved when we get the response
+        const responsePromise = new Promise((resolve) => {
+            const listener = (event) => {
+                const response = event.detail;
+                
+                if (response.url === url) {
+                    document.removeEventListener('qualities-response', listener);
+                    resolve(response);
+                }
+            };
+            
+            document.addEventListener('qualities-response', listener);
+            
+            // Set a timeout
+            setTimeout(() => {
+                document.removeEventListener('qualities-response', listener);
+                resolve({ url });
+            }, 10000);
+        });
+        
+        const response = await responsePromise;
         
         if (response?.streamInfo) {
             const streamInfo = response.streamInfo;
@@ -873,8 +629,8 @@ export function startBackgroundRefreshLoop(intervalMs = 3000, tabId = null) {
         }
         
         if (tabId) {
-            // Just request videos from the background to trigger an update
-            await chrome.runtime.sendMessage({
+            // Request videos via port connection
+            sendPortMessage({ 
                 action: 'getVideos', 
                 tabId: tabId
             });
