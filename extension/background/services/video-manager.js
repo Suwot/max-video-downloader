@@ -90,29 +90,47 @@ function processVideosForBroadcast(videos) {
         qualityThreshold: 15 // 15% difference threshold
     });
     
-    // Now we need to group videos by identifying master-variant relationships
-    // This avoids showing duplicate entries for variants that belong to a master playlist
+    // Create sets to track master and variant URLs
     const processedVideos = [];
     const variantUrls = new Set();
-    
-    // First pass: identify all variant URLs and master playlists
+    const masterUrls = new Set();
+
+    // Step 1: Collect master and variant URLs
     filteredVideos.forEach(video => {
-        if (video.qualityVariants && video.qualityVariants.length > 0) {
-            // This is a master playlist, add variants to our tracking set
-            video.qualityVariants.forEach(variant => {
-                const normalizedVariantUrl = normalizeUrl(variant.url);
-                variantUrls.add(normalizedVariantUrl);
-            });
+        if (video.isMasterPlaylist || video.isPlaylist || video.isMasterPlaylist === true) {
+            masterUrls.add(normalizeUrl(video.url));
+            
+            // Check all possible variant properties (for compatibility with different versions)
+            const variants = video.variants || video.qualityVariants || [];
+            if (Array.isArray(variants)) {
+                variants.forEach(variant => {
+                    // Handle both object variants and string URLs
+                    const variantUrl = typeof variant === 'string' ? variant : variant.url;
+                    if (variantUrl) {
+                        variantUrls.add(normalizeUrl(variantUrl));
+                    }
+                });
+            }
+        }
+        
+        // Also check explicit variant flags
+        if (video.isVariant && video.masterUrl) {
+            variantUrls.add(normalizeUrl(video.url));
+            masterUrls.add(normalizeUrl(video.masterUrl));
         }
     });
-    
-    // Second pass: include only non-variant videos or master playlists
+
+    // Step 2: Build final list - exclude variants when master exists
     filteredVideos.forEach(video => {
         const normalizedUrl = normalizeUrl(video.url);
         
-        // Skip if this is a variant that belongs to a master playlist we're already showing
+        // Skip if this is a variant and we have at least one master
         if (video.isVariant || variantUrls.has(normalizedUrl)) {
-            return;
+            // Only skip if master exists in the list
+            if (masterUrls.size > 0 && masterUrls.has(normalizeUrl(video.masterUrl))) {
+                logDebug(`Skipping variant ${video.url} because master exists`);
+                return;
+            }
         }
         
         // Add additional information needed for immediate display
@@ -194,36 +212,48 @@ function processVideosForBroadcast(videos) {
         processedVideos.push(enhancedVideo);
     });
     
+    logDebug(`Filtered videos: ${validatedVideos.length} input → ${processedVideos.length} output (${masterUrls.size} masters, ${variantUrls.size} variants)`);
     return processedVideos;
 }
 
-// Improved broadcast function that also stores processed videos for instant access
+// Store the filtered videos in storage for persistence
 function broadcastVideoUpdate(tabId) {
-    if (!videosPerTab[tabId]) return;
+    if (!videosPerTab[tabId] || videosPerTab[tabId].size === 0) {
+        return;
+    }
     
-    // Convert Map to Array for sending
-    const videos = Array.from(videosPerTab[tabId].values());
-    videos.sort((a, b) => b.timestamp - a.timestamp);
+    // Convert Map to array
+    const videosArray = Array.from(videosPerTab[tabId].values());
+    videosArray.sort((a, b) => b.timestamp - a.timestamp);
     
-    // Apply proper grouping and filtering - FULLY process videos
-    const processedVideos = processVideosForBroadcast(videos);
+    // Process before broadcasting - this includes variant filtering
+    const processedVideos = processVideosForBroadcast(videosArray);
     
-    // Important: Store the processed videos for instant access when popup opens
+    // Store in local storage for persistence between sessions
     chrome.storage.local.set({
         [`processedVideos_${tabId}`]: processedVideos,
-        [`processedVideosTimestamp_${tabId}`]: Date.now()
+        [`processedVideosTimestamp_${tabId}`]: Date.now(),
+        lastVideoUpdate: Date.now(),
+        lastActiveTab: tabId
+    }).then(() => {
+        logDebug(`Stored ${processedVideos.length} processed videos for tab ${tabId} in storage`);
     }).catch(err => {
-        console.error('Failed to store processed videos:', err);
+        console.error('Error storing videos:', err);
     });
     
-    // Send message to anyone listening
-    chrome.runtime.sendMessage({
-        action: 'videoStateUpdated',
-        tabId: tabId,
-        videos: processedVideos
-    }).catch(() => {
-        // Suppress errors - popup may not be open
-    });
+    // Send with chrome.runtime.sendMessage for compatibility
+    try {
+        chrome.runtime.sendMessage({
+            action: 'videoStateUpdated',
+            tabId: tabId,
+            videos: processedVideos
+        });
+    } catch (e) {
+        // Ignore errors for sendMessage, as the popup might not be open
+        logDebug('Error sending video update message (popup may not be open):', e.message);
+    }
+    
+    return processedVideos;
 }
 
 // Helper function to extract stream metadata

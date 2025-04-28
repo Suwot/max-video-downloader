@@ -29,41 +29,63 @@ const hlsRelationships = new Map();
  * @returns {Array} Processed and grouped videos
  */
 export function processVideos(videos) {
+    if (!videos || !Array.isArray(videos)) return [];
+
+    console.log('Processing videos in popup:', videos.length);
+    
     // First apply our variant filtering to reduce redundant quality options
     const filteredVideos = filterRedundantVariants(videos, {
         removeNeighboringQualities: true,
         qualityThreshold: 15 // 15% difference threshold
     });
 
-    // First pass: Identify and store relationships
+    // Create sets to track master and variant URLs 
+    const variantUrls = new Set();
+    const masterUrls = new Set();
+    
+    // Step 1: Collect master and variant URLs
     filteredVideos.forEach(video => {
-        if (video.type === 'hls') {
-            if (video.isPlaylist && video.qualityVariants?.length > 0) {
-                // Store master playlist relationships
-                video.qualityVariants.forEach(variant => {
-                    hlsRelationships.set(variant.url, {
-                        masterUrl: video.url,
-                        master: video
-                    });
+        // Note: We need to handle both variants and qualityVariants for compatibility
+        if (video.isMasterPlaylist || video.isPlaylist || video.isMasterPlaylist === true) {
+            masterUrls.add(video.url);
+            
+            // Check all possible variant properties
+            const variants = video.variants || video.qualityVariants || [];
+            if (Array.isArray(variants)) {
+                variants.forEach(variant => {
+                    // Handle both object variants and string URLs
+                    const variantUrl = typeof variant === 'string' ? variant : variant.url;
+                    if (variantUrl) {
+                        variantUrls.add(variantUrl);
+                    }
                 });
             }
         }
+        
+        // Also check explicit variant flags
+        if (video.isVariant && video.masterUrl) {
+            variantUrls.add(video.url);
+            masterUrls.add(video.masterUrl);
+        }
     });
 
-    // Second pass: Filter out variants that belong to masters
-    const processedVideos = filteredVideos.filter(video => {
-        if (video.type === 'hls' && !video.isPlaylist) {
-            const relationship = hlsRelationships.get(video.url);
-            if (relationship) {
-                // Skip this variant as it belongs to a master
+    // Step 2: Build final list - exclude variants when master exists
+    const dedupedVideos = filteredVideos.filter(video => {
+        // Skip if this is a variant and we have at least one master
+        if (video.isVariant || variantUrls.has(video.url)) {
+            // Only skip if master exists in the list
+            if (masterUrls.size > 0 && masterUrls.has(video.masterUrl)) {
+                console.log(`Skipping variant ${video.url} because master exists`);
                 return false;
             }
         }
         return true;
     });
 
+    console.log(`Filtered videos: ${videos.length} input → ${dedupedVideos.length} output`);
+    
     // Now group the processed videos
-    return groupVideos(processedVideos);
+    return groupVideos(dedupedVideos);
 }
 
 // Get base directory for a URL
