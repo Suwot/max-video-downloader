@@ -24,6 +24,50 @@ import { filterRedundantVariants } from '../../js/utilities/video-validator.js';
 const hlsRelationships = new Map();
 
 /**
+ * Normalize URL to prevent duplicates
+ * @param {string} url - URL to normalize
+ * @returns {string} Normalized URL
+ */
+function normalizeUrl(url) {
+    // Don't normalize blob URLs
+    if (url.startsWith('blob:')) {
+        return url;
+    }
+    
+    try {
+        const urlObj = new URL(url);
+        
+        // Remove common parameters that don't affect the content
+        urlObj.searchParams.delete('_t');
+        urlObj.searchParams.delete('_r');
+        urlObj.searchParams.delete('cache');
+        urlObj.searchParams.delete('_');
+        urlObj.searchParams.delete('time');
+        urlObj.searchParams.delete('timestamp');
+        urlObj.searchParams.delete('random');
+        
+        // For HLS and DASH, keep a more canonical form
+        if (url.includes('.m3u8') || url.includes('.mpd')) {
+            // Remove common streaming parameters
+            urlObj.searchParams.delete('seq');
+            urlObj.searchParams.delete('segment');
+            urlObj.searchParams.delete('session');
+            urlObj.searchParams.delete('cmsid');
+            
+            // For manifest files, simply use the path for better duplicate detection
+            if (url.includes('/manifest') || url.includes('/playlist') ||
+                url.includes('/master.m3u8') || url.includes('/index.m3u8')) {
+                return urlObj.origin + urlObj.pathname;
+            }
+        }
+        
+        return urlObj.origin + urlObj.pathname + urlObj.search;
+    } catch {
+        return url;
+    }
+}
+
+/**
  * Two-pass video processing to ensure proper grouping
  * @param {Array} videos - Videos to process
  * @returns {Array} Processed and grouped videos
@@ -39,50 +83,43 @@ export function processVideos(videos) {
         qualityThreshold: 15 // 15% difference threshold
     });
 
-    // Create sets to track master and variant URLs 
+    // Create sets to track master and variant URLs
     const variantUrls = new Set();
     const masterUrls = new Set();
     
-    // Step 1: Collect master and variant URLs
+    // Step 1: Collect ALL master playlists and their variant URLs
     filteredVideos.forEach(video => {
-        // Note: We need to handle both variants and qualityVariants for compatibility
-        if (video.isMasterPlaylist || video.isPlaylist || video.isMasterPlaylist === true) {
-            masterUrls.add(video.url);
+        if (video.isMasterPlaylist || video.isPlaylist) {
+            masterUrls.add(normalizeUrl(video.url));
             
-            // Check all possible variant properties
+            // Collect all variants regardless of which property they're in
             const variants = video.variants || video.qualityVariants || [];
             if (Array.isArray(variants)) {
                 variants.forEach(variant => {
-                    // Handle both object variants and string URLs
                     const variantUrl = typeof variant === 'string' ? variant : variant.url;
                     if (variantUrl) {
-                        variantUrls.add(variantUrl);
+                        variantUrls.add(normalizeUrl(variantUrl));
                     }
                 });
             }
         }
+    });
+
+    // Step 2: Build final list - ONLY include non-variant videos
+    const dedupedVideos = [];
+    filteredVideos.forEach(video => {
+        const normalizedUrl = normalizeUrl(video.url);
         
-        // Also check explicit variant flags
-        if (video.isVariant && video.masterUrl) {
-            variantUrls.add(video.url);
-            masterUrls.add(video.masterUrl);
+        // SKIP if it's a variant URL that was listed under a master playlist
+        if (variantUrls.has(normalizedUrl)) {
+            console.log(`Skipping variant ${video.url} because it's a known variant of a master`);
+            return;
         }
+        
+        dedupedVideos.push(video);
     });
 
-    // Step 2: Build final list - exclude variants when master exists
-    const dedupedVideos = filteredVideos.filter(video => {
-        // Skip if this is a variant and we have at least one master
-        if (video.isVariant || variantUrls.has(video.url)) {
-            // Only skip if master exists in the list
-            if (masterUrls.size > 0 && masterUrls.has(video.masterUrl)) {
-                console.log(`Skipping variant ${video.url} because master exists`);
-                return false;
-            }
-        }
-        return true;
-    });
-
-    console.log(`Filtered videos: ${videos.length} input → ${dedupedVideos.length} output`);
+    console.log(`Filtered videos: ${videos.length} input → ${dedupedVideos.length} output (${masterUrls.size} masters, ${variantUrls.size} variants)`);
     
     // Now group the processed videos
     return groupVideos(dedupedVideos);

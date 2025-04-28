@@ -94,17 +94,19 @@ function processVideosForBroadcast(videos) {
     const processedVideos = [];
     const variantUrls = new Set();
     const masterUrls = new Set();
+    
+    // Add a processing timestamp for version tracking
+    const processingTimestamp = Date.now();
 
-    // Step 1: Collect master and variant URLs
+    // Step 1: Collect ALL master playlists and their variant URLs
     filteredVideos.forEach(video => {
-        if (video.isMasterPlaylist || video.isPlaylist || video.isMasterPlaylist === true) {
+        if (video.isMasterPlaylist || video.isPlaylist) {
             masterUrls.add(normalizeUrl(video.url));
             
-            // Check all possible variant properties (for compatibility with different versions)
+            // Collect all variants regardless of which property they're in
             const variants = video.variants || video.qualityVariants || [];
             if (Array.isArray(variants)) {
                 variants.forEach(variant => {
-                    // Handle both object variants and string URLs
                     const variantUrl = typeof variant === 'string' ? variant : variant.url;
                     if (variantUrl) {
                         variantUrls.add(normalizeUrl(variantUrl));
@@ -112,33 +114,25 @@ function processVideosForBroadcast(videos) {
                 });
             }
         }
-        
-        // Also check explicit variant flags
-        if (video.isVariant && video.masterUrl) {
-            variantUrls.add(normalizeUrl(video.url));
-            masterUrls.add(normalizeUrl(video.masterUrl));
-        }
     });
 
-    // Step 2: Build final list - exclude variants when master exists
+    // Step 2: Build final list - ONLY include non-variant videos
     filteredVideos.forEach(video => {
         const normalizedUrl = normalizeUrl(video.url);
         
-        // Skip if this is a variant and we have at least one master
-        if (video.isVariant || variantUrls.has(normalizedUrl)) {
-            // Only skip if master exists in the list
-            if (masterUrls.size > 0 && masterUrls.has(normalizeUrl(video.masterUrl))) {
-                logDebug(`Skipping variant ${video.url} because master exists`);
-                return;
-            }
+        // SKIP if it's a variant URL that was listed under a master playlist
+        if (variantUrls.has(normalizedUrl)) {
+            logDebug(`Skipping variant ${video.url} because it's a known variant of a master`);
+            return;
         }
         
         // Add additional information needed for immediate display
         const enhancedVideo = {
             ...video,
             // Add additional metadata needed by UI
-            timestamp: video.timestamp || Date.now(),
+            timestamp: video.timestamp || processingTimestamp,
             processed: true,
+            lastProcessedAt: processingTimestamp,
             // Ensure video has all necessary fields for display
             title: video.title || getFilenameFromUrl(video.url),
             poster: video.poster || video.previewUrl || null,
