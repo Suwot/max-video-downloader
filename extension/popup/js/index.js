@@ -67,6 +67,24 @@ function handlePortMessage(message) {
         hideLoadingState();
     }
     
+    // Handle active downloads list
+    else if (message.action === 'activeDownloadsList' && message.downloads) {
+        console.log('Received active downloads list:', message.downloads);
+        
+        // Import download module to process active downloads
+        import('./download.js').then(downloadModule => {
+            // Process each active download
+            message.downloads.forEach(download => {
+                // Update UI for each download
+                downloadModule.updateDownloadProgress(
+                    { url: download.url },
+                    download.progress || 0,
+                    download
+                );
+            });
+        });
+    }
+    
     // Handle manifest responses
     else if (message.type === 'manifestContent') {
         console.log('Received manifest content via port');

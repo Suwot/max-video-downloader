@@ -20,79 +20,6 @@ import { getBackgroundPort } from './index.js';
 
 let downloadPort = null;
 
-// Use Map to track multiple active downloads instead of a single download ID
-// key = url, value = downloadId
-const activeDownloadIds = new Map();
-
-/**
- * Store download ID for a URL
- * @param {string} url - Video URL
- * @param {string} downloadId - Unique download identifier
- * @returns {Promise} Promise that resolves when storage is updated
- */
-async function storeDownloadId(url, downloadId) {
-  activeDownloadIds.set(url, downloadId);
-  
-  // Store in chrome.storage.local for persistence between popup sessions
-  try {
-    const result = await chrome.storage.local.get('activeDownloadIds');
-    const storedIds = result.activeDownloadIds || {};
-    storedIds[url] = downloadId;
-    await chrome.storage.local.set({ activeDownloadIds: storedIds });
-    console.log(`Stored download ID for ${url}:`, downloadId);
-  } catch (error) {
-    console.error('Failed to store download ID:', error);
-  }
-}
-
-/**
- * Remove download ID for a URL
- * @param {string} url - Video URL
- * @returns {Promise} Promise that resolves when storage is updated
- */
-async function removeDownloadId(url) {
-  activeDownloadIds.delete(url);
-  
-  // Update chrome.storage.local
-  try {
-    const result = await chrome.storage.local.get('activeDownloadIds');
-    const storedIds = result.activeDownloadIds || {};
-    delete storedIds[url];
-    await chrome.storage.local.set({ activeDownloadIds: storedIds });
-    console.log(`Removed download ID for ${url}`);
-  } catch (error) {
-    console.error('Failed to remove download ID:', error);
-  }
-}
-
-/**
- * Get download ID for a URL
- * @param {string} url - Video URL
- * @returns {string|null} - Download ID or null if not found
- */
-function getDownloadId(url) {
-  return activeDownloadIds.get(url) || null;
-}
-
-/**
- * Load all stored download IDs from chrome.storage.local
- * @returns {Promise} Promise that resolves when storage is read
- */
-async function loadStoredDownloadIds() {
-  try {
-    const result = await chrome.storage.local.get('activeDownloadIds');
-    const storedIds = result.activeDownloadIds || {};
-    
-    Object.entries(storedIds).forEach(([url, id]) => {
-      activeDownloadIds.set(url, id);
-    });
-    
-    console.log(`Loaded ${activeDownloadIds.size} stored download IDs`);
-  } catch (error) {
-    console.error('Failed to load stored download IDs:', error);
-  }
-}
-
 /**
  * Handle download button click
  * @param {HTMLElement} button - Download button
@@ -117,66 +44,19 @@ export async function handleDownload(button, url, type) {
         
         // Create a new port connection for download progress
         downloadPort = chrome.runtime.connect({ name: 'download_progress' });
-
-        // Check if we have a stored download ID for this URL
-        const downloadId = getDownloadId(url);
         
-        if (downloadId) {
-            console.log('Found stored download ID, attempting to reconnect:', downloadId);
-            // Try to reconnect to existing download
-            downloadPort.postMessage({
-                action: 'reconnectToDownload',
-                downloadId: downloadId
-            });
-        } else {
-            // Immediately register interest in this download URL
-            downloadPort.postMessage({
-                action: 'registerForDownload',
-                downloadUrl: url
-            });
-        }
+        // Immediately register interest in this download URL
+        downloadPort.postMessage({
+            action: 'registerForDownload',
+            downloadUrl: url
+        });
         
         // Set up message listener
         downloadPort.onMessage.addListener((response) => {
             console.log('Download message:', response); // Debug log
             
-            // Handle download not found (when reconnecting with ID)
-            if (response?.type === 'download_not_found') {
-                console.log('Download not found for ID:', response.downloadId);
-                
-                // Remove from tracking if it doesn't exist anymore
-                if (activeDownloadIds.size > 0) {
-                    // Find and remove the URL with this ID
-                    for (const [storedUrl, storedId] of activeDownloadIds.entries()) {
-                        if (storedId === response.downloadId) {
-                            removeDownloadId(storedUrl);
-                            break;
-                        }
-                    }
-                }
-                
-                // Proceed with new download request
-                registerNewDownload(url, type, button);
-                return;
-            }
-            
-            // Handle download initiated message
-            if (response?.type === 'downloadInitiated') {
-                console.log('Download initiated with ID:', response.downloadId);
-                // Store the download ID for persistence
-                storeDownloadId(url, response.downloadId);
-                return;
-            }
-            
             // Handle progress updates
             if (response?.type === 'progress') {
-                // If this message has a downloadId and URL, store it
-                if (response.downloadId && response.url) {
-                    if (!getDownloadId(response.url)) {
-                        storeDownloadId(response.url, response.downloadId);
-                    }
-                }
-                
                 // Only process this progress message if it's for the URL we're handling
                 if (response.url !== url) {
                     return; // Ignore progress for other downloads
@@ -223,38 +103,11 @@ export async function handleDownload(button, url, type) {
                 button.style.backgroundColor = '#43A047';
                 button.querySelector('span').textContent = 'Complete!';
                 
-                // Remove download ID from tracking
-                if (response.url) {
-                    removeDownloadId(response.url);
-                } else if (response.downloadId) {
-                    // Find by ID if URL not provided
-                    for (const [storedUrl, storedId] of activeDownloadIds.entries()) {
-                        if (storedId === response.downloadId) {
-                            removeDownloadId(storedUrl);
-                            break;
-                        }
-                    }
-                }
-                
                 // Reset after delay
                 setTimeout(() => resetDownloadState(), 2000);
                 
             } else if (response?.error) {
                 showError(response.error);
-                
-                // Remove download ID on error
-                if (response.url) {
-                    removeDownloadId(response.url);
-                } else if (response.downloadId) {
-                    // Find by ID if URL not provided
-                    for (const [storedUrl, storedId] of activeDownloadIds.entries()) {
-                        if (storedId === response.downloadId) {
-                            removeDownloadId(storedUrl);
-                            break;
-                        }
-                    }
-                }
-                
                 resetDownloadState();
             }
         });
@@ -265,10 +118,8 @@ export async function handleDownload(button, url, type) {
             resetDownloadState();
         });
         
-        // If we don't have a stored download ID, initiate a new download
-        if (!downloadId) {
-            registerNewDownload(url, type, button);
-        }
+        // Initiate a new download
+        registerNewDownload(url, type, button);
         
     } catch (error) {
         console.error('Download failed:', error);
@@ -458,23 +309,13 @@ export async function startDownload(video) {
         // Set up progress handling
         return new Promise((resolve, reject) => {
             port.onMessage.addListener((msg) => {
-                if (msg.type === 'downloadInitiated') {
-                    // Store download ID for persistence
-                    storeDownloadId(downloadUrl, msg.downloadId);
-                }
-                else if (msg.type === 'progress') {
+                if (msg.type === 'progress') {
                     // Update progress UI
                     updateDownloadProgress(video, msg.progress, msg);
                 } else if (msg.success) {
-                    // Clean up on completion
-                    removeDownloadId(downloadUrl);
-                    
                     resolve(msg);
                     port.disconnect();
                 } else if (msg.error) {
-                    // Clean up on error
-                    removeDownloadId(downloadUrl);
-                    
                     reject(new Error(msg.error));
                     port.disconnect();
                 }
@@ -517,61 +358,27 @@ export async function startDownload(video) {
 
 /**
  * Check for active downloads when popup opens
- * This should be called when the popup is initialized
+ * Requests active downloads list from background script
  */
 export async function checkForActiveDownloads() {
-    // Load stored download IDs
-    await loadStoredDownloadIds();
+    console.log('Checking for active downloads...');
     
-    // If we have any stored download IDs, request their current state
-    if (activeDownloadIds.size > 0) {
-        console.log(`Found ${activeDownloadIds.size} stored download IDs, requesting details`);
+    // Get the port connection to the background script
+    const port = getBackgroundPort();
+    
+    if (port) {
+        // Request active downloads list
+        port.postMessage({
+            action: 'getActiveDownloads'
+        });
         
-        // Get the port connection to the background script
-        const port = getBackgroundPort();
-        
-        if (port) {
-            // Request active downloads list
-            port.postMessage({
-                action: 'getActiveDownloads'
-            });
-            
-            // For each stored download ID, attempt to reconnect
-            for (const [url, downloadId] of activeDownloadIds.entries()) {
-                // Create download-specific port
-                const downloadPort = chrome.runtime.connect({ name: 'download_progress' });
-                
-                // Try to reconnect to the download
-                downloadPort.postMessage({
-                    action: 'reconnectToDownload',
-                    downloadId: downloadId
-                });
-                
-                // Handle reconnection response
-                downloadPort.onMessage.addListener((response) => {
-                    if (response.type === 'download_not_found') {
-                        console.log('Download not found, removing from tracking:', downloadId);
-                        removeDownloadId(url);
-                        downloadPort.disconnect();
-                    } else if (response.type === 'progress') {
-                        console.log('Reconnected to download:', downloadId);
-                        
-                        // Find the download button for this URL
-                        const downloadBtn = document.querySelector(`[data-url="${url}"]`);
-                        if (downloadBtn) {
-                            // Update the UI with current progress
-                            updateDownloadProgress({ url }, response.progress, response);
-                        }
-                    }
-                });
-                
-                // Handle disconnection
-                downloadPort.onDisconnect.addListener(() => {
-                    console.log('Download port disconnected for:', downloadId);
-                });
-            }
-        }
+        // Background will respond with activeDownloadsList message
+        // This is handled in the port message listener in index.js
+    } else {
+        console.error('Failed to get background port for active downloads check');
     }
+    
+    return true;
 }
 
 /**
@@ -580,18 +387,37 @@ export async function checkForActiveDownloads() {
  * @param {number} progress - Download progress (0-100)
  * @param {Object} progressData - Additional progress data
  */
-function updateDownloadProgress(video, progress, progressData = {}) {
+export function updateDownloadProgress(video, progress, progressData = {}) {
     const downloadBtn = document.querySelector(`[data-url="${video.url}"]`);
-    if (!downloadBtn) return;
+    if (!downloadBtn) {
+        // Try with originalUrl if available
+        if (progressData.originalUrl) {
+            const altBtn = document.querySelector(`[data-url="${progressData.originalUrl}"]`);
+            if (altBtn) {
+                updateDownloadButtonProgress(altBtn, progress, progressData);
+            }
+        }
+        return;
+    }
 
+    updateDownloadButtonProgress(downloadBtn, progress, progressData);
+}
+
+/**
+ * Update a specific download button with progress information
+ * @param {HTMLElement} button - The download button element
+ * @param {number} progress - Download progress (0-100)
+ * @param {Object} progressData - Additional progress data
+ */
+function updateDownloadButtonProgress(button, progress, progressData = {}) {
     // Ensure progress is between 0 and 100
     progress = Math.max(0, Math.min(100, Math.round(progress)));
     
     // Create progress container if it doesn't exist
-    let progressContainer = downloadBtn.querySelector('.progress-container');
+    let progressContainer = button.querySelector('.progress-container');
     if (!progressContainer) {
         // Replace button content with progress UI
-        downloadBtn.innerHTML = '';
+        button.innerHTML = '';
         
         progressContainer = document.createElement('div');
         progressContainer.className = 'progress-container';
@@ -617,7 +443,7 @@ function updateDownloadProgress(video, progress, progressData = {}) {
         progressContainer.appendChild(progressBar);
         progressContainer.appendChild(progressText);
         progressContainer.appendChild(progressInfo);
-        downloadBtn.appendChild(progressContainer);
+        button.appendChild(progressContainer);
         
         // Add progress styles if not already added
         if (!document.getElementById('progress-styles')) {
@@ -676,10 +502,10 @@ function updateDownloadProgress(video, progress, progressData = {}) {
     let statusText = `Downloading ${progress}%`;
     if (progress >= 100) {
         statusText = 'Download Complete';
-        downloadBtn.classList.add('download-complete');
+        button.classList.add('download-complete');
     } else if (progressData.segmentProgress) {
         // Add segment information if available
-        statusText += ` (Segment: ${progressData.segmentProgress})`;
+        statusText += ` (${progressData.segmentProgress})`;
     }
     
     progressText.textContent = statusText;
@@ -719,14 +545,54 @@ function updateDownloadProgress(video, progress, progressData = {}) {
         progressFill.style.background = `hsl(210, ${saturation}%, 60%)`;
     }
     
-    // Log detailed progress update (for debugging)
-    console.log('Progress update:', {
-        downloadId: progressData.downloadId,
-        progress,
-        speed: progressData.speed,
-        eta: progressData.eta,
-        confidence: progressData.confidence,
-        downloaded: progressData.downloaded && formatSize(progressData.downloaded),
-        size: progressData.size && formatSize(progressData.size)
-    });
+    // Display quality information if available
+    if (progressData.quality && !button.querySelector('.quality-indicator')) {
+        const quality = progressData.quality;
+        
+        // Create quality indicator
+        const qualityIndicator = document.createElement('div');
+        qualityIndicator.className = 'quality-indicator';
+        
+        // Format quality label based on available data
+        let qualityText = '';
+        if (quality.height) {
+            qualityText = `${quality.height}p`;
+            if (quality.fps && quality.fps > 30) {
+                qualityText += `@ ${quality.fps}`;
+            }
+        } else if (quality.resolution) {
+            qualityText = quality.resolution;
+        } else if (quality.label) {
+            qualityText = quality.label;
+        } else {
+            qualityText = 'Custom';
+        }
+        
+        qualityIndicator.textContent = qualityText;
+        
+        // Add styles for quality indicator
+        if (!document.getElementById('quality-indicator-styles')) {
+            const style = document.createElement('style');
+            style.id = 'quality-indicator-styles';
+            style.textContent = `
+                .quality-indicator {
+                    position: absolute;
+                    top: -8px;
+                    right: -8px;
+                    background: #ff9800;
+                    color: white;
+                    padding: 2px 5px;
+                    border-radius: 10px;
+                    font-size: 11px;
+                    font-weight: bold;
+                    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+                }
+            `;
+            document.head.appendChild(style);
+        }
+        
+        // Add to button
+        button.style.position = 'relative';
+        button.appendChild(qualityIndicator);
+    }
 }
