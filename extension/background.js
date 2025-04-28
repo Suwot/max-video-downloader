@@ -741,10 +741,16 @@ async function handlePortMessage(message, port, portId) {
             .map(([id, info]) => ({
                 downloadId: id,
                 url: info.url,
-                progress: info.progress,
-                filename: info.filename,
+                originalUrl: info.originalUrl || info.url,
+                progress: info.progress || 0,
+                status: info.status,
+                filename: info.filename || getFilenameFromUrl(info.url),
                 startTime: info.startTime,
-                lastUpdated: info.lastUpdated
+                lastUpdated: info.lastUpdated,
+                speed: info.speed,
+                eta: info.eta,
+                segmentProgress: info.segmentProgress,
+                quality: info.quality
             }));
         
         port.postMessage({

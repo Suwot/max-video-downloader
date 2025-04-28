@@ -141,6 +141,14 @@ document.addEventListener('DOMContentLoaded', async () => {
         // Initialize UI elements
         initializeUI();
         
+        // Check for active downloads from previous popup sessions
+        import('./download.js').then(downloadModule => {
+            // Since checkForActiveDownloads is now async, handle it properly
+            downloadModule.checkForActiveDownloads().catch(err => {
+                console.error('Error checking for active downloads:', err);
+            });
+        });
+        
         // Get the active tab ID to communicate with background script
         const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
         if (!tabs || !tabs[0] || !tabs[0].id) {
