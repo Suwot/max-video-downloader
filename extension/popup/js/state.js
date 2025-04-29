@@ -20,8 +20,7 @@ import { CacheFactory, CACHE_TTL, CACHE_VERSION, CACHE_VERSION_KEY } from './cac
 // Cache size limits
 const MAX_VIDEOS_CACHE_SIZE = 100;
 const MAX_POSTER_CACHE_SIZE = 50;
-const MAX_MEDIA_INFO_CACHE_SIZE = 100;
-const MAX_RESOLUTION_CACHE_SIZE = 100;
+const MAX_VIDEO_METADATA_CACHE_SIZE = 100; // Combined size for media info and resolution
 const MAX_STREAM_METADATA_CACHE_SIZE = 50;
 const MAX_MASTER_PLAYLISTS_CACHE_SIZE = 50;
 
@@ -37,10 +36,9 @@ const MAX_MASTER_PLAYLISTS_CACHE_SIZE = 50;
  */
 
 // Cache instances using the factory
-const mediaInfoCache = CacheFactory.createMediaInfoCache(MAX_MEDIA_INFO_CACHE_SIZE);
+const videoMetadataCache = CacheFactory.createVideoMetadataCache(MAX_VIDEO_METADATA_CACHE_SIZE);
 const posterCache = CacheFactory.createPosterCache(MAX_POSTER_CACHE_SIZE);
 const streamMetadataCache = CacheFactory.createStreamMetadataCache(MAX_STREAM_METADATA_CACHE_SIZE);
-const resolutionCache = CacheFactory.createCache('resolutionCache', MAX_RESOLUTION_CACHE_SIZE);
 const masterPlaylistCache = CacheFactory.createMasterPlaylistCache(MAX_MASTER_PLAYLISTS_CACHE_SIZE);
 
 // State variables
@@ -324,7 +322,7 @@ export async function initializeState() {
             'currentTabId',
             'currentTabUrl', // Add URL tracking
             'posterCache',
-            'mediaInfoCache', 
+            'videoMetadataCache', 
             'streamMetadataCache',
             'masterPlaylistCache', 
             CACHE_VERSION_KEY
@@ -353,10 +351,9 @@ export async function initializeState() {
         
         // Restore caches with the new cache system
         posterCache.restore(localData);
-        mediaInfoCache.restore(localData);
+        videoMetadataCache.restore(localData);
         streamMetadataCache.restore(localData);
         masterPlaylistCache.restore(localData);
-        resolutionCache.restore(localData);
         
         // Handle videos cache
         const [currentTab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -483,12 +480,12 @@ export function setCurrentTheme(theme) {
 
 // Cache management
 export function hasResolutionCache(url) {
-    return resolutionCache.has(url);
+    return videoMetadataCache.has(url);
 }
 
 export function getResolutionFromCache(url) {
     try {
-        return resolutionCache.get(url);
+        return videoMetadataCache.get(url);
     } catch (error) {
         return handleError('Cache', 'getting resolution from cache', error, null);
     }
@@ -496,7 +493,7 @@ export function getResolutionFromCache(url) {
 
 export function addResolutionToCache(url, resolution) {
     try {
-        resolutionCache.set(url, resolution);
+        videoMetadataCache.set(url, resolution);
     } catch (error) {
         handleError('Cache', 'adding resolution to cache', error);
     }
@@ -520,7 +517,7 @@ export function addPosterToCache(videoUrl, posterUrl) {
 
 export function getMediaInfoFromCache(url) {
     try {
-        return mediaInfoCache.get(url);
+        return videoMetadataCache.get(url);
     } catch (error) {
         return handleError('Cache', 'getting media info from cache', error, null);
     }
@@ -528,7 +525,7 @@ export function getMediaInfoFromCache(url) {
 
 export function addMediaInfoToCache(url, mediaInfo) {
     try {
-        mediaInfoCache.set(url, mediaInfo);
+        videoMetadataCache.set(url, mediaInfo);
     } catch (error) {
         handleError('Cache', 'adding media info to cache', error);
     }
@@ -553,9 +550,8 @@ export function purgeExpiredCaches() {
         // Clean all map-based caches using cache system's purgeExpired method
         const caches = [
             { cache: posterCache, name: 'poster' },
-            { cache: mediaInfoCache, name: 'media info' },
+            { cache: videoMetadataCache, name: 'video metadata' },
             { cache: streamMetadataCache, name: 'stream metadata' },
-            { cache: resolutionCache, name: 'resolution' },
             { cache: masterPlaylistCache, name: 'master playlist' }
         ];
         
@@ -585,9 +581,8 @@ export async function clearAllCaches() {
         
         // Reset all in-memory caches
         cachedVideos = null;
-        resolutionCache.clear();
+        videoMetadataCache.clear();
         posterCache.clear();
-        mediaInfoCache.clear();
         streamMetadataCache.clear();
         masterPlaylistCache.clear();
         
@@ -596,9 +591,8 @@ export async function clearAllCaches() {
             'cachedVideos',
             'videosCacheTimestamp',
             'posterCache',
-            'mediaInfoCache',
+            'videoMetadataCache',
             'streamMetadataCache',
-            'resolutionCache',
             'masterPlaylistCache',
             CACHE_VERSION_KEY
         ]);

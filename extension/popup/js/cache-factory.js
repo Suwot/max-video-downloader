@@ -405,12 +405,12 @@ const CacheFactory = {
     },
     
     /**
-     * Create a media info cache
+     * Create a video metadata cache that combines media info and resolution data
      * @param {number} maxSize - Maximum cache size
-     * @returns {Cache} MediaInfoCache instance
+     * @returns {Cache} VideoMetadataCache instance
      */
-    createMediaInfoCache(maxSize) {
-        return this.createCache('mediaInfoCache', maxSize);
+    createVideoMetadataCache(maxSize) {
+        return this.createCache('videoMetadataCache', maxSize);
     },
     
     /**
@@ -420,15 +420,6 @@ const CacheFactory = {
      */
     createPosterCache(maxSize) {
         return this.createCache('posterCache', maxSize);
-    },
-    
-    /**
-     * Create a resolution cache
-     * @param {number} maxSize - Maximum cache size
-     * @returns {Cache} ResolutionCache instance
-     */
-    createResolutionCache(maxSize) {
-        return this.createCache('resolutionCache', maxSize);
     },
     
     /**

@@ -152,8 +152,6 @@ export async function renderVideos(videos) {
         document.head.appendChild(style);
     }
     
-    // Restore scroll position
-    restoreScrollPosition(container, getScrollPosition());
 }
 
 /**
