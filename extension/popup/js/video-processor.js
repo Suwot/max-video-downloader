@@ -24,7 +24,7 @@ import { filterRedundantVariants } from '../../js/utilities/video-validator.js';
 const hlsRelationships = new Map();
 
 /**
- * Two-pass video processing to ensure proper grouping
+ * Process and group videos - assumes videos are already deduplicated by video-manager.js
  * @param {Array} videos - Videos to process
  * @returns {Array} Processed and grouped videos
  */
@@ -33,52 +33,9 @@ export function processVideos(videos) {
 
     console.log('Processing videos in popup:', videos.length);
     
-    // First apply our variant filtering to reduce redundant quality options
-    const filteredVideos = filterRedundantVariants(videos, {
-        removeNeighboringQualities: true,
-        qualityThreshold: 15 // 15% difference threshold
-    });
-
-    // Create sets to track master and variant URLs
-    const variantUrls = new Set();
-    const masterUrls = new Set();
-    
-    // Step 1: Collect ALL master playlists and their variant URLs
-    filteredVideos.forEach(video => {
-        if (video.isMasterPlaylist || video.isPlaylist) {
-            masterUrls.add(normalizeUrl(video.url));
-            
-            // Collect all variants regardless of which property they're in
-            const variants = video.variants || video.qualityVariants || [];
-            if (Array.isArray(variants)) {
-                variants.forEach(variant => {
-                    const variantUrl = typeof variant === 'string' ? variant : variant.url;
-                    if (variantUrl) {
-                        variantUrls.add(normalizeUrl(variantUrl));
-                    }
-                });
-            }
-        }
-    });
-
-    // Step 2: Build final list - ONLY include non-variant videos
-    const dedupedVideos = [];
-    filteredVideos.forEach(video => {
-        const normalizedUrl = normalizeUrl(video.url);
-        
-        // SKIP if it's a variant URL that was listed under a master playlist
-        if (variantUrls.has(normalizedUrl)) {
-            console.log(`Skipping variant ${video.url} because it's a known variant of a master`);
-            return;
-        }
-        
-        dedupedVideos.push(video);
-    });
-
-    console.log(`Filtered videos: ${videos.length} input → ${dedupedVideos.length} output (${masterUrls.size} masters, ${variantUrls.size} variants)`);
-    
-    // Now group the processed videos
-    return groupVideos(dedupedVideos);
+    // Skip deduplication as it's already handled in video-manager.js
+    // Just proceed with grouping the videos
+    return groupVideos(videos);
 }
 
 /**
