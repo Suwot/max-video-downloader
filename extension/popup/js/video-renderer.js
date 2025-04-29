@@ -434,7 +434,6 @@ export function createVideoElement(video) {
     mediaTypeContainer.appendChild(mediaTypeInfo);
     
     // Always create codec-info element even if we don't have codec details yet
-    // This ensures the element exists for later updates via updateVideoResolution()
     const codecInfo = document.createElement('div');
     codecInfo.className = 'codec-info';
     
@@ -448,33 +447,6 @@ export function createVideoElement(video) {
     
     mediaTypeContainer.appendChild(codecInfo);
     fileInfo.appendChild(mediaTypeContainer);
-    
-    // Resolution info
-    const resolutionContainer = document.createElement('div');
-    resolutionContainer.className = 'resolution-container';
-    
-    const resolutionInfo = document.createElement('div');
-    resolutionInfo.className = 'resolution-info';
-    
-    if (video.resolution || (video.mediaInfo && (video.mediaInfo.width || video.mediaInfo.height))) {
-        // Build resolution text from available info
-        const resolutionText = formatResolution(
-            video.resolution.width,
-            video.resolution.height,
-            video.resolution.fps,
-            video.resolution.bitrate,
-            video.resolution || 
-            video.mediaInfo
-        );
-        resolutionInfo.textContent = resolutionText;
-    } else {
-        // Add a placeholder for resolution that will be updated later
-        resolutionInfo.textContent = 'Resolution loading...';
-        resolutionInfo.classList.add('loading');
-    }
-    
-    resolutionContainer.appendChild(resolutionInfo);
-    fileInfo.appendChild(resolutionContainer);
     
     // Progress bar (initially hidden)
     const progressContainer = document.createElement('div');

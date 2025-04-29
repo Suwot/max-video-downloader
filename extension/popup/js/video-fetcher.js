@@ -375,7 +375,7 @@ export async function fetchVideoInfo(videos, tabId) {
 /**
  * Update resolution display for a specific video
  * @param {string} url - Video URL
- * @param {Object} resolution - Resolution information
+ * @param {Object} streamInfo - Stream information
  */
 export function updateVideoResolution(url, streamInfo) {
     const videoElement = document.querySelector(`.video-item[data-url="${url}"]`);
@@ -392,33 +392,6 @@ export function updateVideoResolution(url, streamInfo) {
                 }
             }
             durationElement.textContent = formatDuration(streamInfo.duration);
-        }
-
-        // Update resolution info
-        const resolutionInfo = videoElement.querySelector('.resolution-info');
-        if (resolutionInfo) {
-            const resolution = {
-                width: streamInfo.width,
-                height: streamInfo.height,
-                fps: streamInfo.fps,
-                bitrate: streamInfo.videoBitrate || streamInfo.totalBitrate
-            };
-            
-            resolutionInfo.textContent = formatResolution(
-                resolution.width,
-                resolution.height,
-                resolution.fps,
-                resolution.bitrate,
-                {
-                    videoCodec: streamInfo.videoCodec,
-                    audioCodec: streamInfo.audioCodec
-                }
-            );
-            
-            // Remove loading class if present
-            if (resolutionInfo.classList.contains('loading')) {
-                resolutionInfo.classList.remove('loading');
-            }
         }
         
         // Update media type info
