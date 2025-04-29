@@ -8,6 +8,7 @@ import { normalizeUrl, getBaseDirectory } from '../../js/utilities/normalize-url
 import nativeHostService from '../../js/native-host-service.js';
 import { validateAndFilterVideos, filterRedundantVariants } from '../../js/utilities/video-validator.js';
 import { processVideoRelationships } from '../../js/manifest-service.js';
+import { getActivePopupPortForTab } from './popup-ports.js';
 
 const videosPerTab = {};
 const playlistsPerTab = {};
@@ -389,6 +390,14 @@ async function addVideoToTab(tabId, videoInfo) {
     if (isNewVideo) {
         // Apply automatic grouping and filtering before broadcasting
         broadcastVideoUpdate(tabId);
+        
+        // Generate preview proactively for the new video if it doesn't have one already
+        if (!videoInfo.previewUrl && !videoInfo.poster) {
+            logDebug('Proactively generating preview for newly detected video:', normalizedUrl);
+            generatePreview(videoInfo.url, tabId).catch(error => {
+                console.error('Error generating preview:', error);
+            });
+        }
     }
 }
 
@@ -416,6 +425,9 @@ async function generatePreview(url, tabId) {
                 if (videoInfo) {
                     videoInfo.previewUrl = response.previewUrl;
                     videosPerTab[tabId].set(normalizedUrl, videoInfo);
+                    
+                    // Notify any open popup about the new preview
+                    notifyPreviewReady(tabId, normalizedUrl, response.previewUrl, videoInfo);
                 }
             }
             
@@ -431,6 +443,34 @@ async function generatePreview(url, tabId) {
     
     // Wait for the preview and return it
     return await previewPromise;
+}
+
+/**
+ * Notify any open popup about a newly generated preview
+ * @param {number} tabId - Tab ID
+ * @param {string} videoUrl - Video URL (normalized)
+ * @param {string} previewUrl - Preview image URL or data URL
+ * @param {Object} videoInfo - Video information object
+ */
+function notifyPreviewReady(tabId, videoUrl, previewUrl, videoInfo) {
+    // Import getActivePopupPortForTab without using dynamic imports to avoid performance overhead
+    const port = getActivePopupPortForTab(tabId);
+    
+    // Check if a popup is open for this tab
+    if (port) {
+        try {
+            logDebug(`Notifying popup for tab ${tabId} about new preview for ${videoUrl}`);
+            
+            port.postMessage({
+                type: 'previewReady',
+                videoUrl: videoUrl,
+                previewUrl: previewUrl,
+                videoId: videoInfo.id || videoUrl // Use ID if available, otherwise URL as ID
+            });
+        } catch (error) {
+            logDebug(`Error notifying popup about preview: ${error.message}`);
+        }
+    }
 }
 
 // Get stream qualities

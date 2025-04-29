@@ -297,11 +297,10 @@ export function createVideoElement(video) {
     } 
     // No preview available yet
     else {
-        // Only attempt to generate a preview if it's not a blob URL without poster
-        if (!(video.type === 'blob' && !video.poster)) {
-            generatePreview(video.url, loader, previewImage, regenerateButton);
-        } else {
-            // For blob URLs without a poster, still show the placeholder
+        // Don't manually request preview generation - it's now handled in the background
+        // Just keep the loader spinning until a preview becomes available
+        if (video.type === 'blob' && !video.poster) {
+            // For blob URLs without a poster, still show the placeholder instead of trying to generate
             previewImage.classList.add('loaded');
             loader.style.display = 'none';
         }
@@ -410,9 +409,9 @@ export function createVideoElement(video) {
     if (mediaContentType === "Audio Only") {
         mediaIcon = '<path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4s4-1.79 4-4V7h4V3h-6z"/>';
     } else if (mediaContentType === "Video Only") {
-        mediaIcon = '<path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/>';
-    } else {
         mediaIcon = '<path d="M21 3H3c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H3V5h18v14z"/><path d="M9 8h2v8H9zm4 0h2v8h-2z"/>';
+    } else {
+        mediaIcon = '<path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/>';
     }
     
     mediaTypeInfo.innerHTML = `
@@ -421,7 +420,7 @@ export function createVideoElement(video) {
         </svg>
         <span>${mediaContentType}</span>
     `;
-
+    
     // Create a separate container for media type info
     const mediaTypeContainer = document.createElement('div');
     mediaTypeContainer.className = 'media-type-container';
@@ -450,24 +449,10 @@ export function createVideoElement(video) {
     const resolutionInfo = document.createElement('div');
     resolutionInfo.className = 'resolution-info';
     
-    // Get resolution info from media info if available, otherwise use video.resolution
-    if (video.mediaInfo && (video.mediaInfo.width || video.mediaInfo.height)) {
-        // Use media info for resolution
+    if (video.resolution || (video.mediaInfo && (video.mediaInfo.width || video.mediaInfo.height))) {
+        // Build resolution text from available info
         const resolutionText = formatResolution(
-            video.mediaInfo.width,
-            video.mediaInfo.height,
-            video.mediaInfo.fps,
-            video.mediaInfo.bitrate,
-            video.mediaInfo
-        );
-        resolutionInfo.textContent = resolutionText;
-    } else if (video.resolution) {
-        // Fall back to video.resolution
-        const resolutionText = formatResolution(
-            video.resolution.width,
-            video.resolution.height,
-            video.resolution.fps,
-            video.resolution.bitrate,
+            video.resolution || 
             video.mediaInfo
         );
         resolutionInfo.textContent = resolutionText;

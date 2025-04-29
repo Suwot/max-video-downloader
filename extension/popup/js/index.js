@@ -148,6 +148,38 @@ function handlePortMessage(message) {
         }));
     }
     
+    // Handle live preview updates for proactively generated previews
+    else if (message.type === 'previewReady') {
+        console.log('Received preview update:', message.videoUrl);
+        
+        // Find the video element in the UI
+        const videoElement = document.querySelector(`.video-item[data-url="${message.videoUrl}"]`);
+        if (videoElement) {
+            // Find the preview image
+            const previewImage = videoElement.querySelector('.preview-image');
+            const loader = videoElement.querySelector('.loader');
+            const regenerateButton = videoElement.querySelector('.regenerate-button');
+            
+            if (previewImage) {
+                // Add load handler before setting src
+                previewImage.onload = () => {
+                    previewImage.classList.remove('placeholder');
+                    previewImage.classList.add('loaded');
+                    if (loader) loader.style.display = 'none';
+                    if (regenerateButton) regenerateButton.classList.add('hidden');
+                };
+                
+                // Set the preview source
+                previewImage.src = message.previewUrl;
+                
+                // Cache the preview for future use
+                import('./state.js').then(stateModule => {
+                    stateModule.addPosterToCache(message.videoUrl, message.previewUrl);
+                });
+            }
+        }
+    }
+    
     // Handle quality responses
     else if (message.type === 'qualitiesResponse') {
         console.log('Received qualities data via port');

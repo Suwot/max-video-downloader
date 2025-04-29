@@ -202,8 +202,23 @@ function broadcastToPopups(message) {
     }
 }
 
+/**
+ * Gets the active popup port for a specific tab
+ * @param {number} tabId - The ID of the tab to find a port for
+ * @returns {Port|null} - The port object if found, or null
+ */
+function getActivePopupPortForTab(tabId) {
+    for (const [portId, portInfo] of popupPorts.entries()) {
+        if (portInfo.tabId === tabId) {
+            return portInfo.port;
+        }
+    }
+    return null;
+}
+
 export { 
     setupPopupPort,
     handlePortMessage,
-    broadcastToPopups
+    broadcastToPopups,
+    getActivePopupPortForTab
 };
