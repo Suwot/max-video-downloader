@@ -113,6 +113,17 @@ export class NativeHostService {
     }
     
     async sendMessage(message, responseHandler = null) {
+        // Check if we already have too many pending messages of this type (avoid infinite loops)
+        const pendingOfSameType = Array.from(this.pendingMessages.values())
+            .filter(pending => pending.message && pending.message.type === message.type)
+            .length;
+            
+        // If there are already too many pending messages of this type, it might be a loop
+        if (pendingOfSameType >= 3 && message.type !== 'heartbeat') {
+            console.warn(`Too many pending ${message.type} messages (${pendingOfSameType}), possible infinite loop`);
+            return Promise.reject(new Error(`Rate limited: too many pending ${message.type} requests`));
+        }
+        
         if (!this.port && !this.connect()) {
             throw new Error('Could not connect to native host');
         }
@@ -122,8 +133,8 @@ export class NativeHostService {
             const id = `msg_${++this.messageId}`;
             const messageWithId = { ...message, id };
             
-            // Store promise callbacks and optional responseHandler
-            this.pendingMessages.set(id, { resolve, reject, responseHandler });
+            // Store promise callbacks, optional responseHandler, and message for debugging
+            this.pendingMessages.set(id, { resolve, reject, responseHandler, message: messageWithId });
             
             // Set timeout to auto-reject after 60 seconds unless it's a download operation
             // Downloads can take longer
@@ -141,6 +152,17 @@ export class NativeHostService {
                 this.port.postMessage(messageWithId);
             } catch (error) {
                 this.pendingMessages.delete(id);
+                
+                // If it's a DASH manifest fetch that failed, return empty results instead of error
+                // This prevents infinite retry loops with DASH manifests
+                if (message.type === 'getQualities' && 
+                    message.url && 
+                    message.url.includes('.mpd')) {
+                    console.warn('DASH manifest fetch failed, returning empty results to avoid retry loop');
+                    resolve({ streamInfo: { hasVideo: true, hasAudio: true } });
+                    return;
+                }
+                
                 reject(error);
                 
                 // Try to reconnect on send error

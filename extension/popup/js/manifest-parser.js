@@ -202,63 +202,17 @@ function parseMediaSegments(content, baseUrl) {
 export function parseDASHManifest(content, baseUrl) {
     const variants = [];
     try {
-        const parser = new DOMParser();
-        const xml = parser.parseFromString(content, 'text/xml');
-        
-        // Get all AdaptationSet elements
-        const adaptationSets = xml.querySelectorAll('AdaptationSet');
-        
-        adaptationSets.forEach(adaptSet => {
-            const mimeType = adaptSet.getAttribute('mimeType') || '';
+        // Check if DOMParser is available
+        if (typeof DOMParser !== 'undefined') {
+            const parser = new DOMParser();
+            const xml = parser.parseFromString(content, 'text/xml');
             
-            // Only process video adaptation sets
-            if (mimeType.startsWith('video/')) {
-                const representations = adaptSet.querySelectorAll('Representation');
-                
-                representations.forEach(rep => {
-                    const variant = {
-                        id: rep.getAttribute('id'),
-                        bandwidth: parseInt(rep.getAttribute('bandwidth')),
-                        width: parseInt(rep.getAttribute('width')),
-                        height: parseInt(rep.getAttribute('height')),
-                        codecs: rep.getAttribute('codecs'),
-                        frameRate: rep.getAttribute('frameRate')
-                    };
-                    
-                    // Convert framerate to fps number
-                    if (variant.frameRate) {
-                        if (variant.frameRate.includes('/')) {
-                            const [num, den] = variant.frameRate.split('/').map(Number);
-                            variant.fps = num / den;
-                        } else {
-                            variant.fps = parseFloat(variant.frameRate);
-                        }
-                    }
-                    
-                    // Handle segment template
-                    const segTemplate = rep.querySelector('SegmentTemplate') || 
-                                     adaptSet.querySelector('SegmentTemplate');
-                    
-                    if (segTemplate) {
-                        variant.initialization = resolveUrl(baseUrl, 
-                            segTemplate.getAttribute('initialization'));
-                        variant.segments = resolveUrl(baseUrl, 
-                            segTemplate.getAttribute('media'));
-                    }
-                    
-                    // Handle base URL
-                    const baseURLElement = rep.querySelector('BaseURL') || 
-                                         adaptSet.querySelector('BaseURL');
-                    
-                    if (baseURLElement) {
-                        variant.url = resolveUrl(baseUrl, baseURLElement.textContent);
-                    }
-                    
-                    variants.push(variant);
-                });
-            }
-        });
-        
+            return processDashXml(xml, baseUrl);
+        } else {
+            // Fallback for environments without DOMParser
+            console.log('DOMParser not available, using basic XML parsing');
+            return parseBasicDashXml(content, baseUrl);
+        }
     } catch (error) {
         console.error('Failed to parse DASH manifest:', error);
     }
@@ -267,12 +221,221 @@ export function parseDASHManifest(content, baseUrl) {
 }
 
 /**
+ * Process DASH XML using DOM methods
+ * @param {Document} xml - Parsed XML document
+ * @param {string} baseUrl - Base URL for resolving relative paths
+ * @returns {Array} Array of variants
+ */
+function processDashXml(xml, baseUrl) {
+    const variants = [];
+    
+    // Get all AdaptationSet elements
+    const adaptationSets = xml.querySelectorAll('AdaptationSet');
+    
+    adaptationSets.forEach(adaptSet => {
+        const mimeType = adaptSet.getAttribute('mimeType') || '';
+        
+        // Only process video adaptation sets
+        if (mimeType.startsWith('video/')) {
+            const representations = adaptSet.querySelectorAll('Representation');
+            
+            representations.forEach(rep => {
+                const variant = extractVariantFromRepresentation(rep, adaptSet, baseUrl);
+                if (variant) variants.push(variant);
+            });
+        }
+    });
+    
+    return variants;
+}
+
+/**
+ * Extract variant information from representation element
+ * @param {Element} rep - Representation element
+ * @param {Element} adaptSet - AdaptationSet element
+ * @param {string} baseUrl - Base URL
+ * @returns {Object} Variant object
+ */
+function extractVariantFromRepresentation(rep, adaptSet, baseUrl) {
+    const variant = {
+        id: rep.getAttribute('id'),
+        bandwidth: parseInt(rep.getAttribute('bandwidth')),
+        width: parseInt(rep.getAttribute('width')),
+        height: parseInt(rep.getAttribute('height')),
+        codecs: rep.getAttribute('codecs'),
+        frameRate: rep.getAttribute('frameRate')
+    };
+    
+    // Convert framerate to fps number
+    if (variant.frameRate) {
+        if (variant.frameRate.includes('/')) {
+            const [num, den] = variant.frameRate.split('/').map(Number);
+            variant.fps = num / den;
+        } else {
+            variant.fps = parseFloat(variant.frameRate);
+        }
+    }
+    
+    // Handle segment template
+    const segTemplate = rep.querySelector('SegmentTemplate') || 
+                        adaptSet.querySelector('SegmentTemplate');
+    
+    if (segTemplate) {
+        variant.initialization = resolveUrl(baseUrl, 
+            segTemplate.getAttribute('initialization'));
+        variant.segments = resolveUrl(baseUrl, 
+            segTemplate.getAttribute('media'));
+    }
+    
+    // Handle base URL
+    const baseURLElement = rep.querySelector('BaseURL') || 
+                            adaptSet.querySelector('BaseURL');
+    
+    if (baseURLElement) {
+        variant.url = resolveUrl(baseUrl, baseURLElement.textContent);
+    }
+    
+    return variant;
+}
+
+/**
+ * Basic XML parser for DASH manifests when DOMParser is unavailable
+ * @param {string} content - XML content
+ * @param {string} baseUrl - Base URL
+ * @returns {Array} Array of variants
+ */
+function parseBasicDashXml(content, baseUrl) {
+    const variants = [];
+    
+    try {
+        // Extract AdaptationSet elements with video mimeType
+        const videoAdaptSets = extractTagsWithAttribute(content, 'AdaptationSet', 'mimeType', /video\//);
+        
+        for (const adaptSetXml of videoAdaptSets) {
+            // Extract Representation elements
+            const representations = extractTags(adaptSetXml, 'Representation');
+            
+            for (const repXml of representations) {
+                const variant = {
+                    id: extractAttribute(repXml, 'id'),
+                    bandwidth: parseInt(extractAttribute(repXml, 'bandwidth')) || 0,
+                    width: parseInt(extractAttribute(repXml, 'width')) || 0,
+                    height: parseInt(extractAttribute(repXml, 'height')) || 0,
+                    codecs: extractAttribute(repXml, 'codecs'),
+                    frameRate: extractAttribute(repXml, 'frameRate')
+                };
+                
+                // Convert framerate to fps
+                if (variant.frameRate) {
+                    if (variant.frameRate.includes('/')) {
+                        const [num, den] = variant.frameRate.split('/').map(Number);
+                        variant.fps = num / den;
+                    } else {
+                        variant.fps = parseFloat(variant.frameRate);
+                    }
+                }
+                
+                // Handle BaseURL
+                const baseURLContent = extractTagContent(repXml, 'BaseURL') || 
+                                    extractTagContent(adaptSetXml, 'BaseURL');
+                
+                if (baseURLContent) {
+                    variant.url = resolveUrl(baseUrl, baseURLContent);
+                }
+                
+                // Handle SegmentTemplate
+                const segTemplateRep = extractTag(repXml, 'SegmentTemplate');
+                const segTemplateAdapt = extractTag(adaptSetXml, 'SegmentTemplate');
+                const segTemplate = segTemplateRep || segTemplateAdapt;
+                
+                if (segTemplate) {
+                    const init = extractAttribute(segTemplate, 'initialization');
+                    const media = extractAttribute(segTemplate, 'media');
+                    
+                    if (init) variant.initialization = resolveUrl(baseUrl, init);
+                    if (media) variant.segments = resolveUrl(baseUrl, media);
+                }
+                
+                variants.push(variant);
+            }
+        }
+    } catch (error) {
+        console.error('Error in basic DASH parser:', error);
+    }
+    
+    return variants;
+}
+
+/**
+ * Extract tag from XML string
+ * @param {string} xml - XML content
+ * @param {string} tagName - Tag name
+ * @returns {string|null} Tag content or null
+ */
+function extractTag(xml, tagName) {
+    const regExp = new RegExp(`<${tagName}[^>]*>([\\s\\S]*?)<\\/${tagName}>|<${tagName}[^>]*\\/>`);
+    const match = xml.match(regExp);
+    return match ? match[0] : null;
+}
+
+/**
+ * Extract all matching tags from XML string
+ * @param {string} xml - XML content
+ * @param {string} tagName - Tag name
+ * @returns {Array} Array of matching tag strings
+ */
+function extractTags(xml, tagName) {
+    const regExp = new RegExp(`<${tagName}[^>]*>([\\s\\S]*?)<\\/${tagName}>|<${tagName}[^>]*\\/>`, 'g');
+    return xml.match(regExp) || [];
+}
+
+/**
+ * Extract tag content
+ * @param {string} xml - XML content
+ * @param {string} tagName - Tag name
+ * @returns {string|null} Content between tags or null
+ */
+function extractTagContent(xml, tagName) {
+    const regExp = new RegExp(`<${tagName}[^>]*>([\\s\\S]*?)<\\/${tagName}>`);
+    const match = xml.match(regExp);
+    return match ? match[1].trim() : null;
+}
+
+/**
+ * Extract attribute value from XML tag
+ * @param {string} xml - XML tag
+ * @param {string} attrName - Attribute name
+ * @returns {string|null} Attribute value or null
+ */
+function extractAttribute(xml, attrName) {
+    const regExp = new RegExp(`${attrName}=["']([^"']*)["']`);
+    const match = xml.match(regExp);
+    return match ? match[1] : null;
+}
+
+/**
+ * Extract tags with a specific attribute value
+ * @param {string} xml - XML content
+ * @param {string} tagName - Tag name
+ * @param {string} attrName - Attribute name
+ * @param {RegExp} attrValueRegex - Regular expression to match attribute value
+ * @returns {Array} Array of matching tags
+ */
+function extractTagsWithAttribute(xml, tagName, attrName, attrValueRegex) {
+    const tags = extractTags(xml, tagName);
+    return tags.filter(tag => {
+        const attrValue = extractAttribute(tag, attrName);
+        return attrValue && attrValueRegex.test(attrValue);
+    });
+}
+
+/**
  * Extract attribute value from HLS tag
  * @param {string} line - HLS tag line
  * @param {string} attr - Attribute name
  * @returns {string|null} Attribute value or null
  */
-function extractAttribute(line, attr) {
+function extractHlsAttribute(line, attr) {
     const match = new RegExp(attr + '=([^,]+)').exec(line);
     return match ? match[1].replace(/"/g, '') : null;
 }

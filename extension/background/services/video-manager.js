@@ -24,6 +24,10 @@ const metadataProcessingQueue = new Map();
 const manifestRelationships = new Map();
 const previewGenerationQueue = new Map();
 
+// Global blacklist for URLs that have failed or reached max processing attempts
+// This prevents repeated console spam for problematic URLs
+const processedUrlBlacklist = new Set();
+
 // Debug logging helper
 function logDebug(...args) {
     console.log('[Video Manager]', new Date().toISOString(), ...args);
@@ -322,18 +326,20 @@ async function addVideoToTab(tabId, videoInfo) {
     
     // Skip known ping/tracking URLs that don't have extracted video URLs
     if ((videoInfo.url.includes('ping.gif') || videoInfo.url.includes('jwpltx.com')) && !videoInfo.foundFromQueryParam) {
-        logDebug('Skipping tracking URL without embedded video URL:', videoInfo.url);
         return;
     }
 
     const normalizedUrl = normalizeUrl(videoInfo.url);
     
+    // Check global blacklist - completely ignore URLs that have failed or reached max attempts
+    const blacklistKey = `${tabId}:${normalizedUrl}`;
+    if (processedUrlBlacklist.has(blacklistKey)) {
+        return; // Silently ignore without logging to prevent console spam
+    }
+    
     // STEP 1: Check if this is a variant of an already known master
-    // This is the fast path - if it's a known variant, we can skip most processing
     const knownRelationship = checkIfVariantOfKnownMaster(videoInfo.url);
     if (knownRelationship && knownRelationship.isVariant) {
-        logDebug(`Skipping processing for ${videoInfo.url} - it's a known variant of ${knownRelationship.masterUrl}`);
-        
         // Still record it in videosPerTab to track all videos, but mark as variant
         const existingVideo = videosPerTab[tabId].get(normalizedUrl);
         
@@ -350,7 +356,6 @@ async function addVideoToTab(tabId, videoInfo) {
             videosPerTab[tabId].set(normalizedUrl, videoInfo);
         }
         
-        // Still broadcast updates to ensure UI is current
         broadcastVideoUpdate(tabId);
         return;
     }
@@ -358,15 +363,9 @@ async function addVideoToTab(tabId, videoInfo) {
     // Get existing video info if any
     const existingVideo = videosPerTab[tabId].get(normalizedUrl);
     
-    // For URLs extracted from query params, use them for deduplication
-    if (videoInfo.foundFromQueryParam) {
-        // Log the original source URL that contained this video URL
-        if (videoInfo.originalUrl) {
-            logDebug('Using extracted URL instead of original tracking URL:', videoInfo.url, 
-                    'extracted from:', videoInfo.originalUrl);
-        } else {
-            logDebug('Found video URL in query parameter:', videoInfo.url);
-        }
+    // Check if this video is already fully processed, nothing to do
+    if (existingVideo && existingVideo.alreadyProcessed) {
+        return;
     }
     
     // Check if this is actually a new video
@@ -374,7 +373,6 @@ async function addVideoToTab(tabId, videoInfo) {
     
     // Merge with existing data if present
     if (existingVideo) {
-        logDebug('Updating existing video:', normalizedUrl);
         videoInfo = {
             ...existingVideo,
             ...videoInfo,
@@ -393,13 +391,12 @@ async function addVideoToTab(tabId, videoInfo) {
             variants: existingVideo.variants || videoInfo.variants
         };
     } else {
-        logDebug('Adding new video:', normalizedUrl);
         videoInfo.timestamp = Date.now();
     }
     
-    // Store video info
+    // Mark as processed now to avoid race conditions with async operations
+    videoInfo.alreadyProcessed = true;
     videosPerTab[tabId].set(normalizedUrl, videoInfo);
-    logDebug('Current video count for tab', tabId, ':', videosPerTab[tabId].size);
     
     // STEP 2: Process HLS/DASH playlists to identify master-variant relationships
     if ((videoInfo.type === 'hls' || videoInfo.type === 'dash') && 
@@ -411,10 +408,6 @@ async function addVideoToTab(tabId, videoInfo) {
             
             // If the video was enhanced with relationship info, update it
             if (processedVideo !== videoInfo) {
-                logDebug('Video was processed and enhanced with relationship data:', 
-                         processedVideo.isVariant ? 'Is variant' : 
-                         processedVideo.isMasterPlaylist ? 'Is master playlist' : 'No relationships');
-                
                 // Update in our collection
                 videosPerTab[tabId].set(normalizedUrl, processedVideo);
                 videoInfo = processedVideo;
@@ -434,6 +427,10 @@ async function addVideoToTab(tabId, videoInfo) {
             }
         } catch (error) {
             console.error('Error processing video relationships:', error);
+            // For DASH manifests that fail, add to blacklist to prevent repeated processing
+            if (videoInfo.type === 'dash' && videoInfo.url.includes('.mpd')) {
+                processedUrlBlacklist.add(blacklistKey);
+            }
         }
     }
     
@@ -454,8 +451,6 @@ async function addVideoToTab(tabId, videoInfo) {
         }
         playlistsPerTab[tabId].add(normalizedUrl);
     }
-    
-    console.log(`Added ${videoInfo.type} video to tab ${tabId}:`, videoInfo.url);
     
     // After processing relationships, group videos and broadcast update
     if (isNewVideo) {
