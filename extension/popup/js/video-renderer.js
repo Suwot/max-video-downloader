@@ -452,6 +452,10 @@ export function createVideoElement(video) {
     if (video.resolution || (video.mediaInfo && (video.mediaInfo.width || video.mediaInfo.height))) {
         // Build resolution text from available info
         const resolutionText = formatResolution(
+            video.resolution.width,
+            video.resolution.height,
+            video.resolution.fps,
+            video.resolution.bitrate,
             video.resolution || 
             video.mediaInfo
         );
