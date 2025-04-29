@@ -11,7 +11,7 @@
  */
 
 import { debounce, formatQualityLabel, formatQualityDetails } from './utilities.js';
-import { getCurrentTheme, setCurrentTheme, getAllGroupStates, setScrollPosition } from './state.js';
+import { getCurrentTheme, setCurrentTheme, getAllGroupStates } from './state.js';
 import { updateVideoList } from './video-fetcher.js';
 
 // Reusable tooltip element
@@ -183,6 +183,15 @@ export function initializeUI() {
         themeToggle,
         refreshContainer
     };
+}
+
+/**
+ * Local implementation of scroll position tracking using localStorage
+ * @param {number} position - Scroll position to save
+ */
+function setScrollPosition(position) {
+    // Use localStorage directly instead of the state management system
+    localStorage.setItem('popupScrollPosition', position.toString());
 }
 
 /**

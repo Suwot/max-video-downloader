@@ -18,11 +18,10 @@
 // popup/js/video-renderer.js
 
 import { getFilenameFromUrl, formatResolution, formatDuration, normalizeUrl } from './utilities.js';
-import { getScrollPosition, getAllGroupStates, setGroupState, getAllVideoGroups, getPosterFromCache, addPosterToCache } from './state.js';
+import { getAllGroupStates, setGroupState, getAllVideoGroups, getPosterFromCache, addPosterToCache } from './state.js';
 import { groupVideosByType } from './video-processor.js';
 import { handleDownload } from './download.js';
 import { generatePreview } from './preview.js';
-import { restoreScrollPosition } from './ui.js';
 import { showQualityDialog } from './ui.js';
 import { getStreamQualities } from './video-processor.js';
 
@@ -86,6 +85,16 @@ function isValidVideoForRendering(video) {
         console.error('Error validating video for rendering:', e, video);
         return false;
     }
+}
+
+/**
+ * Get the current scroll position from the videos container
+ * Local replacement for the removed state.js function
+ * @returns {number} Current scroll position
+ */
+function getScrollPosition() {
+    const container = document.getElementById('videos');
+    return container ? container.scrollTop : 0;
 }
 
 /**

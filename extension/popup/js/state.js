@@ -45,7 +45,6 @@ const masterPlaylistCache = CacheFactory.createMasterPlaylistCache(MAX_MASTER_PL
 
 // State variables
 let cachedVideos = null;
-let scrollPosition = 0;
 let videoGroups = {};
 let groupState = {}; 
 let currentTheme = 'dark';
@@ -480,15 +479,6 @@ export function setCurrentTheme(theme) {
     chrome.storage.sync.set({ theme }).catch(error => {
         handleError('Storage', 'setting theme', error);
     });
-}
-
-// Scroll position management
-export function getScrollPosition() {
-    return scrollPosition;
-}
-
-export function setScrollPosition(position) {
-    scrollPosition = position;
 }
 
 // Cache management

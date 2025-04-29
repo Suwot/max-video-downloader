@@ -19,8 +19,6 @@
 import {
     getCachedVideos,
     setCachedVideos,
-    getScrollPosition,
-    setScrollPosition,
     hasResolutionCache, 
     getResolutionFromCache,
     addResolutionToCache,
@@ -111,11 +109,6 @@ export async function updateVideoList(forceRefresh = false, tabId = null) {
         clearHLSRelationships();
         clearMasterPlaylists(); // Clear the centralized master playlist cache
         clearManifestCaches(); // Clear manifest service caches
-    }
-    
-    // Save current scroll position
-    if (container.scrollTop) {
-        setScrollPosition(container.scrollTop);
     }
     
     // Check if we already have a tab ID, otherwise get the current tab
