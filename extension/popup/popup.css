@@ -170,39 +170,6 @@ body.theme-light {
     align-items: center;
 }
 
-/* Refresh button */
-.refresh-button {
-    display: flex;
-    align-items: center;
-    background-color: #1976D2;
-    color: white;
-    border: none;
-    border-radius: 3px;
-    padding: 3px 10px 3px 8px;
-    font-size: 13px;
-    cursor: pointer;
-    transition: background-color 0.2s;
-    min-width: 85px;  /* Fixed width closer to original size */
-    height: 28px;     /* Slightly smaller height */
-    position: relative;
-    text-align: left;
-}
-
-.refresh-button svg {
-    fill: white !important;
-    flex-shrink: 0;
-    margin-right: 4px;
-}
-
-.refresh-button:hover {
-    background-color: #1565C0;
-}
-
-.refresh-button.loading {
-    opacity: 0.7;
-    cursor: wait;
-}
-
 /* Clear Cache button */
 .clear-cache-button {
     display: flex;
@@ -1222,12 +1189,12 @@ body.theme-light {
 }
 
 @media (max-width: 400px) {
-    .refresh-button, .clear-cache-button {
+    .clear-cache-button {
         padding: 4px 6px;
         font-size: 11px;
     }
     
-    .refresh-button svg, .clear-cache-button svg {
+    .clear-cache-button svg {
         width: 14px;
         height: 14px;
     }
