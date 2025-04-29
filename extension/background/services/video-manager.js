@@ -120,7 +120,8 @@ function processVideosForBroadcast(videos) {
             title: video.title || getFilenameFromUrl(video.url),
             poster: video.poster || video.previewUrl || null,
             downloadable: true,
-            // Add source information to track where the video came from
+            // Preserve source information or default to 'background'
+            // This indicates whether video was detected by content_script or background
             source: video.source || 'background',
             // Track if this was added via background processing while popup was closed
             detectedWhilePopupClosed: true

@@ -522,6 +522,28 @@ body.theme-light {
     background-color: #7f7f7f;
 }
 
+/* Source badge styles */
+.source-badge {
+    position: absolute;
+    top: 4px;
+    left: 4px;
+    padding: 2px 4px;
+    border-radius: 3px;
+    font-size: 8px;
+    font-weight: bold;
+    color: white;
+    background-color: rgba(0, 0, 0, 0.7);
+    z-index: 1;
+}
+
+.source-badge.content_script {
+    background-color: #4caf50;
+}
+
+.source-badge.background {
+    background-color: #ff9800;
+}
+
 /* Info column */
 .info-column {
     flex: 1;
@@ -666,6 +688,33 @@ body.theme-light {
 
 .theme-light .media-type-info svg {
     fill: #666;
+}
+
+/* Source info styles */
+.source-info {
+    display: inline-flex;
+    align-items: center;
+    padding: 1px 4px;
+    border-radius: 3px;
+    font-size: 10px;
+    white-space: nowrap;
+    margin-left: 8px;
+}
+
+.theme-dark .source-info {
+    background-color: rgba(255,255,255,0.1);
+}
+
+.theme-light .source-info {
+    background-color: rgba(0,0,0,0.05);
+}
+
+.source-info.content_script {
+    color: #4caf50;
+}
+
+.source-info.background {
+    color: #ff9800;
 }
 
 /* Codec info */

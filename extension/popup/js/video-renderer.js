@@ -252,6 +252,12 @@ export function createVideoElement(video) {
     typeBadge.textContent = video.type ? video.type.toUpperCase() : 'UNKNOWN';
     previewContainer.appendChild(typeBadge);
     
+    // Add source badge (content_script or background)
+    const sourceBadge = document.createElement('div');
+    sourceBadge.className = `source-badge ${video.source || 'background'}`;
+    sourceBadge.textContent = video.source === 'content_script' ? 'CS' : 'BG';
+    previewContainer.appendChild(sourceBadge);
+    
     const loader = document.createElement('div');
     loader.className = 'loader';
     loader.style.display = 'block'; // Always show loader initially
@@ -432,6 +438,12 @@ export function createVideoElement(video) {
     const mediaTypeContainer = document.createElement('div');
     mediaTypeContainer.className = 'media-type-container';
     mediaTypeContainer.appendChild(mediaTypeInfo);
+    
+    // Add source indicator to media type container
+    const sourceInfo = document.createElement('div');
+    sourceInfo.className = `source-info ${video.source || 'background'}`;
+    sourceInfo.textContent = video.source === 'content_script' ? 'From Page' : 'From Background';
+    mediaTypeContainer.appendChild(sourceInfo);
     
     // Always create codec-info element even if we don't have codec details yet
     const codecInfo = document.createElement('div');

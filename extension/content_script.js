@@ -330,7 +330,7 @@ function sendVideoToBackground(url, source, additionalInfo = {}) {
     chrome.runtime.sendMessage({
         action: 'addVideo',
         url: url,
-        source: source,
+        source: 'content_script', // Explicitly set source as content_script
         type: type,
         foundFromQueryParam: foundFromQueryParam,
         ...additionalInfo
@@ -929,7 +929,10 @@ function notifyBackground(videos) {
     // any open popups AND the background script will also be notified
     chrome.runtime.sendMessage({
         action: 'newVideoDetected',
-        videos: validVideos,
+        videos: validVideos.map(video => ({
+            ...video,
+            source: 'content_script' // Explicitly set source for all videos
+        })),
         timestamp: Date.now()
     }).catch(err => {
         // Suppress errors when popup is not open
