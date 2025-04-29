@@ -33,6 +33,8 @@ initTabTracking();
 
 // Handle port connections
 chrome.runtime.onConnect.addListener(port => {
+    console.log('Background woke up: port connected:', port.name);
+    
     // Create unique port ID
     const portId = Date.now().toString();
     
@@ -114,3 +116,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 });
 
 logDebug('Background script initialized');
+
+// Listen for when the service worker is about to be suspended
+chrome.runtime.onSuspend.addListener(() => {
+  console.log('Background going to sleep...');
+});
