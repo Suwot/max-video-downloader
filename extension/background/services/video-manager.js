@@ -10,6 +10,14 @@ import { validateAndFilterVideos, filterRedundantVariants } from '../../js/utili
 import { processVideoRelationships } from '../../js/manifest-service.js';
 import { getActivePopupPortForTab } from './popup-ports.js';
 
+// Track masters and their variants across all tabs
+// Key: normalized master URL, Value: array of normalized variant URLs
+const knownMasters = new Map();
+
+// Track which variants are linked to which masters
+// Key: normalized variant URL, Value: normalized master URL
+const variantToMaster = new Map();
+
 const videosPerTab = {};
 const playlistsPerTab = {};
 const metadataProcessingQueue = new Map();
@@ -302,6 +310,33 @@ async function addVideoToTab(tabId, videoInfo) {
 
     const normalizedUrl = normalizeUrl(videoInfo.url);
     
+    // STEP 1: Check if this is a variant of an already known master
+    // This is the fast path - if it's a known variant, we can skip most processing
+    const knownRelationship = checkIfVariantOfKnownMaster(videoInfo.url);
+    if (knownRelationship && knownRelationship.isVariant) {
+        logDebug(`Skipping processing for ${videoInfo.url} - it's a known variant of ${knownRelationship.masterUrl}`);
+        
+        // Still record it in videosPerTab to track all videos, but mark as variant
+        const existingVideo = videosPerTab[tabId].get(normalizedUrl);
+        
+        if (existingVideo) {
+            // Update existing entry, keeping its properties but marking as variant
+            existingVideo.isVariant = true;
+            existingVideo.masterPlaylistUrl = knownRelationship.masterUrl;
+            videosPerTab[tabId].set(normalizedUrl, existingVideo);
+        } else {
+            // Add new entry but marked as variant
+            videoInfo.isVariant = true;
+            videoInfo.masterPlaylistUrl = knownRelationship.masterUrl;
+            videoInfo.timestamp = Date.now();
+            videosPerTab[tabId].set(normalizedUrl, videoInfo);
+        }
+        
+        // Still broadcast updates to ensure UI is current
+        broadcastVideoUpdate(tabId);
+        return;
+    }
+    
     // Get existing video info if any
     const existingVideo = videosPerTab[tabId].get(normalizedUrl);
     
@@ -333,7 +368,11 @@ async function addVideoToTab(tabId, videoInfo) {
             poster: videoInfo.poster || existingVideo.poster,
             title: videoInfo.title || existingVideo.title,
             // Preserve or update foundFromQueryParam flag
-            foundFromQueryParam: videoInfo.foundFromQueryParam || existingVideo.foundFromQueryParam
+            foundFromQueryParam: videoInfo.foundFromQueryParam || existingVideo.foundFromQueryParam,
+            // Preserve variant/master status if it was set already
+            isVariant: existingVideo.isVariant || videoInfo.isVariant,
+            isMasterPlaylist: existingVideo.isMasterPlaylist || videoInfo.isMasterPlaylist,
+            variants: existingVideo.variants || videoInfo.variants
         };
     } else {
         logDebug('Adding new video:', normalizedUrl);
@@ -344,9 +383,10 @@ async function addVideoToTab(tabId, videoInfo) {
     videosPerTab[tabId].set(normalizedUrl, videoInfo);
     logDebug('Current video count for tab', tabId, ':', videosPerTab[tabId].size);
     
-    // Use the centralized manifest service to check for and process relationships
-    if (!videoInfo.isVariant && !videoInfo.isMasterPlaylist && 
-        (videoInfo.type === 'hls' || videoInfo.type === 'dash')) {
+    // STEP 2: Process HLS/DASH playlists to identify master-variant relationships
+    if ((videoInfo.type === 'hls' || videoInfo.type === 'dash') && 
+        !videoInfo.isVariant && !videoInfo.isMasterPlaylist) {
+        
         try {
             // Process this video to check for master-variant relationships
             const processedVideo = await processVideoRelationships(videoInfo);
@@ -357,17 +397,30 @@ async function addVideoToTab(tabId, videoInfo) {
                          processedVideo.isVariant ? 'Is variant' : 
                          processedVideo.isMasterPlaylist ? 'Is master playlist' : 'No relationships');
                 
-                // Update in collection
+                // Update in our collection
                 videosPerTab[tabId].set(normalizedUrl, processedVideo);
                 videoInfo = processedVideo;
+                
+                // STEP 3: If this is a master playlist, register its relationships globally
+                if (processedVideo.isMasterPlaylist && processedVideo.variants && 
+                    processedVideo.variants.length > 0) {
+                    
+                    registerMasterVariantRelationship(
+                        processedVideo.url, 
+                        processedVideo.variants
+                    );
+                    
+                    // Re-evaluate other videos to check if any are actually variants of this master
+                    reevaluateStandaloneVideos(tabId, processedVideo.url, processedVideo.variants);
+                }
             }
         } catch (error) {
             console.error('Error processing video relationships:', error);
         }
     }
     
-    // Add to metadata processing queue
-    if (!metadataProcessingQueue.has(normalizedUrl)) {
+    // Add to metadata processing queue if it's not a variant
+    if (!videoInfo.isVariant && !metadataProcessingQueue.has(normalizedUrl)) {
         metadataProcessingQueue.set(normalizedUrl, {
             ...videoInfo,
             tabId,
@@ -376,8 +429,8 @@ async function addVideoToTab(tabId, videoInfo) {
         processMetadataQueue();
     }
     
-    // For HLS playlists, also add to that specific collection
-    if (videoInfo.type === 'hls' && videoInfo.url.includes('.m3u8')) {
+    // For HLS playlists, also add to that specific collection if it's not a variant
+    if (!videoInfo.isVariant && videoInfo.type === 'hls' && videoInfo.url.includes('.m3u8')) {
         if (!playlistsPerTab[tabId]) {
             playlistsPerTab[tabId] = new Set();
         }
@@ -391,12 +444,19 @@ async function addVideoToTab(tabId, videoInfo) {
         // Apply automatic grouping and filtering before broadcasting
         broadcastVideoUpdate(tabId);
         
-        // Generate preview proactively for the new video if it doesn't have one already
-        if (!videoInfo.previewUrl && !videoInfo.poster) {
+        // Only generate previews for videos that:
+        // 1. Don't already have a preview
+        // 2. Aren't variants of a master playlist 
+        // 3. Don't have a poster image already
+        if (!videoInfo.isVariant && !videoInfo.previewUrl && !videoInfo.poster) {
             logDebug('Proactively generating preview for newly detected video:', normalizedUrl);
             generatePreview(videoInfo.url, tabId).catch(error => {
                 console.error('Error generating preview:', error);
             });
+        } else if (videoInfo.isVariant) {
+            logDebug('Skipping preview generation for variant video:', normalizedUrl);
+        } else if (videoInfo.previewUrl || videoInfo.poster) {
+            logDebug('Skipping preview generation, video already has preview/poster:', normalizedUrl);
         }
     }
 }
@@ -453,23 +513,29 @@ async function generatePreview(url, tabId) {
  * @param {Object} videoInfo - Video information object
  */
 function notifyPreviewReady(tabId, videoUrl, previewUrl, videoInfo) {
-    // Import getActivePopupPortForTab without using dynamic imports to avoid performance overhead
-    const port = getActivePopupPortForTab(tabId);
-    
-    // Check if a popup is open for this tab
-    if (port) {
-        try {
+    try {
+        // Check if a popup is open for this tab
+        const port = getActivePopupPortForTab(tabId);
+        
+        if (port) {
             logDebug(`Notifying popup for tab ${tabId} about new preview for ${videoUrl}`);
             
-            port.postMessage({
-                type: 'previewReady',
-                videoUrl: videoUrl,
-                previewUrl: previewUrl,
-                videoId: videoInfo.id || videoUrl // Use ID if available, otherwise URL as ID
-            });
-        } catch (error) {
-            logDebug(`Error notifying popup about preview: ${error.message}`);
+            try {
+                port.postMessage({
+                    type: 'previewReady',
+                    videoUrl: videoUrl,
+                    previewUrl: previewUrl,
+                    videoId: videoInfo.id || videoUrl // Use ID if available, otherwise URL as ID
+                });
+            } catch (error) {
+                logDebug(`Error sending preview notification: ${error.message}`);
+            }
+        } else {
+            // No popup is open for this tab, which is normal - just log it
+            logDebug(`No active popup for tab ${tabId}, preview update will be shown when popup opens`);
         }
+    } catch (error) {
+        logDebug(`Error in notifyPreviewReady: ${error.message}`);
     }
 }
 
@@ -496,34 +562,57 @@ function getVideosForTab(tabId) {
         return [];
     }
     
-    // Convert Map to Array for sending
-    const videos = Array.from(videosPerTab[tabId].values());
-    videos.sort((a, b) => b.timestamp - a.timestamp);
+    // Convert Map to Array for processing
+    const allVideos = Array.from(videosPerTab[tabId].values());
     
-    return videos;
+    // Filter out variants that have a known master in this tab
+    const filteredVideos = allVideos.filter(video => {
+        // If this is already marked as a variant, check if its master exists in this tab
+        if (video.isVariant && video.masterPlaylistUrl) {
+            const normalizedMasterUrl = normalizeUrl(video.masterPlaylistUrl);
+            // Only include if no master exists in this tab
+            const masterExists = allVideos.some(v => normalizeUrl(v.url) === normalizedMasterUrl);
+            return !masterExists; // Skip if master exists
+        }
+        
+        // Check against our global registry
+        const normalizedUrl = normalizeUrl(video.url);
+        if (variantToMaster.has(normalizedUrl)) {
+            const masterUrl = variantToMaster.get(normalizedUrl);
+            // Check if this master exists in current tab
+            const masterExistsInTab = allVideos.some(v => normalizeUrl(v.url) === masterUrl);
+            return !masterExistsInTab; // Skip if master exists
+        }
+        
+        // Include all non-variant videos
+        return true;
+    });
+    
+    // Sort by newest first
+    const sortedVideos = filteredVideos.sort((a, b) => b.timestamp - a.timestamp);
+    
+    logDebug(`Filtered videos for tab ${tabId}: ${allVideos.length} → ${filteredVideos.length}`);
+    return sortedVideos;
 }
 
 // Get playlists for tab
 function getPlaylistsForTab(tabId) {
-    return playlistsPerTab[tabId] ? Array.from(playlistsPerTab[tabId]) : [];
+    if (!playlistsPerTab[tabId] || playlistsPerTab[tabId].size === 0) {
+        return [];
+    }
+    
+    return Array.from(playlistsPerTab[tabId]);
 }
 
-// Helper function to fetch manifest content
+// Fetch manifest content
 async function fetchManifestContent(url) {
     try {
-        const response = await fetch(url, {
-            credentials: 'include',
-            mode: 'cors',
-            headers: {
-                'Accept': '*/*'
-            }
-        });
-        
+        const response = await fetch(url);
         if (!response.ok) {
-            throw new Error(`Failed to fetch manifest: ${response.status} ${response.statusText}`);
+            throw new Error(`Failed to fetch manifest: ${response.statusText}`);
         }
-        
-        return await response.text();
+        const content = await response.text();
+        return content;
     } catch (error) {
         console.error('Error fetching manifest:', error);
         if (error instanceof TypeError && error.message === 'Failed to fetch') {
@@ -570,6 +659,100 @@ function cleanupForTab(tabId) {
     }
 }
 
+/**
+ * Register a relationship between a master playlist and its variants
+ * @param {string} masterUrl - URL of the master playlist
+ * @param {Array} variants - Array of variant URLs or objects with url property
+ */
+function registerMasterVariantRelationship(masterUrl, variants) {
+    const normalizedMasterUrl = normalizeUrl(masterUrl);
+    
+    // Normalize variant URLs
+    const normalizedVariants = variants.map(variant => {
+        if (typeof variant === 'string') {
+            return normalizeUrl(variant);
+        } else if (variant && variant.url) {
+            return normalizeUrl(variant.url);
+        }
+        return null;
+    }).filter(Boolean); // Remove null values
+    
+    // Store in knownMasters map
+    knownMasters.set(normalizedMasterUrl, normalizedVariants);
+    
+    // Update reverse lookup
+    normalizedVariants.forEach(variantUrl => {
+        variantToMaster.set(variantUrl, normalizedMasterUrl);
+    });
+    
+    logDebug(`Registered master playlist ${normalizedMasterUrl} with ${normalizedVariants.length} variants`);
+    
+    return normalizedVariants;
+}
+
+/**
+ * Check if a URL is a variant of any known master playlist
+ * @param {string} url - URL to check
+ * @returns {Object|null} Master relationship info or null if not a variant
+ */
+function checkIfVariantOfKnownMaster(url) {
+    const normalizedUrl = normalizeUrl(url);
+    
+    // Check direct lookup first (fastest)
+    if (variantToMaster.has(normalizedUrl)) {
+        const masterUrl = variantToMaster.get(normalizedUrl);
+        return { 
+            isVariant: true, 
+            masterUrl 
+        };
+    }
+    
+    // No known relationship
+    return null;
+}
+
+/**
+ * Re-evaluate all standalone videos to check if any are variants of the newly added master
+ * @param {number} tabId - Tab ID
+ * @param {string} masterUrl - Master playlist URL
+ * @param {Array} variants - Array of variant URLs
+ */
+function reevaluateStandaloneVideos(tabId, masterUrl, variants) {
+    if (!videosPerTab[tabId]) return;
+    
+    const normalizedMasterUrl = normalizeUrl(masterUrl);
+    const normalizedVariants = variants.map(v => 
+        typeof v === 'string' ? normalizeUrl(v) : normalizeUrl(v.url)
+    ).filter(Boolean);
+    
+    // Check each video in this tab
+    let updatedRelationships = false;
+    videosPerTab[tabId].forEach((video, videoUrl) => {
+        // Skip the master itself
+        if (normalizeUrl(videoUrl) === normalizedMasterUrl) return;
+        
+        // Skip already known variants
+        if (video.isVariant) return;
+        
+        // Check if this video is a variant of the new master
+        const normalizedVideoUrl = normalizeUrl(videoUrl);
+        if (normalizedVariants.includes(normalizedVideoUrl)) {
+            // Mark this video as a variant
+            video.isVariant = true;
+            video.masterPlaylistUrl = masterUrl;
+            videosPerTab[tabId].set(videoUrl, video);
+            
+            logDebug(`Re-evaluated: ${videoUrl} is now marked as a variant of ${masterUrl}`);
+            updatedRelationships = true;
+        }
+    });
+    
+    // Broadcast update if any relationships were updated
+    if (updatedRelationships) {
+        broadcastVideoUpdate(tabId);
+    }
+}
+
 export {
     addVideoToTab,
     broadcastVideoUpdate,
@@ -581,5 +764,8 @@ export {
     storeManifestRelationship,
     getManifestRelationship,
     cleanupForTab,
-    normalizeUrl
+    normalizeUrl,
+    registerMasterVariantRelationship,
+    checkIfVariantOfKnownMaster,
+    reevaluateStandaloneVideos
 };
