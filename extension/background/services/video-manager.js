@@ -90,9 +90,22 @@ function processVideosForBroadcast(videos) {
     filteredVideos.forEach(video => {
         const normalizedUrl = normalizeUrl(video.url);
         
+        // SKIP if it's explicitly marked as a variant
+        if (video.isVariant) {
+            logDebug(`Skipping explicitly marked variant ${video.url}`);
+            return;
+        }
+        
         // SKIP if it's a variant URL that was listed under a master playlist
         if (variantUrls.has(normalizedUrl)) {
             logDebug(`Skipping variant ${video.url} because it's a known variant of a master`);
+            return;
+        }
+        
+        // SKIP if it's in our global variant registry and the master is in this batch
+        if (variantToMaster.has(normalizedUrl)) {
+            const masterUrl = variantToMaster.get(normalizedUrl);
+            logDebug(`Skipping variant ${video.url} (matched to master ${masterUrl})`);
             return;
         }
         
@@ -176,7 +189,11 @@ function processVideosForBroadcast(videos) {
         processedVideos.push(enhancedVideo);
     });
     
-    logDebug(`Filtered videos: ${validatedVideos.length} input → ${processedVideos.length} output (${masterUrls.size} masters, ${variantUrls.size} variants)`);
+    // Log filtering stats with more detail
+    const variantCount = variantUrls.size + variantToMaster.size;
+    logDebug(`Filtered videos: ${validatedVideos.length} input → ${processedVideos.length} output ` +
+             `(${masterUrls.size} masters, ${variantCount} variants total)`);
+    
     return processedVideos;
 }
 
@@ -676,6 +693,23 @@ function registerMasterVariantRelationship(masterUrl, variants) {
         }
         return null;
     }).filter(Boolean); // Remove null values
+    
+    // Enhanced logging - show master and all of its variants
+    console.log(`🎮 MASTER PLAYLIST FOUND: ${masterUrl}`);
+    console.log(`🎮 Normalized master URL: ${normalizedMasterUrl}`);
+    console.log(`🎮 Found ${normalizedVariants.length} variants:`);
+    normalizedVariants.forEach((variantUrl, index) => {
+        console.log(`🎮   [${index + 1}] ${variantUrl}`);
+        
+        // Also log original URL if available
+        const originalUrl = variants[index];
+        if (typeof originalUrl === 'object' && originalUrl.url) {
+            console.log(`🎮       Original: ${originalUrl.url}`);
+            if (originalUrl.height) {
+                console.log(`🎮       Quality: ${originalUrl.height}p${originalUrl.fps ? ` ${originalUrl.fps}fps` : ''}`);
+            }
+        }
+    });
     
     // Store in knownMasters map
     knownMasters.set(normalizedMasterUrl, normalizedVariants);
