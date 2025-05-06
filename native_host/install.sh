@@ -4,8 +4,8 @@
 # Get the absolute path of the script directory
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
-# Create path to index.js
-HOST_PATH="$DIR/index.js"
+# Create path to host executable (not index.js)
+HOST_PATH="$DIR/host"
 
 # Hardcoded extension ID - no need to prompt
 EXTENSION_ID="bkblnddclhmmgjlmbofhakhhbklkcofd"
@@ -42,7 +42,7 @@ else
     exit 1
 fi
 
-# Make sure index.js is executable
+# Make sure host script is executable
 chmod +x "$HOST_PATH"
 
 echo "Installation complete!"

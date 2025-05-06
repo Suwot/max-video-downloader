@@ -1,7 +1,7 @@
 {
   "name": "com.mycompany.ffmpeg",
   "description": "Video Downloader Native Host",
-  "path": "/Users/sellavi/Desktop/Codes/video-downloader-mv3/native_host/index.js",
+  "path": "/Users/sellavi/Desktop/Codes/video-downloader-mv3/native_host/host",
   "type": "stdio",
   "allowed_origins": [
     "chrome-extension://bkblnddclhmmgjlmbofhakhhbklkcofd/"
