@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Video Store Test Page</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+      background-color: #f5f5f5;
+    }
+    h1 {
+      color: #333;
+    }
+    .control-panel {
+      background-color: #fff;
+      padding: 15px;
+      border-radius: 5px;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+      margin-bottom: 20px;
+    }
+    button {
+      padding: 8px 15px;
+      background-color: #4285f4;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      margin-right: 10px;
+      margin-bottom: 10px;
+    }
+    button:hover {
+      background-color: #3367d6;
+    }
+    .test-videos {
+      margin-top: 20px;
+    }
+    pre {
+      background-color: #eee;
+      padding: 10px;
+      border-radius: 4px;
+      overflow: auto;
+      max-height: 300px;
+    }
+    .hidden {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <h1>Video Store Test Page</h1>
+  
+  <div class="control-panel">
+    <h2>Control Panel</h2>
+    <div>
+      <button id="btnAddTestVideos">Add Test Videos</button>
+      <button id="btnGetVideos">Get Videos from Store</button>
+      <button id="btnClearVideos">Clear Videos</button>
+    </div>
+    <div class="test-videos">
+      <h3>Test Video URLs</h3>
+      <textarea id="testUrls" rows="5" style="width: 100%">https://example.com/video1.mp4
+https://example.com/video2.m3u8
+https://example.com/video3.mpd</textarea>
+    </div>
+  </div>
+  
+  <div id="results">
+    <h2>Results</h2>
+    <pre id="output">No results yet.</pre>
+  </div>
+  
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      // Get references to UI elements
+      const btnAddTestVideos = document.getElementById('btnAddTestVideos');
+      const btnGetVideos = document.getElementById('btnGetVideos');
+      const btnClearVideos = document.getElementById('btnClearVideos');
+      const testUrls = document.getElementById('testUrls');
+      const output = document.getElementById('output');
+      
+      // Get the current tab ID
+      let currentTabId = null;
+      chrome.tabs.query({ active: true, currentWindow: true }, function(tabs) {
+        if (tabs[0]) {
+          currentTabId = tabs[0].id;
+          log(`Current tab ID: ${currentTabId}`);
+        }
+      });
+      
+      // Add test videos button
+      btnAddTestVideos.addEventListener('click', function() {
+        if (!currentTabId) {
+          log('No tab ID available.');
+          return;
+        }
+        
+        const urls = testUrls.value.split('\n').filter(url => url.trim());
+        if (urls.length === 0) {
+          log('No URLs to add.');
+          return;
+        }
+        
+        log(`Adding ${urls.length} test videos to tab ${currentTabId}...`);
+        
+        // Send each URL to the background script
+        urls.forEach((url, index) => {
+          const type = getVideoType(url);
+          
+          // Create a message to send to the background script
+          const videoInfo = {
+            url: url.trim(),
+            type: type,
+            title: `Test Video ${index + 1}`,
+            source: 'test',
+            detectionTimestamp: new Date().toISOString()
+          };
+          
+          // Log the message we're sending
+          log(`Sending video: ${JSON.stringify(videoInfo)}`);
+          
+          // Send the message to the background script
+          chrome.runtime.sendMessage({
+            action: 'newVideoDetected',
+            videos: [videoInfo],
+            tabId: currentTabId
+          });
+        });
+        
+        log('All test videos added.');
+      });
+      
+      // Get videos button
+      btnGetVideos.addEventListener('click', function() {
+        if (!currentTabId) {
+          log('No tab ID available.');
+          return;
+        }
+        
+        log('Requesting videos from store...');
+        
+        // Request videos from the store
+        chrome.runtime.sendMessage(
+          { action: 'getVideosFromStore', tabId: currentTabId },
+          function(response) {
+            if (chrome.runtime.lastError) {
+              log(`Error: ${chrome.runtime.lastError.message}`);
+              return;
+            }
+            
+            if (response && response.videos) {
+              log(`Received ${response.videos.length} videos from store.`);
+              log(JSON.stringify(response.videos, null, 2));
+            } else {
+              log('No videos received.');
+            }
+          }
+        );
+      });
+      
+      // Clear videos button
+      btnClearVideos.addEventListener('click', function() {
+        if (!currentTabId) {
+          log('No tab ID available.');
+          return;
+        }
+        
+        // Clear the store for this tab
+        chrome.runtime.sendMessage(
+          { action: 'clearVideosForTab', tabId: currentTabId },
+          function(response) {
+            log('Cleared videos for tab.');
+          }
+        );
+      });
+      
+      // Helper function to log to the output
+      function log(message) {
+        if (typeof message === 'object') {
+          message = JSON.stringify(message, null, 2);
+        }
+        output.textContent += '\n' + message;
+        
+        // Scroll to bottom
+        output.scrollTop = output.scrollHeight;
+      }
+      
+      // Helper function to determine video type
+      function getVideoType(url) {
+        if (url.includes('.m3u8')) {
+          return 'hls';
+        } else if (url.includes('.mpd')) {
+          return 'dash';
+        } else if (/\.(mp4|webm|ogg|mov)(\?|$)/i.test(url)) {
+          return 'direct';
+        } else {
+          return 'unknown';
+        }
+      }
+    });
+  </script>
+</body>
+</html>

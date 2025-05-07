@@ -104,8 +104,8 @@ function getScrollPosition() {
 export async function renderVideos(videos) {
     const container = document.getElementById('videos');
     
-    // Apply final validation filter to ensure we don't show invalid videos
-    videos = videos ? videos.filter(isValidVideoForRendering) : [];
+    // Trust that videos are already filtered by the background service
+    // No filtering should happen in the popup
     
     if (!videos || videos.length === 0) {
         // Use the shared function for showing "no videos" message

@@ -15,10 +15,13 @@
 import { initializeState, getCachedVideos, getCurrentTheme } from './state.js';
 import { applyTheme, initializeUI, setupScrollPersistence, scrollToLastPosition, showLoadingState, hideLoadingState, showNoVideosMessage } from './ui.js';
 import { renderVideos } from './video-renderer.js';
+// Import the store switcher to dynamically choose implementation
+import { getVideoFetcher } from './store-switcher.js';
 
-// Global port connection for communicating with the background script
+// Global variables
 let backgroundPort = null;
 let currentTabId = null;
+let videoFetcher = null; // Will hold the dynamically loaded video fetcher module
 
 /**
  * Establish a connection to the background script
@@ -217,11 +220,17 @@ export function sendPortMessage(message) {
 function requestVideos(forceRefresh = false) {
     if (!currentTabId) return;
     
-    sendPortMessage({ 
-        action: 'getVideos', 
-        tabId: currentTabId,
-        forceRefresh
-    });
+    // Use the dynamically loaded video fetcher
+    if (videoFetcher) {
+        videoFetcher.updateVideoList(forceRefresh, currentTabId);
+    } else {
+        // Fallback to port message if fetcher not loaded
+        sendPortMessage({ 
+            action: 'getVideos', 
+            tabId: currentTabId,
+            forceRefresh
+        });
+    }
 }
 
 // Initialize when DOM is ready
@@ -256,6 +265,27 @@ document.addEventListener('DOMContentLoaded', async () => {
         // Show loading state initially
         showLoadingState('Loading videos...');
         
+        // Dynamically load the appropriate video fetcher module based on our switcher
+        videoFetcher = await getVideoFetcher();
+        console.log('Video fetcher loaded', videoFetcher);
+        
+        // Setup listener for direct message updates from background
+        chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+            console.log('Received runtime message:', message);
+            
+            // Handle video state updates from background
+            if (message.action === 'videoStateUpdated' && message.tabId === currentTabId) {
+                console.log('Background notified popup about video updates');
+                
+                // Request the latest videos - no need to show loader since we already have videos
+                if (videoFetcher) {
+                    videoFetcher.updateVideoList(false, currentTabId);
+                }
+            }
+            
+            return false; // Don't keep the message channel open
+        });
+        
         // STEP 1: Fast render from storage (for immediate display)
         let hasStoredVideos = false;
         try {
@@ -271,8 +301,18 @@ document.addEventListener('DOMContentLoaded', async () => {
             console.error('Error retrieving stored videos:', e);
         }
         
-        // STEP 2: Request fresh videos through port connection
-        requestVideos(!hasStoredVideos);
+        // STEP 2: Request fresh videos through the loaded fetcher
+        if (videoFetcher) {
+            videoFetcher.updateVideoList(!hasStoredVideos, currentTabId);
+            
+            // Start update listener instead of refresh loop
+            if (videoFetcher.startStoreUpdateListener) {
+                videoFetcher.startStoreUpdateListener(currentTabId);
+            }
+        } else {
+            // Fallback to port request if fetcher not available
+            requestVideos(!hasStoredVideos);
+        }
         
         // Check for active downloads from previous popup sessions
         import('./download.js').then(downloadModule => {
@@ -326,7 +366,14 @@ window.addEventListener('unload', () => {
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
         if (tabs[0]) {
             try {
+                // Notify content script
                 chrome.tabs.sendMessage(tabs[0].id, { action: 'popupClosed' });
+                
+                // Also notify background script
+                chrome.runtime.sendMessage({
+                    action: 'popupClosed',
+                    tabId: tabs[0].id
+                });
             } catch (e) {
                 // Suppress errors on unload
             }

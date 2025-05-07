@@ -573,11 +573,19 @@ export function purgeExpiredCaches() {
 /**
  * Clear all caches for a fresh start
  * This completely resets all cached data for testing purposes
+ * @param {boolean} preserveStructure - Whether to preserve master-variant relationships
  * @returns {Promise<boolean>} True if caches were cleared successfully
  */
-export async function clearAllCaches() {
+export async function clearAllCaches(preserveStructure = true) {
     try {
-        logDebug('Clearing all extension caches for fresh testing');
+        logDebug('Clearing extension caches' + (preserveStructure ? ' (preserving structure)' : ''));
+        
+        // Preserve master-variant relationships if requested
+        let masterPlaylistData = null;
+        if (preserveStructure) {
+            masterPlaylistData = Array.from(masterPlaylistCache.getAllValid());
+            logDebug(`Preserving ${masterPlaylistData.length} master-variant relationships`);
+        }
         
         // Reset all in-memory caches
         cachedVideos = null;
@@ -586,19 +594,31 @@ export async function clearAllCaches() {
         streamMetadataCache.clear();
         masterPlaylistCache.clear();
         
-        // Clear all storage caches
+        // Clear storage caches
         await chrome.storage.local.remove([
             'cachedVideos',
             'videosCacheTimestamp',
             'posterCache',
             'videoMetadataCache',
             'streamMetadataCache',
-            'masterPlaylistCache',
             CACHE_VERSION_KEY
         ]);
         
         // Set fresh cache version marker
         await chrome.storage.local.set({ [CACHE_VERSION_KEY]: CACHE_VERSION });
+        
+        // Restore master-variant relationships if we preserved them
+        if (preserveStructure && masterPlaylistData && masterPlaylistData.length > 0) {
+            for (const [masterUrl, playlistData] of masterPlaylistData) {
+                masterPlaylistCache.set(masterUrl, playlistData);
+            }
+            
+            // Also save them to storage for persistence
+            await chrome.storage.local.set({ 
+                'masterPlaylistCache': Object.fromEntries(masterPlaylistData) 
+            });
+            logDebug(`Restored ${masterPlaylistData.length} master-variant relationships`);
+        }
         
         logDebug('All caches cleared successfully');
         return true;
