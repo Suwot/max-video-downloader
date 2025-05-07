@@ -67,11 +67,13 @@ chrome.webRequest.onBeforeRequest.addListener(
                 type = 'direct';
             }
             
-            // Add video
+            // Add video - using 'network' source instead of 'webRequest' to better distinguish 
+            // from page-detected videos for deduplication purposes
             addVideoToTab(details.tabId, {
                 url: url,
                 type: type,
-                source: 'webRequest'
+                source: 'network', // Changed from 'webRequest' to be distinct from 'page' variants
+                detectionTimestamp: new Date().toISOString()
             });
         }
     },
@@ -92,7 +94,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             addVideoToTab(tabId, {
                 url: video.url,
                 type: video.type,
-                source: 'contentScript',
+                source: video.source || 'page', // Ensure consistent 'page' source value
                 poster: video.poster,
                 title: video.title,
                 foundFromQueryParam: video.foundFromQueryParam || false,
@@ -107,6 +109,10 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === 'addVideo') {
         const tabId = sender.tab?.id;
         if (tabId && tabId > 0) {
+            // Ensure source is consistent
+            if (!request.source || request.source === 'content_script') {
+                request.source = 'page';
+            }
             addVideoToTab(tabId, request);
         }
         return false;

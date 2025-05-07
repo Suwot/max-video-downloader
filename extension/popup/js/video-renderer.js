@@ -132,21 +132,29 @@ export async function renderVideos(videos) {
     container.innerHTML = '';
     container.appendChild(fragment);
     
-    // Add CSS for the extracted badge and timestamp if it doesn't exist
+    // Add CSS for the badges, timestamps, and variant indicators
     if (!document.getElementById('custom-badges-style')) {
         const style = document.createElement('style');
         style.id = 'custom-badges-style';
         style.textContent = `
-            .badge.extracted {
+            .badge {
                 display: inline-block;
-                background-color: #2196F3;
-                color: white;
                 font-size: 10px;
                 padding: 2px 6px;
                 border-radius: 10px;
                 margin-left: 8px;
                 vertical-align: middle;
                 font-weight: 500;
+            }
+            
+            .badge.extracted {
+                background-color: #2196F3;
+                color: white;
+            }
+            
+            .badge.variant {
+                background-color: #FF9800;
+                color: white;
             }
             
             .detection-timestamp {
@@ -161,6 +169,81 @@ export async function renderVideos(videos) {
                 font-family: monospace;
                 z-index: 5;
                 cursor: help;
+            }
+            
+            .master-badge {
+                position: absolute;
+                top: 2px;
+                right: 2px;
+                background-color: rgba(76, 175, 80, 0.9);
+                color: white;
+                font-size: 9px;
+                padding: 2px 4px;
+                border-radius: 3px;
+                font-weight: bold;
+                z-index: 5;
+            }
+            
+            .source-badge {
+                position: absolute;
+                bottom: 2px;
+                left: 2px;
+                font-size: 8px;
+                padding: 1px 3px;
+                border-radius: 3px;
+                background-color: rgba(0, 0, 0, 0.6);
+                color: white;
+                z-index: 5;
+            }
+            
+            .source-badge.page {
+                background-color: rgba(33, 150, 243, 0.8);
+            }
+            
+            .source-badge.manifest {
+                background-color: rgba(156, 39, 176, 0.8);
+            }
+            
+            /* Style for master playlists */
+            .video-item.master-playlist {
+                border-left: 3px solid #4CAF50;
+            }
+            
+            /* Style for grouped variants */
+            .video-item.grouped-variant {
+                opacity: 0.7;
+            }
+            
+            /* Style for unclassified variants */
+            .video-item.unclassified-variant {
+                border-left: 3px solid #FF9800;
+            }
+            
+            /* Additional quality info display */
+            .qualities-info {
+                display: inline-block;
+                background-color: rgba(76, 175, 80, 0.1);
+                color: #4CAF50;
+                font-size: 10px;
+                padding: 1px 5px;
+                border-radius: 3px;
+                margin-left: 8px;
+            }
+            
+            /* Source info styles */
+            .source-info {
+                display: inline-block;
+                margin-left: 8px;
+                font-size: 10px;
+                color: #757575;
+            }
+            
+            .source-info.page {
+                color: #2196F3;
+            }
+            
+            .source-info.manifest {
+                color: #9C27B0;
             }
         `;
         document.head.appendChild(style);
@@ -239,6 +322,15 @@ export function createVideoElement(video) {
     element.className = 'video-item';
     element.dataset.url = video.url;
 
+    // Add special classes for grouped/master status
+    if (video.isMasterPlaylist || video.isPlaylist) {
+        element.classList.add('master-playlist');
+    } else if (video.groupedUnderMaster) {
+        element.classList.add('grouped-variant');
+    } else if (video.isUnclassifiedVariant) {
+        element.classList.add('unclassified-variant');
+    }
+
     // Create preview column
     const previewColumn = document.createElement('div');
     previewColumn.className = 'preview-column';
@@ -265,11 +357,20 @@ export function createVideoElement(video) {
     typeBadge.textContent = video.type ? video.type.toUpperCase() : 'UNKNOWN';
     previewContainer.appendChild(typeBadge);
     
-    // Add source badge (content_script or background)
+    // Add source badge (page, manifest, etc.)
     const sourceBadge = document.createElement('div');
     sourceBadge.className = `source-badge ${video.source || 'background'}`;
-    sourceBadge.textContent = video.source === 'content_script' ? 'CS' : 'BG';
+    sourceBadge.textContent = video.source === 'page' ? 'PAGE' : 
+                              video.source === 'manifest' ? 'MANIFEST' : 'BG';
     previewContainer.appendChild(sourceBadge);
+    
+    // Add special badge for master playlists
+    if (video.isMasterPlaylist || video.isPlaylist) {
+        const masterBadge = document.createElement('div');
+        masterBadge.className = 'master-badge';
+        masterBadge.textContent = 'MASTER';
+        previewContainer.appendChild(masterBadge);
+    }
     
     // Add detection timestamp badge if available (for debugging duplicates)
     if (video.detectionTimestamp) {
@@ -370,7 +471,14 @@ export function createVideoElement(video) {
     
     const title = document.createElement('h3');
     title.className = 'video-title';
-    title.textContent = video.title || getFilenameFromUrl(video.url);
+    
+    // Different title formatting for master playlists
+    if (video.isMasterPlaylist || video.isPlaylist) {
+        const qualityCount = video.qualityVariants ? video.qualityVariants.length : 0;
+        title.textContent = `${video.title || getFilenameFromUrl(video.url)} (${qualityCount} qualities)`;
+    } else {
+        title.textContent = video.title || getFilenameFromUrl(video.url);
+    }
     
     // Add extracted badge for videos found in query parameters
     if (video.foundFromQueryParam) {
@@ -378,6 +486,14 @@ export function createVideoElement(video) {
         extractedBadge.className = 'badge extracted';
         extractedBadge.innerHTML = '🔎 Extracted';
         title.appendChild(extractedBadge);
+    }
+    
+    // Add unclassified variant badge
+    if (video.isUnclassifiedVariant) {
+        const variantBadge = document.createElement('span');
+        variantBadge.className = 'badge variant';
+        variantBadge.innerHTML = '⚠️ Variant';
+        title.appendChild(variantBadge);
     }
     
     const copyButton = document.createElement('button');
@@ -472,8 +588,40 @@ export function createVideoElement(video) {
     // Add source indicator to media type container
     const sourceInfo = document.createElement('div');
     sourceInfo.className = `source-info ${video.source || 'background'}`;
-    sourceInfo.textContent = video.source === 'content_script' ? 'From Page' : 'From Background';
+    
+    // Updated source labels
+    if (video.source === 'page') {
+        sourceInfo.textContent = 'From Page';
+    } else if (video.source === 'manifest') {
+        sourceInfo.textContent = 'From Manifest';
+    } else {
+        sourceInfo.textContent = 'From Background';
+    }
+    
     mediaTypeContainer.appendChild(sourceInfo);
+    
+    // For master playlists, show the available qualities
+    if (video.isMasterPlaylist && video.qualityVariants && video.qualityVariants.length > 0) {
+        // Add available qualities badge
+        const qualitiesInfo = document.createElement('div');
+        qualitiesInfo.className = 'qualities-info';
+        
+        // Get the highest quality variant
+        const highestQuality = [...video.qualityVariants].sort((a, b) => 
+            (b.height || 0) - (a.height || 0)
+        )[0];
+        
+        if (highestQuality && highestQuality.height) {
+            qualitiesInfo.textContent = `Up to ${highestQuality.height}p`;
+            if (highestQuality.fps) {
+                qualitiesInfo.textContent += ` ${highestQuality.fps}fps`;
+            }
+        } else {
+            qualitiesInfo.textContent = `${video.qualityVariants.length} Qualities`;
+        }
+        
+        mediaTypeContainer.appendChild(qualitiesInfo);
+    }
     
     // Always create codec-info element even if we don't have codec details yet
     const codecInfo = document.createElement('div');

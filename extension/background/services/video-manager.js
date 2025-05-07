@@ -68,11 +68,15 @@ function processVideosForBroadcast(videos) {
     const processedVideos = [];
     const variantUrls = new Set();
     const masterUrls = new Set();
+    const unclassifiedVariants = new Set();
+    
+    // Create source-based deduplication set
+    const processedUrls = new Set();
     
     // Add a processing timestamp for version tracking
     const processingTimestamp = Date.now();
 
-    // Step 1: Collect ALL master playlists and their variant URLs
+    // Step 1: First pass - Identify all master playlists and their variants
     filteredVideos.forEach(video => {
         if (video.isMasterPlaylist || video.isPlaylist) {
             masterUrls.add(normalizeUrl(video.url));
@@ -88,11 +92,44 @@ function processVideosForBroadcast(videos) {
                 });
             }
         }
+        
+        // Check if this video might be an unclassified variant (HLS/DASH but not a master)
+        if ((video.type === 'hls' || video.type === 'dash') && 
+            !video.isMasterPlaylist && !video.isPlaylist && 
+            !video.groupedUnderMaster && 
+            (video.source === 'page' || video.source === 'content_script')) {
+            
+            // Store it as an unclassified variant - will check in next phase
+            unclassifiedVariants.add(normalizeUrl(video.url));
+            
+            // Also add it to the import unclassifiedVariantsPool for future reference
+            import('../../js/manifest-service.js').then(manifestService => {
+                manifestService.addUnclassifiedVariant(video);
+            }).catch(err => {
+                console.error('Error adding to unclassified variants pool:', err);
+            });
+        }
     });
 
-    // Step 2: Build final list - ONLY include non-variant videos
+    // Step 2: Build final list - ONLY include non-variant videos and master playlists
+    // Sort by source priority: 'manifest' > 'network' > 'page' > 'background'
+    // This ensures we prefer master playlists over variants, and network-detected over page-detected
+    filteredVideos.sort((a, b) => {
+        const sourcePriority = { 'manifest': 4, 'network': 3, 'page': 2, 'background': 1 };
+        const aPriority = sourcePriority[a.source] || 0;
+        const bPriority = sourcePriority[b.source] || 0;
+        return bPriority - aPriority; // Higher priority first
+    });
+    
+    // Now process videos with priority
     filteredVideos.forEach(video => {
         const normalizedUrl = normalizeUrl(video.url);
+        
+        // Skip if we've already processed this URL in this batch
+        if (processedUrls.has(normalizedUrl)) {
+            logDebug(`Skipping duplicate URL in batch: ${video.url}`);
+            return;
+        }
         
         // SKIP if it's explicitly marked as a variant
         if (video.isVariant) {
@@ -109,8 +146,20 @@ function processVideosForBroadcast(videos) {
         // SKIP if it's in our global variant registry and the master is in this batch
         if (variantToMaster.has(normalizedUrl)) {
             const masterUrl = variantToMaster.get(normalizedUrl);
-            logDebug(`Skipping variant ${video.url} (matched to master ${masterUrl})`);
-            return;
+            if (masterUrls.has(masterUrl)) {
+                logDebug(`Skipping variant ${video.url} (matched to master ${masterUrl})`);
+                return;
+            }
+        }
+        
+        // Add to our processed URLs set to avoid duplicates
+        processedUrls.add(normalizedUrl);
+        
+        // Mark as unclassified if needed
+        if (unclassifiedVariants.has(normalizedUrl) && 
+            (video.source === 'page' || video.source === 'content_script')) {
+            logDebug(`Marking as unclassified variant: ${video.url} (source: ${video.source})`);
+            video.isUnclassifiedVariant = true;
         }
         
         // Add additional information needed for immediate display
@@ -124,8 +173,7 @@ function processVideosForBroadcast(videos) {
             title: video.title || getFilenameFromUrl(video.url),
             poster: video.poster || video.previewUrl || null,
             downloadable: true,
-            // Preserve source information or default to 'background'
-            // This indicates whether video was detected by content_script or background
+            // Preserve source information
             source: video.source || 'background',
             // Track if this was added via background processing while popup was closed
             detectedWhilePopupClosed: true,
@@ -203,8 +251,9 @@ function processVideosForBroadcast(videos) {
     
     // Log filtering stats with more detail
     const variantCount = variantUrls.size + variantToMaster.size;
+    const unclassifiedCount = unclassifiedVariants.size;
     logDebug(`Filtered videos: ${validatedVideos.length} input → ${processedVideos.length} output ` +
-             `(${masterUrls.size} masters, ${variantCount} variants total)`);
+             `(${masterUrls.size} masters, ${variantCount} variants, ${unclassifiedCount} unclassified variants)`);
     
     return processedVideos;
 }

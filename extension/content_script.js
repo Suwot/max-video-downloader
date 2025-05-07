@@ -333,10 +333,10 @@ function sendVideoToBackground(url, source, additionalInfo = {}) {
     chrome.runtime.sendMessage({
         action: 'addVideo',
         url: url,
-        source: 'content_script', // Explicitly set source as content_script
+        source: 'page', // Set source as 'page' for content script detection
         type: type,
         foundFromQueryParam: foundFromQueryParam,
-        detectionTimestamp: detectionTimestamp, // Add precise detection timestamp
+        detectionTimestamp: detectionTimestamp,
         ...additionalInfo
     });
 }
