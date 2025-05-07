@@ -156,10 +156,14 @@ async function handlePortMessage(message, port, portId) {
     else if (message.action === 'getActiveDownloads') {
         const activeDownloadList = getActiveDownloads();
         
-        port.postMessage({
-            action: 'activeDownloadsList',
-            downloads: activeDownloadList
-        });
+        try {
+            port.postMessage({
+                action: 'activeDownloadsList',
+                downloads: activeDownloadList
+            });
+        } catch (e) {
+            console.error('Error sending active downloads list:', e);
+        }
     }
 }
 
@@ -187,18 +191,35 @@ function setupPopupPort(port, portId) {
  * Broadcasts a message to all connected popups
  */
 function broadcastToPopups(message) {
+    const portsToRemove = [];
+    
     for (const [portId, portInfo] of popupPorts.entries()) {
         try {
-            if (typeof portInfo === 'object' && portInfo.port) {
-                portInfo.port.postMessage(message);
+            // First, check if the port exists and appears valid
+            if (!portInfo || (!portInfo.port && typeof portInfo !== 'object')) {
+                portsToRemove.push(portId);
+                continue;
+            }
+            
+            // Check if the port is still connected by accessing its sender
+            // This is a more reliable way to check if a port is still valid
+            const port = typeof portInfo === 'object' ? portInfo.port : portInfo;
+            
+            if (port && port.sender) {
+                port.postMessage(message);
             } else {
-                // Direct port object
-                portInfo.postMessage(message);
+                portsToRemove.push(portId);
             }
         } catch (e) {
             console.error('Error broadcasting to popup:', e);
-            popupPorts.delete(portId);
+            portsToRemove.push(portId);
         }
+    }
+    
+    // Clean up any invalid ports identified during broadcast
+    if (portsToRemove.length > 0) {
+        portsToRemove.forEach(id => popupPorts.delete(id));
+        logDebug(`Removed ${portsToRemove.length} invalid port(s)`);
     }
 }
 
@@ -209,8 +230,21 @@ function broadcastToPopups(message) {
  */
 function getActivePopupPortForTab(tabId) {
     for (const [portId, portInfo] of popupPorts.entries()) {
-        if (portInfo.tabId === tabId) {
-            return portInfo.port;
+        try {
+            // Check if this port is for the requested tab
+            if (portInfo && portInfo.tabId === tabId) {
+                // Verify the port is still valid by checking its sender property
+                if (portInfo.port && portInfo.port.sender) {
+                    return portInfo.port;
+                } else {
+                    // Port is invalid, clean it up
+                    popupPorts.delete(portId);
+                    logDebug(`Removed invalid port for tab ${tabId}`);
+                }
+            }
+        } catch (e) {
+            console.error(`Error checking port for tab ${tabId}:`, e);
+            popupPorts.delete(portId);
         }
     }
     return null;

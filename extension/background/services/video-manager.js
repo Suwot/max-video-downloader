@@ -499,6 +499,9 @@ async function addVideoToTab(tabId, videoInfo) {
             videoInfo.masterPlaylistUrl = knownRelationship.masterUrl;
             videoInfo.timestamp = Date.now();
             videosPerTab[tabId].set(normalizedUrl, videoInfo);
+            
+            // Notify any open popup about the new video if this is the first detection
+            notifyNewVideoDetected(tabId);
         }
         
         broadcastVideoUpdate(tabId);
@@ -508,13 +511,13 @@ async function addVideoToTab(tabId, videoInfo) {
     // Get existing video info if any
     const existingVideo = videosPerTab[tabId].get(normalizedUrl);
     
+    // Check if this is actually a new video
+    const isNewVideo = !existingVideo;
+    
     // Check if this video is already fully processed, nothing to do
     if (existingVideo && existingVideo.alreadyProcessed) {
         return;
     }
-    
-    // Check if this is actually a new video
-    const isNewVideo = !existingVideo;
     
     // Merge with existing data if present
     if (existingVideo) {
@@ -544,6 +547,9 @@ async function addVideoToTab(tabId, videoInfo) {
             videoInfo.detectionTimestamp = new Date().toISOString();
             logDebug(`Added missing detection timestamp for newly found video: ${videoInfo.url}`);
         }
+        
+        // Notify any open popup about the new video if this is the first detection
+        notifyNewVideoDetected(tabId);
     }
     
     // Mark as processed now to avoid race conditions with async operations
@@ -950,6 +956,35 @@ function reevaluateStandaloneVideos(tabId, masterUrl, variants) {
     // Broadcast update if any relationships were updated
     if (updatedRelationships) {
         broadcastVideoUpdate(tabId);
+    }
+}
+
+/**
+ * Notify any open popup that new videos have been detected
+ * @param {number} tabId - Tab ID
+ */
+function notifyNewVideoDetected(tabId) {
+    try {
+        // Check if a popup is open for this tab
+        const port = getActivePopupPortForTab(tabId);
+        
+        if (port) {
+            logDebug(`Notifying popup for tab ${tabId} about new video detection`);
+            
+            try {
+                port.postMessage({
+                    action: 'newVideoDetected',
+                    tabId: tabId
+                });
+            } catch (error) {
+                logDebug(`Error sending new video notification: ${error.message}`);
+            }
+        } else {
+            // No popup is open for this tab, which is normal
+            logDebug(`No active popup for tab ${tabId}, video update will be shown when popup opens`);
+        }
+    } catch (error) {
+        logDebug(`Error in notifyNewVideoDetected: ${error.message}`);
     }
 }
 

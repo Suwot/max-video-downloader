@@ -19,6 +19,8 @@ import { renderVideos } from './video-renderer.js';
 // Global port connection for communicating with the background script
 let backgroundPort = null;
 let currentTabId = null;
+let refreshInterval = null;
+let isEmptyState = true; // Track if we're currently showing "No videos found"
 
 /**
  * Establish a connection to the background script
@@ -85,8 +87,18 @@ function handlePortMessage(message) {
     // Handle video list responses
     if (message.action === 'videoListResponse' && message.videos) {
         console.log('Received video list via port:', message.videos.length);
-        renderVideos(message.videos);
-        hideLoadingState();
+        
+        // If we get videos when previously there were none, update the UI
+        if (message.videos.length > 0) {
+            isEmptyState = false;
+            renderVideos(message.videos);
+            hideLoadingState();
+        } else if (!isEmptyState) {
+            // Only update if we're not already showing empty state
+            renderVideos(message.videos);
+            hideLoadingState();
+            isEmptyState = true;
+        }
         
         // Cache videos for future quick access
         if (currentTabId) {
@@ -101,8 +113,18 @@ function handlePortMessage(message) {
     // Handle video state updates
     else if (message.action === 'videoStateUpdated' && message.videos) {
         console.log('Received video state update via port:', message.videos.length);
-        renderVideos(message.videos);
-        hideLoadingState();
+        
+        // If we get videos when previously there were none, update the UI
+        if (message.videos.length > 0) {
+            isEmptyState = false;
+            renderVideos(message.videos);
+            hideLoadingState();
+        } else if (!isEmptyState) {
+            // Only update if we're not already showing empty state
+            renderVideos(message.videos);
+            hideLoadingState();
+            isEmptyState = true;
+        }
         
         // Cache updated videos
         if (message.tabId && message.tabId === currentTabId) {
@@ -112,6 +134,13 @@ function handlePortMessage(message) {
             });
             console.log('Cached updated videos for tab', message.tabId);
         }
+    }
+    
+    // Handle new video detection notification - this is the key to auto-updating
+    else if (message.action === 'newVideoDetected') {
+        console.log('Received new video detection notification');
+        // Force a refresh of the video list
+        requestVideos(true);
     }
     
     // Handle metadata updates
@@ -237,6 +266,35 @@ function requestVideos(forceRefresh = false) {
     });
 }
 
+/**
+ * Set up a periodic refresh to check for new videos
+ * Especially important if popup was opened before videos were detected
+ */
+function setupPeriodicRefresh() {
+    // Clear any existing interval
+    if (refreshInterval) {
+        clearInterval(refreshInterval);
+    }
+    
+    // Create a new interval - refresh every 2.5 seconds if we're in empty state
+    refreshInterval = setInterval(() => {
+        if (isEmptyState) {
+            console.log("Performing periodic check for new videos...");
+            requestVideos(true);
+        }
+    }, 2500);
+}
+
+/**
+ * Clean up the periodic refresh interval
+ */
+function cleanupPeriodicRefresh() {
+    if (refreshInterval) {
+        clearInterval(refreshInterval);
+        refreshInterval = null;
+    }
+}
+
 // Initialize when DOM is ready
 document.addEventListener('DOMContentLoaded', async () => {
     try {
@@ -278,14 +336,21 @@ document.addEventListener('DOMContentLoaded', async () => {
                 console.log('Found stored videos, rendering immediately:', result[storageKey].length);
                 renderVideos(result[storageKey]);
                 hasStoredVideos = true;
+                isEmptyState = false;
                 hideLoadingState();
+            } else {
+                isEmptyState = true;
             }
         } catch (e) {
             console.error('Error retrieving stored videos:', e);
+            isEmptyState = true;
         }
         
         // STEP 2: Request fresh videos through port connection
         requestVideos(!hasStoredVideos);
+        
+        // STEP 3: Set up periodic refresh to check for new videos
+        setupPeriodicRefresh();
         
         // Check for active downloads from previous popup sessions
         import('./download.js').then(downloadModule => {
@@ -301,6 +366,17 @@ document.addEventListener('DOMContentLoaded', async () => {
         } catch (e) {
             console.log('Error notifying content script:', e);
         }
+        
+        // Add Clear Cache button handler
+        document.getElementById('clear-cache-btn')?.addEventListener('click', () => {
+            console.log('Clear cache button clicked');
+            import('./state.js').then(stateModule => {
+                stateModule.clearAllCaches().then(() => {
+                    console.log('Caches cleared, requesting fresh videos');
+                    requestVideos(true);
+                });
+            });
+        });
         
         // Watch for system theme changes
         const darkModeMediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
@@ -336,6 +412,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 // Listen for popup unload to notify content script
 window.addEventListener('unload', () => {
+    // Clean up the refresh interval
+    cleanupPeriodicRefresh();
+    
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
         if (tabs[0]) {
             try {
