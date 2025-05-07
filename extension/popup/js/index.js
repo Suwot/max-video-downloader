@@ -114,6 +114,19 @@ function handlePortMessage(message) {
         }
     }
     
+    // Handle metadata updates
+    else if (message.type === 'metadataUpdate' && message.url && message.mediaInfo) {
+        console.log('Received metadata update for video:', message.url);
+        import('./video-renderer.js').then(module => {
+            module.updateVideoMetadata(message.url, message.mediaInfo);
+            
+            // Also update the cache
+            import('./state.js').then(stateModule => {
+                stateModule.addMediaInfoToCache(message.url, message.mediaInfo);
+            });
+        });
+    }
+    
     // Handle active downloads list
     else if (message.action === 'activeDownloadsList' && message.downloads) {
         console.log('Received active downloads list:', message.downloads);

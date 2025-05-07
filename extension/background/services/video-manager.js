@@ -388,6 +388,10 @@ async function processMetadataQueue(maxRetries = 2) {
                     
                     // Broadcast update to popup if open
                     broadcastVideoUpdate(info.tabId);
+                    
+                    // IMPORTANT: Send a specific metadata update message to the popup
+                    // This allows immediate UI updates without requiring a complete refresh
+                    notifyMetadataUpdate(info.tabId, url, streamInfo);
                 }
             }
         } catch (error) {
@@ -414,6 +418,38 @@ async function processMetadataQueue(maxRetries = 2) {
     if (metadataProcessingQueue.size > 0) {
         // Schedule next batch with a delay
         setTimeout(() => processMetadataQueue(maxRetries), 500);
+    }
+}
+
+/**
+ * Notify any open popup about updated metadata for a video
+ * @param {number} tabId - Tab ID
+ * @param {string} url - Video URL
+ * @param {Object} mediaInfo - Updated media information
+ */
+function notifyMetadataUpdate(tabId, url, mediaInfo) {
+    try {
+        // Check if a popup is open for this tab
+        const port = getActivePopupPortForTab(tabId);
+        
+        if (port) {
+            logDebug(`Notifying popup for tab ${tabId} about metadata update for ${url}`);
+            
+            try {
+                port.postMessage({
+                    type: 'metadataUpdate',
+                    url: url,
+                    mediaInfo: mediaInfo
+                });
+            } catch (error) {
+                logDebug(`Error sending metadata update: ${error.message}`);
+            }
+        } else {
+            // No popup is open for this tab, which is normal
+            logDebug(`No active popup for tab ${tabId}, metadata update will be shown when popup opens`);
+        }
+    } catch (error) {
+        logDebug(`Error in notifyMetadataUpdate: ${error.message}`);
     }
 }
 
