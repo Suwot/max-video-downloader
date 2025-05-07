@@ -16,10 +16,69 @@
  */
 
 // content_script.js
-// Import shared validation utility
-import { validateAndFilterVideos, isValidVideo, isValidVideoUrl } from './js/utilities/video-validator.js';
+// Initialize utility functions that will be loaded dynamically
+let validateAndFilterVideos;
+let isValidVideo;
+let isValidVideoUrl;
 
 console.log('Content script loading...');
+
+// Dynamically import the validation utility
+(async function loadModules() {
+  try {
+    const module = await import(chrome.runtime.getURL('js/utilities/video-validator.js'));
+    validateAndFilterVideos = module.validateAndFilterVideos;
+    isValidVideo = module.isValidVideo;
+    isValidVideoUrl = module.isValidVideoUrl;
+    console.log('Video validator module loaded successfully');
+    init(); // Initialize once modules are loaded
+  } catch (error) {
+    console.error('Failed to load validation utilities:', error);
+    // Fall back to local implementations
+    console.log('Using fallback validation functions');
+    // Implement basic validation functions locally as fallbacks
+    validateAndFilterVideos = videos => videos.filter(v => v && v.url);
+    isValidVideo = video => video && video.url;
+    isValidVideoUrl = url => {
+      try {
+        // Skip blob URLs as they're handled separately
+        if (url.startsWith('blob:')) {
+            return true;
+        }
+        
+        const urlObj = new URL(url);
+        
+        // Early rejection: skip tracking images and known bad extensions
+        const badExtensions = /\.(gif|png|jpg|jpeg|webp|bmp|svg)(\?|$)/i;
+        if (badExtensions.test(urlObj.pathname)) {
+            return false;
+        }
+        
+        // Define patterns for tracking/analytics URLs
+        const ignoredPathPatterns = [
+            /\.gif$/i,                  // tracking pixels
+            /\/ping/i,                  // ping endpoints
+            /\/track/i, /\/pixel/i,
+            /\/stats/i, /\/metric/i,
+            /\/telemetry/i,
+            /\/analytics/i,
+            /jwpltx/, /\/tracking/
+        ];
+
+        // Check if URL matches ignored patterns
+        if (ignoredPathPatterns.some(pattern => pattern.test(urlObj.pathname) || pattern.test(urlObj.hostname))) {
+            return false;
+        }
+        
+        return true;
+      } catch (e) {
+          console.error('Error validating URL:', e);
+          return false;
+      }
+    };
+    init(); // Initialize with fallbacks
+  }
+})();
 
 // Track detected videos to avoid duplicates
 const detectedVideos = new Set();
@@ -565,49 +624,6 @@ function normalizeUrl(url) {
 }
 
 // After the normalizeUrl function
-
-/**
- * Validate video URL to filter out tracking pixels and other non-video content
- * @param {string} url - URL to validate
- * @return {boolean} True if the URL is a valid video, false otherwise
- */
-function isValidVideoUrl(url) {
-    try {
-        // Skip blob URLs as they're handled separately
-        if (url.startsWith('blob:')) {
-            return true;
-        }
-        
-        const urlObj = new URL(url);
-        
-        // Early rejection: skip tracking images and known bad extensions
-        const badExtensions = /\.(gif|png|jpg|jpeg|webp|bmp|svg)(\?|$)/i;
-        if (badExtensions.test(urlObj.pathname)) {
-            return false;
-        }
-        
-        // Define patterns for tracking/analytics URLs
-        const ignoredPathPatterns = [
-            /\.gif$/i,                  // tracking pixels
-            /\/ping/i,                  // ping endpoints
-            /\/track/i, /\/pixel/i,
-            /\/stats/i, /\/metric/i,
-            /\/telemetry/i,
-            /\/analytics/i,
-            /jwpltx/, /\/tracking/
-        ];
-
-        // Check if URL matches ignored patterns
-        if (ignoredPathPatterns.some(pattern => pattern.test(urlObj.pathname) || pattern.test(urlObj.hostname))) {
-            return false;
-        }
-        
-        return true;
-    } catch (e) {
-        console.error('Error validating URL:', e);
-        return false;
-    }
-}
 
 /**
  * Validate video info object and determine if it should be processed
