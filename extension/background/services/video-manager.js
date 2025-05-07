@@ -52,6 +52,66 @@ function getFilenameFromUrl(url) {
     return 'video';
 }
 
+// Track rate limiting for API requests
+const rateLimiter = {
+  activeRequests: 0,
+  maxConcurrent: 2, // Maximum concurrent requests allowed
+  queue: [], // Queue of pending requests
+  lastRequestTime: 0,
+  minDelayBetweenRequests: 500, // Minimum 500ms between requests
+  
+  // Add a request to the queue and process if possible
+  async enqueue(fn) {
+    return new Promise((resolve, reject) => {
+      this.queue.push({ fn, resolve, reject });
+      this.processQueue();
+    });
+  },
+  
+  // Process the next item in the queue if rate limits allow
+  async processQueue() {
+    // If queue is empty or we're at max concurrent requests, stop
+    if (this.queue.length === 0 || this.activeRequests >= this.maxConcurrent) {
+      return;
+    }
+    
+    // Calculate delay needed before next request
+    const now = Date.now();
+    const timeElapsed = now - this.lastRequestTime;
+    const delayNeeded = Math.max(0, this.minDelayBetweenRequests - timeElapsed);
+    
+    // Wait if needed then process
+    setTimeout(() => {
+      // Check again if we can process (in case max concurrent changed)
+      if (this.activeRequests >= this.maxConcurrent) {
+        return;
+      }
+      
+      // Get the next request
+      const { fn, resolve, reject } = this.queue.shift();
+      
+      // Update state and tracking
+      this.activeRequests++;
+      this.lastRequestTime = Date.now();
+      
+      // Execute the request
+      fn()
+        .then(result => {
+          resolve(result);
+          // After request completes, decrease count and check queue
+          this.activeRequests--;
+          this.processQueue();
+        })
+        .catch(error => {
+          reject(error);
+          // After request fails, decrease count and check queue
+          this.activeRequests--;
+          this.processQueue();
+        });
+    }, delayNeeded);
+  }
+};
+
 // Process videos for sending to popup - fully prepare videos for instant display
 function processVideosForBroadcast(videos) {
     // First apply validation filter to remove unwanted videos
@@ -252,16 +312,33 @@ function broadcastVideoUpdate(tabId) {
 // Helper function to extract stream metadata
 async function getStreamMetadata(url) {
     try {
-        // Using imported nativeHostService instead of dynamic import
-        const response = await nativeHostService.sendMessage({
-            type: 'getQualities',
-            url: url
-        });
-
-        if (response?.streamInfo) {
-            return response.streamInfo;
+        // Skip blob URLs as they can't be analyzed
+        if (url.startsWith('blob:')) {
+            logDebug(`Skipping metadata request for blob URL: ${url}`);
+            return {
+                isBlob: true,
+                type: 'blob',
+                format: 'blob',
+                container: 'blob',
+                hasVideo: true,
+                hasAudio: true
+            };
         }
-        return null;
+        
+        // Use our rate limiter to prevent too many concurrent requests
+        return await rateLimiter.enqueue(async () => {
+            logDebug(`Getting stream metadata for ${url} (active requests: ${rateLimiter.activeRequests}, queue: ${rateLimiter.queue.length})`);
+            
+            const response = await nativeHostService.sendMessage({
+                type: 'getQualities',
+                url: url
+            });
+
+            if (response?.streamInfo) {
+                return response.streamInfo;
+            }
+            return null;
+        });
     } catch (error) {
         console.error('Failed to get stream metadata:', error);
         return null;
@@ -269,58 +346,74 @@ async function getStreamMetadata(url) {
 }
 
 // Process metadata queue with retry mechanism
-async function processMetadataQueue(maxConcurrent = 3, maxRetries = 2) {
+async function processMetadataQueue(maxRetries = 2) {
+    // If no items in the queue, nothing to do
     if (metadataProcessingQueue.size === 0) return;
     
-    const entries = Array.from(metadataProcessingQueue.entries()).slice(0, maxConcurrent);
-    const processPromises = entries.map(async ([url, info]) => {
-        let retries = 0;
-        while (retries < maxRetries) {
-            try {
-                metadataProcessingQueue.delete(url);
-                const streamInfo = await getStreamMetadata(url);
+    // We'll process all items in the queue gradually with the rate limiter handling throttling
+    const entries = Array.from(metadataProcessingQueue.entries());
+    logDebug(`Processing metadata queue with ${entries.length} items, rate limiter will handle throttling`);
+    
+    // Process each entry, letting the rate limiter handle concurrency and delays
+    const processPromise = entries.map(async ([url, info]) => {
+        // Remove from queue immediately to prevent duplicate processing
+        metadataProcessingQueue.delete(url);
+        
+        try {
+            // Use our rate-limited getStreamMetadata function
+            const streamInfo = await getStreamMetadata(url);
+            
+            // If we got stream info, update the video
+            if (streamInfo && info.tabId && videosPerTab[info.tabId]) {
+                const normalizedUrl = normalizeUrl(url);
+                const existingVideo = videosPerTab[info.tabId].get(normalizedUrl);
                 
-                if (streamInfo) {
-                    if (info.tabId && videosPerTab[info.tabId]) {
-                        const normalizedUrl = normalizeUrl(url);
-                        const existingVideo = videosPerTab[info.tabId].get(normalizedUrl);
-                        if (existingVideo) {
-                            // Update video with stream info
-                            const updatedVideo = {
-                                ...existingVideo,
-                                streamInfo,
-                                mediaInfo: streamInfo, // Add direct mediaInfo reference
-                                qualities: streamInfo.variants || [],
-                                resolution: {
-                                    width: streamInfo.width,
-                                    height: streamInfo.height,
-                                    fps: streamInfo.fps,
-                                    bitrate: streamInfo.videoBitrate || streamInfo.totalBitrate
-                                }
-                            };
-                            
-                            // Store updated video
-                            videosPerTab[info.tabId].set(normalizedUrl, updatedVideo);
-                            
-                            // Broadcast update to popup if open
-                            broadcastVideoUpdate(info.tabId);
+                if (existingVideo) {
+                    // Update video with stream info
+                    const updatedVideo = {
+                        ...existingVideo,
+                        streamInfo,
+                        mediaInfo: streamInfo, // Add direct mediaInfo reference
+                        qualities: streamInfo.variants || [],
+                        resolution: {
+                            width: streamInfo.width,
+                            height: streamInfo.height,
+                            fps: streamInfo.fps,
+                            bitrate: streamInfo.videoBitrate || streamInfo.totalBitrate
                         }
-                    }
-                    break;
+                    };
+                    
+                    // Store updated video
+                    videosPerTab[info.tabId].set(normalizedUrl, updatedVideo);
+                    
+                    // Broadcast update to popup if open
+                    broadcastVideoUpdate(info.tabId);
                 }
-                retries++;
-            } catch (error) {
-                console.error(`Failed to process metadata for ${url} (attempt ${retries + 1}):`, error);
-                if (retries >= maxRetries - 1) break;
-                await new Promise(resolve => setTimeout(resolve, 1000 * (retries + 1)));
+            }
+        } catch (error) {
+            console.error(`Failed to process metadata for ${url}:`, error);
+            
+            // Only requeue if not too many retries
+            if (info.retryCount < maxRetries) {
+                // Put back in queue with incremented retry count and exponential backoff delay
+                setTimeout(() => {
+                    metadataProcessingQueue.set(url, {
+                        ...info,
+                        retryCount: (info.retryCount || 0) + 1
+                    });
+                    // Try processing the queue again after a delay
+                    processMetadataQueue(maxRetries);
+                }, 1000 * Math.pow(2, info.retryCount || 0)); // Exponential backoff
             }
         }
     });
-
-    await Promise.all(processPromises);
     
+    await Promise.allSettled(processPromise);
+    
+    // Check if new items have been added during processing
     if (metadataProcessingQueue.size > 0) {
-        setTimeout(() => processMetadataQueue(maxConcurrent, maxRetries), 100);
+        // Schedule next batch with a delay
+        setTimeout(() => processMetadataQueue(maxRetries), 500);
     }
 }
 
@@ -462,14 +555,27 @@ async function addVideoToTab(tabId, videoInfo) {
         }
     }
     
-    // Add to metadata processing queue if it's not a variant
-    if (!videoInfo.isVariant && !metadataProcessingQueue.has(normalizedUrl)) {
+    // Add to metadata processing queue if it's not a variant and not a blob URL
+    if (!videoInfo.isVariant && !metadataProcessingQueue.has(normalizedUrl) && !videoInfo.url.startsWith('blob:')) {
         metadataProcessingQueue.set(normalizedUrl, {
             ...videoInfo,
             tabId,
             timestamp: videoInfo.timestamp
         });
         processMetadataQueue();
+    } else if (videoInfo.url.startsWith('blob:')) {
+        // For blob URLs, add default metadata without sending to processing queue
+        videoInfo.streamInfo = {
+            isBlob: true,
+            type: 'blob',
+            format: 'blob',
+            container: 'blob',
+            hasVideo: true,
+            hasAudio: true
+        };
+        videoInfo.mediaInfo = videoInfo.streamInfo;
+        videosPerTab[tabId].set(normalizedUrl, videoInfo);
+        logDebug(`Added default metadata for blob URL: ${videoInfo.url}`);
     }
     
     // For HLS playlists, also add to that specific collection if it's not a variant
