@@ -264,13 +264,13 @@ export function createVideoElement(video) {
     typeBadge.className = `type-badge ${video.type || 'unknown'}`;
     typeBadge.textContent = video.type ? video.type.toUpperCase() : 'UNKNOWN';
     previewContainer.appendChild(typeBadge);
-    
+
     // Add source badge (content_script or background)
     const sourceBadge = document.createElement('div');
     sourceBadge.className = `source-badge ${video.source || 'background'}`;
     sourceBadge.textContent = video.source === 'content_script' ? 'CS' : 'BG';
     previewContainer.appendChild(sourceBadge);
-    
+ 
     // Add detection timestamp badge if available (for debugging duplicates)
     if (video.detectionTimestamp) {
         const timestampBadge = document.createElement('div');
@@ -468,12 +468,6 @@ export function createVideoElement(video) {
     const mediaTypeContainer = document.createElement('div');
     mediaTypeContainer.className = 'media-type-container';
     mediaTypeContainer.appendChild(mediaTypeInfo);
-    
-    // Add source indicator to media type container
-    const sourceInfo = document.createElement('div');
-    sourceInfo.className = `source-info ${video.source || 'background'}`;
-    sourceInfo.textContent = video.source === 'content_script' ? 'From Page' : 'From Background';
-    mediaTypeContainer.appendChild(sourceInfo);
     
     // Always create codec-info element even if we don't have codec details yet
     const codecInfo = document.createElement('div');

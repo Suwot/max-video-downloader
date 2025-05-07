@@ -690,33 +690,6 @@ body.theme-light {
     fill: #666;
 }
 
-/* Source info styles */
-.source-info {
-    display: inline-flex;
-    align-items: center;
-    padding: 1px 4px;
-    border-radius: 3px;
-    font-size: 10px;
-    white-space: nowrap;
-    margin-left: 8px;
-}
-
-.theme-dark .source-info {
-    background-color: rgba(255,255,255,0.1);
-}
-
-.theme-light .source-info {
-    background-color: rgba(0,0,0,0.05);
-}
-
-.source-info.content_script {
-    color: #4caf50;
-}
-
-.source-info.background {
-    color: #ff9800;
-}
-
 /* Codec info */
 .codec-info {
     font-size: 10px;
