@@ -1,12 +1,18 @@
 {
-  "name": "video-downloader-host",
+  "name": "host",
   "version": "1.0.0",
   "description": "Native host for video downloader extension",
-  "main": "host.js",
-  "bin": "host.js",
+  "main": "index.js",
+  "bin": "index.js",
   "pkg": {
     "targets": ["node16-macos-arm64"],
-    "outputPath": "."
+    "outputPath": ".",
+    "assets": [
+      "lib/**/*",
+      "commands/**/*",
+      "services/**/*",
+      "utils/**/*"
+    ]
   },
   "scripts": {
     "build": "pkg .",
