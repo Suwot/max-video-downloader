@@ -132,10 +132,10 @@ export async function renderVideos(videos) {
     container.innerHTML = '';
     container.appendChild(fragment);
     
-    // Add CSS for the extracted badge if it doesn't exist
-    if (!document.getElementById('extracted-badge-style')) {
+    // Add CSS for the extracted badge and timestamp if it doesn't exist
+    if (!document.getElementById('custom-badges-style')) {
         const style = document.createElement('style');
-        style.id = 'extracted-badge-style';
+        style.id = 'custom-badges-style';
         style.textContent = `
             .badge.extracted {
                 display: inline-block;
@@ -148,10 +148,23 @@ export async function renderVideos(videos) {
                 vertical-align: middle;
                 font-weight: 500;
             }
+            
+            .detection-timestamp {
+                position: absolute;
+                bottom: 20px;
+                right: 2px;
+                background-color: rgba(0, 0, 0, 0.6);
+                color: #fff;
+                font-size: 9px;
+                padding: 1px 3px;
+                border-radius: 3px;
+                font-family: monospace;
+                z-index: 5;
+                cursor: help;
+            }
         `;
         document.head.appendChild(style);
     }
-    
 }
 
 /**
@@ -257,6 +270,23 @@ export function createVideoElement(video) {
     sourceBadge.className = `source-badge ${video.source || 'background'}`;
     sourceBadge.textContent = video.source === 'content_script' ? 'CS' : 'BG';
     previewContainer.appendChild(sourceBadge);
+    
+    // Add detection timestamp badge if available (for debugging duplicates)
+    if (video.detectionTimestamp) {
+        const timestampBadge = document.createElement('div');
+        timestampBadge.className = 'detection-timestamp';
+        // Format timestamp for display
+        const timestampDate = new Date(video.detectionTimestamp);
+        const formattedTime = timestampDate.toLocaleTimeString(undefined, { 
+            hour: '2-digit', 
+            minute: '2-digit', 
+            second: '2-digit',
+            fractionalSecondDigits: 3
+        });
+        timestampBadge.title = `Detected at: ${video.detectionTimestamp}`;
+        timestampBadge.textContent = formattedTime;
+        previewContainer.appendChild(timestampBadge);
+    }
     
     const loader = document.createElement('div');
     loader.className = 'loader';

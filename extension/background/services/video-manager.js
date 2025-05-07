@@ -128,7 +128,9 @@ function processVideosForBroadcast(videos) {
             // This indicates whether video was detected by content_script or background
             source: video.source || 'background',
             // Track if this was added via background processing while popup was closed
-            detectedWhilePopupClosed: true
+            detectedWhilePopupClosed: true,
+            // Preserve the detection timestamp for debugging duplicates
+            detectionTimestamp: video.detectionTimestamp || null
         };
         
         // If we have stream info, ensure it's mapped to mediaInfo for the popup
@@ -188,6 +190,11 @@ function processVideosForBroadcast(videos) {
                     };
                 }
             }
+        }
+        
+        // If this video has a detection timestamp, add debugging log
+        if (enhancedVideo.detectionTimestamp) {
+            logDebug(`Preserving detection timestamp for video: ${enhancedVideo.url}, detected at: ${enhancedVideo.detectionTimestamp}`);
         }
         
         // Include this video in the final output
@@ -337,6 +344,11 @@ async function addVideoToTab(tabId, videoInfo) {
         return; // Silently ignore without logging to prevent console spam
     }
     
+    // Preserve the detailed detection timestamp if available
+    if (videoInfo.detectionTimestamp) {
+        logDebug(`Processing video with detection timestamp: ${videoInfo.detectionTimestamp}, URL: ${videoInfo.url}`);
+    }
+    
     // STEP 1: Check if this is a variant of an already known master
     const knownRelationship = checkIfVariantOfKnownMaster(videoInfo.url);
     if (knownRelationship && knownRelationship.isVariant) {
@@ -347,6 +359,10 @@ async function addVideoToTab(tabId, videoInfo) {
             // Update existing entry, keeping its properties but marking as variant
             existingVideo.isVariant = true;
             existingVideo.masterPlaylistUrl = knownRelationship.masterUrl;
+            // Preserve the detection timestamp if available
+            if (videoInfo.detectionTimestamp && !existingVideo.detectionTimestamp) {
+                existingVideo.detectionTimestamp = videoInfo.detectionTimestamp;
+            }
             videosPerTab[tabId].set(normalizedUrl, existingVideo);
         } else {
             // Add new entry but marked as variant
@@ -388,10 +404,17 @@ async function addVideoToTab(tabId, videoInfo) {
             // Preserve variant/master status if it was set already
             isVariant: existingVideo.isVariant || videoInfo.isVariant,
             isMasterPlaylist: existingVideo.isMasterPlaylist || videoInfo.isMasterPlaylist,
-            variants: existingVideo.variants || videoInfo.variants
+            variants: existingVideo.variants || videoInfo.variants,
+            // Preserve the detection timestamp if available
+            detectionTimestamp: existingVideo.detectionTimestamp || videoInfo.detectionTimestamp
         };
     } else {
         videoInfo.timestamp = Date.now();
+        // If no detection timestamp is available (unlikely), create one now
+        if (!videoInfo.detectionTimestamp) {
+            videoInfo.detectionTimestamp = new Date().toISOString();
+            logDebug(`Added missing detection timestamp for newly found video: ${videoInfo.url}`);
+        }
     }
     
     // Mark as processed now to avoid race conditions with async operations
@@ -408,6 +431,11 @@ async function addVideoToTab(tabId, videoInfo) {
             
             // If the video was enhanced with relationship info, update it
             if (processedVideo !== videoInfo) {
+                // Preserve the detection timestamp when updating
+                if (videoInfo.detectionTimestamp) {
+                    processedVideo.detectionTimestamp = videoInfo.detectionTimestamp;
+                }
+                
                 // Update in our collection
                 videosPerTab[tabId].set(normalizedUrl, processedVideo);
                 videoInfo = processedVideo;
