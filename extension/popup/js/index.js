@@ -12,9 +12,11 @@
  */
 
 // extension/popup/js/index.js
-import { initializeState, getCachedVideos, getCurrentTheme } from './state.js';
+import { initializeState, getCurrentTheme } from './state.js';
 import { applyTheme, initializeUI, setupScrollPersistence, scrollToLastPosition, showLoadingState, hideLoadingState, showNoVideosMessage } from './ui.js';
 import { renderVideos } from './video-renderer.js';
+// Import our new VideoStateService
+import { videoStateService } from './services/video-state-service.js';
 
 // Global port connection for communicating with the background script
 let backgroundPort = null;
@@ -93,11 +95,11 @@ const metadataUpdateBatch = {
             });
         }
         
-        // Update module cache for all updates
-        import('./state.js').then(stateModule => {
-            this.updates.forEach((mediaInfo, url) => {
-                stateModule.addMediaInfoToCache(url, mediaInfo);
-            });
+        // Notify the VideoStateService about the updates
+        this.updates.forEach((mediaInfo, url) => {
+            document.dispatchEvent(new CustomEvent('metadata-update', {
+                detail: { url, mediaInfo }
+            }));
         });
         
         // Clear the batch
@@ -231,6 +233,14 @@ function handlePortMessage(message) {
     if (message.type === 'previewReady') {
         console.log('Received preview update:', message.videoUrl);
         
+        // Dispatch an event that VideoStateService listens for
+        document.dispatchEvent(new CustomEvent('preview-ready', { 
+            detail: {
+                videoUrl: message.videoUrl,
+                previewUrl: message.previewUrl
+            }
+        }));
+        
         // Find the video element in the UI
         const videoElement = document.querySelector(`.video-item[data-url="${message.videoUrl}"]`);
         if (videoElement) {
@@ -250,11 +260,6 @@ function handlePortMessage(message) {
                 
                 // Set the preview source
                 previewImage.src = message.previewUrl;
-                
-                // Cache the preview for future use
-                import('./state.js').then(stateModule => {
-                    stateModule.addPosterToCache(message.videoUrl, message.previewUrl);
-                });
             }
         }
         return;
@@ -268,56 +273,6 @@ function handlePortMessage(message) {
         }));
         return;
     }
-}
-
-/**
- * Handle metadata updates in a unified way
- * @param {string} url - The video URL
- * @param {Object} mediaInfo - Media information object
- */
-function handleMetadataUpdate(url, mediaInfo) {
-    console.log('Handling metadata update for:', url);
-    
-    // 1. Update the DOM with new metadata
-    import('./video-renderer.js').then(module => {
-        module.updateVideoMetadata(url, mediaInfo);
-    });
-    
-    // 2. Update our cached videos with the new metadata
-    if (currentTabId) {
-        // Get current videos from cache
-        chrome.storage.local.get([`processedVideos_${currentTabId}`], result => {
-            const storageKey = `processedVideos_${currentTabId}`;
-            const videos = result[storageKey] || [];
-            
-            // Find and update the video
-            const index = videos.findIndex(v => v.url === url);
-            if (index !== -1) {
-                videos[index] = {
-                    ...videos[index],
-                    mediaInfo: mediaInfo,
-                    // Also update resolution field for consistency
-                    resolution: {
-                        width: mediaInfo.width,
-                        height: mediaInfo.height,
-                        fps: mediaInfo.fps,
-                        bitrate: mediaInfo.videoBitrate || mediaInfo.totalBitrate
-                    }
-                };
-                
-                // Update cache with modified videos
-                chrome.storage.local.set({
-                    [storageKey]: videos,
-                    lastVideoUpdate: Date.now()
-                });
-            }
-        });
-    }
-    
-    // 3. Update the module cache
-    import('./state.js').then(stateModule => {
-        stateModule.addMediaInfoToCache(url, mediaInfo);
-    });
 }
 
 /**
@@ -428,7 +383,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             throw new Error('Chrome storage API not available');
         }
 
-        // Initialize state
+        // Initialize state - we'll keep using this for theme and UI preferences
         const state = await initializeState();
         
         // Apply theme
@@ -436,6 +391,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         
         // Initialize UI elements
         initializeUI();
+        
+        // Initialize our VideoStateService
+        await videoStateService.initialize();
         
         // Connect to background script via port (but don't request videos yet)
         getBackgroundPort();
@@ -453,12 +411,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         // STEP 1: Fast render from storage (for immediate display)
         let hasStoredVideos = false;
         try {
-            const storageKey = `processedVideos_${currentTabId}`;
-            const result = await chrome.storage.local.get(storageKey);
-            if (result[storageKey] && result[storageKey].length > 0) {
-                console.log('Found stored videos, rendering immediately:', result[storageKey].length);
+            // Use VideoStateService to get videos from storage
+            const cachedVideos = await videoStateService.getVideosFromStorage();
+            if (cachedVideos && cachedVideos.length > 0) {
+                console.log('Found stored videos, rendering immediately:', cachedVideos.length);
                 // Use the centralized function to update videos
-                updateVideoDisplay(result[storageKey], false); // Don't re-cache
+                updateVideoDisplay(cachedVideos, false); // Don't re-cache
                 hasStoredVideos = true;
             } else {
                 isEmptyState = true;
@@ -489,15 +447,12 @@ document.addEventListener('DOMContentLoaded', async () => {
             console.log('Error notifying content script:', e);
         }
         
-        // Add Clear Cache button handler
-        document.getElementById('clear-cache-btn')?.addEventListener('click', () => {
+        // Add Clear Cache button handler - use our new service
+        document.getElementById('clear-cache-btn')?.addEventListener('click', async () => {
             console.log('Clear cache button clicked');
-            import('./state.js').then(stateModule => {
-                stateModule.clearAllCaches().then(() => {
-                    console.log('Caches cleared, requesting fresh videos');
-                    requestVideos(true);
-                });
-            });
+            await videoStateService.clearCaches();
+            console.log('Caches cleared, requesting fresh videos');
+            requestVideos(true);
         });
         
         // Watch for system theme changes

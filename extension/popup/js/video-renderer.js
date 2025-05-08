@@ -18,7 +18,9 @@
 // popup/js/video-renderer.js
 
 import { getFilenameFromUrl, formatResolution, formatDuration, normalizeUrl } from './utilities.js';
-import { getAllGroupStates, setGroupState, getAllVideoGroups, getPosterFromCache, addPosterToCache } from './state.js';
+import { getAllGroupStates, setGroupState, getAllVideoGroups } from './state.js';
+// Import poster management from our new service instead of state.js
+import { getPoster, addPoster } from './services/video-state-service.js';
 import { groupVideosByType } from './video-processor.js';
 import { handleDownload } from './download.js';
 import { generatePreview } from './preview.js';
@@ -302,14 +304,14 @@ export function createVideoElement(video) {
     // Track if preview has been generated
     let previewGenerated = false;
     
-    // Use cached poster if available
-    if (getPosterFromCache(video.url)) {
+    // Use cached poster if available - use our new service
+    if (getPoster(video.url)) {
         previewImage.onload = () => {
             previewImage.classList.remove('placeholder');
             previewImage.classList.add('loaded');
             loader.style.display = 'none';
         };
-        previewImage.src = getPosterFromCache(video.url);
+        previewImage.src = getPoster(video.url);
         previewGenerated = true;
     }
     // If we already have a preview URL, use it
@@ -319,8 +321,8 @@ export function createVideoElement(video) {
             previewImage.classList.add('loaded');
             loader.style.display = 'none';
             
-            // Cache the poster
-            addPosterToCache(video.url, video.previewUrl);
+            // Cache the poster using our new service
+            addPoster(video.url, video.previewUrl);
         };
         previewImage.src = video.previewUrl;
         previewGenerated = true;
@@ -332,8 +334,8 @@ export function createVideoElement(video) {
             previewImage.classList.add('loaded');
             loader.style.display = 'none';
             
-            // Cache the poster
-            addPosterToCache(video.url, video.poster);
+            // Cache the poster using our new service
+            addPoster(video.url, video.poster);
         };
         previewImage.src = video.poster;
         previewGenerated = true;
