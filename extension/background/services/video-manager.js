@@ -211,20 +211,40 @@ function addVideoToTab(tabId, videoInfo) {
         notifyNewVideoDetected(tabId);
     }
     
-    // For HLS/DASH playlists, process to detect master-variant relationships
-    if ((video.type === 'hls' || video.type === 'dash') && 
-        !video.isVariant && !video.qualityVariants && !video.variants) {
-        enrichWithPlaylistInfo(video, tabId);
-    }
+    // Check if this is a blob URL - skip enrichment completely for blobs
+    const isBlob = video.url.startsWith('blob:');
     
-    // Enrich with metadata if needed
-    if (!video.streamInfo && !video.mediaInfo && !processingRequests.metadata.has(normalizedUrl)) {
-        enrichWithMetadata(video, tabId);
-    }
-    
-    // Generate preview if needed
-    if (!video.previewUrl && !video.poster && !processingRequests.previews.has(normalizedUrl)) {
-        enrichWithPreview(video, tabId);
+    // For blob URLs, add placeholder metadata immediately and skip enrichment
+    if (isBlob) {
+        if (!video.mediaInfo) {
+            // Set basic blob metadata if not already present
+            video.mediaInfo = {
+                isBlob: true,
+                type: 'blob',
+                format: 'blob',
+                container: 'blob',
+                hasVideo: true,
+                hasAudio: true
+            };
+            video.needsMetadata = false;
+            video.needsPreview = false;
+        }
+    } else {
+        // For HLS/DASH playlists, process to detect master-variant relationships
+        if ((video.type === 'hls' || video.type === 'dash') && 
+            !video.isVariant && !video.qualityVariants && !video.variants) {
+            enrichWithPlaylistInfo(video, tabId);
+        }
+        
+        // Enrich with metadata if needed
+        if (!video.streamInfo && !video.mediaInfo && !processingRequests.metadata.has(normalizedUrl)) {
+            enrichWithMetadata(video, tabId);
+        }
+        
+        // Generate preview if needed
+        if (!video.previewUrl && !video.poster && !processingRequests.previews.has(normalizedUrl)) {
+            enrichWithPreview(video, tabId);
+        }
     }
     
     // Broadcast update
@@ -341,6 +361,20 @@ function applyMetadataToVideo(tabId, normalizedUrl, streamInfo) {
 // Enrich video with preview image
 async function enrichWithPreview(video, tabId) {
     const normalizedUrl = normalizeUrl(video.url);
+    
+    // Skip blob URLs early - they can't generate previews
+    if (video.url.startsWith('blob:')) {
+        // Mark as processed to avoid repeated attempts
+        const videos = videosPerTab.get(tabId);
+        if (videos) {
+            const index = videos.findIndex(v => normalizeUrl(v.url) === normalizedUrl);
+            if (index !== -1) {
+                videos[index].needsPreview = false;
+                logDebug(`Skipping preview generation for blob URL: ${video.url}`);
+            }
+        }
+        return;
+    }
     
     // Mark as being processed
     processingRequests.previews.add(normalizedUrl);
