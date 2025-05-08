@@ -4,9 +4,9 @@
  */
 
 // Add static imports at the top
-import { getVideosForTab, getPlaylistsForTab, generatePreview, getStreamQualities, 
+import { getVideosForTab, getPlaylistsForTab, getStreamQualities, 
          fetchManifestContent, storeManifestRelationship, getManifestRelationship,
-         getStreamMetadata } from './video-manager.js';
+         getStreamMetadata, clearVideoCache } from './video-manager.js';
 import { getActiveDownloads, getDownloadDetails, startDownload } from './download-manager.js';
 
 // Track all popup connections for universal communication
@@ -62,36 +62,45 @@ async function handlePortMessage(message, port, portId) {
         });
     }
     
-    // Handle preview generation
+    // Handle preview generation request - now handled through enrichWithPreview in video-manager.js
     else if (message.type === 'generatePreview') {
-        logDebug(`Generating preview for URL: ${message.url}`);
+        logDebug(`Preview request received for URL: ${message.url}`);
         try {
-            const response = await generatePreview(message.url, message.tabId);
+            // Just get the videos and check if any have a matching URL
+            const videos = getVideosForTab(message.tabId);
+            const matchingVideo = videos.find(v => v.url === message.url);
             
-            // If the port is still open, send the response back
-            try {
+            // Return any existing preview or let the popup know we're working on it
+            if (matchingVideo && matchingVideo.previewUrl) {
                 port.postMessage({
                     type: 'previewResponse',
                     requestUrl: message.url,
-                    previewUrl: response?.previewUrl,
-                    error: response?.error
+                    previewUrl: matchingVideo.previewUrl
                 });
-                logDebug(`Preview response sent for ${message.url}`);
-            } catch (e) {
-                console.error('Error sending preview response:', e);
+            } else {
+                port.postMessage({
+                    type: 'previewPending',
+                    requestUrl: message.url
+                });
+                
+                // Add or update the video in video-manager to trigger preview generation
+                // The background will notify the popup when the preview is ready
+                if (matchingVideo) {
+                    // Force preview generation by requesting it through standard channels
+                    port.postMessage({
+                        action: 'videoPreviewRequested',
+                        url: message.url,
+                        tabId: message.tabId
+                    });
+                }
             }
         } catch (error) {
-            logDebug(`Error generating preview: ${error.message}`);
-            // If the port is still open, send error
-            try {
-                port.postMessage({
-                    type: 'previewResponse',
-                    requestUrl: message.url,
-                    error: error.message
-                });
-            } catch (e) {
-                console.error('Error sending preview error response:', e);
-            }
+            logDebug(`Error handling preview request: ${error.message}`);
+            port.postMessage({
+                type: 'previewResponse',
+                requestUrl: message.url,
+                error: error.message
+            });
         }
     }
     
@@ -170,6 +179,19 @@ async function handlePortMessage(message, port, portId) {
                 downloadId: message.downloadId
             });
         }
+    }
+
+    // Handle clear caches request from popup
+    else if (message.action === 'clearCaches') {
+        // Clear video cache in video manager
+        clearVideoCache();
+        
+        port.postMessage({
+            action: 'cacheCleared',
+            success: true
+        });
+        
+        logDebug('Cleared video caches');
     }
 
     // Handle active downloads list request

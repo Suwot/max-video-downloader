@@ -9,8 +9,10 @@
  */
 
 import { sendPortMessage } from './index.js';
-// Import from VideoStateService instead of state.js
-import { addPoster } from './services/video-state-service.js';
+import { videoStateService } from './services/video-state-service.js';
+
+// Local cache for previews during popup session
+const previewCache = new Map();
 
 /**
  * Generate a preview image for a video
@@ -53,9 +55,9 @@ export async function generatePreview(url, loader, previewImage, regenerateButto
             const response = event.detail;
             
             // Only process responses for our URL
-            if (response.url === url) {
+            if (response.requestUrl === url) {
                 clearTimeout(timeoutId);
-                document.removeEventListener('preview-generated', handleResponse);
+                document.removeEventListener('preview-ready', handleResponse);
                 
                 if (response.previewUrl) {
                     // Update the image
@@ -68,8 +70,8 @@ export async function generatePreview(url, loader, previewImage, regenerateButto
                         previewImage.src = response.previewUrl;
                     }
                     
-                    // Cache the preview URL
-                    addPoster(url, response.previewUrl);
+                    // Cache the preview URL locally for this session
+                    previewCache.set(url, response.previewUrl);
                     
                     resolve(response);
                 } else {
@@ -83,7 +85,7 @@ export async function generatePreview(url, loader, previewImage, regenerateButto
         
         // Set timeout for response
         timeoutId = setTimeout(() => {
-            document.removeEventListener('preview-generated', handleResponse);
+            document.removeEventListener('preview-ready', handleResponse);
             // Preview generation timed out
             if (loader) loader.style.display = 'none';
             if (regenerateButton) regenerateButton.classList.remove('hidden');
@@ -91,6 +93,28 @@ export async function generatePreview(url, loader, previewImage, regenerateButto
         }, 10000);
         
         // Listen for response
-        document.addEventListener('preview-generated', handleResponse);
+        document.addEventListener('preview-ready', handleResponse);
     });
 }
+
+/**
+ * Get a cached preview URL for a video
+ * @param {string} url - Video URL
+ * @returns {string|null} Preview URL if cached, null otherwise
+ */
+export function getCachedPreview(url) {
+    return previewCache.get(url) || null;
+}
+
+/**
+ * Store a preview URL in the cache
+ * @param {string} videoUrl - Video URL
+ * @param {string} previewUrl - Preview URL
+ */
+export function cachePreview(videoUrl, previewUrl) {
+    previewCache.set(videoUrl, previewUrl);
+}
+
+// Export the local cache functions to replace the original addPoster/getPoster
+export const addPoster = cachePreview;
+export const getPoster = getCachedPreview;

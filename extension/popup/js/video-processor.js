@@ -6,16 +6,13 @@
  * - Handles video processing logic
  * - Implements video validation and filtering
  * - Manages video quality variants
- * - Processes HLS relationships
  */
 
 // popup/js/video-processor.js
 
-// Import from new services instead of state.js
+// Import from video-state-service
 import { 
-    setVideoGroups,
-    addStreamMetadata, 
-    getStreamMetadata 
+    videoStateService
 } from './services/video-state-service.js';
 
 import { sendPortMessage } from './index.js';
@@ -23,8 +20,8 @@ import { sendPortMessage } from './index.js';
 // Import the video validation and filtering functions
 import { filterRedundantVariants } from '../../js/utilities/video-validator.js';
 
-// Keep track of HLS relationships locally
-const hlsRelationships = new Map(); // Master URL -> Variant URLs
+// Cache for stream metadata
+const metadataCache = new Map();
 
 /**
  * [DEPRECATED] Process videos - pass through only
@@ -45,12 +42,32 @@ export function processVideos(videos) {
  */
 function shareHLSBaseDirectory(video1, video2) {
     try {
+        const getBaseDirectory = (url) => {
+            const parts = url.split('/');
+            parts.pop();
+            return parts.join('/');
+        };
+        
         const dir1 = getBaseDirectory(video1.url);
         const dir2 = getBaseDirectory(video2.url);
         return dir1 === dir2;
     } catch (e) {
         console.error('Error checking HLS directory:', e);
         return false;
+    }
+}
+
+/**
+ * Get base URL (for grouping purposes)
+ * @param {string} url - Full URL
+ * @returns {string} Base URL
+ */
+function getBaseUrl(url) {
+    try {
+        const urlObj = new URL(url);
+        return urlObj.origin + urlObj.pathname.split('/').slice(0, -1).join('/');
+    } catch (e) {
+        return url.split('/').slice(0, -1).join('/');
     }
 }
 
@@ -142,9 +159,6 @@ export function groupVideosByType(videos) {
         }
     });
     
-    // Update video groups in our service
-    setVideoGroups(groups);
-    
     return groups;
 }
 
@@ -196,7 +210,7 @@ export function processStreamQualities(streamInfo) {
 }
 
 /**
- * Process and cache stream metadata
+ * Process and cache stream metadata locally
  * @param {string} url - Stream URL
  * @param {Object} streamInfo - Stream information
  */
@@ -217,9 +231,27 @@ export function processStreamMetadata(url, streamInfo) {
         qualities: processStreamQualities(streamInfo)
     };
     
-    // Cache the processed metadata
-    addStreamMetadata(url, config);
+    // Cache the processed metadata locally
+    metadataCache.set(url, config);
     return config;
+}
+
+/**
+ * Add stream metadata to local cache
+ * @param {string} url - Video URL
+ * @param {Object} metadata - Video metadata
+ */
+export function addStreamMetadata(url, metadata) {
+    metadataCache.set(url, metadata);
+}
+
+/**
+ * Get stream metadata from local cache
+ * @param {string} url - Video URL
+ * @returns {Object|undefined} Metadata if available
+ */
+export function getStreamMetadata(url) {
+    return metadataCache.get(url);
 }
 
 /**
@@ -236,9 +268,9 @@ export async function getStreamQualities(url) {
         throw new Error('Cannot determine active tab');
     }
     
-    // Cache key for qualities
-    if (getStreamMetadata(url)) {
-        return getStreamMetadata(url);
+    // Check local cache first
+    if (metadataCache.has(url)) {
+        return metadataCache.get(url);
     }
     
     // Send port message to request qualities
@@ -264,8 +296,8 @@ export async function getStreamQualities(url) {
                 if (response.streamInfo) {
                     const streamInfo = response.streamInfo;
                     
-                    // Cache the response
-                    addStreamMetadata(url, streamInfo);
+                    // Cache the response locally
+                    metadataCache.set(url, streamInfo);
                     
                     // If we have variants, format them for the quality selector
                     if (streamInfo.variants && streamInfo.variants.length > 0) {
@@ -316,5 +348,11 @@ export async function getStreamQualities(url) {
  * Clear HLS relationships
  */
 export function clearHLSRelationships() {
-    hlsRelationships.clear();
+    // HLS relationships are now managed entirely in the background
+    console.log('HLS relationships now managed in background script');
+}
+
+// Export a minimal setVideoGroups function for backward compatibility
+export function setVideoGroups(groups) {
+    // No-op - groups are maintained in background
 }

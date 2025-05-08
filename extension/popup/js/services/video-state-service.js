@@ -14,15 +14,15 @@ import { sendPortMessage } from '../index.js';
 // Singleton service that manages state
 class VideoStateService {
   constructor() {
-    // Simple local state for current popup session only
+    // Simple local state for current popup session only - minimal storage
     this.currentVideos = [];
-    this.posters = new Map(); // Simple Map for posters during current popup session
-    this.streamMetadata = new Map(); // Simple Map for stream metadata during current popup session
-    this.videoGroups = {}; // Groups of videos by type (hls, dash, direct, etc.)
     
+    // UI state for the current popup session
     this.activeTabId = null;
     this.lastFetchTime = 0;
     this.isInitialized = false;
+    
+    // Event system
     this.eventListeners = {};
     
     // Debug helper
@@ -43,7 +43,8 @@ class VideoStateService {
         this.debug('Initialized with active tab ID:', this.activeTabId);
       }
       
-      // Listen for video metadata updates 
+      // Listen for video updates from background
+      document.addEventListener('video-update', this.handleVideoUpdate.bind(this));
       document.addEventListener('metadata-update', this.handleMetadataUpdate.bind(this));
       document.addEventListener('preview-ready', this.handlePreviewReady.bind(this));
       
@@ -51,7 +52,7 @@ class VideoStateService {
       
       // Trigger a videos fetch if we have a tab
       if (this.activeTabId) {
-        this.fetchVideos({ forceRefresh: true }); // Force refresh to ensure metadata is processed
+        this.fetchVideos({ forceRefresh: false });
       }
       
       return true;
@@ -83,7 +84,7 @@ class VideoStateService {
     this.lastFetchTime = now;
     this.debug('Fetching videos for tab:', this.activeTabId, forceRefresh ? '(forced)' : '');
     
-    // Request videos via port message
+    // Request videos via port message - background script is the source of truth
     sendPortMessage({
       action: 'getVideos',
       tabId: this.activeTabId,
@@ -100,108 +101,36 @@ class VideoStateService {
    */
   updateVideos(videos) {
     this.currentVideos = videos;
-    
-    // Request metadata for any videos without it
-    this.requestMissingMetadata(videos);
-    
     this.emit('videosUpdated', videos);
   }
+
+  /**
+   * Handle video update events from background
+   * @param {CustomEvent} event - Video update event
+   */
+  handleVideoUpdate(event) {
+    const { videos } = event.detail;
+    this.updateVideos(videos);
+  }
   
   /**
-   * Request metadata for videos that don't have it
-   * @param {Array} videos - Videos to check
+   * Handle metadata update events from background
+   * @param {CustomEvent} event - Metadata update event
    */
-  requestMissingMetadata(videos) {
-    if (!videos || !videos.length) return;
-    
-    // Find videos without metadata
-    const videosNeedingMetadata = videos.filter(video => 
-      !video.mediaInfo && !this.streamMetadata.has(video.url)
-    );
-    
-    if (videosNeedingMetadata.length > 0) {
-      this.debug(`Requesting metadata for ${videosNeedingMetadata.length} videos`);
-      
-      // Request metadata for each video
-      videosNeedingMetadata.forEach(video => {
-        sendPortMessage({
-          action: 'getStreamMetadata',
-          url: video.url,
-          tabId: this.activeTabId
-        });
-      });
-    }
+  handleMetadataUpdate(event) {
+    const { url, mediaInfo } = event.detail;
+    // Just pass the event to listeners
+    this.emit('metadata-update', { url, mediaInfo });
   }
 
   /**
-   * Get a poster image 
-   * @param {string} url - Video URL
-   * @returns {string|null} Poster URL or null
+   * Handle preview ready events from background
+   * @param {CustomEvent} event - Preview ready event
    */
-  getPoster(url) {
-    return this.posters.get(url);
-  }
-
-  /**
-   * Add a poster
-   * @param {string} videoUrl - Video URL
-   * @param {string} posterUrl - Poster image URL
-   */
-  addPoster(videoUrl, posterUrl) {
-    this.posters.set(videoUrl, posterUrl);
-  }
-  
-  /**
-   * Get stream metadata
-   * @param {string} url - Stream URL
-   * @returns {Object|null} Stream metadata or null
-   */
-  getStreamMetadata(url) {
-    return this.streamMetadata.get(url);
-  }
-  
-  /**
-   * Add stream metadata
-   * @param {string} url - Stream URL
-   * @param {Object} metadata - Stream metadata
-   */
-  addStreamMetadata(url, metadata) {
-    this.streamMetadata.set(url, metadata);
-  }
-  
-  /**
-   * Check if stream metadata exists
-   * @param {string} url - Stream URL
-   * @returns {boolean} True if metadata exists
-   */
-  hasStreamMetadata(url) {
-    return this.streamMetadata.has(url);
-  }
-  
-  /**
-   * Store video groups by type
-   * @param {Object} groups - Video groups by type
-   */
-  setVideoGroups(groups) {
-    this.videoGroups = groups;
-    this.emit('videoGroupsChanged', groups);
-  }
-  
-  /**
-   * Get all video groups
-   * @returns {Object} Video groups by type
-   */
-  getAllVideoGroups() {
-    return this.videoGroups;
-  }
-  
-  /**
-   * Get videos of a specific type
-   * @param {string} type - Video type (hls, dash, direct, etc.)
-   * @returns {Array} Videos of the specified type
-   */
-  getVideoGroup(type) {
-    return this.videoGroups[type] || [];
+  handlePreviewReady(event) {
+    const { videoUrl, previewUrl } = event.detail;
+    // Just pass the event to listeners
+    this.emit('preview-ready', { videoUrl, previewUrl });
   }
 
   /**
@@ -233,56 +162,51 @@ class VideoStateService {
   }
 
   /**
-   * Handle metadata update events
-   * @param {CustomEvent} event - Metadata update event
+   * Refresh videos
+   * This is a convenience method that forces a refresh
    */
-  handleMetadataUpdate(event) {
-    const { url, mediaInfo } = event.detail;
-    // Store metadata for this popup session
-    this.addStreamMetadata(url, mediaInfo);
-    // Emit event for UI to update
-    this.emit('metadata-update', { url, mediaInfo });
+  async refreshVideos() {
+    return this.fetchVideos({ forceRefresh: true });
   }
 
   /**
-   * Handle preview ready events
-   * @param {CustomEvent} event - Preview ready event
-   */
-  handlePreviewReady(event) {
-    const { videoUrl, previewUrl } = event.detail;
-    // Cache the poster locally for this popup session
-    this.addPoster(videoUrl, previewUrl);
-    // Emit event for UI to update
-    this.emit('preview-ready', { videoUrl, previewUrl });
-  }
-
-  /**
-   * Clear all caches and fetch fresh videos
-   * This is a simplified version that just refreshes videos
+   * Clear all caches and video data
+   * @returns {Promise<boolean>} Success status
    */
   async clearCaches() {
-    this.posters = new Map();
-    this.streamMetadata = new Map();
-    this.lastFetchTime = 0;
-    this.debug('Caches cleared, requesting fresh videos');
-    
-    // Return the result of fetchVideos with forceRefresh=true
-    return this.fetchVideos({ forceRefresh: true });
+    this.debug('Clearing caches');
+    try {
+      // Clear local cache
+      this.currentVideos = [];
+      
+      // Request background to clear its caches
+      sendPortMessage({
+        action: 'clearCaches'
+      });
+      
+      // Reset last fetch time to force refresh next time
+      this.lastFetchTime = 0;
+      
+      // Emit event so UI can update
+      this.emit('caches-cleared', true);
+      
+      return true;
+    } catch (error) {
+      console.error('Failed to clear caches:', error);
+      return false;
+    }
   }
 }
 
+// Create the singleton instance
+const videoStateService = new VideoStateService();
+
 // Export singleton instance
-export const videoStateService = new VideoStateService();
+export { videoStateService };
 
 // Re-export common methods for convenience
 export const fetchVideos = (options) => videoStateService.fetchVideos(options);
-export const getPoster = (url) => videoStateService.getPoster(url);
-export const addPoster = (videoUrl, posterUrl) => videoStateService.addPoster(videoUrl, posterUrl);
-export const setVideoGroups = (groups) => videoStateService.setVideoGroups(groups);
-export const getAllVideoGroups = () => videoStateService.getAllVideoGroups();
-export const getVideoGroup = (type) => videoStateService.getVideoGroup(type);
 export const updateVideos = (videos) => videoStateService.updateVideos(videos);
-export const getStreamMetadata = (url) => videoStateService.getStreamMetadata(url);
-export const addStreamMetadata = (url, metadata) => videoStateService.addStreamMetadata(url, metadata);
-export const hasStreamMetadata = (url) => videoStateService.hasStreamMetadata(url);
+export const refreshVideos = () => videoStateService.refreshVideos();
+export const on = (event, callback) => videoStateService.on(event, callback);
 export const clearCaches = () => videoStateService.clearCaches();

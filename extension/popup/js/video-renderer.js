@@ -20,12 +20,21 @@
 import { getFilenameFromUrl, formatResolution, formatDuration, normalizeUrl } from './utilities.js';
 // Import functions from services instead of state.js
 import { getAllGroupStates, setGroupState } from './services/group-state-service.js';
-import { getPoster, addPoster, getAllVideoGroups } from './services/video-state-service.js';
+import { videoStateService } from './services/video-state-service.js';
+import { addPoster, getPoster, generatePreview } from './preview.js';
 import { groupVideosByType } from './video-processor.js';
 import { handleDownload } from './download.js';
-import { generatePreview } from './preview.js';
 import { showQualityDialog } from './ui.js';
 import { getStreamQualities } from './video-processor.js';
+
+/**
+ * Get all video groups from the background
+ * @returns {Object} Video groups by type
+ */
+function getAllVideoGroups() {
+    // Return the videos grouped by type from the video state service
+    return videoStateService.getState().videoGroups || {};
+}
 
 /**
  * Final validation to ensure tracking pixels and similar unwanted content isn't rendered
