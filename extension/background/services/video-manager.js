@@ -112,24 +112,15 @@ function processVideosForBroadcast(videos) {
     // First apply validation filter to remove unwanted videos
     const validatedVideos = validateAndFilterVideos ? validateAndFilterVideos(videos) : videos;
     
-    // Apply our variant filtering to reduce redundant quality options
-    const filteredVideos = filterRedundantVariants(validatedVideos, {
-        removeNeighboringQualities: true,
-        qualityThreshold: 15 // 15% difference threshold
-    });
-    
-    // Add a processing timestamp for version tracking
-    const processingTimestamp = Date.now();
-
-    // Build final list with enhanced information for display
-    const processedVideos = filteredVideos.map(video => {
+    // We're no longer filtering redundant qualities - using validatedVideos directly
+    const processedVideos = validatedVideos.map(video => {
         // Add additional information needed for immediate display
         return {
             ...video,
             // Add additional metadata needed by UI
-            timestamp: video.timestamp || processingTimestamp,
+            timestamp: video.timestamp || Date.now(),
             processed: true,
-            lastProcessedAt: processingTimestamp,
+            lastProcessedAt: Date.now(),
             // Ensure video has all necessary fields for display
             title: video.title || getFilenameFromUrl(video.url),
             poster: video.poster || video.previewUrl || null,
