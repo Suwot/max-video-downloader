@@ -22,6 +22,90 @@ let currentTabId = null;
 let refreshInterval = null;
 let isEmptyState = true; // Track if we're currently showing "No videos found"
 
+// Batching for metadata updates
+const metadataUpdateBatch = {
+    updates: new Map(),
+    timeoutId: null,
+    batchTimeMs: 100, // Process updates every 100ms
+
+    /**
+     * Add a metadata update to the batch
+     * @param {string} url - Video URL
+     * @param {Object} mediaInfo - Media information
+     */
+    add(url, mediaInfo) {
+        this.updates.set(url, mediaInfo);
+        
+        // Schedule processing if not already scheduled
+        if (!this.timeoutId) {
+            this.timeoutId = setTimeout(() => this.process(), this.batchTimeMs);
+        }
+    },
+    
+    /**
+     * Process all batched metadata updates
+     */
+    process() {
+        if (this.updates.size === 0) return;
+        
+        console.log(`Processing batch of ${this.updates.size} metadata updates`);
+        
+        // Get the module for DOM updates
+        import('./video-renderer.js').then(module => {
+            // Process all DOM updates in one go
+            this.updates.forEach((mediaInfo, url) => {
+                module.updateVideoMetadata(url, mediaInfo);
+            });
+        });
+        
+        // Update cache for all videos in batch
+        if (currentTabId) {
+            chrome.storage.local.get([`processedVideos_${currentTabId}`], result => {
+                const storageKey = `processedVideos_${currentTabId}`;
+                const videos = result[storageKey] || [];
+                let hasChanges = false;
+                
+                // Update all videos with new metadata
+                this.updates.forEach((mediaInfo, url) => {
+                    const index = videos.findIndex(v => v.url === url);
+                    if (index !== -1) {
+                        videos[index] = {
+                            ...videos[index],
+                            mediaInfo: mediaInfo,
+                            resolution: {
+                                width: mediaInfo.width,
+                                height: mediaInfo.height,
+                                fps: mediaInfo.fps,
+                                bitrate: mediaInfo.videoBitrate || mediaInfo.totalBitrate
+                            }
+                        };
+                        hasChanges = true;
+                    }
+                });
+                
+                // Only update storage if we made changes
+                if (hasChanges) {
+                    chrome.storage.local.set({
+                        [storageKey]: videos,
+                        lastVideoUpdate: Date.now()
+                    });
+                }
+            });
+        }
+        
+        // Update module cache for all updates
+        import('./state.js').then(stateModule => {
+            this.updates.forEach((mediaInfo, url) => {
+                stateModule.addMediaInfoToCache(url, mediaInfo);
+            });
+        });
+        
+        // Clear the batch
+        this.updates.clear();
+        this.timeoutId = null;
+    }
+};
+
 /**
  * Establish a connection to the background script
  * @returns {Port} The connection port object
@@ -84,80 +168,30 @@ function normalizeUrl(url) {
 function handlePortMessage(message) {
     console.log('Received port message:', message);
     
-    // Handle video list responses
-    if (message.action === 'videoListResponse' && message.videos) {
-        console.log('Received video list via port:', message.videos.length);
-        
-        // If we get videos when previously there were none, update the UI
-        if (message.videos.length > 0) {
-            isEmptyState = false;
-            renderVideos(message.videos);
-            hideLoadingState();
-        } else if (!isEmptyState) {
-            // Only update if we're not already showing empty state
-            renderVideos(message.videos);
-            hideLoadingState();
-            isEmptyState = true;
-        }
-        
-        // Cache videos for future quick access
-        if (currentTabId) {
-            chrome.storage.local.set({
-                [`processedVideos_${currentTabId}`]: message.videos,
-                lastVideoUpdate: Date.now()
-            });
-            console.log('Cached videos for tab', currentTabId);
-        }
+    // Handle video updates with a unified approach
+    if ((message.action === 'videoListResponse' || message.action === 'videoStateUpdated') && message.videos) {
+        console.log(`Received ${message.videos.length} videos via port`);
+        updateVideoDisplay(message.videos);
+        return;
     }
     
-    // Handle video state updates
-    else if (message.action === 'videoStateUpdated' && message.videos) {
-        console.log('Received video state update via port:', message.videos.length);
-        
-        // If we get videos when previously there were none, update the UI
-        if (message.videos.length > 0) {
-            isEmptyState = false;
-            renderVideos(message.videos);
-            hideLoadingState();
-        } else if (!isEmptyState) {
-            // Only update if we're not already showing empty state
-            renderVideos(message.videos);
-            hideLoadingState();
-            isEmptyState = true;
-        }
-        
-        // Cache updated videos
-        if (message.tabId && message.tabId === currentTabId) {
-            chrome.storage.local.set({
-                [`processedVideos_${message.tabId}`]: message.videos,
-                lastVideoUpdate: Date.now()
-            });
-            console.log('Cached updated videos for tab', message.tabId);
-        }
-    }
-    
-    // Handle new video detection notification - this is the key to auto-updating
-    else if (message.action === 'newVideoDetected') {
+    // Handle new video detection notification
+    if (message.action === 'newVideoDetected') {
         console.log('Received new video detection notification');
         // Force a refresh of the video list
         requestVideos(true);
+        return;
     }
     
     // Handle metadata updates
-    else if (message.type === 'metadataUpdate' && message.url && message.mediaInfo) {
+    if (message.type === 'metadataUpdate' && message.url && message.mediaInfo) {
         console.log('Received metadata update for video:', message.url);
-        import('./video-renderer.js').then(module => {
-            module.updateVideoMetadata(message.url, message.mediaInfo);
-            
-            // Also update the cache
-            import('./state.js').then(stateModule => {
-                stateModule.addMediaInfoToCache(message.url, message.mediaInfo);
-            });
-        });
+        metadataUpdateBatch.add(message.url, message.mediaInfo);
+        return;
     }
     
     // Handle active downloads list
-    else if (message.action === 'activeDownloadsList' && message.downloads) {
+    if (message.action === 'activeDownloadsList' && message.downloads) {
         console.log('Received active downloads list:', message.downloads);
         
         // Import download module to process active downloads
@@ -172,26 +206,29 @@ function handlePortMessage(message) {
                 );
             });
         });
+        return;
     }
     
     // Handle manifest responses
-    else if (message.type === 'manifestContent') {
+    if (message.type === 'manifestContent') {
         console.log('Received manifest content via port');
         document.dispatchEvent(new CustomEvent('manifest-content', { 
             detail: message 
         }));
+        return;
     }
     
     // Handle preview responses
-    else if (message.type === 'previewResponse') {
+    if (message.type === 'previewResponse') {
         console.log('Received preview data via port');
         document.dispatchEvent(new CustomEvent('preview-generated', { 
             detail: message 
         }));
+        return;
     }
     
     // Handle live preview updates for proactively generated previews
-    else if (message.type === 'previewReady') {
+    if (message.type === 'previewReady') {
         console.log('Received preview update:', message.videoUrl);
         
         // Find the video element in the UI
@@ -220,14 +257,100 @@ function handlePortMessage(message) {
                 });
             }
         }
+        return;
     }
     
     // Handle quality responses
-    else if (message.type === 'qualitiesResponse') {
+    if (message.type === 'qualitiesResponse') {
         console.log('Received qualities data via port');
         document.dispatchEvent(new CustomEvent('qualities-response', { 
             detail: message 
         }));
+        return;
+    }
+}
+
+/**
+ * Handle metadata updates in a unified way
+ * @param {string} url - The video URL
+ * @param {Object} mediaInfo - Media information object
+ */
+function handleMetadataUpdate(url, mediaInfo) {
+    console.log('Handling metadata update for:', url);
+    
+    // 1. Update the DOM with new metadata
+    import('./video-renderer.js').then(module => {
+        module.updateVideoMetadata(url, mediaInfo);
+    });
+    
+    // 2. Update our cached videos with the new metadata
+    if (currentTabId) {
+        // Get current videos from cache
+        chrome.storage.local.get([`processedVideos_${currentTabId}`], result => {
+            const storageKey = `processedVideos_${currentTabId}`;
+            const videos = result[storageKey] || [];
+            
+            // Find and update the video
+            const index = videos.findIndex(v => v.url === url);
+            if (index !== -1) {
+                videos[index] = {
+                    ...videos[index],
+                    mediaInfo: mediaInfo,
+                    // Also update resolution field for consistency
+                    resolution: {
+                        width: mediaInfo.width,
+                        height: mediaInfo.height,
+                        fps: mediaInfo.fps,
+                        bitrate: mediaInfo.videoBitrate || mediaInfo.totalBitrate
+                    }
+                };
+                
+                // Update cache with modified videos
+                chrome.storage.local.set({
+                    [storageKey]: videos,
+                    lastVideoUpdate: Date.now()
+                });
+            }
+        });
+    }
+    
+    // 3. Update the module cache
+    import('./state.js').then(stateModule => {
+        stateModule.addMediaInfoToCache(url, mediaInfo);
+    });
+}
+
+/**
+ * Single entry point for updating videos in the UI
+ * @param {Array} videos - The videos to display
+ * @param {boolean} updateCache - Whether to update the cache
+ */
+function updateVideoDisplay(videos, updateCache = true) {
+    console.log('Updating video display with', videos.length, 'videos');
+    
+    // Videos are already processed by the background script,
+    // so we can directly render them without additional processing
+    
+    // Update UI state
+    if (videos.length > 0) {
+        isEmptyState = false;
+        // Render videos directly without additional processing
+        renderVideos(videos);
+        hideLoadingState();
+    } else if (!isEmptyState) {
+        // Only update if we're not already showing empty state
+        renderVideos(videos);
+        hideLoadingState();
+        isEmptyState = true;
+    }
+    
+    // Update cache if needed
+    if (updateCache && currentTabId) {
+        chrome.storage.local.set({
+            [`processedVideos_${currentTabId}`]: videos,
+            lastVideoUpdate: Date.now()
+        });
+        console.log('Cached videos for tab', currentTabId);
     }
 }
 
@@ -334,10 +457,9 @@ document.addEventListener('DOMContentLoaded', async () => {
             const result = await chrome.storage.local.get(storageKey);
             if (result[storageKey] && result[storageKey].length > 0) {
                 console.log('Found stored videos, rendering immediately:', result[storageKey].length);
-                renderVideos(result[storageKey]);
+                // Use the centralized function to update videos
+                updateVideoDisplay(result[storageKey], false); // Don't re-cache
                 hasStoredVideos = true;
-                isEmptyState = false;
-                hideLoadingState();
             } else {
                 isEmptyState = true;
             }

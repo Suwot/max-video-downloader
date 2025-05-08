@@ -226,7 +226,7 @@ function setupBlobListeners() {
     });
     
     // Monitor for new videos being added to the DOM
-    const bodyObserver = new MutationObserver(mutations => {
+    const bodyObserver = new MutationObserver((mutations, observer) => {
         mutations.forEach(mutation => {
             mutation.addedNodes.forEach(node => {
                 if (node.nodeName === 'VIDEO') {
@@ -246,7 +246,27 @@ function setupBlobListeners() {
         });
     });
     
-    bodyObserver.observe(document.body, { childList: true, subtree: true });
+    // Safely start the body observer - handle cases where body isn't available yet
+    function startBodyObserver() {
+        if (document.body) {
+            // Body exists, start observing immediately
+            bodyObserver.observe(document.body, { childList: true, subtree: true });
+        } else {
+            // Wait for body to be created
+            const documentObserver = new MutationObserver(() => {
+                if (document.body) {
+                    bodyObserver.observe(document.body, { childList: true, subtree: true });
+                    documentObserver.disconnect(); // Stop observing document once body exists
+                }
+            });
+            
+            // Observe document for when body is added
+            documentObserver.observe(document.documentElement, { childList: true });
+        }
+    }
+    
+    // Start the observers
+    startBodyObserver();
 }
 
 // Try to snapshot info about a blob URL

@@ -2,14 +2,10 @@
  * @ai-guide-component VideoProcessor
  * @ai-guide-description Transforms and enhances video data
  * @ai-guide-responsibilities
- * - Processes raw video data into displayable formats
  * - Groups videos by type and source
- * - Extracts and normalizes video metadata
  * - Handles stream metadata for different formats (HLS/DASH)
- * - Manages video quality variants and resolution info
  * - Provides analysis of video content types
- * - Deduplicates video sources across formats
- * - Filters out redundant quality variants
+ * - Manages video quality variants and resolution info
  */
 
 // popup/js/video-processor.js
@@ -24,18 +20,18 @@ import { filterRedundantVariants } from '../../js/utilities/video-validator.js';
 const hlsRelationships = new Map();
 
 /**
+ * @deprecated Use videos directly from background processing instead
  * Process and group videos - assumes videos are already deduplicated by video-manager.js
  * @param {Array} videos - Videos to process
- * @returns {Array} Processed and grouped videos
+ * @returns {Array} Processed videos
  */
 export function processVideos(videos) {
     if (!videos || !Array.isArray(videos)) return [];
-
-    console.log('Processing videos in popup:', videos.length);
     
-    // Skip deduplication as it's already handled in video-manager.js
-    // Just proceed with grouping the videos
-    return groupVideos(videos);
+    console.log('WARNING: Using deprecated processVideos function. Videos should be pre-processed by background script.');
+    
+    // Just return the videos directly - they should already be processed by the background script
+    return videos;
 }
 
 /**
@@ -98,86 +94,16 @@ export function shouldGroupVideos(video1, video2) {
 }
 
 /**
+ * @deprecated Use videos directly from background processing instead
  * Group videos by resolution and HLS relationships
  * @param {Array} videos - Videos to group
  * @returns {Array} Grouped videos
  */
 export function groupVideos(videos) {
-    const groupedVideos = [];
-    const processed = new Set();
-
-    // First pass: collect all master playlists
-    const masterPlaylists = videos.filter(v => v.type === 'hls' && v.isPlaylist && v.qualityVariants?.length > 0);
+    console.log('WARNING: Using deprecated groupVideos function. Videos should be pre-grouped by background script.');
     
-    // Process master playlists first
-    for (const master of masterPlaylists) {
-        if (processed.has(master.url)) continue;
-
-        const variants = videos.filter(v => 
-            v.type === 'hls' && 
-            !v.isPlaylist && 
-            shareHLSBaseDirectory(master, v) &&
-            master.qualityVariants.some(qv => qv.url === v.url)
-        );
-
-        // Add all variants to processed set
-        processed.add(master.url);
-        variants.forEach(v => processed.add(v.url));
-
-        // Create grouped video with master as base
-        const groupedVideo = {
-            ...master,
-            qualityVariants: master.qualityVariants.map(qv => ({
-                url: qv.url,
-                width: qv.width,
-                height: qv.height,
-                fps: qv.fps,
-                bandwidth: qv.bandwidth,
-                codecs: qv.codecs
-            }))
-        };
-
-        groupedVideos.push(groupedVideo);
-    }
-
-    // Second pass: handle remaining videos
-    for (const video of videos) {
-        if (processed.has(video.url)) continue;
-
-        processed.add(video.url);
-        const group = [video];
-
-        // Look for related videos
-        for (const otherVideo of videos) {
-            if (processed.has(otherVideo.url)) continue;
-            if (shouldGroupVideos(video, otherVideo)) {
-                group.push(otherVideo);
-                processed.add(otherVideo.url);
-            }
-        }
-
-        if (group.length > 1) {
-            // Sort by resolution and pick highest as main
-            const sortedGroup = group.sort((a, b) => {
-                if (!a.resolution || !b.resolution) return 0;
-                return b.resolution.height - a.resolution.height;
-            });
-
-            const mainVideo = { ...sortedGroup[0] };
-            mainVideo.qualityVariants = sortedGroup.slice(1).map(v => ({
-                url: v.url,
-                width: v.resolution?.width,
-                height: v.resolution?.height,
-                fps: v.resolution?.fps
-            }));
-
-            groupedVideos.push(mainVideo);
-        } else {
-            groupedVideos.push(video);
-        }
-    }
-
-    return groupedVideos;
+    // Simply return the videos as they should already be grouped by the background script
+    return videos;
 }
 
 /**

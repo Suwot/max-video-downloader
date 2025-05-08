@@ -32,7 +32,7 @@ import {
     clearMasterPlaylists
 } from './state.js';
 import { showLoader, showErrorMessage, restoreScrollPosition } from './ui.js';
-import { groupVideos, processVideos, clearHLSRelationships } from './video-processor.js';
+import { groupVideosByType, clearHLSRelationships } from './video-processor.js';
 // Import updateVideoMetadata from video-renderer
 import { renderVideos, updateVideoMetadata } from './video-renderer.js';
 import { formatResolution, formatDuration, getFilenameFromUrl } from './utilities.js';
@@ -53,8 +53,6 @@ import {
 function logDebug(...args) {
     console.log('[Video Fetcher]', new Date().toISOString(), ...args);
 }
-
-// Remove the local knownMasterPlaylists Map as we're now using the centralized one in state.js
 
 /**
  * Process video for HLS relationships
@@ -190,19 +188,28 @@ export async function refreshInBackground(videos) {
 
             if (newVideos.length > 0) {
                 logDebug('Processing', newVideos.length, 'new videos');
-                const processedVideos = [...videos];
+                
+                // Process videos with the HLS relationship function (essential processing)
+                const processedNewVideos = [];
                 for (const video of newVideos) {
                     const processed = await processHLSRelationships(video, tabId);
                     if (processed) {
-                        processedVideos.push(processed);
+                        processedNewVideos.push(processed);
                     }
                 }
-
-                const groupedVideos = processVideos(processedVideos);
-                logDebug('Updating with new videos, total:', groupedVideos.length);
-                setCachedVideos(groupedVideos);
-                renderVideos(groupedVideos);
-                fetchVideoInfo(newVideos, tabId);
+                
+                // Send new videos to the background script for proper processing
+                logDebug('Sending new videos to background script');
+                
+                // Use the port message to trigger processing in the background
+                sendPortMessage({
+                    action: 'addNewVideos',
+                    videos: processedNewVideos,
+                    tabId: tabId
+                });
+                
+                // Request metadata for new videos
+                fetchVideoInfo(processedNewVideos, tabId);
             }
         }
     } catch (error) {
@@ -372,8 +379,6 @@ export async function fetchVideoInfo(videos, tabId) {
         console.error('Error in parallel video info fetching:', error);
     });
 }
-
-// Removed updateVideoResolution - consolidated with updateVideoMetadata in video-renderer.js
 
 /**
  * Get stream resolution from background script using port communication
