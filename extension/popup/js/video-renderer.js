@@ -656,6 +656,9 @@ export function updateVideoMetadata(url, mediaInfo) {
             }
             if (mediaInfo.audioCodec) {
                 codecDetails.push(`Audio: ${mediaInfo.audioCodec.name}`);
+                if (mediaInfo.audioCodec.channels) {
+                    codecDetails.push(`${mediaInfo.audioCodec.channels} channels`);
+                }
             }
         } else if (mediaInfo.hasVideo) {
             mediaContentType = "Video Only";
@@ -695,16 +698,19 @@ export function updateVideoMetadata(url, mediaInfo) {
     if (codecDetails.length > 0) {
         codecInfo.textContent = codecDetails.join(' • ');
         codecInfo.classList.remove('loading');
+    } else {
+        codecInfo.textContent = 'Codec information unavailable';
+        codecInfo.classList.remove('loading');
     }
     
     // Update duration if available
     if (mediaInfo.duration) {
-        const durationElement = videoElement.querySelector('.video-duration');
+        let durationElement = videoElement.querySelector('.video-duration');
         if (!durationElement) {
             // Create duration element if it doesn't exist
             const previewContainer = videoElement.querySelector('.preview-container');
             if (previewContainer) {
-                const durationElement = document.createElement('div');
+                durationElement = document.createElement('div');
                 durationElement.className = 'video-duration';
                 durationElement.textContent = formatDuration(mediaInfo.duration);
                 previewContainer.appendChild(durationElement);
@@ -715,11 +721,23 @@ export function updateVideoMetadata(url, mediaInfo) {
         }
     }
     
+    // Update resolution info if available
+    const resolutionInfo = videoElement.querySelector('.resolution-info');
+    if (resolutionInfo && resolutionInfo.classList.contains('loading') && 
+        mediaInfo.width && mediaInfo.height) {
+        resolutionInfo.classList.remove('loading');
+        resolutionInfo.textContent = `${mediaInfo.width}x${mediaInfo.height}`;
+        if (mediaInfo.fps) {
+            resolutionInfo.textContent += ` ${mediaInfo.fps}fps`;
+        }
+    }
+    
     // Update quality selector dropdown if it exists
     const qualitySelector = videoElement.querySelector('.quality-selector');
     if (qualitySelector && qualitySelector.options.length > 0) {
         // Check if the first option is "Original Quality" and we have resolution info
-        if (qualitySelector.options[0].textContent === 'Original Quality' && 
+        if ((qualitySelector.options[0].textContent === 'Original Quality' || 
+             qualitySelector.options[0].textContent.includes('Resolution')) && 
             mediaInfo.width && mediaInfo.height) {
             
             // Create more descriptive label with actual quality
