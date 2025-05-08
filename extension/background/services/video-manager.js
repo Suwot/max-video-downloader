@@ -10,49 +10,20 @@ import { validateAndFilterVideos, filterRedundantVariants } from '../../js/utili
 import { processVideoRelationships } from '../../js/manifest-service.js';
 import { getActivePopupPortForTab } from './popup-ports.js';
 
-// Track masters and their variants across all tabs
-// Key: normalized master URL, Value: array of normalized variant URLs
-const knownMasters = new Map();
+// Simple in-memory storage: Map<tabId, Array<VideoEntry>>
+const videosPerTab = new Map();
+// Track playlists per tab
+const playlistsPerTab = new Map();
 
-// Track which variants are linked to which masters
-// Key: normalized variant URL, Value: normalized master URL
-const variantToMaster = new Map();
-
-const videosPerTab = {};
-const playlistsPerTab = {};
-const metadataProcessingQueue = new Map();
+// Track manifest relationships
 const manifestRelationships = new Map();
+
+// Track preview generation to avoid duplicate requests
 const previewGenerationQueue = new Map();
+// Track metadata processing
+const metadataProcessingQueue = new Map();
 
-// Global blacklist for URLs that have failed or reached max processing attempts
-// This prevents repeated console spam for problematic URLs
-const processedUrlBlacklist = new Set();
-
-// Debug logging helper
-function logDebug(...args) {
-    console.log('[Video Manager]', new Date().toISOString(), ...args);
-}
-
-// Extract filename from URL
-function getFilenameFromUrl(url) {
-    if (url.startsWith('blob:')) {
-        return 'video_blob';
-    }
-    
-    try {
-        const urlObj = new URL(url);
-        const pathname = urlObj.pathname;
-        const filename = pathname.split('/').pop();
-        
-        if (filename && filename.length > 0) {
-            return filename;
-        }
-    } catch {}
-    
-    return 'video';
-}
-
-// Track rate limiting for API requests
+// Rate limiter for API requests
 const rateLimiter = {
   activeRequests: 0,
   maxConcurrent: 2, // Maximum concurrent requests allowed
@@ -112,69 +83,48 @@ const rateLimiter = {
   }
 };
 
+// Debug logging helper
+function logDebug(...args) {
+    console.log('[Video Manager]', new Date().toISOString(), ...args);
+}
+
+// Extract filename from URL
+function getFilenameFromUrl(url) {
+    if (url.startsWith('blob:')) {
+        return 'video_blob';
+    }
+    
+    try {
+        const urlObj = new URL(url);
+        const pathname = urlObj.pathname;
+        const filename = pathname.split('/').pop();
+        
+        if (filename && filename.length > 0) {
+            return filename;
+        }
+    } catch {}
+    
+    return 'video';
+}
+
 // Process videos for sending to popup - fully prepare videos for instant display
 function processVideosForBroadcast(videos) {
     // First apply validation filter to remove unwanted videos
     const validatedVideos = validateAndFilterVideos ? validateAndFilterVideos(videos) : videos;
     
     // Apply our variant filtering to reduce redundant quality options
-    // This will keep only distinct quality levels, removing nearly identical variants
     const filteredVideos = filterRedundantVariants(validatedVideos, {
         removeNeighboringQualities: true,
         qualityThreshold: 15 // 15% difference threshold
     });
     
-    // Create sets to track master and variant URLs
-    const processedVideos = [];
-    const variantUrls = new Set();
-    const masterUrls = new Set();
-    
     // Add a processing timestamp for version tracking
     const processingTimestamp = Date.now();
 
-    // Step 1: Collect ALL master playlists and their variant URLs
-    filteredVideos.forEach(video => {
-        if (video.isMasterPlaylist || video.isPlaylist) {
-            masterUrls.add(normalizeUrl(video.url));
-            
-            // Collect all variants regardless of which property they're in
-            const variants = video.variants || video.qualityVariants || [];
-            if (Array.isArray(variants)) {
-                variants.forEach(variant => {
-                    const variantUrl = typeof variant === 'string' ? variant : variant.url;
-                    if (variantUrl) {
-                        variantUrls.add(normalizeUrl(variantUrl));
-                    }
-                });
-            }
-        }
-    });
-
-    // Step 2: Build final list - ONLY include non-variant videos
-    filteredVideos.forEach(video => {
-        const normalizedUrl = normalizeUrl(video.url);
-        
-        // SKIP if it's explicitly marked as a variant
-        if (video.isVariant) {
-            logDebug(`Skipping explicitly marked variant ${video.url}`);
-            return;
-        }
-        
-        // SKIP if it's a variant URL that was listed under a master playlist
-        if (variantUrls.has(normalizedUrl)) {
-            logDebug(`Skipping variant ${video.url} because it's a known variant of a master`);
-            return;
-        }
-        
-        // SKIP if it's in our global variant registry and the master is in this batch
-        if (variantToMaster.has(normalizedUrl)) {
-            const masterUrl = variantToMaster.get(normalizedUrl);
-            logDebug(`Skipping variant ${video.url} (matched to master ${masterUrl})`);
-            return;
-        }
-        
+    // Build final list with enhanced information for display
+    const processedVideos = filteredVideos.map(video => {
         // Add additional information needed for immediate display
-        const enhancedVideo = {
+        return {
             ...video,
             // Add additional metadata needed by UI
             timestamp: video.timestamp || processingTimestamp,
@@ -185,114 +135,29 @@ function processVideosForBroadcast(videos) {
             poster: video.poster || video.previewUrl || null,
             downloadable: true,
             // Preserve source information or default to 'background'
-            // This indicates whether video was detected by content_script or background
             source: video.source || 'background',
-            // Track if this was added via background processing while popup was closed
-            detectedWhilePopupClosed: true,
             // Preserve the detection timestamp for debugging duplicates
-            detectionTimestamp: video.detectionTimestamp || null
+            detectionTimestamp: video.detectionTimestamp || null,
+            // Make sure quality variants are preserved
+            qualityVariants: video.qualityVariants || video.variants || [],
+            variants: video.variants || video.qualityVariants || [],
+            isMasterPlaylist: video.isMasterPlaylist || false
         };
-        
-        // If we have stream info, ensure it's mapped to mediaInfo for the popup
-        if (video.streamInfo && !video.mediaInfo) {
-            enhancedVideo.mediaInfo = {
-                hasVideo: video.streamInfo.hasVideo,
-                hasAudio: video.streamInfo.hasAudio,
-                videoCodec: video.streamInfo.videoCodec,
-                audioCodec: video.streamInfo.audioCodec,
-                format: video.streamInfo.format,
-                container: video.streamInfo.container,
-                duration: video.streamInfo.duration,
-                sizeBytes: video.streamInfo.sizeBytes,
-                width: video.streamInfo.width,
-                height: video.streamInfo.height,
-                fps: video.streamInfo.fps,
-                bitrate: video.streamInfo.videoBitrate || video.streamInfo.totalBitrate
-            };
-        }
-        
-        // If we have resolution info from the stream but not as a separate field,
-        // add it for immediate display in the popup
-        if (!video.resolution && video.streamInfo) {
-            enhancedVideo.resolution = {
-                width: video.streamInfo.width,
-                height: video.streamInfo.height,
-                fps: video.streamInfo.fps,
-                bitrate: video.streamInfo.videoBitrate || video.streamInfo.totalBitrate
-            };
-        }
-        
-        // Ensure we have a preview URL for rendering in the UI
-        if (!enhancedVideo.previewUrl && enhancedVideo.poster) {
-            enhancedVideo.previewUrl = enhancedVideo.poster;
-        }
-        
-        // If this is an HLS video, pre-compute some indicators for the UI
-        if (video.type === 'hls' && video.url.includes('.m3u8')) {
-            enhancedVideo.isHLS = true;
-            
-            // If this is a master playlist with variants, mark it as such
-            if (video.qualityVariants && video.qualityVariants.length > 0) {
-                enhancedVideo.isMasterPlaylist = true;
-                enhancedVideo.qualityCount = video.qualityVariants.length;
-                
-                // Find the highest quality variant for preview
-                const highestQuality = [...video.qualityVariants].sort((a, b) => {
-                    return (b.bandwidth || 0) - (a.bandwidth || 0);
-                })[0];
-                
-                if (highestQuality) {
-                    enhancedVideo.highestQualityInfo = {
-                        width: highestQuality.width,
-                        height: highestQuality.height,
-                        bandwidth: highestQuality.bandwidth,
-                        fps: highestQuality.fps
-                    };
-                }
-            }
-        }
-        
-        // If this video has a detection timestamp, add debugging log
-        if (enhancedVideo.detectionTimestamp) {
-            logDebug(`Preserving detection timestamp for video: ${enhancedVideo.url}, detected at: ${enhancedVideo.detectionTimestamp}`);
-        }
-        
-        // Include this video in the final output
-        processedVideos.push(enhancedVideo);
     });
     
-    // Log filtering stats with more detail
-    const variantCount = variantUrls.size + variantToMaster.size;
-    logDebug(`Filtered videos: ${validatedVideos.length} input → ${processedVideos.length} output ` +
-             `(${masterUrls.size} masters, ${variantCount} variants total)`);
-    
-    return processedVideos;
+    // Sort by newest first
+    return processedVideos.sort((a, b) => b.timestamp - a.timestamp);
 }
 
-// Store the filtered videos in storage for persistence
+// Broadcast videos to popup
 function broadcastVideoUpdate(tabId) {
-    if (!videosPerTab[tabId] || videosPerTab[tabId].size === 0) {
-        return;
+    if (!videosPerTab.has(tabId) || videosPerTab.get(tabId).length === 0) {
+        return [];
     }
     
-    // Convert Map to array
-    const videosArray = Array.from(videosPerTab[tabId].values());
-    videosArray.sort((a, b) => b.timestamp - a.timestamp);
-    
-    // Process before broadcasting - this includes variant filtering
-    const processedVideos = processVideosForBroadcast(videosArray);
-    
-    // Store in local storage for persistence between sessions
-    chrome.storage.local.set({
-        [`processedVideos_${tabId}`]: processedVideos,
-        [`processedVideosTimestamp_${tabId}`]: Date.now(),
-        lastVideoUpdate: Date.now(),
-        lastActiveTab: tabId
-    }).then(() => {
-        logDebug(`Stored ${processedVideos.length} processed videos for tab ${tabId} in storage`);
-    }).catch(err => {
-        console.error('Error storing videos:', err);
-    });
+    // Get videos for tab and process them
+    const videos = videosPerTab.get(tabId);
+    const processedVideos = processVideosForBroadcast(videos);
     
     // Send with chrome.runtime.sendMessage for compatibility
     try {
@@ -309,345 +174,81 @@ function broadcastVideoUpdate(tabId) {
     return processedVideos;
 }
 
-// Helper function to extract stream metadata
-async function getStreamMetadata(url) {
-    try {
-        // Skip blob URLs as they can't be analyzed
-        if (url.startsWith('blob:')) {
-            logDebug(`Skipping metadata request for blob URL: ${url}`);
-            return {
-                isBlob: true,
-                type: 'blob',
-                format: 'blob',
-                container: 'blob',
-                hasVideo: true,
-                hasAudio: true
-            };
-        }
-        
-        // Use our rate limiter to prevent too many concurrent requests
-        return await rateLimiter.enqueue(async () => {
-            logDebug(`Getting stream metadata for ${url} (active requests: ${rateLimiter.activeRequests}, queue: ${rateLimiter.queue.length})`);
-            
-            const response = await nativeHostService.sendMessage({
-                type: 'getQualities',
-                url: url
-            });
-
-            if (response?.streamInfo) {
-                return response.streamInfo;
-            }
-            return null;
-        });
-    } catch (error) {
-        console.error('Failed to get stream metadata:', error);
-        return null;
-    }
-}
-
-// Process metadata queue with retry mechanism
-async function processMetadataQueue(maxRetries = 2) {
-    // If no items in the queue, nothing to do
-    if (metadataProcessingQueue.size === 0) return;
-    
-    // We'll process all items in the queue gradually with the rate limiter handling throttling
-    const entries = Array.from(metadataProcessingQueue.entries());
-    logDebug(`Processing metadata queue with ${entries.length} items, rate limiter will handle throttling`);
-    
-    // Process each entry, letting the rate limiter handle concurrency and delays
-    const processPromise = entries.map(async ([url, info]) => {
-        // Remove from queue immediately to prevent duplicate processing
-        metadataProcessingQueue.delete(url);
-        
-        try {
-            // Use our rate-limited getStreamMetadata function
-            const streamInfo = await getStreamMetadata(url);
-            
-            // If we got stream info, update the video
-            if (streamInfo && info.tabId && videosPerTab[info.tabId]) {
-                const normalizedUrl = normalizeUrl(url);
-                const existingVideo = videosPerTab[info.tabId].get(normalizedUrl);
-                
-                if (existingVideo) {
-                    // Update video with stream info
-                    const updatedVideo = {
-                        ...existingVideo,
-                        streamInfo,
-                        mediaInfo: streamInfo, // Add direct mediaInfo reference
-                        qualities: streamInfo.variants || [],
-                        resolution: {
-                            width: streamInfo.width,
-                            height: streamInfo.height,
-                            fps: streamInfo.fps,
-                            bitrate: streamInfo.videoBitrate || streamInfo.totalBitrate
-                        }
-                    };
-                    
-                    // Store updated video
-                    videosPerTab[info.tabId].set(normalizedUrl, updatedVideo);
-                    
-                    // Broadcast update to popup if open
-                    broadcastVideoUpdate(info.tabId);
-                    
-                    // IMPORTANT: Send a specific metadata update message to the popup
-                    // This allows immediate UI updates without requiring a complete refresh
-                    notifyMetadataUpdate(info.tabId, url, streamInfo);
-                }
-            }
-        } catch (error) {
-            console.error(`Failed to process metadata for ${url}:`, error);
-            
-            // Only requeue if not too many retries
-            if (info.retryCount < maxRetries) {
-                // Put back in queue with incremented retry count and exponential backoff delay
-                setTimeout(() => {
-                    metadataProcessingQueue.set(url, {
-                        ...info,
-                        retryCount: (info.retryCount || 0) + 1
-                    });
-                    // Try processing the queue again after a delay
-                    processMetadataQueue(maxRetries);
-                }, 1000 * Math.pow(2, info.retryCount || 0)); // Exponential backoff
-            }
-        }
-    });
-    
-    await Promise.allSettled(processPromise);
-    
-    // Check if new items have been added during processing
-    if (metadataProcessingQueue.size > 0) {
-        // Schedule next batch with a delay
-        setTimeout(() => processMetadataQueue(maxRetries), 500);
-    }
-}
-
-/**
- * Notify any open popup about updated metadata for a video
- * @param {number} tabId - Tab ID
- * @param {string} url - Video URL
- * @param {Object} mediaInfo - Updated media information
- */
-function notifyMetadataUpdate(tabId, url, mediaInfo) {
-    try {
-        // Check if a popup is open for this tab
-        const port = getActivePopupPortForTab(tabId);
-        
-        if (port) {
-            logDebug(`Notifying popup for tab ${tabId} about metadata update for ${url}`);
-            
-            try {
-                port.postMessage({
-                    type: 'metadataUpdate',
-                    url: url,
-                    mediaInfo: mediaInfo
-                });
-            } catch (error) {
-                logDebug(`Error sending metadata update: ${error.message}`);
-            }
-        } else {
-            // No popup is open for this tab, which is normal
-            logDebug(`No active popup for tab ${tabId}, metadata update will be shown when popup opens`);
-        }
-    } catch (error) {
-        logDebug(`Error in notifyMetadataUpdate: ${error.message}`);
-    }
-}
-
-// Add video to tab's collection with enhanced metadata handling
-async function addVideoToTab(tabId, videoInfo) {
-    if (!videosPerTab[tabId]) {
-        logDebug('Creating new video collection for tab:', tabId);
-        videosPerTab[tabId] = new Map();
+// Add video to tab's collection
+function addVideoToTab(tabId, videoInfo) {
+    // Create array for tab if it doesn't exist
+    if (!videosPerTab.has(tabId)) {
+        videosPerTab.set(tabId, []);
     }
     
-    // Skip known ping/tracking URLs that don't have extracted video URLs
-    if ((videoInfo.url.includes('ping.gif') || videoInfo.url.includes('jwpltx.com')) && !videoInfo.foundFromQueryParam) {
-        return;
-    }
-
+    const tabVideos = videosPerTab.get(tabId);
     const normalizedUrl = normalizeUrl(videoInfo.url);
     
-    // Check global blacklist - completely ignore URLs that have failed or reached max attempts
-    const blacklistKey = `${tabId}:${normalizedUrl}`;
-    if (processedUrlBlacklist.has(blacklistKey)) {
-        return; // Silently ignore without logging to prevent console spam
-    }
+    // Check if video already exists
+    const existingIndex = tabVideos.findIndex(v => normalizeUrl(v.url) === normalizedUrl);
     
-    // Preserve the detailed detection timestamp if available
-    if (videoInfo.detectionTimestamp) {
-        logDebug(`Processing video with detection timestamp: ${videoInfo.detectionTimestamp}, URL: ${videoInfo.url}`);
-    }
-    
-    // STEP 1: Check if this is a variant of an already known master
-    const knownRelationship = checkIfVariantOfKnownMaster(videoInfo.url);
-    if (knownRelationship && knownRelationship.isVariant) {
-        // Still record it in videosPerTab to track all videos, but mark as variant
-        const existingVideo = videosPerTab[tabId].get(normalizedUrl);
-        
-        if (existingVideo) {
-            // Update existing entry, keeping its properties but marking as variant
-            existingVideo.isVariant = true;
-            existingVideo.masterPlaylistUrl = knownRelationship.masterUrl;
-            // Preserve the detection timestamp if available
-            if (videoInfo.detectionTimestamp && !existingVideo.detectionTimestamp) {
-                existingVideo.detectionTimestamp = videoInfo.detectionTimestamp;
-            }
-            videosPerTab[tabId].set(normalizedUrl, existingVideo);
-        } else {
-            // Add new entry but marked as variant
-            videoInfo.isVariant = true;
-            videoInfo.masterPlaylistUrl = knownRelationship.masterUrl;
-            videoInfo.timestamp = Date.now();
-            videosPerTab[tabId].set(normalizedUrl, videoInfo);
-            
-            // Notify any open popup about the new video if this is the first detection
-            notifyNewVideoDetected(tabId);
-        }
-        
-        broadcastVideoUpdate(tabId);
-        return;
-    }
-    
-    // Get existing video info if any
-    const existingVideo = videosPerTab[tabId].get(normalizedUrl);
-    
-    // Check if this is actually a new video
-    const isNewVideo = !existingVideo;
-    
-    // Check if this video is already fully processed, nothing to do
-    if (existingVideo && existingVideo.alreadyProcessed) {
-        return;
-    }
-    
-    // Merge with existing data if present
-    if (existingVideo) {
-        videoInfo = {
-            ...existingVideo,
+    if (existingIndex !== -1) {
+        // Update existing video
+        tabVideos[existingIndex] = {
+            ...tabVideos[existingIndex],
             ...videoInfo,
-            // Preserve important existing fields
-            timestamp: existingVideo.timestamp || Date.now(),
-            streamInfo: existingVideo.streamInfo || null,
-            qualities: existingVideo.qualities || [],
-            // Update only if new data is present
-            poster: videoInfo.poster || existingVideo.poster,
-            title: videoInfo.title || existingVideo.title,
-            // Preserve or update foundFromQueryParam flag
-            foundFromQueryParam: videoInfo.foundFromQueryParam || existingVideo.foundFromQueryParam,
-            // Preserve variant/master status if it was set already
-            isVariant: existingVideo.isVariant || videoInfo.isVariant,
-            isMasterPlaylist: existingVideo.isMasterPlaylist || videoInfo.isMasterPlaylist,
-            variants: existingVideo.variants || videoInfo.variants,
-            // Preserve the detection timestamp if available
-            detectionTimestamp: existingVideo.detectionTimestamp || videoInfo.detectionTimestamp
+            timestamp: tabVideos[existingIndex].timestamp || Date.now(),
+            // Preserve existing fields if new data doesn't have them
+            poster: videoInfo.poster || tabVideos[existingIndex].poster,
+            title: videoInfo.title || tabVideos[existingIndex].title,
+            detectionTimestamp: tabVideos[existingIndex].detectionTimestamp || videoInfo.detectionTimestamp,
+            // Preserve variants information
+            qualityVariants: videoInfo.qualityVariants || tabVideos[existingIndex].qualityVariants,
+            variants: videoInfo.variants || tabVideos[existingIndex].variants,
+            isMasterPlaylist: videoInfo.isMasterPlaylist || tabVideos[existingIndex].isMasterPlaylist
         };
     } else {
+        // Add new video
         videoInfo.timestamp = Date.now();
-        // If no detection timestamp is available (unlikely), create one now
         if (!videoInfo.detectionTimestamp) {
             videoInfo.detectionTimestamp = new Date().toISOString();
-            logDebug(`Added missing detection timestamp for newly found video: ${videoInfo.url}`);
         }
         
-        // Notify any open popup about the new video if this is the first detection
+        tabVideos.push(videoInfo);
+        
+        // Notify any open popup about the new video
         notifyNewVideoDetected(tabId);
     }
     
-    // Mark as processed now to avoid race conditions with async operations
-    videoInfo.alreadyProcessed = true;
-    videosPerTab[tabId].set(normalizedUrl, videoInfo);
-    
-    // STEP 2: Process HLS/DASH playlists to identify master-variant relationships
-    if ((videoInfo.type === 'hls' || videoInfo.type === 'dash') && 
-        !videoInfo.isVariant && !videoInfo.isMasterPlaylist) {
-        
-        try {
-            // Process this video to check for master-variant relationships
-            const processedVideo = await processVideoRelationships(videoInfo);
-            
-            // If the video was enhanced with relationship info, update it
-            if (processedVideo !== videoInfo) {
-                // Preserve the detection timestamp when updating
-                if (videoInfo.detectionTimestamp) {
-                    processedVideo.detectionTimestamp = videoInfo.detectionTimestamp;
-                }
-                
-                // Update in our collection
-                videosPerTab[tabId].set(normalizedUrl, processedVideo);
-                videoInfo = processedVideo;
-                
-                // STEP 3: If this is a master playlist, register its relationships globally
-                if (processedVideo.isMasterPlaylist && processedVideo.variants && 
-                    processedVideo.variants.length > 0) {
-                    
-                    registerMasterVariantRelationship(
-                        processedVideo.url, 
-                        processedVideo.variants
-                    );
-                    
-                    // Re-evaluate other videos to check if any are actually variants of this master
-                    reevaluateStandaloneVideos(tabId, processedVideo.url, processedVideo.variants);
-                }
-            }
-        } catch (error) {
-            console.error('Error processing video relationships:', error);
-            // For DASH manifests that fail, add to blacklist to prevent repeated processing
-            if (videoInfo.type === 'dash' && videoInfo.url.includes('.mpd')) {
-                processedUrlBlacklist.add(blacklistKey);
-            }
-        }
+    // For HLS/DASH playlists, process to detect master-variant relationships
+    const video = existingIndex !== -1 ? tabVideos[existingIndex] : videoInfo;
+    if ((video.type === 'hls' || video.type === 'dash') && 
+        !video.isVariant && !video.qualityVariants && !video.variants) {
+        processPlaylistRelationships(video, tabId);
     }
     
-    // Add to metadata processing queue if it's not a variant and not a blob URL
-    if (!videoInfo.isVariant && !metadataProcessingQueue.has(normalizedUrl) && !videoInfo.url.startsWith('blob:')) {
+    // For HLS playlists, add to playlistsPerTab collection if it's not a variant
+    if (videoInfo.type === 'hls' && videoInfo.url.includes('.m3u8') && !videoInfo.isVariant) {
+        if (!playlistsPerTab.has(tabId)) {
+            playlistsPerTab.set(tabId, new Set());
+        }
+        playlistsPerTab.get(tabId).add(normalizedUrl);
+    }
+    
+    // Add to metadata processing queue if not already processed
+    if (!video.mediaInfo && !video.streamInfo && !metadataProcessingQueue.has(normalizedUrl)) {
         metadataProcessingQueue.set(normalizedUrl, {
-            ...videoInfo,
+            url: video.url,
             tabId,
-            timestamp: videoInfo.timestamp
+            timestamp: Date.now()
         });
         processMetadataQueue();
-    } else if (videoInfo.url.startsWith('blob:')) {
-        // For blob URLs, add default metadata without sending to processing queue
-        videoInfo.streamInfo = {
-            isBlob: true,
-            type: 'blob',
-            format: 'blob',
-            container: 'blob',
-            hasVideo: true,
-            hasAudio: true
-        };
-        videoInfo.mediaInfo = videoInfo.streamInfo;
-        videosPerTab[tabId].set(normalizedUrl, videoInfo);
-        logDebug(`Added default metadata for blob URL: ${videoInfo.url}`);
     }
     
-    // For HLS playlists, also add to that specific collection if it's not a variant
-    if (!videoInfo.isVariant && videoInfo.type === 'hls' && videoInfo.url.includes('.m3u8')) {
-        if (!playlistsPerTab[tabId]) {
-            playlistsPerTab[tabId] = new Set();
-        }
-        playlistsPerTab[tabId].add(normalizedUrl);
+    // Generate preview if needed - but don't if we already have more than 3 pending
+    if (!video.previewUrl && !video.poster && rateLimiter.activeRequests + rateLimiter.queue.length < 5) {
+        generatePreview(video.url, tabId).catch(error => {
+            console.error('Error generating preview:', error);
+        });
     }
     
-    // After processing relationships, group videos and broadcast update
-    if (isNewVideo) {
-        // Apply automatic grouping and filtering before broadcasting
-        broadcastVideoUpdate(tabId);
-        
-        // Only generate previews for videos that:
-        // 1. Don't already have a preview
-        // 2. Aren't variants of a master playlist 
-        // 3. Don't have a poster image already
-        if (!videoInfo.isVariant && !videoInfo.previewUrl && !videoInfo.poster) {
-            logDebug('Proactively generating preview for newly detected video:', normalizedUrl);
-            generatePreview(videoInfo.url, tabId).catch(error => {
-                console.error('Error generating preview:', error);
-            });
-        } else if (videoInfo.isVariant) {
-            logDebug('Skipping preview generation for variant video:', normalizedUrl);
-        } else if (videoInfo.previewUrl || videoInfo.poster) {
-            logDebug('Skipping preview generation, video already has preview/poster:', normalizedUrl);
-        }
-    }
+    // Broadcast update
+    broadcastVideoUpdate(tabId);
 }
 
 // Generate preview for a video
@@ -659,47 +260,49 @@ async function generatePreview(url, tabId) {
         return await previewGenerationQueue.get(cacheKey);
     }
 
-    // Create new preview generation promise
-    const previewPromise = new Promise(resolve => {
-        nativeHostService.sendMessage({
-            type: 'generatePreview',
-            url: url
-        }).then(response => {
-            previewGenerationQueue.delete(cacheKey);
+    // Create new preview generation promise with rate limiting
+    const previewPromise = rateLimiter.enqueue(async () => {
+        try {
+            logDebug(`Generating preview for ${url}`);
+            const response = await nativeHostService.sendMessage({
+                type: 'generatePreview',
+                url: url
+            });
             
             // If we successfully generated a preview, cache it with the video
-            if (response && response.previewUrl && tabId && videosPerTab[tabId]) {
+            if (response && response.previewUrl && videosPerTab.has(tabId)) {
                 const normalizedUrl = normalizeUrl(url);
-                const videoInfo = videosPerTab[tabId].get(normalizedUrl);
-                if (videoInfo) {
-                    videoInfo.previewUrl = response.previewUrl;
-                    videosPerTab[tabId].set(normalizedUrl, videoInfo);
+                const videos = videosPerTab.get(tabId);
+                const index = videos.findIndex(v => normalizeUrl(v.url) === normalizedUrl);
+                if (index !== -1) {
+                    videos[index].previewUrl = response.previewUrl;
                     
                     // Notify any open popup about the new preview
-                    notifyPreviewReady(tabId, normalizedUrl, response.previewUrl, videoInfo);
+                    notifyPreviewReady(tabId, normalizedUrl, response.previewUrl, videos[index]);
                 }
             }
             
-            resolve(response);
-        }).catch(error => {
-            previewGenerationQueue.delete(cacheKey);
-            resolve({ error: error.message });
-        });
+            return response;
+        } catch (error) {
+            console.error(`Error generating preview for ${url}:`, error);
+            return { error: error.message };
+        } finally {
+            // Always remove from queue when done, regardless of success/failure
+            setTimeout(() => {
+                previewGenerationQueue.delete(cacheKey);
+            }, 200);
+        }
     });
 
     // Store the promise
     previewGenerationQueue.set(cacheKey, previewPromise);
     
-    // Wait for the preview and return it
-    return await previewPromise;
+    // Return the promise
+    return previewPromise;
 }
 
 /**
  * Notify any open popup about a newly generated preview
- * @param {number} tabId - Tab ID
- * @param {string} videoUrl - Video URL (normalized)
- * @param {string} previewUrl - Preview image URL or data URL
- * @param {Object} videoInfo - Video information object
  */
 function notifyPreviewReady(tabId, videoUrl, previewUrl, videoInfo) {
     try {
@@ -714,14 +317,11 @@ function notifyPreviewReady(tabId, videoUrl, previewUrl, videoInfo) {
                     type: 'previewReady',
                     videoUrl: videoUrl,
                     previewUrl: previewUrl,
-                    videoId: videoInfo.id || videoUrl // Use ID if available, otherwise URL as ID
+                    videoId: videoInfo.id || videoUrl
                 });
             } catch (error) {
                 logDebug(`Error sending preview notification: ${error.message}`);
             }
-        } else {
-            // No popup is open for this tab, which is normal - just log it
-            logDebug(`No active popup for tab ${tabId}, preview update will be shown when popup opens`);
         }
     } catch (error) {
         logDebug(`Error in notifyPreviewReady: ${error.message}`);
@@ -747,50 +347,20 @@ async function getStreamQualities(url) {
 
 // Get videos for tab
 function getVideosForTab(tabId) {
-    if (!videosPerTab[tabId] || videosPerTab[tabId].size === 0) {
+    if (!videosPerTab.has(tabId)) {
         return [];
     }
     
-    // Convert Map to Array for processing
-    const allVideos = Array.from(videosPerTab[tabId].values());
-    
-    // Filter out variants that have a known master in this tab
-    const filteredVideos = allVideos.filter(video => {
-        // If this is already marked as a variant, check if its master exists in this tab
-        if (video.isVariant && video.masterPlaylistUrl) {
-            const normalizedMasterUrl = normalizeUrl(video.masterPlaylistUrl);
-            // Only include if no master exists in this tab
-            const masterExists = allVideos.some(v => normalizeUrl(v.url) === normalizedMasterUrl);
-            return !masterExists; // Skip if master exists
-        }
-        
-        // Check against our global registry
-        const normalizedUrl = normalizeUrl(video.url);
-        if (variantToMaster.has(normalizedUrl)) {
-            const masterUrl = variantToMaster.get(normalizedUrl);
-            // Check if this master exists in current tab
-            const masterExistsInTab = allVideos.some(v => normalizeUrl(v.url) === masterUrl);
-            return !masterExistsInTab; // Skip if master exists
-        }
-        
-        // Include all non-variant videos
-        return true;
-    });
-    
-    // Sort by newest first
-    const sortedVideos = filteredVideos.sort((a, b) => b.timestamp - a.timestamp);
-    
-    logDebug(`Filtered videos for tab ${tabId}: ${allVideos.length} → ${filteredVideos.length}`);
-    return sortedVideos;
+    return processVideosForBroadcast(videosPerTab.get(tabId));
 }
 
 // Get playlists for tab
 function getPlaylistsForTab(tabId) {
-    if (!playlistsPerTab[tabId] || playlistsPerTab[tabId].size === 0) {
+    if (!playlistsPerTab.has(tabId)) {
         return [];
     }
     
-    return Array.from(playlistsPerTab[tabId]);
+    return Array.from(playlistsPerTab.get(tabId));
 }
 
 // Fetch manifest content
@@ -833,135 +403,14 @@ function getManifestRelationship(variantUrl) {
 // Clean up for tab
 function cleanupForTab(tabId) {
     logDebug('Tab removed:', tabId);
-    if (videosPerTab[tabId]) {
-        logDebug('Cleaning up videos for tab:', tabId, 'Count:', videosPerTab[tabId].size);
-        delete videosPerTab[tabId];
-    }
-
-    delete playlistsPerTab[tabId];
-    
-    // Clear manifest relationships for this tab's URLs
-    for (const [url, info] of manifestRelationships.entries()) {
-        if (url.includes(tabId.toString())) {
-            manifestRelationships.delete(url);
-        }
-    }
-}
-
-/**
- * Register a relationship between a master playlist and its variants
- * @param {string} masterUrl - URL of the master playlist
- * @param {Array} variants - Array of variant URLs or objects with url property
- */
-function registerMasterVariantRelationship(masterUrl, variants) {
-    const normalizedMasterUrl = normalizeUrl(masterUrl);
-    
-    // Normalize variant URLs
-    const normalizedVariants = variants.map(variant => {
-        if (typeof variant === 'string') {
-            return normalizeUrl(variant);
-        } else if (variant && variant.url) {
-            return normalizeUrl(variant.url);
-        }
-        return null;
-    }).filter(Boolean); // Remove null values
-    
-    // Enhanced logging - show master and all of its variants
-    console.log(`🎮 MASTER PLAYLIST FOUND: ${masterUrl}`);
-    console.log(`🎮 Normalized master URL: ${normalizedMasterUrl}`);
-    console.log(`🎮 Found ${normalizedVariants.length} variants:`);
-    normalizedVariants.forEach((variantUrl, index) => {
-        console.log(`🎮   [${index + 1}] ${variantUrl}`);
-        
-        // Also log original URL if available
-        const originalUrl = variants[index];
-        if (typeof originalUrl === 'object' && originalUrl.url) {
-            console.log(`🎮       Original: ${originalUrl.url}`);
-            if (originalUrl.height) {
-                console.log(`🎮       Quality: ${originalUrl.height}p${originalUrl.fps ? ` ${originalUrl.fps}fps` : ''}`);
-            }
-        }
-    });
-    
-    // Store in knownMasters map
-    knownMasters.set(normalizedMasterUrl, normalizedVariants);
-    
-    // Update reverse lookup
-    normalizedVariants.forEach(variantUrl => {
-        variantToMaster.set(variantUrl, normalizedMasterUrl);
-    });
-    
-    logDebug(`Registered master playlist ${normalizedMasterUrl} with ${normalizedVariants.length} variants`);
-    
-    return normalizedVariants;
-}
-
-/**
- * Check if a URL is a variant of any known master playlist
- * @param {string} url - URL to check
- * @returns {Object|null} Master relationship info or null if not a variant
- */
-function checkIfVariantOfKnownMaster(url) {
-    const normalizedUrl = normalizeUrl(url);
-    
-    // Check direct lookup first (fastest)
-    if (variantToMaster.has(normalizedUrl)) {
-        const masterUrl = variantToMaster.get(normalizedUrl);
-        return { 
-            isVariant: true, 
-            masterUrl 
-        };
-    }
-    
-    // No known relationship
-    return null;
-}
-
-/**
- * Re-evaluate all standalone videos to check if any are variants of the newly added master
- * @param {number} tabId - Tab ID
- * @param {string} masterUrl - Master playlist URL
- * @param {Array} variants - Array of variant URLs
- */
-function reevaluateStandaloneVideos(tabId, masterUrl, variants) {
-    if (!videosPerTab[tabId]) return;
-    
-    const normalizedMasterUrl = normalizeUrl(masterUrl);
-    const normalizedVariants = variants.map(v => 
-        typeof v === 'string' ? normalizeUrl(v) : normalizeUrl(v.url)
-    ).filter(Boolean);
-    
-    // Check each video in this tab
-    let updatedRelationships = false;
-    videosPerTab[tabId].forEach((video, videoUrl) => {
-        // Skip the master itself
-        if (normalizeUrl(videoUrl) === normalizedMasterUrl) return;
-        
-        // Skip already known variants
-        if (video.isVariant) return;
-        
-        // Check if this video is a variant of the new master
-        const normalizedVideoUrl = normalizeUrl(videoUrl);
-        if (normalizedVariants.includes(normalizedVideoUrl)) {
-            // Mark this video as a variant
-            video.isVariant = true;
-            video.masterPlaylistUrl = masterUrl;
-            videosPerTab[tabId].set(videoUrl, video);
-            
-            logDebug(`Re-evaluated: ${videoUrl} is now marked as a variant of ${masterUrl}`);
-            updatedRelationships = true;
-        }
-    });
-    
-    // Broadcast update if any relationships were updated
-    if (updatedRelationships) {
-        broadcastVideoUpdate(tabId);
+    if (videosPerTab.has(tabId)) {
+        logDebug('Cleaning up videos for tab:', tabId);
+        videosPerTab.delete(tabId);
     }
 }
 
 /**
  * Notify any open popup that new videos have been detected
- * @param {number} tabId - Tab ID
  */
 function notifyNewVideoDetected(tabId) {
     try {
@@ -979,12 +428,190 @@ function notifyNewVideoDetected(tabId) {
             } catch (error) {
                 logDebug(`Error sending new video notification: ${error.message}`);
             }
-        } else {
-            // No popup is open for this tab, which is normal
-            logDebug(`No active popup for tab ${tabId}, video update will be shown when popup opens`);
         }
     } catch (error) {
         logDebug(`Error in notifyNewVideoDetected: ${error.message}`);
+    }
+}
+
+// Set up event listeners to clear videos when tabs are closed or navigated
+chrome.tabs.onRemoved.addListener((tabId) => {
+    cleanupForTab(tabId);
+});
+
+// Listen for page navigation to clear videos
+chrome.webNavigation.onCommitted.addListener((details) => {
+    // Only clear for main frame navigation (not iframes)
+    if (details.frameId === 0) {
+        cleanupForTab(details.tabId);
+    }
+});
+
+// Helper function to extract stream metadata
+async function getStreamMetadata(url) {
+    try {
+        // Skip blob URLs as they can't be analyzed
+        if (url.startsWith('blob:')) {
+            logDebug(`Skipping metadata request for blob URL: ${url}`);
+            return {
+                isBlob: true,
+                type: 'blob',
+                format: 'blob',
+                container: 'blob',
+                hasVideo: true,
+                hasAudio: true
+            };
+        }
+        
+        // Use our rate limiter to prevent too many concurrent requests
+        return await rateLimiter.enqueue(async () => {
+            logDebug(`Getting stream metadata for ${url}`);
+            
+            const response = await nativeHostService.sendMessage({
+                type: 'getQualities',
+                url: url
+            });
+
+            if (response?.streamInfo) {
+                return response.streamInfo;
+            }
+            return null;
+        });
+    } catch (error) {
+        console.error('Failed to get stream metadata:', error);
+        return null;
+    }
+}
+
+/**
+ * Notify any open popup about updated metadata for a video
+ * @param {number} tabId - Tab ID
+ * @param {string} url - Video URL
+ * @param {Object} mediaInfo - Updated media information
+ */
+function notifyMetadataUpdate(tabId, url, mediaInfo) {
+    try {
+        // Check if a popup is open for this tab
+        const port = getActivePopupPortForTab(tabId);
+        
+        if (port) {
+            logDebug(`Notifying popup for tab ${tabId} about metadata update for ${url}`);
+            
+            try {
+                port.postMessage({
+                    type: 'metadataUpdate',
+                    url: url,
+                    mediaInfo: mediaInfo
+                });
+            } catch (error) {
+                logDebug(`Error sending metadata update: ${error.message}`);
+            }
+        } else {
+            // No popup is open for this tab, which is normal
+            logDebug(`No active popup for tab ${tabId}, metadata update will be shown when popup opens`);
+        }
+    } catch (error) {
+        logDebug(`Error in notifyMetadataUpdate: ${error.message}`);
+    }
+}
+
+// Process metadata queue to get stream info for videos
+async function processMetadataQueue(maxRetries = 2) {
+    // If no items in the queue, nothing to do
+    if (metadataProcessingQueue.size === 0) return;
+    
+    // Process a limited number of items at once
+    const entries = Array.from(metadataProcessingQueue.entries()).slice(0, 3);
+    logDebug(`Processing ${entries.length} metadata items`);
+    
+    for (const [url, info] of entries) {
+        // Remove from queue immediately to prevent duplicate processing
+        metadataProcessingQueue.delete(url);
+        
+        try {
+            // Use our rate-limited getStreamMetadata function
+            const streamInfo = await getStreamMetadata(info.url);
+            
+            // If we got stream info, update the video
+            if (streamInfo && info.tabId && videosPerTab.has(info.tabId)) {
+                const normalizedUrl = normalizeUrl(info.url);
+                const videos = videosPerTab.get(info.tabId);
+                const index = videos.findIndex(v => normalizeUrl(v.url) === normalizedUrl);
+                
+                if (index !== -1) {
+                    // Update video with stream info
+                    videos[index] = {
+                        ...videos[index],
+                        streamInfo,
+                        mediaInfo: streamInfo, // Add direct mediaInfo reference
+                        resolution: {
+                            width: streamInfo.width,
+                            height: streamInfo.height,
+                            fps: streamInfo.fps,
+                            bitrate: streamInfo.videoBitrate || streamInfo.totalBitrate
+                        }
+                    };
+                    
+                    // Notify any open popup about the metadata update
+                    notifyMetadataUpdate(info.tabId, info.url, streamInfo);
+                }
+            }
+        } catch (error) {
+            console.error(`Failed to process metadata for ${url}:`, error);
+            
+            // Only requeue if not too many retries
+            if (!info.retryCount || info.retryCount < maxRetries) {
+                // Put back in queue with incremented retry count
+                setTimeout(() => {
+                    metadataProcessingQueue.set(url, {
+                        ...info,
+                        retryCount: (info.retryCount || 0) + 1
+                    });
+                    // Try processing the queue again after a delay
+                    processMetadataQueue(maxRetries);
+                }, 1000);
+            }
+        }
+    }
+    
+    // If there are more items, schedule processing the next batch
+    if (metadataProcessingQueue.size > 0) {
+        setTimeout(() => processMetadataQueue(maxRetries), 500);
+    }
+}
+
+// Process HLS/DASH playlists to detect master-variant relationships
+async function processPlaylistRelationships(videoInfo, tabId) {
+    try {
+        // Use the manifest service to process the video
+        const processedVideo = await processVideoRelationships(videoInfo);
+        
+        if (processedVideo && processedVideo !== videoInfo) {
+            // Update video with new information
+            const normalizedUrl = normalizeUrl(videoInfo.url);
+            const videos = videosPerTab.get(tabId);
+            const index = videos.findIndex(v => normalizeUrl(v.url) === normalizedUrl);
+            
+            if (index !== -1) {
+                // Update the video with new information
+                videos[index] = {
+                    ...videos[index],
+                    ...processedVideo,
+                    // Preserve original fields
+                    timestamp: videos[index].timestamp,
+                    detectionTimestamp: videos[index].detectionTimestamp 
+                };
+                
+                // If this is a master playlist with variants, broadcast update 
+                if (processedVideo.isMasterPlaylist && 
+                    (processedVideo.variants || processedVideo.qualityVariants)) {
+                    logDebug(`Found master playlist with ${(processedVideo.variants || processedVideo.qualityVariants).length} variants`);
+                    broadcastVideoUpdate(tabId);
+                }
+            }
+        }
+    } catch (error) {
+        console.error('Error processing playlist relationships:', error);
     }
 }
 
@@ -995,12 +622,10 @@ export {
     getStreamQualities,
     getVideosForTab,
     getPlaylistsForTab,
+    cleanupForTab,
+    normalizeUrl,
     fetchManifestContent,
     storeManifestRelationship,
     getManifestRelationship,
-    cleanupForTab,
-    normalizeUrl,
-    registerMasterVariantRelationship,
-    checkIfVariantOfKnownMaster,
-    reevaluateStandaloneVideos
+    getStreamMetadata
 };

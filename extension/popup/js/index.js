@@ -281,34 +281,30 @@ function handlePortMessage(message) {
 /**
  * Single entry point for updating videos in the UI
  * @param {Array} videos - The videos to display
- * @param {boolean} updateCache - Whether to update the cache
  */
-function updateVideoDisplay(videos, updateCache = true) {
+function updateVideoDisplay(videos) {
     console.log('Updating video display with', videos.length, 'videos');
     
-    // Videos are already processed by the background script,
-    // so we can directly render them without additional processing
+    // Update VideoStateService with the new videos
+    import('./services/video-state-service.js').then(module => {
+        module.updateVideos(videos);
+    }).catch(err => {
+        console.error('Error importing video-state-service:', err);
+    });
     
-    // Update UI state
+    // Update UI state immediately without waiting for import
     if (videos.length > 0) {
         isEmptyState = false;
-        // Render videos directly without additional processing
+        // Render videos directly
         renderVideos(videos);
         hideLoadingState();
+        console.log('Updated UI with', videos.length, 'videos');
     } else if (!isEmptyState) {
         // Only update if we're not already showing empty state
         renderVideos(videos);
         hideLoadingState();
         isEmptyState = true;
-    }
-    
-    // Update cache if needed
-    if (updateCache && currentTabId) {
-        chrome.storage.local.set({
-            [`processedVideos_${currentTabId}`]: videos,
-            lastVideoUpdate: Date.now()
-        });
-        console.log('Cached videos for tab', currentTabId);
+        console.log('No videos to display, showing empty state');
     }
 }
 
@@ -381,11 +377,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     try {
         console.log('Popup initializing...');
         
-        // Wait for chrome.storage to be available
-        if (!chrome.storage) {
-            throw new Error('Chrome storage API not available');
-        }
-
         // Initialize all services in the proper order
         const serviceState = await initializeServices();
         
@@ -395,7 +386,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         // Initialize UI elements
         initializeUI();
         
-        // Connect to background script via port (but don't request videos yet)
+        // Connect to background script via port
         getBackgroundPort();
         
         // Get the active tab ID using our helper
@@ -405,28 +396,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         // Show loading state initially
         showLoadingState('Loading videos...');
         
-        // STEP 1: Fast render from storage (for immediate display)
-        let hasStoredVideos = false;
-        try {
-            // Use VideoStateService to get videos from storage
-            const cachedVideos = await videoStateService.getVideosFromStorage();
-            if (cachedVideos && cachedVideos.length > 0) {
-                console.log('Found stored videos, rendering immediately:', cachedVideos.length);
-                // Use the centralized function to update videos
-                updateVideoDisplay(cachedVideos, false); // Don't re-cache
-                hasStoredVideos = true;
-            } else {
-                isEmptyState = true;
-            }
-        } catch (e) {
-            console.error('Error retrieving stored videos:', e);
-            isEmptyState = true;
-        }
+        // Request videos directly from background script
+        requestVideos(true);
         
-        // STEP 2: Request fresh videos through port connection
-        requestVideos(!hasStoredVideos);
-        
-        // STEP 3: Set up periodic refresh to check for new videos
+        // Set up periodic refresh to check for new videos
         setupPeriodicRefresh();
         
         // Check for active downloads from previous popup sessions
@@ -444,11 +417,9 @@ document.addEventListener('DOMContentLoaded', async () => {
             console.log('Error notifying content script:', e);
         }
         
-        // Add Clear Cache button handler - use our new service
+        // Add Clear Cache button handler - simplified for in-memory approach
         document.getElementById('clear-cache-btn')?.addEventListener('click', async () => {
-            console.log('Clear cache button clicked');
-            await videoStateService.clearCaches();
-            console.log('Caches cleared, requesting fresh videos');
+            console.log('Refresh button clicked');
             requestVideos(true);
         });
         

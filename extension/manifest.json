@@ -10,6 +10,7 @@
     "downloads",
     "nativeMessaging",
     "webRequest",
+    "webNavigation",
     "notifications",
     "downloads.shelf",
     "storage"
