@@ -767,3 +767,165 @@ export function updateVideoMetadata(url, mediaInfo) {
     
     console.log(`Updated metadata for video: ${url}`);
 }
+
+/**
+ * Update a video element with the latest video data
+ * This is a unified handler for all video updates (preview and metadata)
+ * @param {string} url - Video URL
+ * @param {Object} updatedVideo - Complete updated video object
+ */
+export function updateVideoElement(url, updatedVideo) {
+    if (!url || !updatedVideo) return;
+    
+    // Find the video element by URL
+    const videoElement = document.querySelector(`.video-item[data-url="${CSS.escape(url)}"]`);
+    if (!videoElement) return;
+    
+    // 1. Update preview image if we have one
+    if (updatedVideo.previewUrl) {
+        const previewImage = videoElement.querySelector('.preview-image');
+        const loader = videoElement.querySelector('.loader');
+        const regenerateButton = videoElement.querySelector('.regenerate-button');
+        
+        if (previewImage) {
+            // Only update if the src is different
+            if (previewImage.src !== updatedVideo.previewUrl) {
+                previewImage.onload = () => {
+                    previewImage.classList.remove('placeholder');
+                    previewImage.classList.add('loaded');
+                    if (loader) loader.style.display = 'none';
+                    if (regenerateButton) regenerateButton.classList.add('hidden');
+                };
+                previewImage.src = updatedVideo.previewUrl;
+                
+                // Cache the preview
+                import('../preview.js').then(module => {
+                    module.cachePreview(url, updatedVideo.previewUrl);
+                });
+            }
+        }
+    }
+    
+    // 2. Update metadata information
+    if (updatedVideo.mediaInfo) {
+        const mediaInfo = updatedVideo.mediaInfo;
+        
+        // Find UI elements in this video card
+        const codecInfo = videoElement.querySelector('.codec-info');
+        let codecDetails = [];
+        
+        // Update media type info in UI (Video & Audio, Video Only, Audio Only)
+        let mediaContentType = "Unknown";
+        let mediaIcon = '';
+        
+        if (mediaInfo) {
+            if (mediaInfo.hasVideo && mediaInfo.hasAudio) {
+                mediaContentType = "Video & Audio";
+                mediaIcon = '<path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/>';
+                
+                if (mediaInfo.videoCodec) {
+                    codecDetails.push(`Video: ${mediaInfo.videoCodec.name}`);
+                }
+                if (mediaInfo.audioCodec) {
+                    codecDetails.push(`Audio: ${mediaInfo.audioCodec.name}`);
+                    if (mediaInfo.audioCodec.channels) {
+                        codecDetails.push(`${mediaInfo.audioCodec.channels} channels`);
+                    }
+                }
+            } else if (mediaInfo.hasVideo) {
+                mediaContentType = "Video Only";
+                mediaIcon = '<path d="M21 3H3c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H3V5h18v14z"/><path d="M9 8h2v8H9zm4 0h2v8h-2z"/>';
+                
+                if (mediaInfo.videoCodec) {
+                    codecDetails.push(`Codec: ${mediaInfo.videoCodec.name}`);
+                }
+            } else if (mediaInfo.hasAudio) {
+                mediaContentType = "Audio Only";
+                mediaIcon = '<path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4s4-1.79 4-4V7h4V3h-6z"/>';
+                
+                if (mediaInfo.audioCodec) {
+                    codecDetails.push(`Codec: ${mediaInfo.audioCodec.name}`);
+                    if (mediaInfo.audioCodec.channels) {
+                        codecDetails.push(`${mediaInfo.audioCodec.channels} channels`);
+                    }
+                    if (mediaInfo.audioCodec.sampleRate) {
+                        codecDetails.push(`${mediaInfo.audioCodec.sampleRate}Hz`);
+                    }
+                }
+            }
+            
+            // Update the media content type icon and label
+            const mediaTypeInfo = videoElement.querySelector('.media-type-info');
+            if (mediaTypeInfo) {
+                mediaTypeInfo.innerHTML = `
+                    <svg viewBox="0 0 24 24" width="12" height="12" xmlns="http://www.w3.org/2000/svg">
+                        ${mediaIcon}
+                    </svg>
+                    <span>${mediaContentType}</span>
+                `;
+            }
+            
+            // Update codec info
+            if (codecInfo) {
+                if (codecDetails.length > 0) {
+                    codecInfo.textContent = codecDetails.join(' • ');
+                    codecInfo.classList.remove('loading');
+                } else {
+                    codecInfo.textContent = 'Codec information unavailable';
+                    codecInfo.classList.remove('loading');
+                }
+            }
+            
+            // Update duration if available
+            if (mediaInfo.duration) {
+                let durationElement = videoElement.querySelector('.video-duration');
+                if (!durationElement) {
+                    // Create duration element if it doesn't exist
+                    const previewContainer = videoElement.querySelector('.preview-container');
+                    if (previewContainer) {
+                        durationElement = document.createElement('div');
+                        durationElement.className = 'video-duration';
+                        durationElement.textContent = formatDuration(mediaInfo.duration);
+                        previewContainer.appendChild(durationElement);
+                    }
+                } else {
+                    // Update existing duration element
+                    durationElement.textContent = formatDuration(mediaInfo.duration);
+                }
+            }
+            
+            // Update resolution info if available
+            const resolutionInfo = videoElement.querySelector('.resolution-info');
+            if (resolutionInfo && resolutionInfo.classList.contains('loading') && 
+                mediaInfo.width && mediaInfo.height) {
+                resolutionInfo.classList.remove('loading');
+                resolutionInfo.textContent = `${mediaInfo.width}x${mediaInfo.height}`;
+                if (mediaInfo.fps) {
+                    resolutionInfo.textContent += ` ${mediaInfo.fps}fps`;
+                }
+            }
+            
+            // Update quality selector dropdown if it exists
+            const qualitySelector = videoElement.querySelector('.quality-selector');
+            if (qualitySelector && qualitySelector.options.length > 0) {
+                // Check if the first option is "Original Quality" and we have resolution info
+                if ((qualitySelector.options[0].textContent === 'Original Quality' || 
+                     qualitySelector.options[0].textContent.includes('Resolution')) && 
+                    mediaInfo.width && mediaInfo.height) {
+                    
+                    // Create more descriptive label with actual quality
+                    let qualityLabel = `${mediaInfo.height}p`;
+                    if (mediaInfo.fps) {
+                        qualityLabel += ` ${mediaInfo.fps}fps`;
+                    }
+                    if (mediaInfo.hasAudio === false) {
+                        qualityLabel += ' (no audio)';
+                    }
+                    
+                    // Update the option text
+                    qualitySelector.options[0].textContent = qualityLabel;
+                }
+            }
+        }
+    }
+}

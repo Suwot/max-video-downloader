@@ -333,8 +333,8 @@ function applyMetadataToVideo(tabId, normalizedUrl, streamInfo) {
             } : null
         };
         
-        // Notify any open popup about the metadata update
-        notifyMetadataUpdate(tabId, normalizedUrl, streamInfo);
+        // Use the unified notification method instead
+        notifyVideoUpdated(tabId, normalizedUrl, videos[index]);
     }
 }
 
@@ -365,8 +365,8 @@ async function enrichWithPreview(video, tabId) {
                 videos[index].previewUrl = response.previewUrl;
                 videos[index].needsPreview = false;
                 
-                // Notify any open popup about the new preview
-                notifyPreviewReady(tabId, normalizedUrl, response.previewUrl, videos[index]);
+                // Use the unified notification method instead
+                notifyVideoUpdated(tabId, normalizedUrl, videos[index]);
             }
         }
     } catch (error) {
@@ -374,6 +374,38 @@ async function enrichWithPreview(video, tabId) {
     } finally {
         // Always remove from processing set when done
         processingRequests.previews.delete(normalizedUrl);
+    }
+}
+
+/**
+ * Notify any open popup about a video update (for any property)
+ * @param {number} tabId - Tab ID
+ * @param {string} url - Video URL
+ * @param {Object} updatedVideo - The complete updated video object
+ */
+function notifyVideoUpdated(tabId, url, updatedVideo) {
+    try {
+        // Check if a popup is open for this tab
+        const port = getActivePopupPortForTab(tabId);
+        
+        if (port) {
+            logDebug(`Notifying popup for tab ${tabId} about video update for ${url}`);
+            
+            try {
+                port.postMessage({
+                    type: 'videoUpdated',
+                    url: url,
+                    video: updatedVideo
+                });
+            } catch (error) {
+                logDebug(`Error sending video update: ${error.message}`);
+            }
+        } else {
+            // No popup is open for this tab, which is normal
+            logDebug(`No active popup for tab ${tabId}, update will be shown when popup opens`);
+        }
+    } catch (error) {
+        logDebug(`Error in notifyVideoUpdated: ${error.message}`);
     }
 }
 

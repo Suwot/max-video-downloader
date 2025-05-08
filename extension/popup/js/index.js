@@ -276,6 +276,21 @@ function handlePortMessage(message) {
         }));
         return;
     }
+
+    // Handle unified video updates - new handler for single video updates
+    if (message.type === 'videoUpdated') {
+        console.log('Received unified video update:', message.url);
+        
+        // Dispatch an event that VideoStateService will handle
+        document.dispatchEvent(new CustomEvent('video-updated', { 
+            detail: {
+                url: message.url,
+                video: message.video
+            }
+        }));
+        
+        return;
+    }
 }
 
 /**

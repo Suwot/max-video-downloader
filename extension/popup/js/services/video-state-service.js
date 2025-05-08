@@ -10,6 +10,7 @@
 // popup/js/services/video-state-service.js
 
 import { sendPortMessage } from '../index.js';
+import { updateVideoElement } from '../video-renderer.js';
 
 // Singleton service that manages state
 class VideoStateService {
@@ -47,6 +48,15 @@ class VideoStateService {
       document.addEventListener('video-update', this.handleVideoUpdate.bind(this));
       document.addEventListener('metadata-update', this.handleMetadataUpdate.bind(this));
       document.addEventListener('preview-ready', this.handlePreviewReady.bind(this));
+      
+      // Setup video update listeners
+      document.addEventListener('video-updated', (event) => {
+        const { url, video } = event.detail;
+        videoStateService.handleVideoUpdated(event);
+        
+        // Use the unified updater to update the UI
+        updateVideoElement(url, video);
+      });
       
       this.isInitialized = true;
       
@@ -131,6 +141,30 @@ class VideoStateService {
     const { videoUrl, previewUrl } = event.detail;
     // Just pass the event to listeners
     this.emit('preview-ready', { videoUrl, previewUrl });
+  }
+
+  /**
+   * Handle unified video updates from background
+   * @param {CustomEvent} event - Video update event
+   */
+  handleVideoUpdated(event) {
+    const { url, video } = event.detail;
+    
+    // Find the video in our current list and update it
+    if (this.currentVideos && this.currentVideos.length > 0) {
+      const index = this.currentVideos.findIndex(v => v.url === url);
+      
+      if (index !== -1) {
+        // Update the video with new data
+        this.currentVideos[index] = {
+          ...this.currentVideos[index],
+          ...video
+        };
+        
+        // Emit the event for UI updates
+        this.emit('video-updated', { url, video });
+      }
+    }
   }
 
   /**
