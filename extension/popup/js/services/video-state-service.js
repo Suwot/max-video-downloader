@@ -19,41 +19,161 @@ const CACHE_TIMEOUT = 5 * 60 * 1000; // 5 minutes
 const POSTER_CACHE_SIZE = 50;
 const STREAM_METADATA_CACHE_SIZE = 50;
 
-// Simple LRU cache for efficient data storage
+// Enhanced LRU cache for efficient data storage with TTL and persistence
 class LRUCache {
-  constructor(limit) {
+  constructor(name, limit, ttl = CACHE_TIMEOUT) {
+    this.name = name;
     this.limit = limit;
+    this.ttl = ttl;
     this.cache = new Map();
     this.order = [];
+    this._saveTimeout = null;
   }
 
   get(key) {
     if (!this.cache.has(key)) return null;
+    
+    const entry = this.cache.get(key);
+    // TTL check
+    if (entry.timestamp && (Date.now() - entry.timestamp > this.ttl)) {
+      this.delete(key);
+      return null;
+    }
+    
     // Move to front of access order
     this.order = this.order.filter(k => k !== key);
     this.order.unshift(key);
-    return this.cache.get(key);
+    
+    return entry.value;
   }
 
   set(key, value) {
-    this.cache.set(key, value);
+    const entry = {
+      value,
+      timestamp: Date.now()
+    };
+    
+    this.cache.set(key, entry);
+    
     // Add to front of access order
     this.order = this.order.filter(k => k !== key);
     this.order.unshift(key);
+    
     // Trim if over limit
     if (this.order.length > this.limit) {
       const oldest = this.order.pop();
       this.cache.delete(oldest);
     }
+    
+    // Optionally save to storage
+    if (this.name) {
+      this.debounceSave();
+    }
+    
+    return true;
   }
 
   has(key) {
-    return this.cache.has(key);
+    if (!this.cache.has(key)) return false;
+    
+    const entry = this.cache.get(key);
+    // TTL check
+    if (entry.timestamp && (Date.now() - entry.timestamp > this.ttl)) {
+      this.delete(key);
+      return false;
+    }
+    
+    return true;
+  }
+
+  delete(key) {
+    const deleted = this.cache.delete(key);
+    if (deleted) {
+      this.order = this.order.filter(k => k !== key);
+      if (this.name) {
+        this.debounceSave();
+      }
+    }
+    return deleted;
   }
 
   clear() {
     this.cache.clear();
     this.order = [];
+    if (this.name) {
+      this.save();
+    }
+    return true;
+  }
+  
+  // Save to Chrome storage (debounced)
+  debounceSave() {
+    if (this._saveTimeout) clearTimeout(this._saveTimeout);
+    this._saveTimeout = setTimeout(() => this.save(), 500);
+  }
+  
+  // Save cache to storage
+  async save() {
+    if (!this.name) return false; // Don't save unnamed caches
+    
+    try {
+      // Convert Map entries to array of [key, {value, timestamp}] pairs
+      const dataToStore = Array.from(this.cache.entries());
+      const storageObj = { [this.name]: JSON.stringify(dataToStore) };
+      
+      await chrome.storage.local.set(storageObj);
+      return true;
+    } catch (error) {
+      console.error(`[LRUCache:${this.name}] Error saving cache:`, error);
+      return false;
+    }
+  }
+  
+  // Load cache from storage
+  async restore() {
+    if (!this.name) return false;
+    
+    try {
+      const result = await chrome.storage.local.get(this.name);
+      if (!result[this.name]) return false;
+      
+      const parsedData = JSON.parse(result[this.name]);
+      this.cache.clear();
+      this.order = [];
+      
+      let restoredCount = 0;
+      let expiredCount = 0;
+      
+      for (const [key, entry] of parsedData) {
+        // Skip expired entries
+        if (Date.now() - entry.timestamp > this.ttl) {
+          expiredCount++;
+          continue;
+        }
+        
+        this.cache.set(key, entry);
+        this.order.unshift(key);
+        restoredCount++;
+      }
+      
+      // Ensure we're still within limit
+      if (this.order.length > this.limit) {
+        this.order = this.order.slice(0, this.limit);
+        // Remove any entries that don't match order
+        const validKeys = new Set(this.order);
+        for (const key of this.cache.keys()) {
+          if (!validKeys.has(key)) {
+            this.cache.delete(key);
+          }
+        }
+      }
+      
+      console.log(`[LRUCache:${this.name}] Restored ${restoredCount} entries, skipped ${expiredCount} expired entries`);
+      return restoredCount > 0;
+    } catch (error) {
+      console.error(`[LRUCache:${this.name}] Error restoring cache:`, error);
+      return false;
+    }
   }
 }
 
@@ -61,8 +181,8 @@ class LRUCache {
 class VideoStateService {
   constructor() {
     // Local caches - minimal state needed for UI performance
-    this.posterCache = new LRUCache(POSTER_CACHE_SIZE);
-    this.streamMetadataCache = new LRUCache(STREAM_METADATA_CACHE_SIZE);
+    this.posterCache = new LRUCache('posterCache', POSTER_CACHE_SIZE, 10 * 60 * 1000); // 10 minutes TTL
+    this.streamMetadataCache = new LRUCache('streamMetadataCache', STREAM_METADATA_CACHE_SIZE, 30 * 60 * 1000); // 30 minutes TTL
     this.videoGroups = {}; // Groups of videos by type (hls, dash, direct, etc.)
     
     this.activeTabId = null;
@@ -91,6 +211,12 @@ class VideoStateService {
       // Listen for video metadata updates 
       document.addEventListener('metadata-update', this.handleMetadataUpdate.bind(this));
       document.addEventListener('preview-ready', this.handlePreviewReady.bind(this));
+      
+      // Restore caches from storage
+      await Promise.all([
+        this.posterCache.restore(),
+        this.streamMetadataCache.restore()
+      ]);
       
       this.isInitialized = true;
       
