@@ -1,36 +1,39 @@
 /**
  * @ai-guide-component VideoProcessor
- * @ai-guide-description Transforms and enhances video data
+ * @ai-guide-description Video processing and organization
  * @ai-guide-responsibilities
- * - Groups videos by type and source
- * - Handles stream metadata for different formats (HLS/DASH)
- * - Provides analysis of video content types
- * - Manages video quality variants and resolution info
+ * - Groups videos by type (HLS, DASH, etc.)
+ * - Handles video processing logic
+ * - Implements video validation and filtering
+ * - Manages video quality variants
+ * - Processes HLS relationships
  */
 
 // popup/js/video-processor.js
 
-import { normalizeUrl, getBaseUrl, getBaseDirectory } from '../../js/utilities/normalize-url.js';
-import { formatQualityLabel, formatQualityDetails } from './utilities.js';
-import { setVideoGroups, addStreamMetadata, getStreamMetadata, getCachedVideos, setCachedVideos } from './state.js';
+// Import from new services instead of state.js
+import { 
+    setVideoGroups,
+    addStreamMetadata, 
+    getStreamMetadata 
+} from './services/video-state-service.js';
+
+import { sendPortMessage } from './index.js';
+
 // Import the video validation and filtering functions
 import { filterRedundantVariants } from '../../js/utilities/video-validator.js';
 
-// Track HLS relationships globally
-const hlsRelationships = new Map();
+// Keep track of HLS relationships locally
+const hlsRelationships = new Map(); // Master URL -> Variant URLs
 
 /**
- * @deprecated Use videos directly from background processing instead
- * Process and group videos - assumes videos are already deduplicated by video-manager.js
+ * [DEPRECATED] Process videos - pass through only
+ * @deprecated Use background-processed videos directly, this method is only for backward compatibility
  * @param {Array} videos - Videos to process
- * @returns {Array} Processed videos
+ * @returns {Array} The same videos (passthrough)
  */
 export function processVideos(videos) {
-    if (!videos || !Array.isArray(videos)) return [];
-    
-    console.log('WARNING: Using deprecated processVideos function. Videos should be pre-processed by background script.');
-    
-    // Just return the videos directly - they should already be processed by the background script
+    console.warn('processVideos is deprecated - videos are now processed in the background script');
     return videos;
 }
 
@@ -94,24 +97,23 @@ export function shouldGroupVideos(video1, video2) {
 }
 
 /**
- * @deprecated Use videos directly from background processing instead
- * Group videos by resolution and HLS relationships
+ * [DEPRECATED] Group videos - pass through only 
+ * @deprecated Use background-processed videos directly, this method is only for backward compatibility
  * @param {Array} videos - Videos to group
- * @returns {Array} Grouped videos
+ * @returns {Array} The same videos (passthrough)
  */
 export function groupVideos(videos) {
-    console.log('WARNING: Using deprecated groupVideos function. Videos should be pre-grouped by background script.');
-    
-    // Simply return the videos as they should already be grouped by the background script
+    console.warn('groupVideos is deprecated - grouping is now handled in the background script');
     return videos;
 }
 
 /**
- * Group videos by type (HLS, DASH, etc.)
- * @param {Array} videos - Videos to group
- * @returns {Object} Videos grouped by type
+ * Group videos by type for display
+ * @param {Array} videos - The videos to group
+ * @returns {Object} Grouped videos by type
  */
 export function groupVideosByType(videos) {
+    // Initialize video groups
     const groups = {
         hls: [],
         dash: [],
@@ -119,19 +121,28 @@ export function groupVideosByType(videos) {
         blob: [],
         unknown: []
     };
-    
-    if (!videos || videos.length === 0) return groups;
-    
+
+    // Group videos by type
     videos.forEach(video => {
+        if (!video || !video.url) return;
+        
         const type = video.type || 'unknown';
-        if (groups[type]) {
-            groups[type].push(video);
+        
+        // Add to appropriate group
+        if (type === 'hls') {
+            groups.hls.push(video);
+        } else if (type === 'dash') {
+            groups.dash.push(video);
+        } else if (type === 'blob') {
+            groups.blob.push(video);
+        } else if (type === 'direct' || type === 'mp4' || type === 'mp3' || type === 'video') {
+            groups.direct.push(video);
         } else {
             groups.unknown.push(video);
         }
     });
     
-    // Store in state for access elsewhere
+    // Update video groups in our service
     setVideoGroups(groups);
     
     return groups;
@@ -213,32 +224,96 @@ export function processStreamMetadata(url, streamInfo) {
 
 /**
  * Get stream qualities for a URL
- * @param {string} url - Stream URL
- * @returns {Promise<Array>} Array of quality options
+ * @param {string} url - Video URL
+ * @returns {Promise<Array>} Array of available qualities
  */
 export async function getStreamQualities(url) {
-    // Check cache first
-    const cached = getStreamMetadata(url);
-    if (cached?.qualities) {
-        return cached.qualities;
+    // Get current tab ID
+    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+    const tabId = tabs[0]?.id;
+    
+    if (!tabId) {
+        throw new Error('Cannot determine active tab');
     }
     
-    // Request fresh metadata
-    const response = await chrome.runtime.sendMessage({
+    // Cache key for qualities
+    if (getStreamMetadata(url)) {
+        return getStreamMetadata(url);
+    }
+    
+    // Send port message to request qualities
+    sendPortMessage({
         type: 'getHLSQualities',
-        url: url
+        url: url,
+        tabId: tabId
     });
     
-    if (response?.streamInfo) {
-        const config = processStreamMetadata(url, response.streamInfo);
-        return config.qualities;
-    }
-    
-    return [];
+    // Wait for response via event
+    return new Promise((resolve, reject) => {
+        let timeoutId;
+        
+        const handleResponse = (event) => {
+            const response = event.detail;
+            
+            // Only process responses for our URL
+            if (response.url === url) {
+                clearTimeout(timeoutId);
+                document.removeEventListener('qualities-response', handleResponse);
+                
+                // If we got stream info, extract the qualities
+                if (response.streamInfo) {
+                    const streamInfo = response.streamInfo;
+                    
+                    // Cache the response
+                    addStreamMetadata(url, streamInfo);
+                    
+                    // If we have variants, format them for the quality selector
+                    if (streamInfo.variants && streamInfo.variants.length > 0) {
+                        const qualities = streamInfo.variants.map(variant => {
+                            return {
+                                url: variant.url,
+                                resolution: `${variant.width}x${variant.height}`,
+                                height: variant.height,
+                                width: variant.width,
+                                fps: variant.fps,
+                                bandwidth: variant.bandwidth,
+                                codecs: variant.codecs
+                            };
+                        });
+                        
+                        resolve(qualities);
+                    } else {
+                        // No variants, just use the original URL with its resolution
+                        resolve([{
+                            url: url,
+                            resolution: streamInfo.width && streamInfo.height ? 
+                                `${streamInfo.width}x${streamInfo.height}` : 'Original',
+                            height: streamInfo.height,
+                            width: streamInfo.width,
+                            fps: streamInfo.fps,
+                            bandwidth: streamInfo.videoBitrate || streamInfo.totalBitrate,
+                            codecs: streamInfo.videoCodec?.name
+                        }]);
+                    }
+                } else {
+                    resolve([]);
+                }
+            }
+        };
+        
+        // Set timeout for response
+        timeoutId = setTimeout(() => {
+            document.removeEventListener('qualities-response', handleResponse);
+            resolve([]);
+        }, 5000);
+        
+        // Listen for response
+        document.addEventListener('qualities-response', handleResponse);
+    });
 }
 
 /**
- * Clear HLS relationships (call this when forcing refresh)
+ * Clear HLS relationships
  */
 export function clearHLSRelationships() {
     hlsRelationships.clear();

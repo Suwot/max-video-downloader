@@ -18,9 +18,9 @@
 // popup/js/video-renderer.js
 
 import { getFilenameFromUrl, formatResolution, formatDuration, normalizeUrl } from './utilities.js';
-import { getAllGroupStates, setGroupState, getAllVideoGroups } from './state.js';
-// Import poster management from our new service instead of state.js
-import { getPoster, addPoster } from './services/video-state-service.js';
+// Import functions from services instead of state.js
+import { getAllGroupStates, setGroupState } from './services/group-state-service.js';
+import { getPoster, addPoster, getAllVideoGroups } from './services/video-state-service.js';
 import { groupVideosByType } from './video-processor.js';
 import { handleDownload } from './download.js';
 import { generatePreview } from './preview.js';

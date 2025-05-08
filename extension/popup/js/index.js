@@ -12,11 +12,14 @@
  */
 
 // extension/popup/js/index.js
-import { initializeState, getCurrentTheme } from './state.js';
-import { applyTheme, initializeUI, setupScrollPersistence, scrollToLastPosition, showLoadingState, hideLoadingState, showNoVideosMessage } from './ui.js';
-import { renderVideos } from './video-renderer.js';
-// Import our new VideoStateService
+
+// Import ServiceInitializer to coordinate service initialization
+import { initializeServices, getActiveTab } from './services/service-initializer.js';
+import { themeService, applyTheme } from './services/theme-service.js';
 import { videoStateService } from './services/video-state-service.js';
+
+import { initializeUI, setupScrollPersistence, scrollToLastPosition, showLoadingState, hideLoadingState, showNoVideosMessage } from './ui.js';
+import { renderVideos } from './video-renderer.js';
 
 // Global port connection for communicating with the background script
 let backgroundPort = null;
@@ -383,27 +386,21 @@ document.addEventListener('DOMContentLoaded', async () => {
             throw new Error('Chrome storage API not available');
         }
 
-        // Initialize state - we'll keep using this for theme and UI preferences
-        const state = await initializeState();
+        // Initialize all services in the proper order
+        const serviceState = await initializeServices();
         
-        // Apply theme
-        applyTheme(state.currentTheme);
+        // Apply theme using ThemeService
+        applyTheme(themeService.getTheme());
         
         // Initialize UI elements
         initializeUI();
         
-        // Initialize our VideoStateService
-        await videoStateService.initialize();
-        
         // Connect to background script via port (but don't request videos yet)
         getBackgroundPort();
         
-        // Get the active tab ID
-        const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-        if (!tabs || !tabs[0] || !tabs[0].id) {
-            throw new Error('Could not determine active tab');
-        }
-        currentTabId = tabs[0].id;
+        // Get the active tab ID using our helper
+        const activeTab = await getActiveTab();
+        currentTabId = activeTab.id;
         
         // Show loading state initially
         showLoadingState('Loading videos...');
@@ -457,16 +454,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         
         // Watch for system theme changes
         const darkModeMediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-        darkModeMediaQuery.addEventListener('change', (e) => {
-            // Only update theme automatically if user hasn't set a preference
-            chrome.storage.sync.get(['theme'], (result) => {
-                // If theme was not explicitly set by the user, follow system preference
-                if (result.theme === undefined) {
-                    const newTheme = e.matches ? 'dark' : 'light';
-                    applyTheme(newTheme);
-                }
-            });
-        });
+        darkModeMediaQuery.addEventListener('change', themeService.handleSystemThemeChange.bind(themeService));
 
         // Setup scroll persistence
         setupScrollPersistence();

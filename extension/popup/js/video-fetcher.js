@@ -15,22 +15,14 @@
  * - Processes HLS relationships while respecting extracted URLs
  */
 
-// Import all from single source
-import {
-    getCachedVideos,
-    setCachedVideos,
-    hasResolutionCache, 
-    getResolutionFromCache,
-    addResolutionToCache,
-    getMediaInfoFromCache, 
-    addMediaInfoToCache,
-    addPosterToCache,
-    getPosterFromCache,
-    // Import master playlist cache functions
-    getMasterPlaylist,
-    addMasterPlaylist,
-    clearMasterPlaylists
-} from './state.js';
+// Import directly from services instead of state.js
+import { 
+    getStreamMetadata, 
+    addStreamMetadata,
+    getPoster, 
+    addPoster 
+} from './services/video-state-service.js';
+
 import { showLoader, showErrorMessage, restoreScrollPosition } from './ui.js';
 import { groupVideosByType, clearHLSRelationships } from './video-processor.js';
 // Import updateVideoMetadata from video-renderer
@@ -96,7 +88,7 @@ async function processHLSRelationships(video, tabId) {
  * Update the video list, either from cache or by fetching new videos
  * @param {boolean} forceRefresh - Whether to force refresh even if cached videos exist
  * @param {number} tabId - Optional tab ID for the active tab
- * @returns {Array} The current videos list
+ * @returns {Promise<Array>} The current videos list
  */
 export async function updateVideoList(forceRefresh = false, tabId = null) {
     const container = document.getElementById('videos');
@@ -106,7 +98,6 @@ export async function updateVideoList(forceRefresh = false, tabId = null) {
     if (forceRefresh) {
         logDebug('Clearing HLS relationships');
         clearHLSRelationships();
-        clearMasterPlaylists(); // Clear the centralized master playlist cache
         clearManifestCaches(); // Clear manifest service caches
     }
     
@@ -131,8 +122,8 @@ export async function updateVideoList(forceRefresh = false, tabId = null) {
         forceRefresh
     });
     
-    // Return the current cached videos (UI will be updated via port response)
-    return getCachedVideos();
+    // Return empty array - videos come from background now
+    return [];
 }
 
 /**
@@ -241,7 +232,7 @@ export async function fetchVideoInfo(videos, tabId) {
             };
             
             // Cache the placeholder info
-            addMediaInfoToCache(video.url, placeholderInfo);
+            addStreamMetadata(video.url, placeholderInfo);
             
             // Update UI with blob-specific message
             updateVideoMetadata(video.url, {
@@ -257,7 +248,7 @@ export async function fetchVideoInfo(videos, tabId) {
         }
         
         // Include video if it doesn't have mediaInfo
-        return !video.mediaInfo && !getMediaInfoFromCache(video.url);
+        return !video.mediaInfo && !getStreamMetadata(video.url);
     });
     
     if (videosNeedingInfo.length === 0) {
@@ -321,26 +312,10 @@ export async function fetchVideoInfo(videos, tabId) {
                 };
 
                 // Cache the media info
-                addMediaInfoToCache(video.url, mediaInfo);
-
-                // Update video object with media info
-                const updatedVideo = {
-                    ...video,
-                    mediaInfo
-                };
+                addStreamMetadata(video.url, mediaInfo);
 
                 // Update UI immediately
                 updateVideoMetadata(video.url, mediaInfo);
-                
-                // Update this video in the cache
-                const cachedVideos = getCachedVideos();
-                if (cachedVideos) {
-                    const index = cachedVideos.findIndex(v => v.url === video.url);
-                    if (index !== -1) {
-                        cachedVideos[index] = updatedVideo;
-                        setCachedVideos(cachedVideos);
-                    }
-                }
             }
         } catch (error) {
             // Don't show errors for blob URLs - they're expected to fail
@@ -360,7 +335,7 @@ export async function fetchVideoInfo(videos, tabId) {
                 bitrate: null
             };
             
-            addMediaInfoToCache(video.url, placeholderInfo);
+            addStreamMetadata(video.url, placeholderInfo);
             
             // Update UI to show we're done trying
             const resolutionInfo = document.querySelector(`.video-item[data-url="${video.url}"] .resolution-info`);
@@ -388,8 +363,15 @@ export async function fetchVideoInfo(videos, tabId) {
  */
 export async function getStreamResolution(url, tabId = null) {
     // Check cache first
-    if (hasResolutionCache(url)) {
-        return getResolutionFromCache(url);
+    const cachedMetadata = getStreamMetadata(url);
+    if (cachedMetadata) {
+        return formatResolution(
+            cachedMetadata.width,
+            cachedMetadata.height,
+            cachedMetadata.fps,
+            cachedMetadata.bitrate,
+            cachedMetadata
+        );
     }
     
     if (url.startsWith('blob:')) {
@@ -445,7 +427,8 @@ export async function getStreamResolution(url, tabId = null) {
                 }
             );
             
-            addResolutionToCache(url, resolution);
+            // Cache stream metadata
+            addStreamMetadata(url, streamInfo);
             
             // Update UI immediately with full stream info
             updateVideoMetadata(url, streamInfo);
@@ -464,40 +447,8 @@ export async function getStreamResolution(url, tabId = null) {
  * @returns {Promise<boolean>} True if metadata was preserved
  */
 export async function preserveMetadata() {
-    const videos = getCachedVideos();
-    if (!videos || videos.length === 0) {
-        return false;
-    }
-    
-    logDebug('Preserving metadata for', videos.length, 'videos before refresh');
-    
-    // For each video with metadata, ensure it's properly stored in the cache
-    let metadataCount = 0;
-    for (const video of videos) {
-        if (video.mediaInfo) {
-            addMediaInfoToCache(video.url, video.mediaInfo);
-            metadataCount++;
-        }
-        
-        if (video.resolution) {
-            addResolutionToCache(video.url, formatResolution(
-                video.resolution.width,
-                video.resolution.height,
-                video.resolution.fps,
-                video.resolution.bitrate,
-                video.mediaInfo
-            ));
-        }
-        
-        if (video.previewUrl) {
-            addPosterToCache(video.url, video.previewUrl);
-        } else if (video.poster) {
-            addPosterToCache(video.url, video.poster);
-        }
-    }
-    
-    logDebug('Preserved metadata for', metadataCount, 'videos');
-    return metadataCount > 0;
+    // Since background.js is now the source of truth, we don't need this function
+    return true;
 }
 
 // Track the background refresh interval

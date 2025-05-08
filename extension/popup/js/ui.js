@@ -1,17 +1,18 @@
 /**
- * @ai-guide-component UIManager
- * @ai-guide-description Manages the user interface for the extension popup
+ * @ai-guide-component UI
+ * @ai-guide-description Handles UI components and interactions
  * @ai-guide-responsibilities
- * - Renders video cards and containers in the popup
- * - Manages UI state transitions and animations
- * - Handles user interaction events
- * - Provides theme switching capabilities
- * - Implements loading states and progress indicators
- * - Manages video preview generation and display
+ * - Controls main UI elements and interactions
+ * - Manages loading states and error messages
+ * - Implements theme switching functionality
+ * - Provides dialogs and notifications
+ * - Manages responsive UI adjustments
  */
 
 import { debounce, formatQualityLabel, formatQualityDetails } from './utilities.js';
-import { getCurrentTheme, setCurrentTheme, getAllGroupStates } from './state.js';
+import { getTheme, setTheme, applyTheme as applyThemeChange } from './services/theme-service.js';
+import { getAllGroupStates } from './services/group-state-service.js';
+import { clearCaches } from './services/video-state-service.js';
 import { updateVideoList } from './video-fetcher.js';
 
 // Reusable tooltip element
@@ -23,17 +24,7 @@ sharedTooltip.className = 'tooltip';
  * @param {string} theme - Theme to apply ('dark' or 'light')
  */
 export function applyTheme(theme) {
-    document.body.classList.remove('theme-light', 'theme-dark');
-    document.body.classList.add(`theme-${theme}`);
-    setCurrentTheme(theme);
-    
-    // Update theme toggle button icon
-    const themeToggle = document.querySelector('.theme-toggle');
-    if (themeToggle) {
-        themeToggle.innerHTML = theme === 'dark' 
-            ? '<svg viewBox="0 0 24 24" width="16" height="16"><path d="M12,7c-2.76,0-5,2.24-5,5s2.24,5,5,5s5-2.24,5-5S14.76,7,12,7L12,7z M2,13h2c0.55,0,1-0.45,1-1s-0.45-1-1-1H2 c-0.55,0-1,0.45-1,1S1.45,13,2,13z M20,13h2c0.55,0,1-0.45,1-1s-0.45-1-1-1h-2c-0.55,0-1,0.45-1,1S19.45,13,20,13z M11,2v2 c0,0.55,0.45,1,1,1s1-0.45,1-1V2c0-0.55-0.45-1-1-1S11,1.45,11,2z M11,20v2c0,0.55,0.45,1,1,1s1-0.45,1-1v-2c0-0.55-0.45-1-1-1 S11,19.45,11,20z M5.99,4.58c-0.39-0.39-1.03-0.39-1.41,0c-0.39,0.39-0.39,1.03,0,1.41l1.06,1.06c0.39,0.39,1.03,0.39,1.41,0 s0.39-1.03,0-1.41L5.99,4.58z M18.36,16.95c-0.39-0.39-1.03-0.39-1.41,0c-0.39,0.39-0.39,1.03,0,1.41l1.06,1.06 c0.39,0.39,1.03,0.39,1.41,0c0.39-0.39,0.39-1.03,0-1.41L18.36,16.95z M19.42,5.99c0.39-0.39,0.39-1.03,0-1.41 c-0.39-0.39-1.03-0.39-1.41,0l-1.06,1.06c-0.39,0.39-0.39,1.03,0,1.41s1.03,0.39,1.41,0L19.42,5.99z M7.05,18.36 c0.39-0.39,0.39-1.03,0-1.41c-0.39-0.39-1.03-0.39-1.41,0l-1.06,1.06c-0.39,0.39-0.39,1.03,0,1.41s1.03,0.39,1.41,0L7.05,18.36z" /></svg>'
-            : '<svg viewBox="0 0 24 24" width="16" height="16"><path d="M9.37,5.51C9.19,6.15,9.1,6.82,9.1,7.5c0,4.08,3.32,7.4,7.4,7.4c0.68,0,1.35-0.09,1.99-0.27C17.45,17.19,14.93,19,12,19 c-3.86,0-7-3.14-7-7C5,9.07,6.81,6.55,9.37,5.51z M12,3c-4.97,0-9,4.03-9,9s4.03,9,9,9s9-4.03,9-9c0-0.46-0.04-0.92-0.1-1.36 c-0.98,1.37-2.58,2.26-4.4,2.26c-2.98,0-5.4-2.42-5.4-5.4c0-1.81,0.89-3.42,2.26-4.4C12.92,3.04,12.46,3,12,3L12,3z" /></svg>';
-    }
+    applyThemeChange(theme);
 }
 
 /**
@@ -72,9 +63,8 @@ export function initializeUI() {
         button.disabled = true;
         
         try {
-            // Import and call the clearAllCaches function
-            const { clearAllCaches } = await import('./state.js');
-            await clearAllCaches();
+            // Use VideoStateService to clear caches
+            await clearCaches();
             
             // Force a full refresh with forceRefresh=true
             const { updateVideoList } = await import('./video-fetcher.js');
@@ -111,13 +101,19 @@ export function initializeUI() {
     // Create theme toggle button
     const themeToggle = document.createElement('button');
     themeToggle.className = 'theme-toggle';
-    themeToggle.innerHTML = getCurrentTheme() === 'dark'
+    themeToggle.innerHTML = getTheme() === 'dark'
         ? '<svg viewBox="0 0 24 24" width="16" height="16"><path d="M12,7c-2.76,0-5,2.24-5,5s2.24,5,5,5s5-2.24,5-5S14.76,7,12,7L12,7z M2,13h2c0.55,0,1-0.45,1-1s-0.45-1-1-1H2 c-0.55,0-1,0.45-1,1S1.45,13,2,13z M20,13h2c0.55,0,1-0.45,1-1s-0.45-1-1-1h-2c-0.55,0-1,0.45-1,1S19.45,13,20,13z M11,2v2 c0,0.55,0.45,1,1,1s1-0.45,1-1V2c0-0.55-0.45-1-1-1S11,1.45,11,2z M11,20v2c0,0.55,0.45,1,1,1s1-0.45,1-1v-2c0-0.55-0.45-1-1-1 S11,19.45,11,20z M5.99,4.58c-0.39-0.39-1.03-0.39-1.41,0c-0.39,0.39-0.39,1.03,0,1.41l1.06,1.06c0.39,0.39,1.03,0.39,1.41,0 s0.39-1.03,0-1.41L5.99,4.58z M18.36,16.95c-0.39-0.39-1.03-0.39-1.41,0c-0.39,0.39-0.39,1.03,0,1.41l1.06,1.06 c0.39,0.39,1.03,0.39,1.41,0c0.39-0.39,0.39-1.03,0-1.41L18.36,16.95z M19.42,5.99c0.39-0.39,0.39-1.03,0-1.41 c-0.39-0.39-1.03-0.39-1.41,0l-1.06,1.06c-0.39,0.39-0.39,1.03,0,1.41s1.03,0.39,1.41,0L19.42,5.99z M7.05,18.36 c0.39-0.39,0.39-1.03,0-1.41c-0.39-0.39-1.03-0.39-1.41,0l-1.06,1.06c-0.39,0.39-0.39,1.03,0,1.41s1.03,0.39,1.41,0L7.05,18.36z" /></svg>'
         : '<svg viewBox="0 0 24 24" width="16" height="16"><path d="M9.37,5.51C9.19,6.15,9.1,6.82,9.1,7.5c0,4.08,3.32,7.4,7.4,7.4c0.68,0,1.35-0.09,1.99-0.27C17.45,17.19,14.93,19,12,19 c-3.86,0-7-3.14-7-7C5,9.07,6.81,6.55,9.37,5.51z M12,3c-4.97,0-9,4.03-9,9s4.03,9,9,9s9-4.03,9-9c0-0.46-0.04-0.92-0.1-1.36 c-0.98,1.37-2.58,2.26-4.4,2.26c-2.98,0-5.4-2.42-5.4-5.4c0-1.81,0.89-3.42,2.26-4.4C12.92,3.04,12.46,3,12,3L12,3z" /></svg>';
     
-    themeToggle.addEventListener('click', () => {
-        const newTheme = getCurrentTheme() === 'dark' ? 'light' : 'dark';
-        applyTheme(newTheme);
+    // Fix: Use setTheme instead of applyTheme to persist the theme change
+    themeToggle.addEventListener('click', async () => {
+        const newTheme = getTheme() === 'dark' ? 'light' : 'dark';
+        await setTheme(newTheme);
+        
+        // Update the icon based on the new theme
+        themeToggle.innerHTML = newTheme === 'dark'
+            ? '<svg viewBox="0 0 24 24" width="16" height="16"><path d="M12,7c-2.76,0-5,2.24-5,5s2.24,5,5,5s5-2.24,5-5S14.76,7,12,7L12,7z M2,13h2c0.55,0,1-0.45,1-1s-0.45-1-1-1H2 c-0.55,0-1,0.45-1,1S1.45,13,2,13z M20,13h2c0.55,0,1-0.45,1-1s-0.45-1-1-1h-2c-0.55,0-1,0.45-1,1S19.45,13,20,13z M11,2v2 c0,0.55,0.45,1,1,1s1-0.45,1-1V2c0-0.55-0.45-1-1-1S11,1.45,11,2z M11,20v2c0,0.55,0.45,1,1,1s1-0.45,1-1v-2c0-0.55-0.45-1-1-1 S11,19.45,11,20z M5.99,4.58c-0.39-0.39-1.03-0.39-1.41,0c-0.39,0.39-0.39,1.03,0,1.41l1.06,1.06c0.39,0.39,1.03,0.39,1.41,0 s0.39-1.03,0-1.41L5.99,4.58z M18.36,16.95c-0.39-0.39-1.03-0.39-1.41,0c-0.39,0.39-0.39,1.03,0,1.41l1.06,1.06 c0.39,0.39,1.03,0.39,1.41,0c0.39-0.39,0.39-1.03,0-1.41L18.36,16.95z M19.42,5.99c0.39-0.39,0.39-1.03,0-1.41 c-0.39-0.39-1.03-0.39-1.41,0l-1.06,1.06c-0.39,0.39-0.39,1.03,0,1.41s1.03,0.39,1.41,0L19.42,5.99z M7.05,18.36 c0.39-0.39,0.39-1.03,0-1.41c-0.39-0.39-1.03-0.39-1.41,0l-1.06,1.06c-0.39,0.39-0.39,1.03,0,1.41s1.03,0.39,1.41,0L7.05,18.36z" /></svg>'
+            : '<svg viewBox="0 0 24 24" width="16" height="16"><path d="M9.37,5.51C9.19,6.15,9.1,6.82,9.1,7.5c0,4.08,3.32,7.4,7.4,7.4c0.68,0,1.35-0.09,1.99-0.27C17.45,17.19,14.93,19,12,19 c-3.86,0-7-3.14-7-7C5,9.07,6.81,6.55,9.37,5.51z M12,3c-4.97,0-9,4.03-9,9s4.03,9,9,9s9-4.03,9-9c0-0.46-0.04-0.92-0.1-1.36 c-0.98,1.37-2.58,2.26-4.4,2.26c-2.98,0-5.4-2.42-5.4-5.4c0-1.81,0.89-3.42,2.26-4.4C12.92,3.04,12.46,3,12,3L12,3z" /></svg>';
     });
     
     // Add theme toggle to right container
@@ -310,10 +306,10 @@ export function showQualityDialog(qualities) {
         `;
 
         // Add theme variables
-        dialog.style.setProperty('--background', getCurrentTheme() === 'dark' ? '#2d2d2d' : '#ffffff');
-        dialog.style.setProperty('--border', getCurrentTheme() === 'dark' ? '#444' : '#e0e0e0');
-        dialog.style.setProperty('--text-secondary', getCurrentTheme() === 'dark' ? '#aaa' : '#666');
-        dialog.style.setProperty('--hover', getCurrentTheme() === 'dark' ? '#3d3d3d' : '#f5f5f5');
+        dialog.style.setProperty('--background', getTheme() === 'dark' ? '#2d2d2d' : '#ffffff');
+        dialog.style.setProperty('--border', getTheme() === 'dark' ? '#444' : '#e0e0e0');
+        dialog.style.setProperty('--text-secondary', getTheme() === 'dark' ? '#aaa' : '#666');
+        dialog.style.setProperty('--hover', getTheme() === 'dark' ? '#3d3d3d' : '#f5f5f5');
         dialog.style.setProperty('--primary', '#1976D2');
         
         document.body.appendChild(overlay);
@@ -354,4 +350,55 @@ export function showQualityDialog(qualities) {
             }
         });
     });
+}
+
+/**
+ * Toggle theme between light and dark
+ */
+export async function toggleTheme() {
+    // Get current theme from ThemeService
+    const currentTheme = getTheme();
+    const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+    
+    // Set the new theme
+    await setTheme(newTheme);
+    
+    return newTheme;
+}
+
+/**
+ * Clear all caches and request a fresh data fetch
+ */
+export async function clearAllCaches() {
+    // Use VideoStateService to clear caches
+    await clearCaches();
+    
+    // Show toast notification
+    showToast('Caches cleared, reloading data...');
+    
+    return true;
+}
+
+/**
+ * Show a toast notification
+ * @param {string} message - Message to display
+ * @param {number} duration - Duration in ms
+ */
+export function showToast(message, duration = 3000) {
+    const toast = document.createElement('div');
+    toast.className = 'toast';
+    toast.textContent = message;
+    
+    document.body.appendChild(toast);
+    
+    setTimeout(() => {
+        toast.classList.add('visible');
+    }, 100);
+    
+    setTimeout(() => {
+        toast.classList.remove('visible');
+        setTimeout(() => {
+            document.body.removeChild(toast);
+        }, 300);
+    }, duration);
 }

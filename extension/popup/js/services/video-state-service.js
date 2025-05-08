@@ -17,8 +17,9 @@ import { sendPortMessage } from '../index.js';
 // Constants for storage
 const CACHE_TIMEOUT = 5 * 60 * 1000; // 5 minutes
 const POSTER_CACHE_SIZE = 50;
+const STREAM_METADATA_CACHE_SIZE = 50;
 
-// Simple LRU cache for posters to prevent re-fetching
+// Simple LRU cache for efficient data storage
 class LRUCache {
   constructor(limit) {
     this.limit = limit;
@@ -46,6 +47,10 @@ class LRUCache {
     }
   }
 
+  has(key) {
+    return this.cache.has(key);
+  }
+
   clear() {
     this.cache.clear();
     this.order = [];
@@ -57,6 +62,9 @@ class VideoStateService {
   constructor() {
     // Local caches - minimal state needed for UI performance
     this.posterCache = new LRUCache(POSTER_CACHE_SIZE);
+    this.streamMetadataCache = new LRUCache(STREAM_METADATA_CACHE_SIZE);
+    this.videoGroups = {}; // Groups of videos by type (hls, dash, direct, etc.)
+    
     this.activeTabId = null;
     this.lastFetchTime = 0;
     this.isInitialized = false;
@@ -169,12 +177,66 @@ class VideoStateService {
   addPoster(videoUrl, posterUrl) {
     this.posterCache.set(videoUrl, posterUrl);
   }
+  
+  /**
+   * Get stream metadata from cache
+   * @param {string} url - Stream URL
+   * @returns {Object|null} Stream metadata or null
+   */
+  getStreamMetadata(url) {
+    return this.streamMetadataCache.get(url);
+  }
+  
+  /**
+   * Add stream metadata to cache
+   * @param {string} url - Stream URL
+   * @param {Object} metadata - Stream metadata
+   */
+  addStreamMetadata(url, metadata) {
+    this.streamMetadataCache.set(url, metadata);
+  }
+  
+  /**
+   * Check if stream metadata exists in cache
+   * @param {string} url - Stream URL
+   * @returns {boolean} True if metadata exists
+   */
+  hasStreamMetadata(url) {
+    return this.streamMetadataCache.has(url);
+  }
+  
+  /**
+   * Store video groups by type
+   * @param {Object} groups - Video groups by type
+   */
+  setVideoGroups(groups) {
+    this.videoGroups = groups;
+    this.emit('videoGroupsChanged', groups);
+  }
+  
+  /**
+   * Get all video groups
+   * @returns {Object} Video groups by type
+   */
+  getAllVideoGroups() {
+    return this.videoGroups;
+  }
+  
+  /**
+   * Get videos of a specific type
+   * @param {string} type - Video type (hls, dash, direct, etc.)
+   * @returns {Array} Videos of the specified type
+   */
+  getVideoGroup(type) {
+    return this.videoGroups[type] || [];
+  }
 
   /**
    * Clear all caches
    */
   async clearCaches() {
     this.posterCache.clear();
+    this.streamMetadataCache.clear();
     this.lastFetchTime = 0;
     
     // Request a refresh from background
@@ -215,6 +277,9 @@ class VideoStateService {
    */
   handleMetadataUpdate(event) {
     const { url, mediaInfo } = event.detail;
+    // Add to cache
+    this.addStreamMetadata(url, mediaInfo);
+    // Emit event for UI to update
     this.emit('metadata-update', { url, mediaInfo });
   }
 
@@ -239,3 +304,9 @@ export const fetchVideos = (options) => videoStateService.fetchVideos(options);
 export const getPoster = (url) => videoStateService.getPoster(url);
 export const addPoster = (videoUrl, posterUrl) => videoStateService.addPoster(videoUrl, posterUrl);
 export const clearCaches = () => videoStateService.clearCaches();
+export const getStreamMetadata = (url) => videoStateService.getStreamMetadata(url);
+export const addStreamMetadata = (url, metadata) => videoStateService.addStreamMetadata(url, metadata);
+export const hasStreamMetadata = (url) => videoStateService.hasStreamMetadata(url);
+export const setVideoGroups = (groups) => videoStateService.setVideoGroups(groups);
+export const getAllVideoGroups = () => videoStateService.getAllVideoGroups();
+export const getVideoGroup = (type) => videoStateService.getVideoGroup(type);
