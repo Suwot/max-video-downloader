@@ -76,6 +76,144 @@ class ManifestParser {
     }
 
     /**
+     * Light parse a manifest to detect if it's a master playlist without fetching the entire file
+     * @param {string} url URL of the manifest
+     * @param {string} type Manifest type ('hls' or 'dash')
+     * @returns {Promise<Object|null>} Basic manifest info or null if failed
+     */
+    async lightParse(url, type) {
+        if (!url) {
+            logDebug('MANIFEST-PARSER ERROR: No URL provided for light parsing');
+            return null;
+        }
+
+        try {
+            logDebug(`Light parsing ${type} manifest from ${url}`);
+            
+            // Validate URL format before fetching
+            try {
+                new URL(url);
+            } catch (urlError) {
+                logDebug(`MANIFEST-PARSER ERROR: Invalid URL format: ${url}`, urlError);
+                return null;
+            }
+            
+            // Use fetch with a range request to get just the first part of the manifest
+            const content = await this.fetchPartialManifest(url);
+            
+            if (!content) {
+                logDebug(`MANIFEST-PARSER ERROR: Failed to fetch manifest content from ${url}`);
+                return null;
+            }
+            
+            // Log the first 200 characters of content to verify it's valid
+            logDebug(`MANIFEST-PARSER: Content preview: ${content.substring(0, 200)}${content.length > 200 ? '...' : ''}`);
+
+            // Basic parsing result structure
+            const result = {
+                url: url,
+                type: type,
+                isLightParsed: true
+            };
+            
+            // HLS detection
+            if (type === 'hls') {
+                // For HLS, check for STREAM-INF tag which indicates a master playlist
+                const isMaster = content.includes('#EXT-X-STREAM-INF:');
+                
+                return {
+                    ...result,
+                    isMasterPlaylist: isMaster,
+                    isVariant: !isMaster
+                };
+            }
+            
+            // DASH detection
+            if (type === 'dash') {
+                // For DASH, check for AdaptationSet and Representation tags
+                const hasMasterElements = content.includes('<AdaptationSet') && 
+                                         content.includes('<Representation');
+                
+                return {
+                    ...result,  
+                    isMasterPlaylist: hasMasterElements,
+                    isVariant: !hasMasterElements
+                };
+            }
+            
+            return null;
+        } catch (error) {
+            logDebug('MANIFEST-PARSER ERROR: Exception during light parsing:', error.message);
+            logDebug('MANIFEST-PARSER ERROR: Stack trace:', error.stack);
+            return null;
+        }
+    }
+    
+    /**
+     * Fetch just the first part of manifest content
+     * @param {string} url Manifest URL
+     * @returns {Promise<string|null>} First part of manifest content or null if failed
+     */
+    fetchPartialManifest(url) {
+        return new Promise((resolve) => {
+            try {
+                const urlObj = new URL(url);
+                const protocol = urlObj.protocol === 'https:' ? https : http;
+                
+                logDebug(`MANIFEST-PARSER: Light fetching from ${urlObj.protocol}//${urlObj.hostname}${urlObj.pathname}${urlObj.search}`);
+                
+                const options = {
+                    method: 'GET',
+                    hostname: urlObj.hostname,
+                    path: urlObj.pathname + urlObj.search,
+                    port: urlObj.port || (urlObj.protocol === 'https:' ? 443 : 80),
+                    timeout: 5000, // 5 second timeout for light parsing
+                    headers: {
+                        'Range': 'bytes=0-2047', // Get first 2KB which is usually enough to determine manifest type
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                        'Accept': '*/*',
+                        'Accept-Encoding': 'gzip, deflate, br',
+                        'Connection': 'keep-alive'
+                    }
+                };
+                
+                const req = protocol.request(options, (res) => {
+                    let data = '';
+                    
+                    res.on('data', (chunk) => {
+                        data += chunk.toString();
+                    });
+                    
+                    res.on('end', () => {
+                        if (res.statusCode >= 200 && res.statusCode < 300) {
+                            resolve(data);
+                        } else {
+                            logDebug(`MANIFEST-PARSER ERROR: HTTP error ${res.statusCode} during light parsing`);
+                            resolve(null);
+                        }
+                    });
+                });
+                
+                req.on('error', (error) => {
+                    logDebug(`MANIFEST-PARSER ERROR: Network error during light parsing: ${error.message}`);
+                    resolve(null);
+                });
+                
+                req.setTimeout(5000, () => {
+                    logDebug('MANIFEST-PARSER ERROR: Timeout during light parsing');
+                    req.destroy();
+                    resolve(null);
+                });
+                
+                req.end();
+            } catch (error) {
+                logDebug(`MANIFEST-PARSER ERROR: Exception in light fetch: ${error.message}`);
+                resolve(null);
+            }
+        });
+    }
+
+    /**
      * Fetch manifest content from URL
      * @param {string} url Manifest URL
      * @returns {Promise<string|null>} Manifest content or null if failed

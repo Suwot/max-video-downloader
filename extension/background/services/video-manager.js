@@ -129,7 +129,13 @@ function processVideosForBroadcast(videos) {
             // Make sure quality variants are preserved
             qualityVariants: video.qualityVariants || video.variants || [],
             variants: video.variants || video.qualityVariants || [],
-            isMasterPlaylist: video.isMasterPlaylist || false
+            // Preserve parsing state flags
+            isLightParsed: video.isLightParsed || false,
+            isFullyParsed: video.isFullyParsed || false,
+            isMasterPlaylist: video.isMasterPlaylist || false,
+            isVariant: video.isVariant || false,
+            // File size information
+            fileSize: video.fileSize || video.streamInfo?.sizeBytes || video.streamInfo?.estimatedSize || null
         };
     });
     
@@ -186,11 +192,14 @@ function addVideoToTab(tabId, videoInfo) {
             // Preserve existing fields if new data doesn't have them
             poster: videoInfo.poster || tabVideos[existingIndex].poster,
             title: videoInfo.title || tabVideos[existingIndex].title,
-            detectionTimestamp: tabVideos[existingIndex].detectionTimestamp || videoInfo.detectionTimestamp,
+            // Preserve parsing states if they exist
+            isLightParsed: videoInfo.isLightParsed || tabVideos[existingIndex].isLightParsed || false, 
+            isFullyParsed: videoInfo.isFullyParsed || tabVideos[existingIndex].isFullyParsed || false,
             // Preserve variants information
             qualityVariants: videoInfo.qualityVariants || tabVideos[existingIndex].qualityVariants,
             variants: videoInfo.variants || tabVideos[existingIndex].variants,
-            isMasterPlaylist: videoInfo.isMasterPlaylist || tabVideos[existingIndex].isMasterPlaylist
+            isMasterPlaylist: videoInfo.isMasterPlaylist || tabVideos[existingIndex].isMasterPlaylist, 
+            isVariant: videoInfo.isVariant || tabVideos[existingIndex].isVariant || false
         };
         video = tabVideos[existingIndex];
     } else {
@@ -198,11 +207,16 @@ function addVideoToTab(tabId, videoInfo) {
         video = {
             ...videoInfo,
             timestamp: Date.now(),
-            detectionTimestamp: videoInfo.detectionTimestamp || new Date().toISOString(),
             // Important flags for tracking processing status
             isBeingProcessed: false,
             needsMetadata: true,
-            needsPreview: !videoInfo.poster && !videoInfo.previewUrl
+            needsPreview: !videoInfo.poster && !videoInfo.previewUrl,
+            // Add parsing state flags
+            isLightParsed: videoInfo.isLightParsed || false,
+            isFullyParsed: videoInfo.isFullyParsed || false,
+            // Master/variant status
+            isMasterPlaylist: videoInfo.isMasterPlaylist || false,
+            isVariant: videoInfo.isVariant || false
         };
         
         tabVideos.push(video);
@@ -228,16 +242,17 @@ function addVideoToTab(tabId, videoInfo) {
             };
             video.needsMetadata = false;
             video.needsPreview = false;
+            video.isFullyParsed = true; // Mark blob URLs as fully parsed
         }
     } else {
         // For HLS/DASH playlists, process to detect master-variant relationships
         if ((video.type === 'hls' || video.type === 'dash') && 
-            !video.isVariant && !video.qualityVariants && !video.variants) {
+            !video.isLightParsed && !video.isVariant && !video.qualityVariants && !video.variants) {
             enrichWithPlaylistInfo(video, tabId);
         }
         
-        // Enrich with metadata if needed
-        if (!video.streamInfo && !video.mediaInfo && !processingRequests.metadata.has(normalizedUrl)) {
+        // Enrich with metadata if needed, only if not fully parsed already
+        if (!video.isFullyParsed && !video.streamInfo && !video.mediaInfo && !processingRequests.metadata.has(normalizedUrl)) {
             enrichWithMetadata(video, tabId);
         }
         
@@ -254,6 +269,12 @@ function addVideoToTab(tabId, videoInfo) {
 // Enrich video with playlist information (for HLS/DASH)
 async function enrichWithPlaylistInfo(video, tabId) {
     try {
+        // Skip if already light parsed and we know its type
+        if (video.isLightParsed && (video.isMasterPlaylist || video.isVariant)) {
+            logDebug(`Skipping playlist info enrichment for already parsed video: ${video.url}`);
+            return;
+        }
+        
         // Use the manifest service to process the video
         const processedVideo = await processVideoRelationships(video);
         
@@ -265,19 +286,31 @@ async function enrichWithPlaylistInfo(video, tabId) {
             
             if (index !== -1) {
                 // Update the video with new information
+                // Save previous variants count for comparison
+                const previousVariantsCount = videos[index].variants?.length || videos[index].qualityVariants?.length || 0;
+                
                 videos[index] = {
                     ...videos[index],
                     ...processedVideo,
                     // Preserve original fields
                     timestamp: videos[index].timestamp,
-                    detectionTimestamp: videos[index].detectionTimestamp 
+                    detectionTimestamp: videos[index].detectionTimestamp,
+                    // Ensure both variant arrays are populated
+                    variants: processedVideo.variants || videos[index].variants || [],
+                    qualityVariants: processedVideo.qualityVariants || videos[index].qualityVariants || []
                 };
                 
+                // Log variants info for debugging
+                const currentVariantsCount = videos[index].variants?.length || videos[index].qualityVariants?.length || 0;
+                
                 // If this is a master playlist with variants, broadcast update 
-                if (processedVideo.isMasterPlaylist && 
-                    (processedVideo.variants || processedVideo.qualityVariants)) {
-                    logDebug(`Found master playlist with ${(processedVideo.variants || processedVideo.qualityVariants).length} variants`);
-                    broadcastVideoUpdate(tabId);
+                if (processedVideo.isMasterPlaylist) {
+                    if (currentVariantsCount > 0) {
+                        logDebug(`Found master playlist with ${currentVariantsCount} variants (was ${previousVariantsCount})`);
+                        broadcastVideoUpdate(tabId);
+                    } else {
+                        logDebug(`⚠️ Master playlist has no variants: ${videos[index].url}`);
+                    }
                 }
             }
         }
@@ -289,6 +322,12 @@ async function enrichWithPlaylistInfo(video, tabId) {
 // Enrich video with metadata
 async function enrichWithMetadata(video, tabId) {
     const normalizedUrl = normalizeUrl(video.url);
+    
+    // Skip if already fully parsed or being processed
+    if (video.isFullyParsed || processingRequests.metadata.has(normalizedUrl)) {
+        logDebug(`[DEBUG] ⏭️ Skipping metadata enrichment for ${video.url} - already ${video.isFullyParsed ? 'fully parsed' : 'in progress'}`);
+        return;
+    }
     
     // Mark as being processed
     processingRequests.metadata.add(normalizedUrl);
@@ -308,19 +347,93 @@ async function enrichWithMetadata(video, tabId) {
             return;
         }
         
+        // For master playlists, we might not need detailed metadata
+        // since we'll get that from the variants
+        if (video.isLightParsed && video.isMasterPlaylist) {
+            // If we have variants, apply basic metadata and mark as processed
+            if (video.qualityVariants && video.qualityVariants.length > 0) {
+                logDebug(`[DEBUG] ⚡ OPTIMIZATION: Using variant info for master playlist ${video.url}`);
+                
+                // Calculate basic info from variants if available
+                const highestQuality = [...video.qualityVariants].sort((a, b) => 
+                    (b.bandwidth || 0) - (a.bandwidth || 0)
+                )[0];
+                
+                if (highestQuality) {
+                    // Create basic metadata from variant info
+                    applyMetadataToVideo(tabId, normalizedUrl, {
+                        type: video.type,
+                        format: video.type,
+                        container: video.type,
+                        isMasterPlaylist: true,
+                        hasVideo: true,
+                        hasAudio: true,
+                        width: highestQuality.width,
+                        height: highestQuality.height,
+                        fps: highestQuality.fps || highestQuality.frameRate,
+                        videoBitrate: highestQuality.bandwidth,
+                        totalBitrate: highestQuality.bandwidth,
+                        estimatedSize: estimateFileSize(highestQuality.bandwidth, video.duration)
+                    });
+                    return;
+                }
+            }
+        }
+        
+        // For variant streams with a known master, we might already have the metadata
+        if (video.isLightParsed && video.isVariant && video.masterUrl) {
+            const videos = videosPerTab.get(tabId);
+            const masterVideo = videos.find(v => normalizeUrl(v.url) === normalizeUrl(video.masterUrl));
+            
+            if (masterVideo && masterVideo.qualityVariants) {
+                const matchingVariant = masterVideo.qualityVariants.find(
+                    v => normalizeUrl(v.url) === normalizedUrl
+                );
+                
+                if (matchingVariant) {
+                    // Apply variant-specific metadata from master
+                    applyMetadataToVideo(tabId, normalizedUrl, {
+                        type: video.type,
+                        format: video.type,
+                        container: video.type,
+                        isVariant: true,
+                        hasVideo: true,
+                        hasAudio: true,
+                        width: matchingVariant.width,
+                        height: matchingVariant.height,
+                        fps: matchingVariant.fps || matchingVariant.frameRate,
+                        videoBitrate: matchingVariant.bandwidth,
+                        totalBitrate: matchingVariant.bandwidth,
+                        estimatedSize: estimateFileSize(matchingVariant.bandwidth, video.duration)
+                    });
+                    return;
+                }
+            }
+        }
+        
+        // If we made it here, get the full metadata from the native host
         // Use our rate limiter to prevent too many concurrent requests
         const streamInfo = await rateLimiter.enqueue(async () => {
             logDebug(`Getting stream metadata for ${video.url}`);
             
+            // Determine if we can use light parsing for the native host
+            const useLight = video.isLightParsed && (video.isMasterPlaylist || video.isVariant);
+            
             const response = await nativeHostService.sendMessage({
                 type: 'getQualities',
-                url: video.url
+                url: video.url,
+                light: useLight
             });
 
             return response?.streamInfo || null;
         });
         
         if (streamInfo) {
+            // Add file size estimation for normal (non-adaptive) streams
+            if (streamInfo.totalBitrate && video.duration) {
+                streamInfo.estimatedSize = estimateFileSize(streamInfo.totalBitrate, video.duration);
+            }
+            
             applyMetadataToVideo(tabId, normalizedUrl, streamInfo);
         }
     } catch (error) {
@@ -345,12 +458,14 @@ function applyMetadataToVideo(tabId, normalizedUrl, streamInfo) {
             streamInfo,
             mediaInfo: streamInfo, // Add direct mediaInfo reference
             needsMetadata: false,  // Mark as processed
+            isFullyParsed: true,   // Mark as fully parsed
             resolution: streamInfo.width && streamInfo.height ? {
                 width: streamInfo.width,
                 height: streamInfo.height,
                 fps: streamInfo.fps,
                 bitrate: streamInfo.videoBitrate || streamInfo.totalBitrate
-            } : null
+            } : null,
+            fileSize: streamInfo.estimatedSize || videos[index].fileSize
         };
         
         // Use the unified notification method instead
@@ -735,6 +850,19 @@ function clearVideoCache() {
     rateLimiter.activeRequests = 0;
     
     return true;
+}
+
+/**
+ * Estimate file size based on bitrate and duration
+ * @param {number} bitrate - Bitrate in bits per second
+ * @param {number} duration - Duration in seconds
+ * @returns {number} Estimated file size in bytes
+ */
+function estimateFileSize(bitrate, duration) {
+    if (!bitrate || !duration) return null;
+    
+    // Formula: (bitrate in bps * duration in seconds) / 8 = bytes
+    return Math.round((bitrate * duration) / 8);
 }
 
 export {

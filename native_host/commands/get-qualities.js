@@ -25,10 +25,11 @@ class GetQualitiesCommand extends BaseCommand {
      * Execute the getQualities command
      * @param {Object} params Command parameters
      * @param {string} params.url Video URL to analyze
+     * @param {boolean} [params.light] Whether to do light analysis only
      */
     async execute(params) {
-        const { url } = params;
-        logDebug('🎥 Analyzing media from:', url);
+        const { url, light = false } = params;
+        logDebug('🎥 Analyzing media from:', url, light ? '(light mode)' : '(full mode)');
         
         // Skip for blob URLs
         if (url.startsWith('blob:')) {
@@ -38,6 +39,24 @@ class GetQualitiesCommand extends BaseCommand {
         }
         
         try {
+            // If light parsing is requested and this is a streaming URL (HLS/DASH),
+            // we can determine if it's a master playlist much more quickly
+            if (light && (url.includes('.m3u8') || url.includes('.mpd'))) {
+                logDebug('🔎 Performing light analysis to determine manifest type');
+                const lightResult = await this.performLightAnalysis(url);
+                
+                if (lightResult.success) {
+                    this.sendSuccess(lightResult);
+                    return lightResult;
+                }
+                
+                // If light analysis failed but we want full analysis, continue
+                if (!lightResult.success && !lightResult.needsFullParsing) {
+                    this.sendError('Light analysis failed: ' + (lightResult.error || 'Unknown error'));
+                    return lightResult;
+                }
+            }
+            
             // Get required services
             const ffmpegService = this.getService('ffmpeg');
             
@@ -169,6 +188,17 @@ class GetQualitiesCommand extends BaseCommand {
                                 logDebug(`📦 Size: ${sizeMB}MB`);
                             }
                             
+                            // Calculate estimated size based on bitrate and duration if exact size not available
+                            if (!streamInfo.sizeBytes && streamInfo.totalBitrate && streamInfo.duration) {
+                                // Formula: (bitrate in bps * duration in seconds) / 8 = bytes
+                                streamInfo.estimatedSize = Math.round((streamInfo.totalBitrate * streamInfo.duration) / 8);
+                                const sizeMB = (streamInfo.estimatedSize / (1024 * 1024)).toFixed(1);
+                                logDebug(`📊 Estimated size: ${sizeMB}MB (based on bitrate × duration)`);
+                            }
+                            
+                            // Mark as fully parsed
+                            streamInfo.isFullyParsed = true;
+                            
                             this.sendSuccess({ streamInfo });
                             logDebug('✅ Media analysis complete');
                             resolve({ success: true, streamInfo });
@@ -195,6 +225,110 @@ class GetQualitiesCommand extends BaseCommand {
             logDebug('❌ GetQualities error:', err);
             this.sendError(err.message);
             return { error: err.message };
+        }
+    }
+
+    /**
+     * Perform light analysis to determine if a streaming URL is a master playlist
+     * without doing full ffprobe analysis
+     * @param {string} url URL to analyze
+     * @returns {Promise<Object>} Basic info result
+     */
+    async performLightAnalysis(url) {
+        try {
+            // Determine the type from extension
+            const type = url.includes('.m3u8') ? 'hls' : url.includes('.mpd') ? 'dash' : 'unknown';
+            
+            logDebug(`🔎 [LIGHT-ANALYSIS] Starting light analysis for ${url} (${type})`);
+            
+            // Use the manifest parser to check the first portion of the file
+            const manifestParser = this.getService('manifest-parser') || {
+                lightParse: async (url, type) => {
+                    // Very basic fetch implementation if service not available
+                    const https = require('https');
+                    const http = require('http');
+                    const { URL } = require('url');
+                    
+                    return new Promise((resolve) => {
+                        try {
+                            const urlObj = new URL(url);
+                            const protocol = urlObj.protocol === 'https:' ? https : http;
+                            
+                            const options = {
+                                method: 'GET',
+                                hostname: urlObj.hostname,
+                                path: urlObj.pathname + urlObj.search,
+                                port: urlObj.port || (urlObj.protocol === 'https:' ? 443 : 80),
+                                timeout: 5000,
+                                headers: {
+                                    'Range': 'bytes=0-2047', // Just get first 2KB
+                                    'User-Agent': 'Mozilla/5.0',
+                                    'Accept': '*/*'
+                                }
+                            };
+                            
+                            const req = protocol.request(options, (res) => {
+                                let data = '';
+                                res.on('data', (chunk) => {
+                                    data += chunk.toString();
+                                });
+                                
+                                res.on('end', () => {
+                                    // Basic detection
+                                    if (type === 'hls') {
+                                        const isMaster = data.includes('#EXT-X-STREAM-INF:');
+                                        resolve({
+                                            isMasterPlaylist: isMaster,
+                                            isVariant: !isMaster,
+                                            type: 'hls',
+                                            format: 'hls', 
+                                            isLightParsed: true
+                                        });
+                                    } else if (type === 'dash') {
+                                        const isMaster = data.includes('<AdaptationSet') && 
+                                                        data.includes('<Representation');
+                                        resolve({
+                                            isMasterPlaylist: isMaster,
+                                            isVariant: !isMaster,
+                                            type: 'dash',
+                                            format: 'dash',
+                                            isLightParsed: true
+                                        });
+                                    } else {
+                                        resolve(null);
+                                    }
+                                });
+                            });
+                            
+                            req.on('error', () => resolve(null));
+                            req.end();
+                        } catch (error) {
+                            resolve(null);
+                        }
+                    });
+                }
+            };
+            
+            const result = await manifestParser.lightParse(url, type);
+            
+            if (result) {
+                logDebug(`🔎 [LIGHT-ANALYSIS] Success for ${url}: isMaster=${result.isMasterPlaylist}, isVariant=${result.isVariant}`);
+                return { 
+                    success: true,
+                    streamInfo: {
+                        ...result,
+                        hasVideo: true,
+                        hasAudio: true,
+                        container: type
+                    }
+                };
+            }
+            
+            // If light parsing fails, indicate that full parsing is needed
+            return { success: false, needsFullParsing: true };
+        } catch (error) {
+            logDebug('Error in light analysis:', error);
+            return { success: false, error: error.message };
         }
     }
 }

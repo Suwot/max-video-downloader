@@ -15,7 +15,7 @@
  * @param {string} content - M3U8 content
  * @returns {Object} Detection result with confidence level
  */
-function detectPlaylistType(content) {
+export function detectPlaylistType(content) {
     const result = {
         isMaster: false,
         confidence: 0,
@@ -84,16 +84,25 @@ export function parseHLSManifest(content, baseUrl) {
 
     const variants = [];
     let currentVariant = null;
+    let streamInfCount = 0;
 
     for (const line of lines) {
         if (line.startsWith('#EXT-X-STREAM-INF:')) {
+            streamInfCount++;
             currentVariant = parseStreamInfo(line);
+            console.log(`[DEBUG] 📺 Found HLS STREAM-INF: ${line}`);
         } else if (line && !line.startsWith('#') && currentVariant) {
             // Add URL to variant
             currentVariant.url = resolveUrl(baseUrl, line.trim());
+            console.log(`[DEBUG] 🔗 Adding variant URL: ${currentVariant.url}`);
             variants.push(currentVariant);
             currentVariant = null;
         }
+    }
+    
+    console.log(`[DEBUG] 📊 HLS parsing complete: found ${streamInfCount} STREAM-INF tags and ${variants.length} valid variants`);
+    if (variants.length === 0 && streamInfCount > 0) {
+        console.warn(`[DEBUG] ⚠️ Found ${streamInfCount} STREAM-INF tags but no variants - possible parsing issue!`);
     }
 
     return {
