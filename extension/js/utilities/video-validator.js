@@ -96,15 +96,15 @@ export function filterRedundantVariants(videos, options = {}) {
 
     // First, find master playlists with variants
     const mastersWithVariants = videos.filter(v => 
-        v.qualityVariants && v.qualityVariants.length > 1
+        v.variants && v.variants.length > 1
     );
 
     // Process each master playlist to filter variants
     mastersWithVariants.forEach(master => {
-        if (!master.qualityVariants) return;
+        if (!master.variants) return;
 
         // Sort variants by resolution (height) - highest first
-        const sortedVariants = [...master.qualityVariants].sort((a, b) => {
+        const sortedVariants = [...master.variants].sort((a, b) => {
             const heightA = a.height || 0;
             const heightB = b.height || 0;
             if (heightA === heightB) {
@@ -155,7 +155,7 @@ export function filterRedundantVariants(videos, options = {}) {
         });
 
         // Replace variants with filtered list
-        master.qualityVariants = filteredVariants;
+        master.variants = filteredVariants;
     });
 
     return videos;

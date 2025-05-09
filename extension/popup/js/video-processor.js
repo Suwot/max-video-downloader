@@ -86,10 +86,10 @@ export function shouldGroupVideos(video1, video2) {
         }
 
         // If one is a master playlist and has variants
-        if (video1.isPlaylist && video1.qualityVariants?.some(v => v.url === video2.url)) {
+        if (video1.isPlaylist && video1.variants?.some(v => v.url === video2.url)) {
             return true;
         }
-        if (video2.isPlaylist && video2.qualityVariants?.some(v => v.url === video1.url)) {
+        if (video2.isPlaylist && video2.variants?.some(v => v.url === video1.url)) {
             return true;
         }
 

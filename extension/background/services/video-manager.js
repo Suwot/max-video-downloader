@@ -126,9 +126,8 @@ function processVideosForBroadcast(videos) {
             source: video.source || 'background',
             // Preserve the detection timestamp for debugging duplicates
             detectionTimestamp: video.detectionTimestamp || null,
-            // Make sure quality variants are preserved
-            qualityVariants: video.qualityVariants || video.variants || [],
-            variants: video.variants || video.qualityVariants || [],
+            // Only keep variants array
+            variants: video.variants || [],
             // Preserve parsing state flags
             isLightParsed: video.isLightParsed || false,
             isFullyParsed: video.isFullyParsed || false,
@@ -196,8 +195,7 @@ function addVideoToTab(tabId, videoInfo) {
             isLightParsed: videoInfo.isLightParsed || tabVideos[existingIndex].isLightParsed || false, 
             isFullyParsed: videoInfo.isFullyParsed || tabVideos[existingIndex].isFullyParsed || false,
             // Preserve variants information
-            qualityVariants: videoInfo.qualityVariants || tabVideos[existingIndex].qualityVariants,
-            variants: videoInfo.variants || tabVideos[existingIndex].variants,
+            variants: videoInfo.variants || tabVideos[existingIndex].variants || [],
             isMasterPlaylist: videoInfo.isMasterPlaylist || tabVideos[existingIndex].isMasterPlaylist, 
             isVariant: videoInfo.isVariant || tabVideos[existingIndex].isVariant || false
         };
@@ -247,7 +245,7 @@ function addVideoToTab(tabId, videoInfo) {
     } else {
         // For HLS/DASH playlists, process to detect master-variant relationships
         if ((video.type === 'hls' || video.type === 'dash') && 
-            !video.isLightParsed && !video.isVariant && !video.qualityVariants && !video.variants) {
+            !video.isLightParsed && !video.isVariant && !video.variants) {
             enrichWithPlaylistInfo(video, tabId);
         }
         
@@ -287,7 +285,7 @@ async function enrichWithPlaylistInfo(video, tabId) {
             if (index !== -1) {
                 // Update the video with new information
                 // Save previous variants count for comparison
-                const previousVariantsCount = videos[index].variants?.length || videos[index].qualityVariants?.length || 0;
+                const previousVariantsCount = videos[index].variants?.length || 0;
                 
                 videos[index] = {
                     ...videos[index],
@@ -295,13 +293,12 @@ async function enrichWithPlaylistInfo(video, tabId) {
                     // Preserve original fields
                     timestamp: videos[index].timestamp,
                     detectionTimestamp: videos[index].detectionTimestamp,
-                    // Ensure both variant arrays are populated
-                    variants: processedVideo.variants || videos[index].variants || [],
-                    qualityVariants: processedVideo.qualityVariants || videos[index].qualityVariants || []
+                    // Ensure variants array is populated
+                    variants: processedVideo.variants || videos[index].variants || []
                 };
                 
                 // Log variants info for debugging
-                const currentVariantsCount = videos[index].variants?.length || videos[index].qualityVariants?.length || 0;
+                const currentVariantsCount = videos[index].variants?.length || 0;
                 
                 // If this is a master playlist with variants, broadcast update 
                 if (processedVideo.isMasterPlaylist) {
@@ -351,11 +348,11 @@ async function enrichWithMetadata(video, tabId) {
         // since we'll get that from the variants
         if (video.isLightParsed && video.isMasterPlaylist) {
             // If we have variants, apply basic metadata and mark as processed
-            if (video.qualityVariants && video.qualityVariants.length > 0) {
+            if (video.variants && video.variants.length > 0) {
                 logDebug(`[DEBUG] ⚡ OPTIMIZATION: Using variant info for master playlist ${video.url}`);
                 
                 // Calculate basic info from variants if available
-                const highestQuality = [...video.qualityVariants].sort((a, b) => 
+                const highestQuality = [...video.variants].sort((a, b) => 
                     (b.bandwidth || 0) - (a.bandwidth || 0)
                 )[0];
                 
@@ -385,8 +382,8 @@ async function enrichWithMetadata(video, tabId) {
             const videos = videosPerTab.get(tabId);
             const masterVideo = videos.find(v => normalizeUrl(v.url) === normalizeUrl(video.masterUrl));
             
-            if (masterVideo && masterVideo.qualityVariants) {
-                const matchingVariant = masterVideo.qualityVariants.find(
+            if (masterVideo && masterVideo.variants) {
+                const matchingVariant = masterVideo.variants.find(
                     v => normalizeUrl(v.url) === normalizedUrl
                 );
                 
@@ -653,7 +650,6 @@ function storeManifestRelationship(playlistUrl, variants) {
         if (playlistIndex !== -1) {
             // Update the video with variants
             videos[playlistIndex].variants = variants;
-            videos[playlistIndex].qualityVariants = variants;
             videos[playlistIndex].isMasterPlaylist = true;
             
             // Also update any existing variants to point to their master

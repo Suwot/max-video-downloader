@@ -74,8 +74,7 @@ export async function fetchAndParseManifest(url, type = 'auto', light = false) {
             type: type,
             isPlaylist: true,
             isMasterPlaylist: true,
-            variants: mappedVariants,  // Include both variants and qualityVariants
-            qualityVariants: mappedVariants
+            variants: mappedVariants  // Use only variants as the single source of truth
         };
         
         // Store in master playlist cache
@@ -338,9 +337,9 @@ export async function processVideoRelationships(video) {
  */
 async function processMasterPlaylist(video) {
     // If it's already a known master playlist with variants, return as is
-    if (video.isMasterPlaylist && (video.variants?.length > 0 || video.qualityVariants?.length > 0)) {
+    if (video.isMasterPlaylist && video.variants?.length > 0) {
         console.log(`[DEBUG] Using existing variants for master playlist ${video.url}`, 
-                   {variants: video.variants?.length || 0, qualityVariants: video.qualityVariants?.length || 0});
+                   {variants: video.variants?.length || 0});
         return video;
     }
     
@@ -362,8 +361,7 @@ async function processMasterPlaylist(video) {
                     isLightParsed: true,
                     isFullyParsed: true,
                     isMasterPlaylist: true,
-                    qualityVariants: masterInfo.variants,
-                    variants: masterInfo.variants  // Ensure both arrays are populated for backward compatibility
+                    variants: masterInfo.variants  // Use only variants
                 };
                 console.log(`[DEBUG] ✅ Successfully extracted ${masterInfo.variants.length} variants for ${video.url}`);
                 return result;
@@ -383,7 +381,6 @@ async function processMasterPlaylist(video) {
         isLightParsed: true,
         isMasterPlaylist: true,
         variants: video.variants || [],
-        qualityVariants: video.qualityVariants || []
     };
 }
 
@@ -401,7 +398,7 @@ async function processVariantStream(video) {
         
         if (masterPlaylist) {
             // Extract variant-specific information from the master playlist
-            const variants = masterPlaylist.qualityVariants || masterPlaylist.variants || [];
+            const variants = masterPlaylist.variants || [];
             const matchingVariant = variants.find(v => normalizeUrl(v.url) === normalizeUrl(video.url));
             
             if (matchingVariant) {
@@ -554,8 +551,7 @@ export async function diagnoseManifestVariants(url) {
             const cached = masterPlaylistCache.get(normalizedUrl);
             console.log(`[DIAGNOSIS] Found in cache:`, {
                 isMasterPlaylist: cached.isMasterPlaylist,
-                variants: cached.variants?.length || 0,
-                qualityVariants: cached.qualityVariants?.length || 0
+                variants: cached.variants?.length || 0
             });
         } else {
             console.log(`[DIAGNOSIS] Not found in cache`);

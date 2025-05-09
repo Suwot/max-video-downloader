@@ -643,9 +643,9 @@ function createVideoActions(video) {
     actionsDiv.className = 'download-group';
     
     // Create quality selector if variants are available
-    if (video.qualityVariants && video.qualityVariants.length > 0) {
+    if (video.variants && video.variants.length > 0) {
         // Sort variants by resolution height (highest first)
-        const sortedVariants = [...video.qualityVariants].sort((a, b) => 
+        const sortedVariants = [...video.variants].sort((a, b) => 
             (b.height || 0) - (a.height || 0)
         );
 
@@ -731,7 +731,7 @@ function createVideoActions(video) {
         
         if (video.type === 'hls' || video.type === 'dash') {
             // Only fetch stream qualities if we don't have variants
-            if (!video.qualityVariants) {
+            if (!video.variants) {
                 const qualities = await getStreamQualities(selectedUrl);
                 if (qualities && qualities.length > 0) {
                     const selectedQuality = await showQualityDialog(qualities);
