@@ -59,7 +59,7 @@ const metadataUpdateBatch = {
         import('./video-renderer.js').then(module => {
             // Process all DOM updates in one go
             this.updates.forEach((mediaInfo, url) => {
-                module.updateVideoMetadata(url, mediaInfo);
+                module.updateVideoElement(url, mediaInfo, true);
             });
         });
         

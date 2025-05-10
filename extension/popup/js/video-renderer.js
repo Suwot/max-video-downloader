@@ -754,39 +754,26 @@ function createVideoActions(video) {
 }
 
 /**
- * Update metadata for a rendered video element when it becomes available
- * @param {string} url - Video URL to update
- * @param {Object} mediaInfo - Media information object with codec details
- */
-export function updateVideoMetadata(url, mediaInfo) {
-    if (!url || !mediaInfo) return;
-    
-    // Find the video element by URL
-    const videoElement = document.querySelector(`.video-item[data-url="${CSS.escape(url)}"]`);
-    if (!videoElement) return;
-
-    // Find the codec-info element inside this video element
-    const codecInfo = videoElement.querySelector('.codec-info');
-    if (!codecInfo) return;
-    
-    // Use the shared helper function to update UI
-    updateVideoMetadataUI(videoElement, mediaInfo);
-    
-    console.log(`Updated metadata for video: ${url}`);
-}
-
-/**
  * Update a video element with the latest video data
- * This is a unified handler for all video updates (preview and metadata)
+ * This is a unified handler for all video updates (preview and/or metadata)
  * @param {string} url - Video URL
- * @param {Object} updatedVideo - Complete updated video object
+ * @param {Object} updatedVideo - Complete updated video object or just mediaInfo
+ * @param {boolean} [isMetadataOnly=false] - If true, updatedVideo is treated as mediaInfo object
  */
-export function updateVideoElement(url, updatedVideo) {
+export function updateVideoElement(url, updatedVideo, isMetadataOnly = false) {
     if (!url || !updatedVideo) return;
     
     // Find the video element by URL
     const videoElement = document.querySelector(`.video-item[data-url="${CSS.escape(url)}"]`);
     if (!videoElement) return;
+    
+    // Handle metadata-only updates (for backward compatibility)
+    if (isMetadataOnly) {
+        // In this case, updatedVideo is actually just mediaInfo
+        updateVideoMetadataUI(videoElement, updatedVideo);
+        console.log(`Updated metadata for video: ${url}`);
+        return;
+    }
     
     // 1. Update preview image if we have one
     if (updatedVideo.previewUrl) {
@@ -816,6 +803,17 @@ export function updateVideoElement(url, updatedVideo) {
         // Use the shared helper function to update UI
         updateVideoMetadataUI(videoElement, updatedVideo.mediaInfo);
     }
+}
+
+/**
+ * Update metadata for a rendered video element when it becomes available
+ * @param {string} url - Video URL to update
+ * @param {Object} mediaInfo - Media information object with codec details
+ * @deprecated Use updateVideoElement with isMetadataOnly=true instead
+ */
+export function updateVideoMetadata(url, mediaInfo) {
+    // Call the unified update function with the metadata-only flag
+    updateVideoElement(url, mediaInfo, true);
 }
 
 /**
