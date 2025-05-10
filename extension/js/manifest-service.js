@@ -3,7 +3,7 @@
  * @ai-guide-description Centralized service for handling streaming manifests
  * @ai-guide-responsibilities
  * - Provides unified parsing for HLS and DASH manifests
- * - Manages master-variant relationships for streaming playlists
+ * - Manages master-variant relationships directly within master playlist objects
  * - Caches parsing results to prevent duplicate processing
  * - Coordinates manifest operations across background and popup contexts
  * - Exposes consistent API for all manifest operations
@@ -11,9 +11,8 @@
 
 import { parseHLSManifest, parseDASHManifest, detectPlaylistType } from '../popup/js/manifest-parser.js';
 
-// Cache for master playlists and their variants
+// Cache for master playlists (which contain their variants directly)
 const masterPlaylistCache = new Map();
-const manifestRelationshipCache = new Map();
 
 // Cache with expiration for manifest content
 const manifestContentCache = new Map();
@@ -204,18 +203,8 @@ export async function fetchAndParseManifest(url, type = 'auto', light = false) {
                 needsPreview: manifestInfo.needsPreview !== false // Default to true unless explicitly false
             });
             
-            // Store in cache
+            // Store in cache - the variants are already included directly in the enhancedVideo object
             masterPlaylistCache.set(normalizedUrl, enhancedVideo);
-            
-            // Store relationships for easier lookup
-            manifestInfo.variants.forEach(variant => {
-                const variantNormalizedUrl = normalizeUrl(variant.url);
-                manifestRelationshipCache.set(variantNormalizedUrl, {
-                    masterUrl: url,
-                    masterNormalizedUrl: normalizedUrl,
-                    variant: variant
-                });
-            });
             
             return enhancedVideo;
         }
@@ -456,7 +445,22 @@ function formatFileSize(bytes) {
  */
 export function isVariantOfMasterPlaylist(url) {
     const normalizedUrl = normalizeUrl(url);
-    return manifestRelationshipCache.get(normalizedUrl) || null;
+    
+    // Check all master playlists to see if any contain this URL as a variant
+    for (const [masterNormalizedUrl, masterPlaylist] of masterPlaylistCache.entries()) {
+        if (masterPlaylist.variants && Array.isArray(masterPlaylist.variants)) {
+            const variant = masterPlaylist.variants.find(v => normalizeUrl(v.url) === normalizedUrl);
+            if (variant) {
+                return {
+                    masterUrl: masterPlaylist.url,
+                    masterNormalizedUrl: masterNormalizedUrl,
+                    variant: variant
+                };
+            }
+        }
+    }
+    
+    return null;
 }
 
 /**
@@ -619,7 +623,6 @@ export async function processVideoRelationships(video) {
  */
 export function clearCaches() {
     masterPlaylistCache.clear();
-    manifestRelationshipCache.clear();
     manifestContentCache.clear();
 }
 
@@ -720,7 +723,6 @@ export async function diagnoseManifestVariants(url) {
         const normalizedUrl = normalizeUrl(url);
         const isCached = manifestContentCache.has(normalizedUrl);
         const isMasterCached = masterPlaylistCache.has(normalizedUrl);
-        const isRelationshipCached = manifestRelationshipCache.has(normalizedUrl);
         
         // Step 2: Light parsing
         console.log(`[DIAGNOSIS] Performing light parsing...`);
@@ -732,8 +734,7 @@ export async function diagnoseManifestVariants(url) {
             format: type === 'hls' ? 'HLS' : type === 'dash' ? 'DASH' : null,
             cacheStatus: {
                 contentCached: isCached,
-                masterPlaylistCached: isMasterCached,
-                relationshipCached: isRelationshipCached
+                masterPlaylistCached: isMasterCached
             }
         };
         

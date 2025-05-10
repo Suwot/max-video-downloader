@@ -51,12 +51,16 @@ const rateLimiter = {
     // Wait if needed then process
     setTimeout(() => {
       // Check again if we can process (in case max concurrent changed)
-      if (this.activeRequests >= this.maxConcurrent) {
+      if (this.activeRequests >= this.maxConcurrent || this.queue.length === 0) {
         return;
       }
       
       // Get the next request
-      const { fn, resolve, reject } = this.queue.shift();
+      const nextItem = this.queue.shift();
+      if (!nextItem) {
+        return; // Handle case where queue became empty
+      }
+      const { fn, resolve, reject } = nextItem;
       
       // Update state and tracking
       this.activeRequests++;
