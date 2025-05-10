@@ -28,10 +28,9 @@ export async function fetchAndParseManifest(url, type = 'auto', light = false) {
         return await lightParseManifest(url, type);
     }
     
-    // First check our cache
+    // Check cache for full parsed results
     const normalizedUrl = normalizeUrl(url);
     if (masterPlaylistCache.has(normalizedUrl)) {
-        console.log('Using cached manifest for:', url);
         return masterPlaylistCache.get(normalizedUrl);
     }
 
@@ -55,11 +54,9 @@ export async function fetchAndParseManifest(url, type = 'auto', light = false) {
         return null;
     }
     
-    // Process and store relationships if this is a master playlist
-    if (manifestInfo && manifestInfo.isMasterPlaylist && manifestInfo.variants && manifestInfo.variants.length > 0) {
-        console.log(`[DEBUG] 📋 Full parse found ${manifestInfo.variants.length} variants for ${url}`);
-        
-        // Map variant info to a more standardized format
+    // Standardize and cache master playlists with variants
+    if (manifestInfo && manifestInfo.isMasterPlaylist && manifestInfo.variants?.length > 0) {
+        // Standardize variant info format
         const mappedVariants = manifestInfo.variants.map(v => ({
             url: v.url,
             width: v.width || (v.resolution ? parseInt(v.resolution.split('x')[0]) : null),
@@ -73,13 +70,13 @@ export async function fetchAndParseManifest(url, type = 'auto', light = false) {
             url: url,
             type: type,
             isMasterPlaylist: true,
-            variants: mappedVariants  // Use only variants as the single source of truth
+            variants: mappedVariants
         };
         
-        // Store in master playlist cache
+        // Store in cache
         masterPlaylistCache.set(normalizedUrl, enhancedVideo);
         
-        // Store relationships
+        // Store relationships for easier lookup
         manifestInfo.variants.forEach(variant => {
             const variantNormalizedUrl = normalizeUrl(variant.url);
             manifestRelationshipCache.set(variantNormalizedUrl, {
@@ -104,8 +101,6 @@ export async function fetchAndParseManifest(url, type = 'auto', light = false) {
 export async function lightParseManifest(url, type = 'auto') {
     const normalizedUrl = normalizeUrl(url);
     
-    console.log(`[DEBUG] 🔍 LIGHT PARSING started for ${url} (${type})`);
-    
     // Determine type if auto
     if (type === 'auto') {
         type = url.includes('.m3u8') ? 'hls' : url.includes('.mpd') ? 'dash' : 'unknown';
@@ -120,20 +115,17 @@ export async function lightParseManifest(url, type = 'auto') {
         let response = await fetch(url, {
             signal: controller.signal,
             headers: {
-                'Range': 'bytes=0-4095' // Get first 4KB which is usually enough to determine manifest type
+                'Range': 'bytes=0-4095' // Get first 4KB for basic detection
             }
         });
         
-        // Some servers don't support Range requests, so if we get a 416 (Range Not Satisfiable)
-        // or 206 (Partial Content) but with a very small response, try again without Range
+        // Fall back to full fetch if Range isn't supported
         if (response.status === 416 || (response.status === 206 && parseInt(response.headers.get('content-length') || '0') < 100)) {
-            console.log(`[DEBUG] ♻️ Range request failed for ${url}, falling back to full fetch`);
             response = await fetch(url, { signal: controller.signal });
         }
         clearTimeout(timeoutId);
         
         if (!response.ok) {
-            console.error('Failed to light parse manifest:', response.statusText);
             return null;
         }
         
@@ -148,24 +140,20 @@ export async function lightParseManifest(url, type = 'auto') {
         
         // HLS detection
         if (type === 'hls') {
-            // Use the detectPlaylistType function directly
             const playlistType = detectPlaylistType(content);
-            
             return {
                 ...result,
                 isMasterPlaylist: playlistType.isMaster,
                 isVariant: !playlistType.isMaster,
                 confidence: playlistType.confidence,
-                reasons: playlistType.reason
+                reasons: playlistType.reason || null
             };
         }
         
         // DASH detection
         if (type === 'dash') {
-            // For DASH, check for AdaptationSet and Representation tags
             const hasMasterElements = content.includes('<AdaptationSet') && 
                                      content.includes('<Representation');
-            
             return {
                 ...result,
                 isMasterPlaylist: hasMasterElements,
@@ -231,18 +219,14 @@ export async function processVideoRelationships(video) {
     
     const normalizedUrl = normalizeUrl(video.url);
     
-    // If already light parsed, use that information
-    if (video.isLightParsed) {
-        // If it's already identified as a variant or master, use that information
-        if (video.isVariant || video.isMasterPlaylist) {
-            return video;
-        }
+    // If already light parsed and role is determined, use that info
+    if (video.isLightParsed && (video.isVariant || video.isMasterPlaylist)) {
+        return video;
     }
     
-    // Check if this is a variant of an existing master playlist
+    // Check cache for existing relationships
     const relationship = isVariantOfMasterPlaylist(normalizedUrl);
     if (relationship) {
-        // This is a variant URL, mark it as such and add master reference
         return {
             ...video,
             isVariant: true,
@@ -251,7 +235,7 @@ export async function processVideoRelationships(video) {
         };
     }
     
-    // If already a known master playlist, return as is
+    // Check if it's a known master playlist
     if (isMasterPlaylist(normalizedUrl)) {
         return {
             ...video,
@@ -260,22 +244,15 @@ export async function processVideoRelationships(video) {
         };
     }
     
-    // For HLS or DASH videos, use light parsing first to determine if it's a master or variant
+    // For HLS or DASH, use the two-stage parsing approach
     if ((video.type === 'hls' && video.url.includes('.m3u8')) || 
         (video.type === 'dash' && video.url.includes('.mpd'))) {
         
         try {
-            // First try light parsing to determine master/variant status
-            const lightInfo = await fetchAndParseManifest(video.url, video.type, true);
+            // Stage 1: Light parsing
+            const lightInfo = await lightParseManifest(video.url, video.type);
             
             if (lightInfo) {
-                console.log(`[DEBUG] 🔍 LIGHT PARSING result for ${video.url}:`, 
-                    JSON.stringify({
-                        isMasterPlaylist: lightInfo.isMasterPlaylist,
-                        isVariant: lightInfo.isVariant,
-                        confidence: lightInfo.confidence
-                    }));
-                
                 // Update video with light parsing results
                 const updatedVideo = {
                     ...video,
@@ -283,43 +260,39 @@ export async function processVideoRelationships(video) {
                     isLightParsed: true
                 };
                 
-                // If it's a master playlist and we have enough info, return early
+                // If it's a master playlist, do full parsing to get variants
                 if (lightInfo.isMasterPlaylist) {
-                    // Master playlists need full parsing for variants
-                    return await processMasterPlaylist(updatedVideo);
-                }
-                
-                // For variants, we can return with just the light parsing
-                if (lightInfo.isVariant) {
-                    return updatedVideo;
+                    // Stage 2: Full parsing for master playlists
+                    const fullInfo = await fetchAndParseManifest(video.url, video.type, false);
+                    if (fullInfo && fullInfo.variants?.length > 0) {
+                        return {
+                            ...updatedVideo,
+                            ...fullInfo,
+                            isFullyParsed: true
+                        };
+                    }
                 }
                 
                 return updatedVideo;
             }
             
-            // If light parsing failed, fall back to full parsing
-            const masterInfo = await fetchAndParseManifest(video.url, video.type);
-            if (masterInfo) {
-                if ((video.type === 'hls' && masterInfo.isMasterPlaylist) || 
-                    (video.type === 'dash' && masterInfo.variants && masterInfo.variants.length > 0)) {
-                    // It's a master playlist
-                    return {
-                        ...video,
-                        ...masterInfo,
-                        isLightParsed: true,
-                        isFullyParsed: true,
-                        isMasterPlaylist: true
-                    };
+            // If light parsing failed, try full parsing
+            const fullInfo = await fetchAndParseManifest(video.url, video.type, false);
+            if (fullInfo) {
+                const result = {
+                    ...video,
+                    ...fullInfo,
+                    isLightParsed: true,
+                    isFullyParsed: true
+                };
+                
+                if (fullInfo.isMasterPlaylist || (fullInfo.variants?.length > 0)) {
+                    result.isMasterPlaylist = true;
                 } else {
-                    // It's a variant stream
-                    return {
-                        ...video,
-                        ...masterInfo,
-                        isLightParsed: true,
-                        isFullyParsed: true,
-                        isVariant: true
-                    };
+                    result.isVariant = true;
                 }
+                
+                return result;
             }
         } catch (error) {
             console.error(`Error processing relationships for ${video.url}:`, error);
@@ -329,112 +302,8 @@ export async function processVideoRelationships(video) {
     return video;
 }
 
-/**
- * Process a master playlist video to extract variants
- * @param {Object} video - Master playlist video object
- * @returns {Promise<Object>} Processed video with variants
- */
-async function processMasterPlaylist(video) {
-    // If it's already a known master playlist with variants, return as is
-    if (video.isMasterPlaylist && video.variants?.length > 0) {
-        console.log(`[DEBUG] Using existing variants for master playlist ${video.url}`, 
-                   {variants: video.variants?.length || 0});
-        return video;
-    }
-    
-    try {
-        console.log(`[DEBUG] 🔍 Performing FULL PARSING for master playlist ${video.url}`);
-        // Do full parsing to extract variant information
-        const masterInfo = await fetchAndParseManifest(video.url, video.type, false);
-        
-        if (masterInfo) {
-            console.log(`[DEBUG] Full parse result:`, 
-                      {hasVariants: !!(masterInfo.variants && masterInfo.variants.length > 0),
-                       variantCount: masterInfo.variants?.length || 0});
-                       
-            if (masterInfo.variants && masterInfo.variants.length > 0) {
-                // Create a complete master playlist object
-                const result = {
-                    ...video,
-                    ...masterInfo,
-                    isLightParsed: true,
-                    isFullyParsed: true,
-                    isMasterPlaylist: true,
-                    variants: masterInfo.variants  // Use only variants
-                };
-                console.log(`[DEBUG] ✅ Successfully extracted ${masterInfo.variants.length} variants for ${video.url}`);
-                return result;
-            } else {
-                console.warn(`[DEBUG] ⚠️ Full parsing did not return any variants for master playlist ${video.url}`);
-            }
-        } else {
-            console.warn(`[DEBUG] ⚠️ Full parsing returned no result for ${video.url}`);
-        }
-    } catch (error) {
-        console.error(`Error processing master playlist ${video.url}:`, error);
-    }
-    
-    // If we couldn't get variants, just mark as master and return
-    return {
-        ...video,
-        isLightParsed: true,
-        isMasterPlaylist: true,
-        variants: video.variants || [],
-    };
-}
-
-/**
- * Process a variant stream to extract detailed metadata
- * @param {Object} video - Variant stream video object
- * @returns {Promise<Object>} Processed variant video
- */
-async function processVariantStream(video) {
-    if (video.isFullyParsed) return video;
-    
-    try {
-        // Check if this variant is related to a master playlist
-        const masterPlaylist = getMasterPlaylistForVariant(video.url);
-        
-        if (masterPlaylist) {
-            // Extract variant-specific information from the master playlist
-            const variants = masterPlaylist.variants || [];
-            const matchingVariant = variants.find(v => normalizeUrl(v.url) === normalizeUrl(video.url));
-            
-            if (matchingVariant) {
-                // Merge variant info from master playlist
-                return {
-                    ...video,
-                    ...matchingVariant,
-                    masterUrl: masterPlaylist.url,
-                    isVariant: true,
-                    isLightParsed: true,
-                    isFullyParsed: true
-                };
-            }
-        }
-        
-        // If no master info available, do full parsing on the variant itself
-        const variantInfo = await fetchAndParseManifest(video.url, video.type);
-        
-        if (variantInfo) {
-            return {
-                ...video,
-                ...variantInfo,
-                isLightParsed: true,
-                isFullyParsed: true,
-                isVariant: true
-            };
-        }
-    } catch (error) {
-        console.error(`Error processing variant stream ${video.url}:`, error);
-    }
-    
-    return {
-        ...video,
-        isLightParsed: true,
-        isVariant: true
-    };
-}
+// These functions have been consolidated into processVideoRelationships
+// to simplify the flow with the new 2-stage parsing approach
 
 /**
  * Estimate file size based on bitrate and duration
@@ -464,13 +333,19 @@ export function clearCaches() {
  */
 async function fetchManifestContent(url) {
     try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+        
         const response = await fetch(url, {
             credentials: 'include',
             mode: 'cors',
+            signal: controller.signal,
             headers: {
                 'Accept': '*/*'
             }
         });
+        
+        clearTimeout(timeoutId);
         
         if (!response.ok) {
             throw new Error(`Failed to fetch manifest: ${response.status} ${response.statusText}`);
@@ -534,7 +409,7 @@ function normalizeUrl(url) {
  */
 export async function diagnoseManifestVariants(url) {
     try {
-        console.log(`[DIAGNOSIS] 🔍 Starting manifest diagnosis for: ${url}`);
+        console.log(`[DIAGNOSIS] Starting manifest diagnosis for: ${url}`);
         
         // Step 1: Determine manifest type
         const type = url.includes('.m3u8') ? 'hls' : url.includes('.mpd') ? 'dash' : 'unknown';
@@ -544,69 +419,56 @@ export async function diagnoseManifestVariants(url) {
             return { error: 'Unknown manifest type' };
         }
         
-        // Step 2: Check cache
-        const normalizedUrl = normalizeUrl(url);
-        if (masterPlaylistCache.has(normalizedUrl)) {
-            const cached = masterPlaylistCache.get(normalizedUrl);
-            console.log(`[DIAGNOSIS] Found in cache:`, {
-                isMasterPlaylist: cached.isMasterPlaylist,
-                variants: cached.variants?.length || 0
-            });
+        // Step 2: Light parsing
+        console.log(`[DIAGNOSIS] Performing light parsing...`);
+        const lightInfo = await lightParseManifest(url, type);
+        let result = { type };
+        
+        if (lightInfo) {
+            result.lightParse = {
+                isMasterPlaylist: lightInfo.isMasterPlaylist,
+                isVariant: lightInfo.isVariant
+            };
         } else {
-            console.log(`[DIAGNOSIS] Not found in cache`);
+            console.log(`[DIAGNOSIS] Light parsing failed`);
         }
         
-        // Step 3: Fetch full manifest
-        console.log(`[DIAGNOSIS] Fetching full manifest...`);
+        // Step 3: Full parsing
+        console.log(`[DIAGNOSIS] Performing full parsing...`);
+        const fullInfo = await fetchAndParseManifest(url, type, false);
+        
+        if (fullInfo) {
+            result.fullParse = {
+                isMasterPlaylist: fullInfo.isMasterPlaylist,
+                variants: fullInfo.variants?.length || 0
+            };
+        } else {
+            console.log(`[DIAGNOSIS] Full parsing failed`);
+        }
+        
+        // Step 4: Detailed parsing for debugging
         const content = await fetchManifestContent(url);
-        
-        if (!content) {
-            return { error: 'Failed to fetch manifest content' };
+        if (content) {
+            if (type === 'hls') {
+                const streamInfMatches = content.match(/#EXT-X-STREAM-INF:/g);
+                const streamInfCount = streamInfMatches ? streamInfMatches.length : 0;
+                result.details = {
+                    contentLength: content.length,
+                    streamInfCount: streamInfCount
+                };
+            } else if (type === 'dash') {
+                const representationMatches = content.match(/<Representation/g);
+                const representationCount = representationMatches ? representationMatches.length : 0;
+                result.details = {
+                    contentLength: content.length,
+                    representationCount: representationCount
+                };
+            }
         }
         
-        console.log(`[DIAGNOSIS] Received ${content.length} bytes of content`);
-        
-        // Step 4: Parse the manifest
-        let result;
-        if (type === 'hls') {
-            // Display first 100 characters to verify format
-            console.log(`[DIAGNOSIS] Content start: ${content.substring(0, 100).replace(/\n/g, '\\n')}`);
-            
-            // Count STREAM-INF tags
-            const streamInfMatches = content.match(/#EXT-X-STREAM-INF:/g);
-            const streamInfCount = streamInfMatches ? streamInfMatches.length : 0;
-            console.log(`[DIAGNOSIS] STREAM-INF tags found: ${streamInfCount}`);
-            
-            // Parse using the same logic
-            const parsed = parseHLSManifest(content, url);
-            result = {
-                type: 'hls',
-                detectionResult: detectPlaylistType(content),
-                parsed: parsed,
-                variantCount: parsed.variants?.length || 0
-            };
-        } else if (type === 'dash') {
-            // Display first 100 characters
-            console.log(`[DIAGNOSIS] Content start: ${content.substring(0, 100).replace(/\n/g, '\\n')}`);
-            
-            // Count Representation tags
-            const representationMatches = content.match(/<Representation/g);
-            const representationCount = representationMatches ? representationMatches.length : 0;
-            console.log(`[DIAGNOSIS] Representation tags found: ${representationCount}`);
-            
-            const parsed = parseDASHManifest(content, url);
-            result = {
-                type: 'dash',
-                parsed: parsed,
-                variantCount: parsed.variants?.length || 0
-            };
-        }
-        
-        console.log(`[DIAGNOSIS] 📊 Parse result:`, result);
         return result;
-        
     } catch (error) {
-        console.error(`[DIAGNOSIS] ❌ Error: ${error.message}`);
+        console.error(`[DIAGNOSIS] Error: ${error.message}`);
         return { error: error.message };
     }
 }
