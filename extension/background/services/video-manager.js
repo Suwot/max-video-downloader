@@ -134,7 +134,7 @@ function processVideosForBroadcast(videos) {
             isMasterPlaylist: video.isMasterPlaylist || false,
             isVariant: video.isVariant || false,
             // File size information
-            fileSize: video.fileSize || video.streamInfo?.sizeBytes || video.streamInfo?.estimatedSize || null
+            fileSize: video.fileSize || video.mediaInfo?.sizeBytes || video.mediaInfo?.estimatedSize || null
         };
     });
     
@@ -250,7 +250,7 @@ function addVideoToTab(tabId, videoInfo) {
         }
         
         // Enrich with metadata if needed, only if not fully parsed already
-        if (!video.isFullyParsed && !video.streamInfo && !video.mediaInfo && !processingRequests.metadata.has(normalizedUrl)) {
+        if (!video.isFullyParsed && !video.mediaInfo && !processingRequests.metadata.has(normalizedUrl)) {
             enrichWithMetadata(video, tabId);
         }
         
@@ -442,7 +442,7 @@ async function enrichWithMetadata(video, tabId) {
 }
 
 // Apply metadata to a video and notify popup
-function applyMetadataToVideo(tabId, normalizedUrl, streamInfo) {
+function applyMetadataToVideo(tabId, normalizedUrl, mediaInfo) {
     if (!videosPerTab.has(tabId)) return;
     
     const videos = videosPerTab.get(tabId);
@@ -452,17 +452,16 @@ function applyMetadataToVideo(tabId, normalizedUrl, streamInfo) {
         // Update video with stream info
         videos[index] = {
             ...videos[index],
-            streamInfo,
-            mediaInfo: streamInfo, // Add direct mediaInfo reference
+            mediaInfo,
             needsMetadata: false,  // Mark as processed
             isFullyParsed: true,   // Mark as fully parsed
-            resolution: streamInfo.width && streamInfo.height ? {
-                width: streamInfo.width,
-                height: streamInfo.height,
-                fps: streamInfo.fps,
-                bitrate: streamInfo.videoBitrate || streamInfo.totalBitrate
+            resolution: mediaInfo.width && mediaInfo.height ? {
+                width: mediaInfo.width,
+                height: mediaInfo.height,
+                fps: mediaInfo.fps,
+                bitrate: mediaInfo.videoBitrate || mediaInfo.totalBitrate
             } : null,
-            fileSize: streamInfo.estimatedSize || videos[index].fileSize
+            fileSize: mediaInfo.estimatedSize || videos[index].fileSize
         };
         
         // Use the unified notification method instead
@@ -789,8 +788,8 @@ async function getStreamMetadata(url) {
         // Check if we already have this video's metadata
         for (const videos of videosPerTab.values()) {
             const video = videos.find(v => normalizeUrl(v.url) === normalizeUrl(url));
-            if (video && (video.streamInfo || video.mediaInfo)) {
-                return video.streamInfo || video.mediaInfo;
+            if (video && video.mediaInfo) {
+                return video.mediaInfo;
             }
         }
         
