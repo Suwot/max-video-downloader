@@ -39,17 +39,52 @@ async function getManifestContent(url) {
         manifestContentCache.delete(normalizedUrl);
     }
     
-    // Fetch fresh content
-    const content = await fetchManifestContent(url);
-    if (content) {
-        // Store in cache with timestamp
+    try {
+        // Use fetch with a range request to get just the first part of the manifest
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000);
+        
+        // Try to fetch using Range header first, but be prepared to fall back to full fetch
+        let response = await fetch(url, {
+            signal: controller.signal,
+            headers: {
+                'Range': 'bytes=0-4095' // Get first 4KB for basic detection
+            },
+            credentials: 'include',
+            mode: 'cors'
+        });
+        
+        // Fall back to full fetch if Range isn't supported
+        if (response.status === 416 || (response.status === 206 && parseInt(response.headers.get('content-length') || '0') < 100)) {
+            response = await fetch(url, { 
+                signal: controller.signal,
+                credentials: 'include',
+                mode: 'cors',
+                headers: {
+                    'Accept': '*/*'
+                }
+            });
+        }
+        clearTimeout(timeoutId);
+        
+        if (!response.ok) {
+            console.error(`Error fetching manifest: ${response.status} ${response.statusText}`);
+            return null;
+        }
+        
+        const content = await response.text();
+        
+        // Cache the content
         manifestContentCache.set(normalizedUrl, {
             content,
             timestamp: now
         });
+        
+        return content;
+    } catch (error) {
+        console.error('Error fetching manifest content:', error);
+        return null;
     }
-    
-    return content;
 }
 
 /**
@@ -76,84 +111,131 @@ export async function fetchAndParseManifest(url, type = 'auto', light = false) {
         type = url.includes('.m3u8') ? 'hls' : url.includes('.mpd') ? 'dash' : 'unknown';
     }
     
-    // Fetch manifest content using the cached content manager
-    const content = await getManifestContent(url);
-    if (!content) return null;
-    
-    // Use the appropriate parser
-    let manifestInfo = null;
-    if (type === 'hls') {
-        manifestInfo = parseHLSManifest(content, url);
-    } else if (type === 'dash') {
-        manifestInfo = parseDASHManifest(content, url);
-    } else {
-        console.error('Unknown manifest type:', type);
-        return null;
-    }
-    
-    // Standardize and cache master playlists with variants
-    if (manifestInfo && manifestInfo.isMasterPlaylist && manifestInfo.variants?.length > 0) {
-        // Standardize variant info format with all available metadata
-        const mappedVariants = manifestInfo.variants.map(v => {
-            // Extract resolution from string if needed
-            const width = v.width || (v.resolution ? parseInt(v.resolution.split('x')[0]) : null);
-            const height = v.height || (v.resolution ? parseInt(v.resolution.split('x')[1]) : null);
-            const bandwidth = v.bandwidth || null;
-            const duration = v.duration || manifestInfo.metadata?.totalDuration || null;
+    try {
+        // Fetch manifest content using the cached content manager
+        const content = await getManifestContent(url);
+        if (!content) {
+            console.error(`Failed to fetch manifest content for ${url}`);
+            return null;
+        }
+        
+        // Use the appropriate parser
+        let manifestInfo = null;
+        if (type === 'hls') {
+            manifestInfo = parseHLSManifest(content, url);
+        } else if (type === 'dash') {
+            manifestInfo = parseDASHManifest(content, url);
+        } else {
+            console.error('Unknown manifest type:', type);
+            return null;
+        }
+        
+        if (!manifestInfo) {
+            console.error(`Failed to parse ${type} manifest for ${url}`);
+            return null;
+        }
+        
+        // Standardize and cache master playlists with variants
+        if (manifestInfo.isMasterPlaylist && manifestInfo.variants?.length > 0) {
+            // Standardize variant info format with all available metadata
+            const mappedVariants = manifestInfo.variants.map(v => {
+                // Extract resolution from string if needed
+                const width = v.width || (v.resolution ? parseInt(v.resolution.split('x')[0]) : null);
+                const height = v.height || (v.resolution ? parseInt(v.resolution.split('x')[1]) : null);
+                const bandwidth = v.bandwidth || null;
+                const duration = v.duration || manifestInfo.metadata?.totalDuration || null;
+                
+                // Calculate estimated size if we have bandwidth and duration
+                let estimatedSize = null;
+                if (bandwidth && duration) {
+                    estimatedSize = estimateFileSize(bandwidth, duration);
+                }
+                
+                return {
+                    url: v.url,
+                    width: width,
+                    height: height,
+                    resolution: width && height ? `${width}x${height}` : null,
+                    fps: v.fps || v.frameRate || null,
+                    bandwidth: bandwidth,
+                    bitrate: bandwidth ? Math.round(bandwidth / 1000) : null, // In kbps for readability
+                    codecs: v.codecs || null,
+                    duration: duration,
+                    estimatedSize: estimatedSize,
+                    mimeType: v.mimeType || null,
+                    format: type === 'hls' ? 'HLS' : type === 'dash' ? 'DASH' : null
+                };
+            });
             
-            // Calculate estimated size if we have bandwidth and duration
-            let estimatedSize = null;
-            if (bandwidth && duration) {
-                estimatedSize = estimateFileSize(bandwidth, duration);
+            // Create enhanced metadata with counts and quality info
+            const metadata = {
+                ...(manifestInfo.metadata || {}),
+                playlistType: 'master',
+                container: type === 'hls' ? 'Apple HTTP Live Streaming' : 'MPEG-DASH',
+                variantCount: mappedVariants.length,
+                hasBandwidthInfo: mappedVariants.some(v => v.bandwidth !== null)
+            };
+            
+            // Add quality range information if available
+            const heightsAvailable = mappedVariants
+                .map(v => v.height)
+                .filter(Boolean)
+                .sort((a, b) => a - b);
+                
+            if (heightsAvailable.length > 0) {
+                metadata.lowestQuality = heightsAvailable[0];
+                metadata.highestQuality = heightsAvailable[heightsAvailable.length - 1];
+                metadata.qualityLevels = [...new Set(heightsAvailable)].length;
             }
             
-            return {
-                url: v.url,
-                width: width,
-                height: height,
-                resolution: width && height ? `${width}x${height}` : null,
-                fps: v.fps || v.frameRate || null,
-                bandwidth: bandwidth,
-                bitrate: bandwidth ? Math.round(bandwidth / 1000) : null, // In kbps for readability
-                codecs: v.codecs || null,
-                duration: duration,
-                estimatedSize: estimatedSize,
-                mimeType: v.mimeType || null,
-                format: type === 'hls' ? 'HLS' : type === 'dash' ? 'DASH' : null
-            };
-        });
+            // Create standardized video object with complete metadata
+            const enhancedVideo = standardizeVideoObject({
+                url: url,
+                type: type,
+                isMasterPlaylist: true,
+                isVariant: false,
+                variants: mappedVariants,
+                metadata: metadata,
+                confidence: manifestInfo.confidence || 0.9
+            }, {}, {
+                isLightParsed: true,
+                isFullyParsed: true,
+                needsMetadata: false,
+                needsPreview: manifestInfo.needsPreview !== false // Default to true unless explicitly false
+            });
+            
+            // Store in cache
+            masterPlaylistCache.set(normalizedUrl, enhancedVideo);
+            
+            // Store relationships for easier lookup
+            manifestInfo.variants.forEach(variant => {
+                const variantNormalizedUrl = normalizeUrl(variant.url);
+                manifestRelationshipCache.set(variantNormalizedUrl, {
+                    masterUrl: url,
+                    masterNormalizedUrl: normalizedUrl,
+                    variant: variant
+                });
+            });
+            
+            return enhancedVideo;
+        }
         
-        // Create standardized video object with complete metadata
-        const enhancedVideo = {
+        // For non-master playlists or those without variants
+        return standardizeVideoObject({
             url: url,
             type: type,
-            format: type === 'hls' ? 'HLS' : type === 'dash' ? 'DASH' : null,
-            isMasterPlaylist: true,
-            isVariant: false,
+            isMasterPlaylist: manifestInfo.isMasterPlaylist === true,
+            isVariant: manifestInfo.isVariant === true,
+            metadata: manifestInfo.metadata || {},
+            confidence: manifestInfo.confidence || 0.8
+        }, {}, {
             isLightParsed: true,
-            isFullyParsed: true,
-            variants: mappedVariants,
-            metadata: manifestInfo.metadata || null,
-            confidence: manifestInfo.confidence || null
-        };
-        
-        // Store in cache
-        masterPlaylistCache.set(normalizedUrl, enhancedVideo);
-        
-        // Store relationships for easier lookup
-        manifestInfo.variants.forEach(variant => {
-            const variantNormalizedUrl = normalizeUrl(variant.url);
-            manifestRelationshipCache.set(variantNormalizedUrl, {
-                masterUrl: url,
-                masterNormalizedUrl: normalizedUrl,
-                variant: variant
-            });
+            isFullyParsed: true
         });
-        
-        return enhancedVideo;
+    } catch (error) {
+        console.error(`Error in fetchAndParseManifest for ${url}:`, error);
+        return null;
     }
-    
-    return manifestInfo;
 }
 
 /**
@@ -178,38 +260,16 @@ export async function lightParseManifest(url, type = 'auto') {
         if (cachedContent && (Date.now() - cachedContent.timestamp < CACHE_EXPIRATION_MS)) {
             content = cachedContent.content;
         } else {
-            // Use fetch with a range request to get just the first part of the manifest
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 5000);
+            // Use getManifestContent helper to fetch and cache content
+            content = await getManifestContent(url);
             
-            // Try to fetch using Range header first, but be prepared to fall back to full fetch
-            let response = await fetch(url, {
-                signal: controller.signal,
-                headers: {
-                    'Range': 'bytes=0-4095' // Get first 4KB for basic detection
-                }
-            });
-            
-            // Fall back to full fetch if Range isn't supported
-            if (response.status === 416 || (response.status === 206 && parseInt(response.headers.get('content-length') || '0') < 100)) {
-                response = await fetch(url, { signal: controller.signal });
-            }
-            clearTimeout(timeoutId);
-            
-            if (!response.ok) {
+            if (!content) {
+                console.error(`Failed to fetch manifest content for ${url}`);
                 return null;
             }
-            
-            content = await response.text();
-            
-            // Cache the content
-            manifestContentCache.set(normalizedUrl, {
-                content: content,
-                timestamp: Date.now()
-            });
         }
         
-        // Basic parsing result structure with consistent property names
+        // Basic parsing result structure
         const result = {
             url: url,
             type: type,
@@ -218,34 +278,134 @@ export async function lightParseManifest(url, type = 'auto') {
             isFullyParsed: false
         };
         
+        // Prepare metadata object with common fields
+        const metadata = {
+            container: type === 'hls' ? 'Apple HTTP Live Streaming' : 
+                      type === 'dash' ? 'MPEG-DASH' : null
+        };
+        
         // HLS detection
         if (type === 'hls') {
             const playlistType = detectPlaylistType(content);
-            return {
-                ...result,
+            
+            // Add HLS-specific metadata fields
+            metadata.playlistType = playlistType.isMaster ? 'master' : 'variant';
+            
+            // Extract version information
+            const versionMatch = content.match(/#EXT-X-VERSION:(\d+)/);
+            if (versionMatch) metadata.version = parseInt(versionMatch[1]);
+            
+            // For variant playlists, extract additional metadata
+            if (!playlistType.isMaster) {
+                const targetDurationMatch = content.match(/#EXT-X-TARGETDURATION:(\d+)/);
+                if (targetDurationMatch) metadata.targetDuration = parseInt(targetDurationMatch[1]);
+                
+                const mediaSequenceMatch = content.match(/#EXT-X-MEDIA-SEQUENCE:(\d+)/);
+                if (mediaSequenceMatch) metadata.mediaSequence = parseInt(mediaSequenceMatch[1]);
+                
+                // Attempt to get playlist type (VOD/LIVE/EVENT)
+                const playlistTypeMatch = content.match(/#EXT-X-PLAYLIST-TYPE:([^\r\n]+)/);
+                if (playlistTypeMatch) metadata.streamType = playlistTypeMatch[1].trim();
+                
+                // Count segments to provide approximate segment count
+                const segmentCount = (content.match(/#EXTINF:/g) || []).length;
+                if (segmentCount > 0) metadata.segmentCount = segmentCount;
+                
+                // Estimate total duration from segments if targetDuration is known
+                if (metadata.targetDuration && metadata.segmentCount) {
+                    metadata.estimatedDuration = metadata.targetDuration * metadata.segmentCount;
+                }
+            } else {
+                // For master playlists, count variants
+                const variantCount = (content.match(/#EXT-X-STREAM-INF:/g) || []).length;
+                if (variantCount > 0) metadata.variantCount = variantCount;
+            }
+            
+            // Create standardized result object
+            return standardizeVideoObject({
+                url,
+                type,
                 isMasterPlaylist: playlistType.isMaster,
                 isVariant: !playlistType.isMaster,
                 confidence: playlistType.confidence,
                 reasons: playlistType.reason || null,
-                metadata: {
-                    playlistType: playlistType.isMaster ? 'master' : 'variant'
-                }
-            };
+                metadata,
+                isLightParsed: true,
+                isFullyParsed: false
+            });
         }
         
         // DASH detection
         if (type === 'dash') {
             const hasMasterElements = content.includes('<AdaptationSet') && 
                                      content.includes('<Representation');
-            return {
-                ...result,
+            
+            // Add DASH-specific metadata fields
+            metadata.playlistType = hasMasterElements ? 'master' : 'variant';
+            
+            // Extract DASH version
+            const mpdMatch = content.match(/<MPD[^>]*version="([^"]+)"/);
+            if (mpdMatch) metadata.version = mpdMatch[1];
+            
+            // Extract duration if available
+            const durationMatch = content.match(/mediaPresentationDuration="PT([^"]+)"/);
+            if (durationMatch) {
+                const durationStr = durationMatch[1];
+                let totalSeconds = 0;
+                
+                // Parse ISO 8601 duration format more comprehensively
+                if (durationStr.includes('H')) {
+                    const hours = parseFloat(durationStr.split('H')[0].replace('PT', ''));
+                    totalSeconds += hours * 3600;
+                    
+                    // Check for minutes after hours
+                    if (durationStr.includes('M')) {
+                        const minutesPart = durationStr.split('H')[1];
+                        const minutes = parseFloat(minutesPart.split('M')[0]);
+                        totalSeconds += minutes * 60;
+                    }
+                    
+                    // Check for seconds after hours/minutes
+                    if (durationStr.includes('S')) {
+                        const secondsPart = durationStr.includes('M') ? 
+                            durationStr.split('M')[1] : durationStr.split('H')[1];
+                        const seconds = parseFloat(secondsPart.split('S')[0]);
+                        totalSeconds += seconds;
+                    }
+                } else if (durationStr.includes('M')) {
+                    const minutes = parseFloat(durationStr.split('M')[0].replace('PT', ''));
+                    totalSeconds += minutes * 60;
+                    
+                    // Check for seconds after minutes
+                    if (durationStr.includes('S')) {
+                        const seconds = parseFloat(durationStr.split('M')[1].split('S')[0]);
+                        totalSeconds += seconds;
+                    }
+                } else if (durationStr.includes('S')) {
+                    const seconds = parseFloat(durationStr.split('S')[0].replace('PT', ''));
+                    totalSeconds += seconds;
+                }
+                
+                metadata.totalDuration = totalSeconds;
+            }
+            
+            // Count representations for master playlists
+            if (hasMasterElements) {
+                const representationCount = (content.match(/<Representation/g) || []).length;
+                if (representationCount > 0) metadata.variantCount = representationCount;
+            }
+            
+            // Create standardized result object
+            return standardizeVideoObject({
+                url,
+                type,
                 isMasterPlaylist: hasMasterElements,
                 isVariant: !hasMasterElements,
-                confidence: hasMasterElements ? 0.8 : 0.8, // Set confidence level
-                metadata: {
-                    playlistType: hasMasterElements ? 'master' : 'variant'
-                }
-            };
+                confidence: hasMasterElements ? 0.9 : 0.8,
+                metadata,
+                isLightParsed: true,
+                isFullyParsed: false
+            });
         }
         
         return null;
@@ -352,30 +512,27 @@ export async function processVideoRelationships(video) {
     const masterInfo = getMasterPlaylistForVariant(video.url);
     if (masterInfo) {
         // This is a known variant, link it to its master
-        return {
-            ...video,
+        return standardizeVideoObject(video, {
             isVariant: true,
             isMasterPlaylist: false,
             masterUrl: masterInfo.masterUrl,
-            masterInfo: masterInfo,
+            masterInfo: masterInfo
+        }, {
             isLightParsed: true,
             isFullyParsed: true,
-            format: video.type === 'hls' ? 'HLS' : video.type === 'dash' ? 'DASH' : null
-        };
+            needsMetadata: false // Metadata is available through the master
+        });
     }
     
     // Check if this is already a known master playlist
     if (isMasterPlaylist(video.url)) {
         const masterPlaylist = masterPlaylistCache.get(normalizedUrl);
-        return {
-            ...video,
-            ...masterPlaylist,
+        return standardizeVideoObject(video, masterPlaylist, {
             isMasterPlaylist: true,
             isVariant: false,
             isLightParsed: true,
-            isFullyParsed: true,
-            format: video.type === 'hls' ? 'HLS' : video.type === 'dash' ? 'DASH' : null
-        };
+            isFullyParsed: true
+        });
     }
     
     // For streaming formats, use the two-stage parsing approach
@@ -393,54 +550,54 @@ export async function processVideoRelationships(video) {
                     const fullInfo = await fetchAndParseManifest(video.url, video.type, false);
                     if (fullInfo) {
                         // Return complete info with standardized structure
-                        return {
-                            ...video,
-                            ...fullInfo,
+                        return standardizeVideoObject(video, fullInfo, {
                             isLightParsed: true,
                             isFullyParsed: true,
-                            format: video.type === 'hls' ? 'HLS' : video.type === 'dash' ? 'DASH' : null
-                        };
+                            needsMetadata: false,
+                            // Only needs preview if we don't have one
+                            needsPreview: !video.poster && !fullInfo.poster
+                        });
                     }
                     
                     // If full parsing failed, use light parsing results
-                    return {
-                        ...video,
-                        ...lightInfo,
+                    return standardizeVideoObject(video, lightInfo, {
                         isLightParsed: true,
                         isFullyParsed: false,
-                        format: video.type === 'hls' ? 'HLS' : video.type === 'dash' ? 'DASH' : null
-                    };
+                        needsMetadata: true,  // Still needs full metadata
+                        processed: false      // Not fully processed
+                    });
                 } else {
                     // For variants, light parsing is sufficient
-                    return {
-                        ...video,
-                        ...lightInfo,
+                    return standardizeVideoObject(video, lightInfo, {
                         isVariant: true,
                         isMasterPlaylist: false,
                         isLightParsed: true,
                         isFullyParsed: false, // No full parsing needed for variants
-                        format: video.type === 'hls' ? 'HLS' : video.type === 'dash' ? 'DASH' : null
-                    };
+                        needsMetadata: false  // Variants can use light metadata
+                    });
                 }
             }
             
             // If light parsing failed, try full parsing as a fallback
             const fullInfo = await fetchAndParseManifest(video.url, video.type, false);
             if (fullInfo) {
-                return {
-                    ...video,
-                    ...fullInfo,
+                return standardizeVideoObject(video, fullInfo, {
                     isLightParsed: true,
-                    isFullyParsed: true,
-                    format: video.type === 'hls' ? 'HLS' : video.type === 'dash' ? 'DASH' : null
-                };
+                    isFullyParsed: true
+                });
             }
         } catch (error) {
             console.error(`Error processing relationships for ${video.url}:`, error);
         }
     }
     
-    return video;
+    // For other types (direct media), just return the video as is
+    return standardizeVideoObject(video, {}, {
+        // Direct videos are fully processed after basic metadata extraction
+        isLightParsed: true,
+        isFullyParsed: true,
+        needsPreview: !video.poster && !video.previewUrl
+    });
 }
 
 /**
@@ -545,13 +702,25 @@ export async function diagnoseManifestVariants(url) {
             return { error: 'Unknown manifest type' };
         }
         
+        // Get cache state
+        const normalizedUrl = normalizeUrl(url);
+        const isCached = manifestContentCache.has(normalizedUrl);
+        const isMasterCached = masterPlaylistCache.has(normalizedUrl);
+        const isRelationshipCached = manifestRelationshipCache.has(normalizedUrl);
+        
         // Step 2: Light parsing
         console.log(`[DIAGNOSIS] Performing light parsing...`);
         const lightInfo = await lightParseManifest(url, type);
         let result = { 
             url: url,
+            normalizedUrl: normalizedUrl,
             type: type,
-            format: type === 'hls' ? 'HLS' : type === 'dash' ? 'DASH' : null
+            format: type === 'hls' ? 'HLS' : type === 'dash' ? 'DASH' : null,
+            cacheStatus: {
+                contentCached: isCached,
+                masterPlaylistCached: isMasterCached,
+                relationshipCached: isRelationshipCached
+            }
         };
         
         if (lightInfo) {
@@ -560,10 +729,14 @@ export async function diagnoseManifestVariants(url) {
                 isVariant: lightInfo.isVariant,
                 confidence: lightInfo.confidence || null,
                 reasons: lightInfo.reasons || null,
-                metadata: lightInfo.metadata || null
+                metadata: lightInfo.metadata || null,
+                isLightParsed: lightInfo.isLightParsed || false,
+                isFullyParsed: lightInfo.isFullyParsed || false,
+                processed: lightInfo.processed || false
             };
         } else {
             console.log(`[DIAGNOSIS] Light parsing failed`);
+            result.lightParse = { error: 'Light parsing failed' };
         }
         
         // Step 3: Full parsing
@@ -576,39 +749,92 @@ export async function diagnoseManifestVariants(url) {
                 isVariant: fullInfo.isVariant,
                 variants: fullInfo.variants ? {
                     count: fullInfo.variants.length,
-                    sample: fullInfo.variants.length > 0 ? fullInfo.variants[0] : null
+                    sampleUrls: fullInfo.variants.slice(0, 3).map(v => v.url),
+                    sample: fullInfo.variants.length > 0 ? 
+                        Object.fromEntries(
+                            Object.entries(fullInfo.variants[0])
+                            .filter(([key]) => !key.includes('url'))
+                        ) : null
                 } : null,
                 metadata: fullInfo.metadata || null,
-                confidence: fullInfo.confidence || null
+                confidence: fullInfo.confidence || null,
+                isLightParsed: fullInfo.isLightParsed || false,
+                isFullyParsed: fullInfo.isFullyParsed || false,
+                processed: fullInfo.processed || false
             };
         } else {
             console.log(`[DIAGNOSIS] Full parsing failed`);
+            result.fullParse = { error: 'Full parsing failed' };
         }
         
         // Step 4: Detailed parsing for debugging
         const content = await getManifestContent(url);
         if (content) {
+            const contentExcerpt = content.substring(0, 500) + '...';
+            
             if (type === 'hls') {
                 const streamInfMatches = content.match(/#EXT-X-STREAM-INF:/g);
                 const streamInfCount = streamInfMatches ? streamInfMatches.length : 0;
+                
+                const extinf = content.match(/#EXTINF:/g);
+                const extinfCount = extinf ? extinf.length : 0;
+                
+                const keyDirective = content.includes('#EXT-X-KEY');
+                const version = content.match(/#EXT-X-VERSION:(\d+)/);
+                
                 result.details = {
                     contentLength: content.length,
-                    streamInfCount: streamInfCount
+                    contentExcerpt: contentExcerpt,
+                    streamInfCount: streamInfCount,
+                    segmentCount: extinfCount,
+                    hasEncryption: keyDirective,
+                    version: version ? parseInt(version[1]) : null,
+                    isMultivariant: streamInfCount > 0,
+                    isSegmented: extinfCount > 0
                 };
             } else if (type === 'dash') {
                 const representationMatches = content.match(/<Representation/g);
                 const representationCount = representationMatches ? representationMatches.length : 0;
+                
+                const adaptationSetMatches = content.match(/<AdaptationSet/g);
+                const adaptationSetCount = adaptationSetMatches ? adaptationSetMatches.length : 0;
+                
+                const segmentMatches = content.match(/<Segment/g) || content.match(/<SegmentTemplate/g);
+                const segmentCount = segmentMatches ? segmentMatches.length : 0;
+                
                 result.details = {
                     contentLength: content.length,
-                    representationCount: representationCount
+                    contentExcerpt: contentExcerpt,
+                    adaptationSetCount: adaptationSetCount,
+                    representationCount: representationCount,
+                    segmentCount: segmentCount,
+                    isMultivariant: representationCount > 1,
+                    isMultiAdaptation: adaptationSetCount > 1
                 };
             }
+        }
+        
+        // Step 5: Check for known relationship in cache
+        const knownMaster = getMasterPlaylistForVariant(url);
+        if (knownMaster) {
+            result.relationships = {
+                isKnownVariant: true,
+                masterUrl: knownMaster.url,
+                variantCount: knownMaster.variants?.length || 0
+            };
+        } else if (isMasterPlaylist(url)) {
+            const master = masterPlaylistCache.get(normalizedUrl);
+            result.relationships = {
+                isKnownMaster: true,
+                variantCount: master.variants?.length || 0,
+                variantUrls: master.variants?.slice(0, 3).map(v => v.url) || []
+            };
         }
         
         return result;
     } catch (error) {
         console.error(`[DIAGNOSIS] Error: ${error.message}`);
-        return { error: error.message };
+        return { error: error.message, stack: error.stack };
     }
 }
 
@@ -619,52 +845,78 @@ export async function diagnoseManifestVariants(url) {
  * @returns {Promise<Array>} Array of variant options
  */
 export async function getVariantOptions(url, type = 'auto') {
-    // Fully parse the manifest to get variants
-    const manifestInfo = await fetchAndParseManifest(url, type, false);
-    
-    if (manifestInfo && manifestInfo.variants && manifestInfo.variants.length > 0) {
-        return manifestInfo.variants.map(variant => {
-            // Create a user-friendly label
-            let label = '';
-            if (variant.resolution) {
-                label += variant.resolution;
-            } else if (variant.width && variant.height) {
-                label += `${variant.width}x${variant.height}`;
-            }
-            
-            if (variant.bitrate) {
-                label += label ? ` (${variant.bitrate} kbps)` : `${variant.bitrate} kbps`;
-            }
-            
-            if (!label && variant.bandwidth) {
-                label = `${Math.round(variant.bandwidth / 1000)} kbps`;
-            }
-            
-            if (!label) {
-                label = 'Unknown quality';
-            }
-            
-            // Include estimated file size if available
-            if (variant.estimatedSize) {
-                label += ` - ${formatFileSize(variant.estimatedSize)}`;
-            }
-            
-            return {
-                url: variant.url,
-                label: label,
-                resolution: variant.resolution || null,
-                width: variant.width || null,
-                height: variant.height || null,
-                bitrate: variant.bitrate || null,
-                estimatedSize: variant.estimatedSize || null,
-                formatSize: variant.estimatedSize ? formatFileSize(variant.estimatedSize) : null,
-                codecs: variant.codecs || null,
-                format: variant.format || manifestInfo.format || null
-            };
-        });
+    try {
+        // Fully parse the manifest to get variants
+        const manifestInfo = await fetchAndParseManifest(url, type, false);
+        
+        if (manifestInfo && manifestInfo.variants && manifestInfo.variants.length > 0) {
+            return manifestInfo.variants.map(variant => {
+                // Create a user-friendly label
+                let label = '';
+                if (variant.resolution) {
+                    label += variant.resolution;
+                } else if (variant.width && variant.height) {
+                    label += `${variant.width}x${variant.height}`;
+                }
+                
+                if (variant.bitrate) {
+                    label += label ? ` (${variant.bitrate} kbps)` : `${variant.bitrate} kbps`;
+                }
+                
+                if (!label && variant.bandwidth) {
+                    label = `${Math.round(variant.bandwidth / 1000)} kbps`;
+                }
+                
+                if (!label) {
+                    label = 'Unknown quality';
+                }
+                
+                // Include estimated file size if available
+                if (variant.estimatedSize) {
+                    label += ` - ${formatFileSize(variant.estimatedSize)}`;
+                }
+                
+                return standardizeVideoObject({
+                    url: variant.url,
+                    label: label,
+                    resolution: variant.resolution || null,
+                    width: variant.width || null,
+                    height: variant.height || null,
+                    bitrate: variant.bitrate || null,
+                    estimatedSize: variant.estimatedSize || null,
+                    formatSize: variant.estimatedSize ? formatFileSize(variant.estimatedSize) : null,
+                    codecs: variant.codecs || null,
+                    format: variant.format || manifestInfo.format || null,
+                    type: manifestInfo.type,
+                    isVariant: true,
+                    isMasterPlaylist: false,
+                    masterUrl: url
+                }, {}, {
+                    isLightParsed: true,
+                    isFullyParsed: true
+                });
+            });
+        }
+        
+        // For single-variant videos, return the source as the only option
+        if (manifestInfo) {
+            return [{
+                url: url,
+                label: 'Original quality',
+                resolution: manifestInfo.resolution || null,
+                width: manifestInfo.width || (manifestInfo.metadata?.width || null),
+                height: manifestInfo.height || (manifestInfo.metadata?.height || null),
+                bitrate: manifestInfo.bitrate || (manifestInfo.metadata?.bitrate || null),
+                format: manifestInfo.format || null,
+                type: manifestInfo.type
+            }];
+        }
+        
+        return [];
+    } catch (error) {
+        console.error(`Error getting variant options for ${url}:`, error);
+        return [];
     }
-    
-    return [];
 }
 
 /**
@@ -694,4 +946,129 @@ export async function getBestQualityVariant(url, type = 'auto') {
         
         return 0;
     })[0];
+}
+
+/**
+ * Standardize video object with consistent metadata and processing flags
+ * @param {Object} video - Base video object
+ * @param {Object} additionalInfo - Additional info to merge in
+ * @param {Object} options - Options for standardization
+ * @returns {Object} Standardized video object
+ */
+function standardizeVideoObject(video, additionalInfo = {}, options = {}) {
+    // Start with base video or empty object
+    const result = { ...video };
+    
+    // Merge in additional info, without overriding existing values unless specified
+    Object.keys(additionalInfo).forEach(key => {
+        // Skip certain fields that should be handled specifically
+        if (['metadata', 'poster', 'previewUrl', 'variants'].includes(key)) return;
+        
+        // Use additionalInfo value if video doesn't have this property or override is specified
+        if (result[key] === undefined || options.overrideExisting) {
+            result[key] = additionalInfo[key];
+        }
+    });
+    
+    // Handle format field consistently
+    if (!result.format) {
+        result.format = result.type === 'hls' ? 'HLS' : 
+                       result.type === 'dash' ? 'DASH' : null;
+    }
+    
+    // Merge metadata properly, with result.metadata taking precedence
+    result.metadata = {
+        ...(additionalInfo.metadata || {}),
+        ...(result.metadata || {})
+    };
+    
+    // Ensure metadata includes playlistType if we have master/variant info
+    if (!result.metadata.playlistType) {
+        if (result.isMasterPlaylist) {
+            result.metadata.playlistType = 'master';
+        } else if (result.isVariant) {
+            result.metadata.playlistType = 'variant';
+        }
+    }
+    
+    // Ensure playlist type and master/variant flags are consistent
+    if (result.metadata.playlistType === 'master') {
+        result.isMasterPlaylist = true;
+        result.isVariant = false;
+    } else if (result.metadata.playlistType === 'variant') {
+        result.isMasterPlaylist = false;
+        result.isVariant = true;
+    }
+    
+    // Handle container type if available
+    if (!result.metadata.container) {
+        if (result.type === 'hls') {
+            result.metadata.container = 'Apple HTTP Live Streaming';
+        } else if (result.type === 'dash') {
+            result.metadata.container = 'MPEG-DASH';
+        }
+    }
+    
+    // Merge variants lists if both exist, with result.variants taking precedence
+    if (additionalInfo.variants && additionalInfo.variants.length > 0) {
+        if (!result.variants || result.variants.length === 0) {
+            result.variants = [...additionalInfo.variants];
+        } else {
+            // Merge by URL to avoid duplicates
+            const variantMap = new Map();
+            
+            // Add existing variants first
+            result.variants.forEach(v => {
+                variantMap.set(normalizeUrl(v.url), v);
+            });
+            
+            // Add additional variants if not already present
+            additionalInfo.variants.forEach(v => {
+                const normalizedVariantUrl = normalizeUrl(v.url);
+                if (!variantMap.has(normalizedVariantUrl)) {
+                    variantMap.set(normalizedVariantUrl, v);
+                }
+            });
+            
+            result.variants = Array.from(variantMap.values());
+        }
+        
+        // Update metadata with variant count
+        if (result.isMasterPlaylist && result.variants.length > 0) {
+            result.metadata.variantCount = result.variants.length;
+        }
+    }
+    
+    // Handle image fields
+    const poster = options.poster || video.poster || additionalInfo.poster || null;
+    const previewUrl = options.previewUrl || video.previewUrl || additionalInfo.previewUrl || poster;
+    
+    result.poster = poster;
+    result.previewUrl = previewUrl;
+    
+    // Set processing flags based on the information we have
+    result.isLightParsed = options.isLightParsed ?? result.isLightParsed ?? true;
+    result.isFullyParsed = options.isFullyParsed ?? result.isFullyParsed ?? false;
+    
+    // Determine if metadata is needed
+    result.needsMetadata = options.needsMetadata ?? (
+        // Default logic: needs metadata if it's a master playlist that isn't fully parsed
+        (result.isMasterPlaylist && !result.isFullyParsed) || 
+        // Or if metadata is missing critical fields
+        !result.metadata || 
+        Object.keys(result.metadata).length === 0
+    );
+    
+    // Determine if preview is needed
+    result.needsPreview = options.needsPreview ?? (!poster && !previewUrl);
+    
+    // Determine overall processed state
+    // Fully processed means: light parsed, (fully parsed if master), and has preview if needed
+    result.processed = options.processed ?? (
+        result.isLightParsed && 
+        (!result.isMasterPlaylist || result.isFullyParsed) && 
+        (!result.needsPreview)
+    );
+    
+    return result;
 }
