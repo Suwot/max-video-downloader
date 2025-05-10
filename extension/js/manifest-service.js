@@ -976,11 +976,20 @@ function standardizeVideoObject(video, additionalInfo = {}, options = {}) {
                        result.type === 'dash' ? 'DASH' : null;
     }
     
-    // Merge metadata properly, with result.metadata taking precedence
+    // Merge metadata properly, preserving original manifest metadata
+    // Note: ffprobe data will take priority later in video-manager.js
     result.metadata = {
         ...(additionalInfo.metadata || {}),
         ...(result.metadata || {})
     };
+    
+    // If we have mediaInfo from ffprobe, it takes precedence over manifest metadata
+    if (!result.mediaInfo && result.metadata) {
+        result.mediaInfo = { ...result.metadata };
+    } else if (result.mediaInfo && result.metadata) {
+        // Store manifest metadata separately for reference
+        result.manifestMetadata = { ...result.metadata };
+    }
     
     // Ensure metadata includes playlistType if we have master/variant info
     if (!result.metadata.playlistType) {

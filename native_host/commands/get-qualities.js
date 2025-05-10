@@ -199,6 +199,9 @@ class GetQualitiesCommand extends BaseCommand {
                             // Mark as fully parsed
                             streamInfo.isFullyParsed = true;
                             
+                            // Note: This ffprobe-derived metadata takes priority over JavaScript-parsed manifest data
+                            // The video-manager.js handles merging with proper priority
+                            
                             this.sendSuccess({ streamInfo });
                             logDebug('✅ Media analysis complete');
                             resolve({ success: true, streamInfo });
