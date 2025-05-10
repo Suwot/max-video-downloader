@@ -86,15 +86,15 @@ export function shouldGroupVideos(video1, video2) {
         }
 
         // If one is a master playlist and has variants
-        if (video1.isPlaylist && video1.variants?.some(v => v.url === video2.url)) {
+        if (video1.isMasterPlaylist && video1.variants?.some(v => v.url === video2.url)) {
             return true;
         }
-        if (video2.isPlaylist && video2.variants?.some(v => v.url === video1.url)) {
+        if (video2.isMasterPlaylist && video2.variants?.some(v => v.url === video1.url)) {
             return true;
         }
 
         // Both are variants - check if they're from same directory and have variant naming
-        if (!video1.isPlaylist && !video2.isPlaylist) {
+        if (!video1.isMasterPlaylist && !video2.isMasterPlaylist) {
             const name1 = video1.url.split('/').pop();
             const name2 = video2.url.split('/').pop();
             if (name1.startsWith('video_') && name2.startsWith('video_')) {

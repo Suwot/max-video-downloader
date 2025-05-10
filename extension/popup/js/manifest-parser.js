@@ -74,7 +74,7 @@ export function parseHLSManifest(content, baseUrl) {
     if (!type.isMaster) {
         return {
             type: 'hls',
-            isPlaylist: false,
+            isMasterPlaylist: false,
             segments: parseMediaSegments(content, baseUrl),
             metadata: parseMetadata(content),
             confidence: Math.abs(type.confidence),
@@ -107,7 +107,7 @@ export function parseHLSManifest(content, baseUrl) {
 
     return {
         type: 'hls',
-        isPlaylist: true,
+        isMasterPlaylist: true,
         variants: variants,
         metadata: parseMetadata(content),
         confidence: type.confidence,

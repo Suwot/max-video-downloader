@@ -56,7 +56,7 @@ export async function fetchAndParseManifest(url, type = 'auto', light = false) {
     }
     
     // Process and store relationships if this is a master playlist
-    if (manifestInfo && manifestInfo.isPlaylist && manifestInfo.variants && manifestInfo.variants.length > 0) {
+    if (manifestInfo && manifestInfo.isMasterPlaylist && manifestInfo.variants && manifestInfo.variants.length > 0) {
         console.log(`[DEBUG] 📋 Full parse found ${manifestInfo.variants.length} variants for ${url}`);
         
         // Map variant info to a more standardized format
@@ -72,7 +72,6 @@ export async function fetchAndParseManifest(url, type = 'auto', light = false) {
         const enhancedVideo = {
             url: url,
             type: type,
-            isPlaylist: true,
             isMasterPlaylist: true,
             variants: mappedVariants  // Use only variants as the single source of truth
         };
@@ -301,7 +300,7 @@ export async function processVideoRelationships(video) {
             // If light parsing failed, fall back to full parsing
             const masterInfo = await fetchAndParseManifest(video.url, video.type);
             if (masterInfo) {
-                if ((video.type === 'hls' && masterInfo.isPlaylist) || 
+                if ((video.type === 'hls' && masterInfo.isMasterPlaylist) || 
                     (video.type === 'dash' && masterInfo.variants && masterInfo.variants.length > 0)) {
                     // It's a master playlist
                     return {
