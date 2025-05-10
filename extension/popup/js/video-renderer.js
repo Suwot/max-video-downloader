@@ -690,26 +690,75 @@ function createVideoActions(video) {
             const option = document.createElement('option');
             option.value = variant.url;
             
-            // Create user-friendly quality label
-            let qualityLabel = variant.height ? `${variant.height}p` : 'Alternative Quality';
+            // Check if this variant has full mediaInfo available
+            const hasFullMediaInfo = variant.mediaInfo && Object.keys(variant.mediaInfo).length > 5;
             
-            // Add fps if available
+            console.log(`Variant ${variant.url} has ${hasFullMediaInfo ? 'full' : 'basic'} mediaInfo`);
+            if (hasFullMediaInfo) {
+                console.log('  - Fields:', Object.keys(variant.mediaInfo).join(', '));
+            }
+            
+            // Create user-friendly quality label
+            let qualityLabel = '';
+            
+            // Get height info from the best possible source
+            let height = null;
+            if (variant.mediaInfo && variant.mediaInfo.height) {
+                height = variant.mediaInfo.height;
+            } else if (variant.height) {
+                height = variant.height;
+            } else if (variant.resolution && variant.resolution.height) {
+                height = variant.resolution.height;
+            }
+            
+            if (height) {
+                qualityLabel = `${height}p`;
+            } else {
+                qualityLabel = 'Alternative Quality';
+            }
+            
+            // Add fps from various possible sources
+            let fps = null;
             if (variant.fps) {
-                qualityLabel += ` ${variant.fps}fps`;
+                fps = variant.fps;
+            } else if (variant.frameRate) {
+                fps = variant.frameRate;
+            } else if (variant.mediaInfo && variant.mediaInfo.fps) {
+                fps = variant.mediaInfo.fps;
+            } else if (variant.mediaInfo && variant.mediaInfo.videoCodec && variant.mediaInfo.videoCodec.frameRate) {
+                fps = variant.mediaInfo.videoCodec.frameRate;
+            }
+            
+            if (fps) {
+                qualityLabel += ` ${fps}fps`;
             }
             
             // Add bandwidth info for better comparison
-            if (variant.bandwidth) {
-                const mbps = (variant.bandwidth / 1000000).toFixed(1);
+            let bandwidth = variant.bandwidth;
+            if (!bandwidth && variant.mediaInfo) {
+                bandwidth = variant.mediaInfo.videoBitrate || variant.mediaInfo.totalBitrate;
+            }
+            
+            if (bandwidth) {
+                const mbps = (bandwidth / 1000000).toFixed(1);
                 if (mbps > 0) {
                     qualityLabel += ` (${mbps} Mbps)`;
                 }
             }
             
             // Add codec info if available
-            if (variant.codecs) {
+            let codecs = variant.codecs;
+            if (!codecs && variant.mediaInfo && variant.mediaInfo.videoCodec) {
+                if (typeof variant.mediaInfo.videoCodec === 'object') {
+                    codecs = variant.mediaInfo.videoCodec.name;
+                } else {
+                    codecs = variant.mediaInfo.videoCodec;
+                }
+            }
+            
+            if (codecs) {
                 // Extract main codec name without profile details
-                const mainCodec = variant.codecs.split('.')[0];
+                const mainCodec = codecs.split('.')[0];
                 if (mainCodec && !qualityLabel.includes(mainCodec)) {
                     qualityLabel += ` - ${mainCodec}`;
                 }
@@ -775,6 +824,12 @@ export function updateVideoElement(url, updatedVideo, isMetadataOnly = false) {
         return;
     }
     
+    // Special handling for variants - log detailed information
+    if (updatedVideo.isVariant) {
+        const mediaInfoFieldCount = updatedVideo.mediaInfo ? Object.keys(updatedVideo.mediaInfo).length : 0;
+        console.log(`Updating UI for variant with ${mediaInfoFieldCount} mediaInfo fields: ${url}`);
+    }
+    
     // 1. Update preview image if we have one
     if (updatedVideo.previewUrl) {
         const previewImage = videoElement.querySelector('.preview-image');
@@ -800,8 +855,19 @@ export function updateVideoElement(url, updatedVideo, isMetadataOnly = false) {
     
     // 2. Update metadata information
     if (updatedVideo.mediaInfo) {
-        // Use the shared helper function to update UI
-        updateVideoMetadataUI(videoElement, updatedVideo.mediaInfo);
+        // Check if this is a variant and log details about its mediaInfo
+        if (updatedVideo.isVariant) {
+            const videoDataElement = videoElement.querySelector('.video-data');
+            if (videoDataElement) {
+                // Log what fields we have in the variant's mediaInfo
+                const mediaInfoKeys = Object.keys(updatedVideo.mediaInfo);
+                console.log(`Variant ${url} has mediaInfo fields: ${mediaInfoKeys.join(', ')}`);
+            }
+        }
+        
+        // Use the shared helper function to update UI with full mediaInfo
+        // Pass the entire video object for context
+        updateVideoMetadataUI(videoElement, updatedVideo.mediaInfo, updatedVideo);
     }
 }
 
@@ -820,10 +886,17 @@ export function updateVideoMetadata(url, mediaInfo) {
  * Helper function to update the metadata UI elements in a video card
  * @param {HTMLElement} videoElement - The video element to update
  * @param {Object} mediaInfo - Media information object with codec details
+ * @param {Object} [videoData] - Complete video object (optional)
  * @returns {void}
  */
-function updateVideoMetadataUI(videoElement, mediaInfo) {
+function updateVideoMetadataUI(videoElement, mediaInfo, videoData = null) {
     if (!videoElement || !mediaInfo) return;
+    
+    // Additional debugging for variants
+    if (videoData && videoData.isVariant) {
+        console.log(`updateVideoMetadataUI for variant: ${videoData.url}`);
+        console.log('MediaInfo keys:', Object.keys(mediaInfo));
+    }
     
     // Find UI elements in this video card
     const codecInfo = videoElement.querySelector('.codec-info');
@@ -838,9 +911,18 @@ function updateVideoMetadataUI(videoElement, mediaInfo) {
             mediaContentType = "Video & Audio";
             mediaIcon = '<path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/>';
             
+            // Video codec information - handle both nested and flat structures
             if (mediaInfo.videoCodec) {
-                codecDetails.push(`Video: ${mediaInfo.videoCodec.name}`);
+                if (typeof mediaInfo.videoCodec === 'object') {
+                    codecDetails.push(`Video: ${mediaInfo.videoCodec.name || 'Unknown'}`);
+                } else {
+                    codecDetails.push(`Video: ${mediaInfo.videoCodec}`);
+                }
+            } else if (mediaInfo.videoCodecName) {
+                codecDetails.push(`Video: ${mediaInfo.videoCodecName}`);
             }
+            
+            // Audio codec information - handle both nested and flat structures
             if (mediaInfo.audioCodec) {
                 codecDetails.push(`Audio: ${mediaInfo.audioCodec.name}`);
                 if (mediaInfo.audioCodec.channels) {
@@ -911,27 +993,90 @@ function updateVideoMetadataUI(videoElement, mediaInfo) {
         
         // Update resolution info if available
         const resolutionInfo = videoElement.querySelector('.resolution-info');
-        if (resolutionInfo && resolutionInfo.classList.contains('loading') && 
-            mediaInfo.width && mediaInfo.height) {
-            resolutionInfo.classList.remove('loading');
-            resolutionInfo.textContent = `${mediaInfo.width}x${mediaInfo.height}`;
-            if (mediaInfo.fps) {
-                resolutionInfo.textContent += ` ${mediaInfo.fps}fps`;
+        if (resolutionInfo) {
+            // Get the best resolution information available from various sources
+            let width = null, height = null;
+            
+            // Extract width and height from the most reliable source
+            if (mediaInfo.width && mediaInfo.height) {
+                width = mediaInfo.width;
+                height = mediaInfo.height;
+            } else if (videoData && videoData.resolution) {
+                width = videoData.resolution.width;
+                height = videoData.resolution.height;
+            } else if (videoData && videoData.width && videoData.height) {
+                width = videoData.width;
+                height = videoData.height;
+            }
+            
+            // Handle both loading and already-loaded states
+            if (width && height) {
+                resolutionInfo.classList.remove('loading');
+                resolutionInfo.textContent = `${width}x${height}`;
+                
+                // Add fps info from multiple possible sources
+                let fps = null;
+                if (mediaInfo.fps) {
+                    fps = mediaInfo.fps;
+                } else if (mediaInfo.frameRate) {
+                    fps = mediaInfo.frameRate;
+                } else if (mediaInfo.videoCodec && mediaInfo.videoCodec.frameRate) {
+                    fps = mediaInfo.videoCodec.frameRate;
+                } else if (videoData && videoData.fps) {
+                    fps = videoData.fps;
+                } else if (videoData && videoData.resolution && videoData.resolution.fps) {
+                    fps = videoData.resolution.fps;
+                }
+                
+                if (fps) {
+                    resolutionInfo.textContent += ` ${fps}fps`;
+                }
             }
         }
         
         // Update quality selector dropdown if it exists
         const qualitySelector = videoElement.querySelector('.quality-selector');
         if (qualitySelector && qualitySelector.options.length > 0) {
+            // Get the best resolution information available from various sources
+            let width = null, height = null;
+            
+            // Extract width and height from the most reliable source
+            if (mediaInfo.width && mediaInfo.height) {
+                width = mediaInfo.width;
+                height = mediaInfo.height;
+            } else if (videoData && videoData.resolution) {
+                width = videoData.resolution.width;
+                height = videoData.resolution.height;
+            } else if (videoData && videoData.width && videoData.height) {
+                width = videoData.width;
+                height = videoData.height;
+            }
+            
             // Check if the first option is "Original Quality" and we have resolution info
             if ((qualitySelector.options[0].textContent === 'Original Quality' || 
-                 qualitySelector.options[0].textContent.includes('Resolution')) && 
-                mediaInfo.width && mediaInfo.height) {
+                 qualitySelector.options[0].textContent.includes('Resolution') ||
+                 qualitySelector.options[0].textContent.includes('p')) && 
+                height) {
                 
                 // Create more descriptive label with actual quality
-                let qualityLabel = `${mediaInfo.height}p`;
+                let qualityLabel = `${height}p`;
+                
+                // Add fps info from multiple possible sources
+                let fps = null;
                 if (mediaInfo.fps) {
-                    qualityLabel += ` ${mediaInfo.fps}fps`;
+                    fps = mediaInfo.fps;
+                } else if (mediaInfo.frameRate) {
+                    fps = mediaInfo.frameRate;
+                } else if (mediaInfo.videoCodec && mediaInfo.videoCodec.frameRate) {
+                    fps = mediaInfo.videoCodec.frameRate;
+                } else if (videoData && videoData.fps) {
+                    fps = videoData.fps;
+                } else if (videoData && videoData.resolution && videoData.resolution.fps) {
+                    fps = videoData.resolution.fps;
+                }
+                
+                if (fps) {
+                    qualityLabel += ` ${fps}fps`;
                 }
                 if (mediaInfo.hasAudio === false) {
                     qualityLabel += ' (no audio)';

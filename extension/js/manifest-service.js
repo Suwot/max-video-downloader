@@ -512,15 +512,17 @@ export async function processVideoRelationships(video) {
     const masterInfo = getMasterPlaylistForVariant(video.url);
     if (masterInfo) {
         // This is a known variant, link it to its master
+        // But mark it as needing full parsing - this is key to ensuring full metadata
         return standardizeVideoObject(video, {
             isVariant: true,
             isMasterPlaylist: false,
             masterUrl: masterInfo.masterUrl,
-            masterInfo: masterInfo
+            masterInfo: masterInfo,
+            needsFullParsing: true // Add flag to indicate we want full parsing
         }, {
             isLightParsed: true,
-            isFullyParsed: true,
-            needsMetadata: false // Metadata is available through the master
+            isFullyParsed: false, // Mark as NOT fully parsed so it gets full metadata
+            needsMetadata: true   // Always get metadata for variants
         });
     }
     
@@ -567,14 +569,26 @@ export async function processVideoRelationships(video) {
                         processed: false      // Not fully processed
                     });
                 } else {
-                    // For variants, light parsing is sufficient
-                    return standardizeVideoObject(video, lightInfo, {
-                        isVariant: true,
-                        isMasterPlaylist: false,
-                        isLightParsed: true,
-                        isFullyParsed: false, // No full parsing needed for variants
-                        needsMetadata: false  // Variants can use light metadata
-                    });
+                    // Fully parse variant playlists too, to get complete metadata
+                    const fullInfo = await fetchAndParseManifest(video.url, video.type, false);
+                    if (fullInfo) {
+                        return standardizeVideoObject(video, fullInfo, {
+                            isVariant: true,
+                            isMasterPlaylist: false,
+                            isLightParsed: true,
+                            isFullyParsed: true,
+                            needsMetadata: false
+                        });
+                    } else {
+                        // Fallback to light parsing if full parsing fails
+                        return standardizeVideoObject(video, lightInfo, {
+                            isVariant: true,
+                            isMasterPlaylist: false,
+                            isLightParsed: true,
+                            isFullyParsed: false,
+                            needsMetadata: true  // Flag that it needs metadata
+                        });
+                    }
                 }
             }
             
@@ -876,7 +890,9 @@ export async function getVariantOptions(url, type = 'auto') {
                     label += ` - ${formatFileSize(variant.estimatedSize)}`;
                 }
                 
-                return standardizeVideoObject({
+                // First try to get the full variant info via a dedicated fetch
+                // This ensures each variant has its own complete metadata
+                const variantInfo = {
                     url: variant.url,
                     label: label,
                     resolution: variant.resolution || null,
@@ -890,10 +906,23 @@ export async function getVariantOptions(url, type = 'auto') {
                     type: manifestInfo.type,
                     isVariant: true,
                     isMasterPlaylist: false,
-                    masterUrl: url
-                }, {}, {
+                    masterUrl: url,
+                    // Add reference to ensure we have a link back to the master
+                    masterInfo: {
+                        masterUrl: url,
+                        masterType: manifestInfo.type
+                    }
+                };
+                
+                // Mark it as ready for full parsing and metadata
+                return standardizeVideoObject(variantInfo, {
+                    // Required for backend integration
+                    needsMetadata: true,
+                    needsFullParsing: true,
+                }, {
                     isLightParsed: true,
-                    isFullyParsed: true
+                    isFullyParsed: false, // Set to false to ensure it gets fully parsed
+                    needsMetadata: true,  // Mark that it needs full metadata
                 });
             });
         }
@@ -989,6 +1018,24 @@ function standardizeVideoObject(video, additionalInfo = {}, options = {}) {
     } else if (result.mediaInfo && result.metadata) {
         // Store manifest metadata separately for reference
         result.manifestMetadata = { ...result.metadata };
+    }
+    
+    // Ensure correct processing flags for variants - this is key to fixing the issue
+    if (result.isVariant) {
+        // For variants, ensure flags are correctly set to trigger full metadata fetching
+        if (options.needsMetadata !== false) {
+            result.needsMetadata = true;
+        }
+        
+        // Only set isFullyParsed=false for variants to ensure they get full metadata
+        if (options.isFullyParsed === undefined) {
+            result.isFullyParsed = false;
+        } else {
+            result.isFullyParsed = options.isFullyParsed;
+        }
+        
+        // Set flag to request full parsing for all variants
+        result.needsFullParsing = true;
     }
     
     // Ensure metadata includes playlistType if we have master/variant info

@@ -109,8 +109,53 @@ function processVideosForBroadcast(videos) {
     // First apply validation filter to remove unwanted videos
     const validatedVideos = validateAndFilterVideos ? validateAndFilterVideos(videos) : videos;
     
-    // No separate video filtering, just prepare for display
-    const processedVideos = validatedVideos.map(video => {
+    // Second pass: process each variant to ensure it has full metadata
+    const processedWithVariants = validatedVideos.map(video => {
+        // If this is a master playlist with variants, ensure each variant has full metadata
+        if (video.isMasterPlaylist && video.variants && video.variants.length > 0) {
+            const processedVariants = video.variants.map(variant => {
+                // Find if this variant exists directly in the videos list
+                const fullVariant = validatedVideos.find(v => 
+                    v.isVariant && normalizeUrl(v.url) === normalizeUrl(variant.url) && v.isFullyParsed);
+                
+                if (fullVariant) {
+                    // Use the fully parsed variant data instead of the limited variant data
+                    logDebug(`Using fully parsed data for variant: ${variant.url}`);
+                    
+                    // Deep clone the mediaInfo to ensure all properties are transmitted
+                    const clonedMediaInfo = fullVariant.mediaInfo ? 
+                        JSON.parse(JSON.stringify(fullVariant.mediaInfo)) : null;
+                    
+                    // Count the mediaInfo fields for verification
+                    const mediaInfoFieldCount = clonedMediaInfo ? Object.keys(clonedMediaInfo).length : 0;
+                    logDebug(`Variant ${variant.url} has ${mediaInfoFieldCount} mediaInfo fields after clone`);
+                    
+                    // Merge the variant data with the full variant data
+                    return {
+                        ...variant,
+                        ...fullVariant,
+                        mediaInfo: clonedMediaInfo,
+                        isFullyParsed: true,
+                        // Add this flag to indicate it's using complete data
+                        hasCompleteMetadata: true
+                    };
+                }
+                
+                return variant;
+            });
+            
+            // Replace the variants array with the processed variants
+            return {
+                ...video,
+                variants: processedVariants
+            };
+        }
+        
+        return video;
+    });
+    
+    // Third pass: final preparation for display
+    const processedVideos = processedWithVariants.map(video => {
         // Add additional information needed for immediate display
         return {
             ...video,
@@ -126,7 +171,7 @@ function processVideosForBroadcast(videos) {
             source: video.source || 'background',
             // Preserve the detection timestamp for debugging duplicates
             detectionTimestamp: video.detectionTimestamp || null,
-            // Only keep variants array
+            // Ensure variants are properly preserved
             variants: video.variants || [],
             // Preserve parsing state flags
             isLightParsed: video.isLightParsed || false,
@@ -304,6 +349,27 @@ async function enrichWithPlaylistInfo(video, tabId) {
                 if (processedVideo.isMasterPlaylist) {
                     if (currentVariantsCount > 0) {
                         logDebug(`Found master playlist with ${currentVariantsCount} variants (was ${previousVariantsCount})`);
+                        
+                        // Important: Also add each variant as a standalone video that will get fully parsed
+                        if (processedVideo.variants && processedVideo.variants.length > 0) {
+                            logDebug(`Adding ${processedVideo.variants.length} variants as standalone videos for full parsing`);
+                            
+                            // Add each variant to the list so it gets processed independently
+                            processedVideo.variants.forEach(variant => {
+                                // Add the variant as a new video in this tab
+                                addVideoToTab(tabId, {
+                                    url: variant.url,
+                                    type: video.type,
+                                    source: 'variantExtraction',
+                                    isVariant: true,
+                                    masterUrl: video.url,
+                                    isMasterPlaylist: false,
+                                    isFullyParsed: false, // Will trigger full parsing
+                                    needsMetadata: true
+                                });
+                            });
+                        }
+                        
                         broadcastVideoUpdate(tabId);
                     } else {
                         logDebug(`⚠️ Master playlist has no variants: ${videos[index].url}`);
@@ -377,8 +443,9 @@ async function enrichWithMetadata(video, tabId) {
             }
         }
         
-        // For variant streams with a known master, we might already have the metadata
-        if (video.isLightParsed && video.isVariant && video.masterUrl) {
+        // For variant streams with a known master, we might already have some basic metadata,
+        // but we want to ensure we get full metadata for all variants
+        if (video.isVariant && video.masterUrl) {
             const videos = videosPerTab.get(tabId);
             const masterVideo = videos.find(v => normalizeUrl(v.url) === normalizeUrl(video.masterUrl));
             
@@ -388,8 +455,11 @@ async function enrichWithMetadata(video, tabId) {
                 );
                 
                 if (matchingVariant) {
-                    // Apply variant-specific metadata from master
-                    applyMetadataToVideo(tabId, normalizedUrl, {
+                    // Get the variant's base info from the master, but always continue to full metadata fetch
+                    logDebug(`Variant ${video.url} found in master ${video.masterUrl}`);
+                    
+                    // Extract basic info from the matching variant in the master playlist
+                    const variantBaseInfo = {
                         type: video.type,
                         format: video.type,
                         container: video.type,
@@ -402,8 +472,19 @@ async function enrichWithMetadata(video, tabId) {
                         videoBitrate: matchingVariant.bandwidth,
                         totalBitrate: matchingVariant.bandwidth,
                         estimatedSize: estimateFileSize(matchingVariant.bandwidth, video.duration)
-                    });
-                    return;
+                    };
+                    
+                    // Store this info, but don't return - continue to get full metadata below
+                    video.partialMediaInfo = variantBaseInfo;
+                    
+                    // If this is just for partial metadata and we don't want full parsing, return now
+                    if (!video.isFullyParsed && video.isLightParsed) {
+                        applyMetadataToVideo(tabId, normalizedUrl, variantBaseInfo);
+                        return;
+                    }
+                    
+                    // Otherwise continue to full metadata fetch below
+                    logDebug(`Getting full metadata for variant: ${video.url}`);
                 }
             }
         }
@@ -413,8 +494,17 @@ async function enrichWithMetadata(video, tabId) {
         const streamInfo = await rateLimiter.enqueue(async () => {
             logDebug(`Getting stream metadata for ${video.url}`);
             
-            // Determine if we can use light parsing for the native host
-            const useLight = video.isLightParsed && (video.isMasterPlaylist || video.isVariant);
+            // Always get full metadata for variants - this is the key to fixing the issue
+            const useLight = false; // Force full parsing for all HLS/DASH content
+            
+            // Detailed logging for debugging
+            if (video.isVariant) {
+                logDebug(`🔍 Getting FULL metadata for variant: ${video.url} (from master: ${video.masterUrl})`);
+            } else if (video.isMasterPlaylist) {
+                logDebug(`🔍 Getting FULL metadata for master playlist: ${video.url}`);
+            } else {
+                logDebug(`🔍 Getting FULL metadata for: ${video.url}`);
+            }
             
             const response = await nativeHostService.sendMessage({
                 type: 'getQualities',
@@ -449,20 +539,50 @@ function applyMetadataToVideo(tabId, normalizedUrl, mediaInfo) {
     const index = videos.findIndex(v => normalizeUrl(v.url) === normalizedUrl);
     
     if (index !== -1) {
+        // Special logging for variants
+        if (videos[index].isVariant) {
+            logDebug(`Applying metadata to variant video: ${videos[index].url}`);
+            
+            // If this is a variant with partial media info from its master,
+            // ensure we merge all properties properly
+            if (videos[index].partialMediaInfo) {
+                logDebug(`Merging partial variant info with full metadata`);
+                // Combine the full media info with any partial info we've already gathered
+                mediaInfo = {
+                    ...videos[index].partialMediaInfo,
+                    ...mediaInfo,
+                };
+            }
+        }
+        
+        // Create a merged mediaInfo object with proper priority
+        const mergedMediaInfo = {
+            // Start with any existing mediaInfo
+            ...(videos[index].mediaInfo || {}),
+            // Then apply new mediaInfo, which takes precedence
+            ...mediaInfo,
+        };
+        
         // Update video with stream info
         videos[index] = {
             ...videos[index],
-            mediaInfo,
+            mediaInfo: mergedMediaInfo,
             needsMetadata: false,  // Mark as processed
             isFullyParsed: true,   // Mark as fully parsed
+            // Update resolution data from the mediaInfo
             resolution: mediaInfo.width && mediaInfo.height ? {
                 width: mediaInfo.width,
                 height: mediaInfo.height,
                 fps: mediaInfo.fps,
                 bitrate: mediaInfo.videoBitrate || mediaInfo.totalBitrate
-            } : null,
+            } : videos[index].resolution,
             fileSize: mediaInfo.estimatedSize || videos[index].fileSize
         };
+        
+        // Special handling for variants - ensure they have proper flag set
+        if (videos[index].isVariant) {
+            videos[index].isVariantFullyProcessed = true;
+        }
         
         // Use the unified notification method instead
         notifyVideoUpdated(tabId, normalizedUrl, videos[index]);
@@ -536,11 +656,33 @@ function notifyVideoUpdated(tabId, url, updatedVideo) {
         if (port) {
             logDebug(`Notifying popup for tab ${tabId} about video update for ${url}`);
             
+            // Special handling for variants - include more detailed logging
+            if (updatedVideo.isVariant) {
+                const mediaInfoFieldCount = updatedVideo.mediaInfo ? Object.keys(updatedVideo.mediaInfo).length : 0;
+                logDebug(`Sending variant update with ${mediaInfoFieldCount} mediaInfo fields: ${url}`);
+                
+                // Add detailed logging of available fields for debugging
+                if (updatedVideo.mediaInfo) {
+                    logDebug(`Variant mediaInfo fields: ${Object.keys(updatedVideo.mediaInfo).join(', ')}`);
+                }
+            }
+            
+            // Make a clean copy of the video object for transmission
+            const videoForTransmission = {
+                ...updatedVideo,
+                // Force a deep clone of mediaInfo to ensure all properties are transmitted
+                mediaInfo: updatedVideo.mediaInfo ? JSON.parse(JSON.stringify(updatedVideo.mediaInfo)) : null,
+                // Also deep clone any variants
+                variants: updatedVideo.variants ? JSON.parse(JSON.stringify(updatedVideo.variants)) : [],
+                // Add a marker so we can track which videos have been processed
+                _processedByVideoManager: true
+            };
+            
             try {
                 port.postMessage({
                     type: 'videoUpdated',
                     url: url,
-                    video: updatedVideo
+                    video: videoForTransmission
                 });
             } catch (error) {
                 logDebug(`Error sending video update: ${error.message}`);
@@ -658,6 +800,24 @@ function storeManifestRelationship(playlistUrl, variants) {
                     videos[variantIndex].isMasterPlaylist = false;
                     videos[variantIndex].isVariant = true;
                     videos[variantIndex].masterPlaylistUrl = playlistUrl;
+                    
+                    // Mark variant for full parsing to ensure complete metadata
+                    videos[variantIndex].isFullyParsed = false;
+                    videos[variantIndex].needsMetadata = true;
+                    videos[variantIndex].needsFullParsing = true;
+                } else {
+                    // Create the variant if it doesn't exist yet
+                    // This ensures all variants are added individually with full parsing flags
+                    const newVariant = {
+                        ...variant,
+                        isVariant: true,
+                        masterPlaylistUrl: playlistUrl,
+                        isFullyParsed: false,
+                        needsMetadata: true,
+                        needsFullParsing: true,
+                        tabId
+                    };
+                    videos.push(newVariant);
                 }
             }
             

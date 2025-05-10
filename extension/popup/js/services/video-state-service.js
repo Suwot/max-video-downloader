@@ -154,15 +154,63 @@ class VideoStateService {
     if (this.currentVideos && this.currentVideos.length > 0) {
       const index = this.currentVideos.findIndex(v => v.url === url);
       
-      if (index !== -1) {
-        // Update the video with new data
+      if (index !== -1) {          // Special handling for variants - log when receiving variant updates
+          if (video.isVariant) {
+            const mediaInfoFieldCount = video.mediaInfo ? Object.keys(video.mediaInfo).length : 0;
+            this.debug(`Received variant update with ${mediaInfoFieldCount} mediaInfo fields: ${url}`);
+            
+            // Add detailed logging of available fields for debugging
+            if (video.mediaInfo) {
+              this.debug(`Variant mediaInfo fields: ${Object.keys(video.mediaInfo).join(', ')}`);
+            }
+          }
+          
+          // Deep clone the incoming mediaInfo to ensure we don't lose any fields
+          const incomingMediaInfo = video.mediaInfo ? JSON.parse(JSON.stringify(video.mediaInfo)) : {};
+          const existingMediaInfo = this.currentVideos[index].mediaInfo ? 
+              JSON.parse(JSON.stringify(this.currentVideos[index].mediaInfo)) : {};
+        
+        // Properly merge the video with new data, preserving structure
         this.currentVideos[index] = {
           ...this.currentVideos[index],
-          ...video
+          ...video,
+          // Ensure mediaInfo is properly merged with deep cloned objects
+          mediaInfo: {
+            ...existingMediaInfo,
+            ...incomingMediaInfo
+          }
         };
         
+        // For variants, also update the master playlist if exists
+        if (video.isVariant && video.masterUrl) {
+          const masterIndex = this.currentVideos.findIndex(v => v.url === video.masterUrl);
+          if (masterIndex !== -1 && this.currentVideos[masterIndex].variants) {
+            // Update the variant in the master's variant list too
+            const variantIndex = this.currentVideos[masterIndex].variants.findIndex(
+              v => v.url === url
+            );
+            
+            if (variantIndex !== -1) {
+              this.debug(`Updating variant ${url} in master playlist ${video.masterUrl} (fields: ${Object.keys(video.mediaInfo || {}).length})`);
+              
+              // Create a deep clone of the variant's mediaInfo to ensure all fields are preserved
+              const variantMediaInfo = this.currentVideos[index].mediaInfo ? 
+                JSON.parse(JSON.stringify(this.currentVideos[index].mediaInfo)) : {};
+                
+              // Ensure this variant in the master has all the fields from the full variant
+              this.currentVideos[masterIndex].variants[variantIndex] = {
+                ...this.currentVideos[masterIndex].variants[variantIndex],
+                ...video,
+                // Always use the full mediaInfo from the standalone variant
+                mediaInfo: variantMediaInfo,
+                isFullyParsed: true
+              };
+            }
+          }
+        }
+        
         // Emit the event for UI updates
-        this.emit('video-updated', { url, video });
+        this.emit('video-updated', { url, video: this.currentVideos[index] });
       }
     }
   }
