@@ -24,7 +24,8 @@ globalThis.allDetectedVideosInternal = allDetectedVideos;
 // Temporary processing trackers (not for storage)
 const processingRequests = {
   previews: new Set(), // Track URLs currently being processed for previews
-  metadata: new Set()  // Track URLs currently being processed for metadata
+  metadata: new Set(),  // Track URLs currently being processed for metadata
+  lightParsing: new Set() // Track URLs currently being light parsed
 };
 
 // Rate limiter for API requests
@@ -251,6 +252,50 @@ function addVideoToTab(tabId, videoInfo) {
         timestamp: Date.now()
     });
     
+    // If this is HLS or DASH, perform lightweight validation before adding to videosPerTab
+    if ((videoInfo.type === 'hls' || videoInfo.type === 'dash') && !videoInfo.subtype) {
+        // Don't block the main flow; perform validation asynchronously
+        (async () => {
+            try {
+                const parseResult = await lightParseContent(videoInfo.url, videoInfo.type);
+                
+                // Get the video from the map (it might have been updated since)
+                const tabMap = allDetectedVideos.get(tabId);
+                if (!tabMap || !tabMap.has(normalizedUrl)) return;
+                
+                const videoEntry = tabMap.get(normalizedUrl);
+                
+                // Update the video entry with subtype info
+                const updatedEntry = {
+                    ...videoEntry,
+                    subtype: parseResult.subtype,
+                    isValid: parseResult.isValid,
+                };
+                
+                // Update type flags based on subtype
+                if (parseResult.subtype === 'hls-master' || parseResult.subtype === 'dash-master') {
+                    updatedEntry.isMasterPlaylist = true;
+                    updatedEntry.isVariant = false;
+                } else if (parseResult.subtype === 'hls-variant' || parseResult.subtype === 'dash-variant') {
+                    updatedEntry.isVariant = true;
+                    updatedEntry.isMasterPlaylist = false;
+                }
+                
+                // Update the entry in the map
+                tabMap.set(normalizedUrl, updatedEntry);
+                
+                // Log result
+                if (parseResult.isValid) {
+                    logDebug(`[LightParse] Validated ${videoInfo.url} as ${parseResult.subtype}`);
+                } else {
+                    logDebug(`[LightParse] Invalid video: ${videoInfo.url} (${parseResult.subtype})`);
+                }
+            } catch (error) {
+                logDebug(`Error validating ${videoInfo.url}: ${error.message}`);
+            }
+        })();
+    }
+    
     // Create array for tab if it doesn't exist
     if (!videosPerTab.has(tabId)) {
         videosPerTab.set(tabId, []);
@@ -372,9 +417,17 @@ function addVideoToTab(tabId, videoInfo) {
 async function enrichWithPlaylistInfo(video, tabId) {
     try {
         // Skip if already light parsed and we know its type
-        if (video.isLightParsed && (video.isMasterPlaylist || video.isVariant)) {
-            logDebug(`Skipping playlist info enrichment for already parsed video: ${video.url}`);
-            return;
+        if (video.isLightParsed || (video.subtype && video.subtype !== 'processing')) {
+            logDebug(`Skipping playlist info enrichment for already parsed video: ${video.url} (${video.subtype || 'no subtype'})`);
+            
+            // If it's a light-parsed master, we still want to extract variants
+            if (video.subtype === 'hls-master' || video.subtype === 'dash-master') {
+                logDebug(`Processing master playlist for variants: ${video.url}`);
+                // Continue with variant extraction
+            } else if (video.subtype === 'not-a-video' || video.subtype === 'fetch-failed') {
+                // Skip further processing for non-videos
+                return;
+            }
         }
         
         // Use the manifest service to process the video
@@ -724,6 +777,85 @@ async function enrichWithPreview(video, tabId) {
     } finally {
         // Always remove from processing set when done
         processingRequests.previews.delete(normalizedUrl);
+    }
+}
+
+/**
+ * Perform lightweight parsing of HLS/DASH content to determine its subtype
+ * This fetches only the first 4KB to make a quick determination
+ * @param {string} url - The URL to analyze
+ * @param {string} type - The content type ('hls' or 'dash')
+ * @returns {Promise<{isValid: boolean, subtype: string}>} - Analysis result
+ */
+async function lightParseContent(url, type) {
+    const normalizedUrl = normalizeUrl(url);
+    
+    // Skip if already being processed
+    if (processingRequests.lightParsing.has(normalizedUrl)) {
+        return { isValid: true, subtype: 'processing' };
+    }
+    
+    // Mark as being processed
+    processingRequests.lightParsing.add(normalizedUrl);
+    
+    try {
+        // Get just the first 4KB of content to determine what it is
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000);  // 5 second timeout
+        
+        logDebug(`Light parsing ${url} to determine subtype`);
+        
+        const response = await fetch(url, {
+            signal: controller.signal,
+            headers: {
+                'Range': 'bytes=0-4095' // Request just the first 4KB
+            }
+        });
+        
+        clearTimeout(timeoutId);
+        
+        if (!response.ok) {
+            logDebug(`Failed to fetch ${url} for light parsing: ${response.status}`);
+            return { isValid: false, subtype: 'fetch-failed' };
+        }
+        
+        const content = await response.text();
+        
+        // Analyze the content based on type
+        if (type === 'hls') {
+            // Check if it's a master playlist (contains #EXT-X-STREAM-INF)
+            if (content.includes('#EXT-X-STREAM-INF')) {
+                return { isValid: true, subtype: 'hls-master' };
+            } 
+            // Check if it's a variant/media playlist (contains #EXTINF)
+            else if (content.includes('#EXTINF')) {
+                return { isValid: true, subtype: 'hls-variant' };
+            }
+            // Neither master nor variant markers found
+            return { isValid: false, subtype: 'not-a-video' };
+        } 
+        else if (type === 'dash') {
+            // Check for basic MPD structure
+            if (content.includes('<MPD') && (content.includes('</MPD') || 
+                content.includes('xmlns="urn:mpeg:dash:schema:mpd'))) {
+                
+                // Check if it contains AdaptationSet (indicates master)
+                if (content.includes('AdaptationSet')) {
+                    return { isValid: true, subtype: 'dash-master' };
+                } else {
+                    return { isValid: true, subtype: 'dash-variant' };
+                }
+            }
+            return { isValid: false, subtype: 'not-a-video' };
+        }
+        
+        return { isValid: false, subtype: 'unknown-type' };
+    } catch (error) {
+        logDebug(`Error during light parsing of ${url}: ${error.message}`);
+        return { isValid: false, subtype: 'parse-error' };
+    } finally {
+        // Clean up
+        processingRequests.lightParsing.delete(normalizedUrl);
     }
 }
 

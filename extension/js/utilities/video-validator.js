@@ -32,9 +32,18 @@ export function validateAndFilterVideos(videos) {
             return true;
         }
         
-        // If it's an HLS or DASH video, we can safely assume it's valid 
-        // as these were already validated by specialized functions
+        // If it's an HLS or DASH video, check subtype value from light parsing
         if (video.type === 'hls' || video.type === 'dash') {
+            // If we have a subtype from light parsing, use it
+            if (video.subtype) {
+                // Filter out URLs that were identified as non-videos
+                if (video.subtype === 'not-a-video' || video.subtype === 'fetch-failed') {
+                    logDebug(`Filtering out light-parsed non-video: ${video.url} (${video.subtype})`);
+                    return false;
+                }
+                return true;
+            }
+            // If no subtype yet, let it through (will be parsed later)
             return true;
         }
         
