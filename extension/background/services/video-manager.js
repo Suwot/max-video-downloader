@@ -265,28 +265,8 @@ function broadcastVideoUpdate(tabId) {
 
 // Add video to tab's collection
 function addVideoToTab(tabId, videoInfo) {
-    // Normalize URL for deduplication
+    // Normalize URL for deduplication - we'll need this for lookup
     const normalizedUrl = normalizeUrl(videoInfo.url);
-    
-    // Initialize tab's video collection if it doesn't exist
-    if (!allDetectedVideos.has(tabId)) {
-        allDetectedVideos.set(tabId, new Map());
-    }
-    
-    // Get the map for this specific tab
-    const tabDetectedVideos = allDetectedVideos.get(tabId);
-    
-    // Skip if already in this tab's collection
-    if (tabDetectedVideos.has(normalizedUrl)) {
-        return false;
-    }
-    
-    // Add to tab's collection
-    tabDetectedVideos.set(normalizedUrl, {
-        ...videoInfo,
-        normalizedUrl,
-        timestamp: Date.now()
-    });
     
     // If this is HLS or DASH, perform lightweight validation before adding to videosPerTab
     if ((videoInfo.type === 'hls' || videoInfo.type === 'dash') && !videoInfo.subtype) {
