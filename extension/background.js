@@ -129,28 +129,105 @@ chrome.webRequest.onBeforeRequest.addListener(
         if (details.tabId < 0) return;
 
         const url = details.url;
-        // Check for HLS, DASH, and direct video files
-        if (
-            url.includes('.m3u8') || 
-            url.includes('.mpd') || 
-            /\.(mp4|webm|ogg|mov|avi|mkv|flv)(\?|$)/i.test(url)
-        ) {
-            // Determine type
+        
+        // Skip known tracking/analytics domains
+        const trackingDomains = [
+            'jwpltx.com',
+            'analytics',
+            'telemetry',
+            'tracking',
+            'tracker',
+            'pixel',
+            'beacon',
+            'stats',
+            'metrics'
+        ];
+        
+        try {
+            // Parse the URL to examine its components
+            const urlObj = new URL(url);
+            
+            // Skip obvious tracking/analytics endpoints
+            if (urlObj.pathname.endsWith('.gif') || 
+                urlObj.pathname.endsWith('.pixel') || 
+                urlObj.pathname.includes('/ping') || 
+                urlObj.pathname.includes('/analytics') || 
+                urlObj.hostname.includes('tracker')) {
+                return;
+            }
+            
+            // Skip if domain contains any tracking keywords
+            const domainLower = urlObj.hostname.toLowerCase();
+            if (trackingDomains.some(term => domainLower.includes(term))) {
+                return;
+            }
+            
+            // Check for HLS, DASH, and direct video files with more precise path-based detection
+            let isVideoUrl = false;
             let type = 'unknown';
+            
+            // Check for HLS streams (.m3u8)
             if (url.includes('.m3u8')) {
-                type = 'hls';
-            } else if (url.includes('.mpd')) {
-                type = 'dash';
-            } else if (/\.(mp4|webm|ogg|mov|avi|mkv|flv)(\?|$)/i.test(url)) {
+                // Verify it's in the path, not just a parameter
+                const isActualM3U8 = 
+                    urlObj.pathname.includes('.m3u8') || 
+                    urlObj.pathname.includes('/master.m3u8') || 
+                    urlObj.pathname.includes('/index-f');
+                
+                if (isActualM3U8) {
+                    isVideoUrl = true;
+                    type = 'hls';
+                }
+            } 
+            // Check for DASH manifests (.mpd)
+            else if (url.includes('.mpd')) {
+                // Verify it's in the path, not just a parameter
+                const isActualMPD = urlObj.pathname.includes('.mpd');
+                
+                if (isActualMPD) {
+                    isVideoUrl = true;
+                    type = 'dash';
+                }
+            } 
+            // Check for direct video files
+            else if (/\.(mp4|webm|ogg|mov|avi|mkv|flv)(\?|$)/i.test(url)) {
+                isVideoUrl = true;
                 type = 'direct';
             }
             
-            // Add video
-            addVideoToTab(details.tabId, {
-                url: url,
-                type: type,
-                source: 'webRequest'
-            });
+            // Add video if it passed all the filtering
+            if (isVideoUrl) {
+                addVideoToTab(details.tabId, {
+                    url: url,
+                    type: type,
+                    source: 'webRequest'
+                });
+            }
+        } catch (err) {
+            // If URL parsing fails, fall back to the original simpler checks
+            // This ensures we don't miss videos due to URL parsing errors
+            if (
+                (url.includes('.m3u8') && !url.includes('.gif') && !url.includes('ping')) || 
+                (url.includes('.mpd') && !url.includes('.gif') && !url.includes('ping')) || 
+                /\.(mp4|webm|ogg|mov|avi|mkv|flv)(\?|$)/i.test(url)
+            ) {
+                // Determine type
+                let type = 'unknown';
+                if (url.includes('.m3u8')) {
+                    type = 'hls';
+                } else if (url.includes('.mpd')) {
+                    type = 'dash';
+                } else if (/\.(mp4|webm|ogg|mov|avi|mkv|flv)(\?|$)/i.test(url)) {
+                    type = 'direct';
+                }
+                
+                // Add video
+                addVideoToTab(details.tabId, {
+                    url: url,
+                    type: type,
+                    source: 'webRequest'
+                });
+            }
         }
     },
     { urls: ["<all_urls>"] }
