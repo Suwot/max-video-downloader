@@ -68,9 +68,38 @@ function addDetectedVideo(tabId, videoInfo) {
         // Direct videos and blobs can go straight to addVideoToTab
         addVideoToTab(tabId, videoInfo);
     } else if (videoInfo.type === 'hls' || videoInfo.type === 'dash') {
-        // HLS and DASH need further processing to determine subtypes
-        // This will be implemented in the next step, for now just add to addVideoToTab
-        addVideoToTab(tabId, videoInfo);
+        // First determine subtype via lightweight parsing before adding to tab
+    (async () => {
+        try {
+            const parseResult = await lightParseContent(videoInfo.url, videoInfo.type);
+            
+            // Update the entry in allDetectedVideos with subtype info
+            const tabMap = allDetectedVideos.get(tabId);
+            if (tabMap && tabMap.has(normalizedUrl)) {
+                const updatedEntry = {
+                    ...tabMap.get(normalizedUrl),
+                    subtype: parseResult.subtype,
+                    isValid: parseResult.isValid,
+                    isMasterPlaylist: parseResult.subtype === 'hls-master' || parseResult.subtype === 'dash-master',
+                    isVariant: parseResult.subtype === 'hls-variant' || parseResult.subtype === 'dash-variant'
+                };
+                
+                tabMap.set(normalizedUrl, updatedEntry);
+                
+                // Only add master playlists to the tab collection
+                if (parseResult.isValid && (parseResult.subtype === 'hls-master' || parseResult.subtype === 'dash-master')) {
+                    logDebug(`Adding master playlist to tab: ${videoInfo.url} (${parseResult.subtype})`);
+                    addVideoToTab(tabId, updatedEntry);
+                } else if (parseResult.isValid) {
+                    logDebug(`Skipping variant in main tab collection: ${videoInfo.url} (${parseResult.subtype})`);
+                }
+            }
+        } catch (error) {
+            logDebug(`Error determining subtype for ${videoInfo.url}: ${error.message}`);
+            // Fall back to adding video as-is if parsing fails
+            addVideoToTab(tabId, videoInfo);
+        }
+    })();
     } else {
         // Unknown types also go straight to addVideoToTab
         addVideoToTab(tabId, videoInfo);
@@ -1187,6 +1216,29 @@ function estimateFileSize(bitrate, duration) {
     return Math.round((bitrate * duration) / 8);
 }
 
+
+/**
+ * Get all detected videos, optionally filtered by tab
+ * @param {number} [tabId] - Optional tab ID to filter by
+ * @returns {Map} Map of videos
+ */
+function getAllDetectedVideos(tabId) {
+    if (tabId === undefined) {
+        // Return a flattened map of all videos across all tabs (for debugging)
+        const allVideos = new Map();
+        for (const [currentTabId, tabVideos] of allDetectedVideos.entries()) {
+            for (const [url, video] of tabVideos.entries()) {
+                allVideos.set(url, { ...video, tabId: currentTabId });
+            }
+        }
+        return allVideos;
+    }
+    
+    // Return videos for specific tab or empty map if tab doesn't exist
+    return allDetectedVideos.get(tabId) || new Map();
+}
+
+
 export {
     addDetectedVideo,
     addVideoToTab,
@@ -1196,6 +1248,7 @@ export {
     getPlaylistsForTab,
     cleanupForTab,
     normalizeUrl,
+    getAllDetectedVideos,
     fetchManifestContent,
     getManifestRelationship,
     getStreamMetadata,
