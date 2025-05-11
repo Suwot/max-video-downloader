@@ -5,7 +5,7 @@
 
 // Add static imports at the top
 import { getVideosForTab, getPlaylistsForTab, getStreamQualities, 
-         fetchManifestContent, storeManifestRelationship, getManifestRelationship,
+         fetchManifestContent, getManifestRelationship,
          getStreamMetadata, clearVideoCache } from './video-manager.js';
 import { getActiveDownloads, getDownloadDetails, startDownload } from './download-manager.js';
 
@@ -146,13 +146,6 @@ async function handlePortMessage(message, port, portId) {
             type: 'manifestContent',
             url: message.url,
             content: content
-        });
-    }
-    else if (message.type === 'storeManifestRelationship') {
-        const success = storeManifestRelationship(message.playlistUrl, message.variants);
-        port.postMessage({
-            type: 'manifestRelationshipStored',
-            success: success
         });
     }
     else if (message.type === 'getManifestRelationship') {

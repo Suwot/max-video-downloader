@@ -216,6 +216,9 @@ function broadcastVideoUpdate(tabId) {
     return processedVideos;
 }
 
+// Add a new temporary map to track standalone variants before we know if they belong to a master
+const pendingVariantsMap = new Map(); // key = tabId, value = Map<normalizedUrl, variantInfo>
+
 // Add video to tab's collection
 function addVideoToTab(tabId, videoInfo) {
     // Create array for tab if it doesn't exist
@@ -226,7 +229,30 @@ function addVideoToTab(tabId, videoInfo) {
     const tabVideos = videosPerTab.get(tabId);
     const normalizedUrl = normalizeUrl(videoInfo.url);
     
-    // Check if video already exists
+    // Special handling for variants - store in pending map first
+    if (videoInfo.isVariant && !videoInfo.masterUrl) {
+        // This looks like a variant that was detected standalone (not via a master)
+        // Store it in pending map for potential later processing
+        if (!pendingVariantsMap.has(tabId)) {
+            pendingVariantsMap.set(tabId, new Map());
+        }
+        
+        // Check if we already have this variant in pending map
+        const tabPendingVariants = pendingVariantsMap.get(tabId);
+        if (!tabPendingVariants.has(normalizedUrl)) {
+            logDebug(`Storing potential standalone variant in pending map: ${videoInfo.url}`);
+            tabPendingVariants.set(normalizedUrl, {
+                ...videoInfo,
+                timestamp: Date.now(),
+                detectionTimestamp: Date.now()
+            });
+        }
+        
+        // Don't add to main videos collection yet
+        return;
+    }
+    
+    // Check if video already exists in main collection
     const existingIndex = tabVideos.findIndex(v => normalizeUrl(v.url) === normalizedUrl);
     
     let video; // The video object to work with
@@ -349,35 +375,61 @@ async function enrichWithPlaylistInfo(video, tabId) {
                 // Log variants info for debugging
                 const currentVariantsCount = videos[index].variants?.length || 0;
                 
-                // If this is a master playlist with variants, broadcast update 
-                if (processedVideo.isMasterPlaylist) {
-                    if (currentVariantsCount > 0) {
-                        logDebug(`Found master playlist with ${currentVariantsCount} variants (was ${previousVariantsCount})`);
+                // If this is a master playlist with variants, handle variant deduplication
+                if (processedVideo.isMasterPlaylist && processedVideo.variants && processedVideo.variants.length > 0) {
+                    logDebug(`Found master playlist with ${currentVariantsCount} variants (was ${previousVariantsCount})`);
+                    
+                    // Get the pending variants map for this tab
+                    const pendingVariants = pendingVariantsMap.get(tabId) || new Map();
+                    
+                    // Instead of adding variants directly, store their relation to this master
+                    // in the pending map. This way they can all be processed in one place.
+                    processedVideo.variants.forEach(variant => {
+                        const variantNormalizedUrl = normalizeUrl(variant.url);
                         
-                        // Important: Also add each variant as a standalone video that will get fully parsed
-                        if (processedVideo.variants && processedVideo.variants.length > 0) {
-                            logDebug(`Adding ${processedVideo.variants.length} variants as standalone videos for full parsing`);
-                            
-                            // Add each variant to the list so it gets processed independently
-                            processedVideo.variants.forEach(variant => {
-                                // Add the variant as a new video in this tab
-                                addVideoToTab(tabId, {
-                                    url: variant.url,
-                                    type: video.type,
-                                    source: 'variantExtraction',
-                                    isVariant: true,
-                                    masterUrl: video.url,
-                                    isMasterPlaylist: false,
-                                    isFullyParsed: false, // Will trigger full parsing
-                                    needsMetadata: true
-                                });
+                        // If this variant already exists in pending map, update it with master info
+                        if (pendingVariants.has(variantNormalizedUrl)) {
+                            const existingVariant = pendingVariants.get(variantNormalizedUrl);
+                            pendingVariants.set(variantNormalizedUrl, {
+                                ...existingVariant,
+                                ...variant,
+                                isVariant: true,
+                                masterUrl: video.url, 
+                                isMasterPlaylist: false,
+                                // Set a flag to indicate this variant has a known master
+                                hasKnownMaster: true
                             });
+                            logDebug(`Updated pending variant with master info: ${variant.url}`);
+                        } else {
+                            // Add new entry to pending map
+                            pendingVariants.set(variantNormalizedUrl, {
+                                ...variant,
+                                url: variant.url,
+                                type: video.type,
+                                source: 'variantExtraction',
+                                isVariant: true,
+                                masterUrl: video.url,
+                                isMasterPlaylist: false,
+                                isFullyParsed: false,
+                                needsMetadata: true,
+                                hasKnownMaster: true, 
+                                timestamp: Date.now(),
+                                detectionTimestamp: Date.now()
+                            });
+                            logDebug(`Added new variant to pending map: ${variant.url}`);
                         }
-                        
-                        broadcastVideoUpdate(tabId);
-                    } else {
-                        logDebug(`⚠️ Master playlist has no variants: ${videos[index].url}`);
-                    }
+                    });
+                    
+                    // Update the pending variants map
+                    pendingVariantsMap.set(tabId, pendingVariants);
+                    
+                    // Trigger processing of pending variants sooner since we found new ones
+                    schedulePendingVariantsProcessing(tabId);
+                    
+                    // Broadcast update with the new information about the master
+                    broadcastVideoUpdate(tabId);
+                } else if (currentVariantsCount === 0) {
+                    logDebug(`⚠️ Master playlist has no variants: ${videos[index].url}`);
                 }
             }
         }
@@ -700,33 +752,6 @@ function notifyVideoUpdated(tabId, url, updatedVideo) {
     }
 }
 
-/**
- * Notify any open popup about a newly generated preview
- */
-function notifyPreviewReady(tabId, videoUrl, previewUrl, videoInfo) {
-    try {
-        // Check if a popup is open for this tab
-        const port = getActivePopupPortForTab(tabId);
-        
-        if (port) {
-            logDebug(`Notifying popup for tab ${tabId} about new preview for ${videoUrl}`);
-            
-            try {
-                port.postMessage({
-                    type: 'previewReady',
-                    videoUrl: videoUrl,
-                    previewUrl: previewUrl,
-                    videoId: videoInfo.id || videoUrl
-                });
-            } catch (error) {
-                logDebug(`Error sending preview notification: ${error.message}`);
-            }
-        }
-    } catch (error) {
-        logDebug(`Error in notifyPreviewReady: ${error.message}`);
-    }
-}
-
 // Get stream qualities
 async function getStreamQualities(url) {
     try {
@@ -786,52 +811,46 @@ async function fetchManifestContent(url) {
     }
 }
 
-// Store manifest relationship - for compatibility
-function storeManifestRelationship(playlistUrl, variants) {
-    // Find all videos that match this playlist
-    for (const [tabId, videos] of videosPerTab.entries()) {
-        const playlistIndex = videos.findIndex(v => normalizeUrl(v.url) === normalizeUrl(playlistUrl));
-        
-        if (playlistIndex !== -1) {
-            // Update the video with variants
-            videos[playlistIndex].variants = variants;
-            videos[playlistIndex].isMasterPlaylist = true;
-            
-            // Also update any existing variants to point to their master
-            for (const variant of variants) {
-                const variantIndex = videos.findIndex(v => normalizeUrl(v.url) === normalizeUrl(variant.url));
-                if (variantIndex !== -1) {
-                    videos[variantIndex].isMasterPlaylist = false;
-                    videos[variantIndex].isVariant = true;
-                    videos[variantIndex].masterPlaylistUrl = playlistUrl;
-                    
-                    // Mark variant for full parsing to ensure complete metadata
-                    videos[variantIndex].isFullyParsed = false;
-                    videos[variantIndex].needsMetadata = true;
-                    videos[variantIndex].needsFullParsing = true;
-                } else {
-                    // Create the variant if it doesn't exist yet
-                    // This ensures all variants are added individually with full parsing flags
-                    const newVariant = {
-                        ...variant,
-                        isVariant: true,
-                        masterPlaylistUrl: playlistUrl,
-                        isFullyParsed: false,
-                        needsMetadata: true,
-                        needsFullParsing: true,
-                        tabId
-                    };
-                    videos.push(newVariant);
-                }
-            }
-            
-            // Broadcast update
-            broadcastVideoUpdate(tabId);
-        }
-    }
+// // Store manifest relationship - for compatibility
+// function storeManifestRelationship(playlistUrl, variants) {
+//     // Since manifests are typically found in a single tab context,
+//     // we'll simplify by only updating the first matching tab
     
-    return true;
-}
+//     for (const [tabId, videos] of videosPerTab.entries()) {
+//         const playlistIndex = videos.findIndex(v => normalizeUrl(v.url) === normalizeUrl(playlistUrl));
+        
+//         if (playlistIndex !== -1) {
+//             // Found the playlist in this tab, update it
+//             videos[playlistIndex].variants = variants;
+//             videos[playlistIndex].isMasterPlaylist = true;
+            
+//             // Add any variants that don't already exist in this tab
+//             for (const variant of variants) {
+//                 const variantIndex = videos.findIndex(v => normalizeUrl(v.url) === normalizeUrl(variant.url));
+                
+//                 if (variantIndex === -1) {
+//                     // Only add new variants, don't duplicate
+//                     videos.push({
+//                         ...variant,
+//                         url: variant.url,
+//                         isVariant: true,
+//                         masterPlaylistUrl: playlistUrl,
+//                         isFullyParsed: false,
+//                         needsMetadata: true,
+//                         needsFullParsing: true
+//                     });
+//                 }
+//             }
+            
+//             // Update UI and return after processing the first matching tab
+//             broadcastVideoUpdate(tabId);
+//             return true;
+//         }
+//     }
+    
+//     // No matching playlist found in any tab
+//     return false;
+// }
 
 // Get manifest relationship - for compatibility
 function getManifestRelationship(variantUrl) {
@@ -870,6 +889,19 @@ function getManifestRelationship(variantUrl) {
 // Clean up for tab
 function cleanupForTab(tabId) {
     logDebug('Tab removed:', tabId);
+    
+    // Clear any pending variants timer
+    if (pendingVariantsTimers.has(tabId)) {
+        clearTimeout(pendingVariantsTimers.get(tabId));
+        pendingVariantsTimers.delete(tabId);
+    }
+    
+    // Clear pending variants
+    if (pendingVariantsMap.has(tabId)) {
+        pendingVariantsMap.delete(tabId);
+    }
+    
+    // Clear videos
     if (videosPerTab.has(tabId)) {
         logDebug('Cleaning up videos for tab:', tabId);
         videosPerTab.delete(tabId);
@@ -881,6 +913,9 @@ function cleanupForTab(tabId) {
  */
 function notifyNewVideoDetected(tabId) {
     try {
+        // Schedule processing of pending variants
+        schedulePendingVariantsProcessing(tabId);
+        
         // Check if a popup is open for this tab
         const port = getActivePopupPortForTab(tabId);
         
@@ -901,6 +936,62 @@ function notifyNewVideoDetected(tabId) {
     }
 }
 
+// Set up a timer to process pending variants after page activity settles
+// This will run when no new videos are detected for a period of time
+let pendingVariantsTimers = new Map(); // key = tabId, value = timer ID
+
+function schedulePendingVariantsProcessing(tabId) {
+    // Clear any existing timer for this tab
+    if (pendingVariantsTimers.has(tabId)) {
+        clearTimeout(pendingVariantsTimers.get(tabId));
+    }
+    
+    // Set a new timer
+    const timerId = setTimeout(() => {
+        processPendingVariants(tabId);
+        pendingVariantsTimers.delete(tabId);
+    }, 2000); // Wait 2 seconds after activity stops
+    
+    pendingVariantsTimers.set(tabId, timerId);
+}
+
+// Add a function to process pending variants after a certain idle time
+function processPendingVariants(tabId) {
+    if (!pendingVariantsMap.has(tabId)) {
+        return;
+    }
+    
+    const pendingVariants = pendingVariantsMap.get(tabId);
+    if (pendingVariants.size === 0) {
+        return;
+    }
+    
+    logDebug(`Processing ${pendingVariants.size} pending variants for tab ${tabId}`);
+    
+    // Add all variants to the main collection
+    for (const [url, variantInfo] of pendingVariants.entries()) {
+        // Check if this is a variant with a known master or a standalone variant
+        if (variantInfo.hasKnownMaster) {
+            logDebug(`Adding variant with known master to main collection: ${variantInfo.url}`);
+        } else {
+            logDebug(`Adding standalone variant to main collection: ${variantInfo.url}`);
+        }
+        
+        // Add to main videos collection with appropriate flags
+        addVideoToTab(tabId, {
+            ...variantInfo,
+            // Only mark as standalone if it doesn't have a known master
+            isStandaloneVariant: !variantInfo.hasKnownMaster
+        });
+    }
+    
+    // Clear the pending variants map for this tab
+    pendingVariants.clear();
+    
+    // Broadcast update with the new variants
+    broadcastVideoUpdate(tabId);
+}
+
 // Set up event listeners to clear videos when tabs are closed or navigated
 chrome.tabs.onRemoved.addListener((tabId) => {
     cleanupForTab(tabId);
@@ -913,38 +1004,6 @@ chrome.webNavigation.onCommitted.addListener((details) => {
         cleanupForTab(details.tabId);
     }
 });
-
-/**
- * Notify any open popup about updated metadata for a video
- * @param {number} tabId - Tab ID
- * @param {string} url - Video URL
- * @param {Object} mediaInfo - Updated media information
- */
-function notifyMetadataUpdate(tabId, url, mediaInfo) {
-    try {
-        // Check if a popup is open for this tab
-        const port = getActivePopupPortForTab(tabId);
-        
-        if (port) {
-            logDebug(`Notifying popup for tab ${tabId} about metadata update for ${url}`);
-            
-            try {
-                port.postMessage({
-                    type: 'metadataUpdate',
-                    url: url,
-                    mediaInfo: mediaInfo
-                });
-            } catch (error) {
-                logDebug(`Error sending metadata update: ${error.message}`);
-            }
-        } else {
-            // No popup is open for this tab, which is normal
-            logDebug(`No active popup for tab ${tabId}, metadata update will be shown when popup opens`);
-        }
-    } catch (error) {
-        logDebug(`Error in notifyMetadataUpdate: ${error.message}`);
-    }
-}
 
 // Get stream metadata for a URL
 async function getStreamMetadata(url) {
@@ -1033,7 +1092,6 @@ export {
     cleanupForTab,
     normalizeUrl,
     fetchManifestContent,
-    storeManifestRelationship,
     getManifestRelationship,
     getStreamMetadata,
     clearVideoCache
