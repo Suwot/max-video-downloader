@@ -838,9 +838,6 @@ export function updateVideoElement(url, updatedVideo, isMetadataOnly = false) {
                     if (regenerateButton) regenerateButton.classList.add('hidden');
                 };
                 previewImage.src = updatedVideo.previewUrl;
-                
-                // Cache the preview (use local function instead of import)
-                cachePreview(url, updatedVideo.previewUrl);
             }
         }
     }

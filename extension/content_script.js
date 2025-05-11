@@ -921,13 +921,13 @@ function setupEnhancedDetection() {
 
 // Extract video information from a video element
 function extractVideoInfo(videoElement) {
-    let src = videoElement.src || '';
+    let src = videoElement.src || null;
     
     // If no src attribute, check for source elements
     if (!src) {
         const source = videoElement.querySelector('source');
         if (source) {
-            src = source.src || '';
+            src = source.src || null;
         }
     }
     
