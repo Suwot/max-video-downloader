@@ -28,6 +28,57 @@ const allDetectedVideos = new Map();
 // Expose allDetectedVideos for debugging
 globalThis.allDetectedVideosInternal = allDetectedVideos;
 
+/**
+ * Add detected video to the central tracking map
+ * This is the first step in the video processing pipeline
+ * @param {number} tabId - The tab ID where the video was detected
+ * @param {Object} videoInfo - Information about the detected video
+ * @returns {boolean} - True if this is a new video, false if it's a duplicate
+ */
+function addDetectedVideo(tabId, videoInfo) {
+    // Normalize URL for deduplication
+    const normalizedUrl = normalizeUrl(videoInfo.url);
+    
+    // Initialize tab's video collection if it doesn't exist
+    if (!allDetectedVideos.has(tabId)) {
+        allDetectedVideos.set(tabId, new Map());
+    }
+    
+    // Get the map for this specific tab
+    const tabDetectedVideos = allDetectedVideos.get(tabId);
+    
+    // Skip if already in this tab's collection
+    if (tabDetectedVideos.has(normalizedUrl)) {
+        return false;
+    }
+    
+    // Add to tab's collection with timestamp
+    tabDetectedVideos.set(normalizedUrl, {
+        ...videoInfo,
+        normalizedUrl,
+        tabId, // Store the tab ID for reference
+        timestamp: Date.now(),
+        detectionTimestamp: Date.now()
+    });
+    
+    logDebug(`Added new video to detection map: ${videoInfo.url} (type: ${videoInfo.type})`);
+    
+    // Now process based on video type
+    if (videoInfo.type === 'direct' || videoInfo.url.startsWith('blob:')) {
+        // Direct videos and blobs can go straight to addVideoToTab
+        addVideoToTab(tabId, videoInfo);
+    } else if (videoInfo.type === 'hls' || videoInfo.type === 'dash') {
+        // HLS and DASH need further processing to determine subtypes
+        // This will be implemented in the next step, for now just add to addVideoToTab
+        addVideoToTab(tabId, videoInfo);
+    } else {
+        // Unknown types also go straight to addVideoToTab
+        addVideoToTab(tabId, videoInfo);
+    }
+    
+    return true;
+}
+
 // Temporary processing trackers (not for storage)
 const processingRequests = {
   previews: new Set(), // Track URLs currently being processed for previews
@@ -1168,6 +1219,7 @@ function getAllDetectedVideos(tabId) {
 }
 
 export {
+    addDetectedVideo,
     addVideoToTab,
     broadcastVideoUpdate,
     getStreamQualities,

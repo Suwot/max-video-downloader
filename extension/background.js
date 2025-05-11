@@ -18,7 +18,7 @@
 // background.js - Service worker for the extension
 
 // Import our modularized services
-import { addVideoToTab, getAllDetectedVideos } from './background/services/video-manager.js';
+import { addDetectedVideo, getAllDetectedVideos } from './background/services/video-manager.js';
 import { initTabTracking } from './background/services/tab-tracker.js';
 import { setupDownloadPort } from './background/services/download-manager.js';
 import { setupPopupPort } from './background/services/popup-ports.js';
@@ -197,7 +197,7 @@ chrome.webRequest.onBeforeRequest.addListener(
             
             // Add video if it passed all the filtering
             if (isVideoUrl) {
-                addVideoToTab(details.tabId, {
+                addDetectedVideo(details.tabId, {
                     url: url,
                     type: type,
                     source: 'webRequest'
@@ -222,7 +222,7 @@ chrome.webRequest.onBeforeRequest.addListener(
                 }
                 
                 // Add video
-                addVideoToTab(details.tabId, {
+                addDetectedVideo(details.tabId, {
                     url: url,
                     type: type,
                     source: 'webRequest'
@@ -244,7 +244,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         
         // Process each video through the same pipeline
         request.videos.forEach(video => {
-            addVideoToTab(tabId, {
+            addDetectedVideo(tabId, {
                 url: video.url,
                 type: video.type,
                 source: 'contentScript',
@@ -262,7 +262,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === 'addVideo') {
         const tabId = sender.tab?.id;
         if (tabId && tabId > 0) {
-            addVideoToTab(tabId, request);
+            addDetectedVideo(tabId, request);
         }
         return false;
     }
