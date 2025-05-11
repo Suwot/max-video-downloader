@@ -497,7 +497,7 @@ async function enrichWithPlaylistInfo(video, tabId) {
                         return {
                             ...variant,
                             type: video.type,
-                            source: 'js-parser',
+                            source: 'simple-js-parser',
                             isVariant: true,
                             masterUrl: video.url,
                             hasKnownMaster: true,
