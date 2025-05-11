@@ -26,6 +26,12 @@ export function validateAndFilterVideos(videos) {
         // Validate that we have a URL
         if (!video || !video.url) return false;
         
+        // Filter out variants that have a known master - they should only appear nested in their master playlists
+        if (video.isVariant && video.hasKnownMaster) {
+            logDebug(`Filtering out variant with known master: ${video.url}`);
+            return false;
+        }
+        
         // If this video was found in a query parameter, trust that it's already
         // been validated properly - don't apply additional filtering
         if (video.foundFromQueryParam) {

@@ -1,6 +1,13 @@
 /**
  * Video Manager Service
  * Manages video detection, metadata, and tracking across tabs
+ * 
+ * VARIANT HANDLING APPROACH:
+ * - Master playlists store their variants as nested objects within their `variants` array
+ * - Variants from a master playlist are NOT added as standalone entries in the main collection
+ * - Variants are only visible in the UI when viewing their parent master playlist
+ * - When a variant needs metadata, we update it both as a standalone entity (if it exists)
+ *   and within its master playlist
  */
 
 // Add static imports at the top
@@ -123,37 +130,18 @@ function processVideosForBroadcast(videos) {
     
     // Second pass: process each variant to ensure it has full metadata
     const processedWithVariants = validatedVideos.map(video => {
-        // If this is a master playlist with variants, ensure each variant has full metadata
+        // If this is a master playlist with variants, enhance each variant with available info
         if (video.isMasterPlaylist && video.variants && video.variants.length > 0) {
             const processedVariants = video.variants.map(variant => {
-                // Find if this variant exists directly in the videos list
-                const fullVariant = validatedVideos.find(v => 
-                    v.isVariant && normalizeUrl(v.url) === normalizeUrl(variant.url) && v.isFullyParsed);
-                
-                if (fullVariant) {
-                    // Use the fully parsed variant data instead of the limited variant data
-                    logDebug(`Using fully parsed data for variant: ${variant.url}`);
-                    
-                    // Deep clone the mediaInfo to ensure all properties are transmitted
-                    const clonedMediaInfo = fullVariant.mediaInfo ? 
-                        JSON.parse(JSON.stringify(fullVariant.mediaInfo)) : null;
-                    
-                    // Count the mediaInfo fields for verification
-                    const mediaInfoFieldCount = clonedMediaInfo ? Object.keys(clonedMediaInfo).length : 0;
-                    logDebug(`Variant ${variant.url} has ${mediaInfoFieldCount} mediaInfo fields after clone`);
-                    
-                    // Merge the variant data with the full variant data
-                    return {
-                        ...variant,
-                        ...fullVariant,
-                        mediaInfo: clonedMediaInfo,
-                        isFullyParsed: true,
-                        // Add this flag to indicate it's using complete data
-                        hasCompleteMetadata: true
-                    };
-                }
-                
-                return variant;
+                // The variant info is already stored in the master playlist
+                // No need to look for standalone variants anymore
+                return {
+                    ...variant,
+                    // Add any missing properties needed for UI display
+                    isVariant: true,
+                    hasKnownMaster: true,
+                    mediaInfo: variant.mediaInfo || null
+                };
             });
             
             // Replace the variants array with the processed variants
@@ -300,9 +288,9 @@ function addVideoToTab(tabId, videoInfo) {
     
     const tabVideos = videosPerTab.get(tabId);
     
-    // Handle variants directly - no special handling required
-    // All variants are now added directly to the main collection
-    // regardless of whether they came from a master playlist or were detected standalone
+    // Variant handling approach:
+    // - Variants detected via a master are stored only as nested objects in their master playlist
+    // - Standalone variants (not detected through a master) are still added directly to the collection
     
     // Check if video already exists in main collection
     const existingIndex = tabVideos.findIndex(v => normalizeUrl(v.url) === normalizedUrl);
@@ -376,15 +364,19 @@ function addVideoToTab(tabId, videoInfo) {
             enrichWithPlaylistInfo(video, tabId);
         }
         
-        // Enrich with metadata if needed, only if not fully parsed already
-        if (!video.isFullyParsed && !video.mediaInfo && !processingRequests.metadata.has(normalizedUrl)) {
-            enrichWithMetadata(video, tabId);
-        }
-        
-        // Generate preview if needed
-        if (!video.previewUrl && !video.poster && !processingRequests.previews.has(normalizedUrl)) {
-            enrichWithPreview(video, tabId);
-        }
+    // Enrich with metadata if needed, only if not fully parsed already
+    if (!video.isFullyParsed && !video.mediaInfo && !processingRequests.metadata.has(normalizedUrl)) {
+        enrichWithMetadata(video, tabId);
+    }
+    
+    // Generate preview if needed
+    if (!video.previewUrl && !video.poster && !processingRequests.previews.has(normalizedUrl)) {
+        enrichWithPreview(video, tabId);
+    }
+    
+    // Note: At this point, even variants from master playlists are still added to the main collection
+    // But they will be filtered out at display time in getVideosForTab() if they have a known master
+    // This ensures we can still work with them in the background but they don't appear as duplicates in the UI
     }
     
     // Broadcast update
@@ -435,61 +427,28 @@ async function enrichWithPlaylistInfo(video, tabId) {
                 // Log variants info for debugging
                 const currentVariantsCount = videos[index].variants?.length || 0;
                 
-                // If this is a master playlist with variants, handle variant deduplication
+                // If this is a master playlist with variants, just log the information
                 if (processedVideo.isMasterPlaylist && processedVideo.variants && processedVideo.variants.length > 0) {
                     logDebug(`Found master playlist with ${currentVariantsCount} variants (was ${previousVariantsCount})`);
                     
-                    // Add variants directly to the main collection
-                    processedVideo.variants.forEach(variant => {
-                        // Add each variant directly to the videos collection
-                        const variantNormalizedUrl = normalizeUrl(variant.url);
-                        
-                        // Only add if it doesn't already exist
-                        const existingVariantIndex = videos.findIndex(v => normalizeUrl(v.url) === variantNormalizedUrl);
-                        
-                        if (existingVariantIndex === -1) {
-                            // Add as a new video entry
-                            const newVariant = {
-                                ...variant,
-                                url: variant.url,
-                                type: video.type,
-                                source: 'variantExtraction',
-                                isVariant: true,
-                                masterUrl: video.url,
-                                isMasterPlaylist: false,
-                                isFullyParsed: false,
-                                needsMetadata: true,
-                                hasKnownMaster: true, 
-                                timestamp: Date.now(),
-                                detectionTimestamp: Date.now()
-                            };
-                            
-                            videos.push(newVariant);
-                            logDebug(`Added variant directly to videos collection: ${variant.url}`);
-                            
-                            // Also add to the allDetectedVideos map
-                            const tabMap = allDetectedVideos.get(tabId);
-                            if (tabMap && !tabMap.has(variantNormalizedUrl)) {
-                                tabMap.set(variantNormalizedUrl, {
-                                    ...newVariant,
-                                    normalizedUrl: variantNormalizedUrl
-                                });
-                            }
-                        } else {
-                            // Update the existing variant with information from the master
-                            videos[existingVariantIndex] = {
-                                ...videos[existingVariantIndex],
-                                ...variant,
-                                isVariant: true,
-                                masterUrl: video.url,
-                                isMasterPlaylist: false,
-                                hasKnownMaster: true
-                            };
-                            logDebug(`Updated existing variant with master info: ${variant.url}`);
-                        }
+                    // Enhanced variants with additional information
+                    const enhancedVariants = processedVideo.variants.map(variant => {
+                        return {
+                            ...variant,
+                            type: video.type,
+                            source: 'variantExtraction',
+                            isVariant: true,
+                            masterUrl: video.url,
+                            hasKnownMaster: true,
+                            timestamp: Date.now(),
+                        };
                     });
                     
-                    // Broadcast update with the new information about the master and variants
+                    // Update the master playlist's variants with the enhanced variants
+                    videos[index].variants = enhancedVariants;
+                    logDebug(`Updated master playlist with ${enhancedVariants.length} enhanced variants`);
+                    
+                    // Broadcast update with the new information about the master
                     broadcastVideoUpdate(tabId);
                 } else if (currentVariantsCount === 0) {
                     logDebug(`⚠️ Master playlist has no variants: ${videos[index].url}`);
@@ -569,13 +528,13 @@ async function enrichWithMetadata(video, tabId) {
             const masterVideo = videos.find(v => normalizeUrl(v.url) === normalizeUrl(video.masterUrl));
             
             if (masterVideo && masterVideo.variants) {
-                const matchingVariant = masterVideo.variants.find(
+                const matchingVariantIndex = masterVideo.variants.findIndex(
                     v => normalizeUrl(v.url) === normalizedUrl
                 );
                 
-                if (matchingVariant) {
+                if (matchingVariantIndex !== -1) {
                     // Get the variant's base info from the master, but always continue to full metadata fetch
-                    logDebug(`Variant ${video.url} found in master ${video.masterUrl}`);
+                    logDebug(`Variant ${video.url} found in master ${video.masterUrl} at index ${matchingVariantIndex}`);
                     
                     // Extract basic info from the matching variant in the master playlist
                     const variantBaseInfo = {
@@ -585,12 +544,20 @@ async function enrichWithMetadata(video, tabId) {
                         isVariant: true,
                         hasVideo: true,
                         hasAudio: true,
-                        width: matchingVariant.width,
-                        height: matchingVariant.height,
-                        fps: matchingVariant.fps || matchingVariant.frameRate,
-                        videoBitrate: matchingVariant.bandwidth,
-                        totalBitrate: matchingVariant.bandwidth,
-                        estimatedSize: estimateFileSize(matchingVariant.bandwidth, video.duration)
+                        width: masterVideo.variants[matchingVariantIndex].width,
+                        height: masterVideo.variants[matchingVariantIndex].height,
+                        fps: masterVideo.variants[matchingVariantIndex].fps || masterVideo.variants[matchingVariantIndex].frameRate,
+                        videoBitrate: masterVideo.variants[matchingVariantIndex].bandwidth,
+                        totalBitrate: masterVideo.variants[matchingVariantIndex].bandwidth,
+                        estimatedSize: estimateFileSize(masterVideo.variants[matchingVariantIndex].bandwidth, video.duration)
+                    };
+                    
+                    // Update the variant in the master playlist with this metadata
+                    masterVideo.variants[matchingVariantIndex] = {
+                        ...masterVideo.variants[matchingVariantIndex],
+                        ...variantBaseInfo,
+                        mediaInfo: variantBaseInfo,
+                        isFullyParsed: true
                     };
                     
                     // Store this info, but don't return - continue to get full metadata below
@@ -701,6 +668,29 @@ function applyMetadataToVideo(tabId, normalizedUrl, mediaInfo) {
         // Special handling for variants - ensure they have proper flag set
         if (videos[index].isVariant) {
             videos[index].isVariantFullyProcessed = true;
+            
+            // If this is a variant with a known master, update the variant in the master playlist too
+            if (videos[index].hasKnownMaster && videos[index].masterUrl) {
+                const masterVideo = videos.find(v => normalizeUrl(v.url) === normalizeUrl(videos[index].masterUrl));
+                if (masterVideo && masterVideo.variants) {
+                    const variantIndex = masterVideo.variants.findIndex(
+                        v => normalizeUrl(v.url) === normalizedUrl
+                    );
+                    
+                    if (variantIndex !== -1) {
+                        logDebug(`Updating variant in master playlist: ${normalizedUrl}`);
+                        // Update the variant in the master playlist with the new metadata
+                        masterVideo.variants[variantIndex] = {
+                            ...masterVideo.variants[variantIndex],
+                            mediaInfo: mergedMediaInfo,
+                            isFullyParsed: true,
+                            isVariantFullyProcessed: true,
+                            resolution: videos[index].resolution,
+                            fileSize: videos[index].fileSize
+                        };
+                    }
+                }
+            }
         }
         
         // Use the unified notification method instead
@@ -863,6 +853,11 @@ function notifyVideoUpdated(tabId, url, updatedVideo) {
                 if (updatedVideo.mediaInfo) {
                     logDebug(`Variant mediaInfo fields: ${Object.keys(updatedVideo.mediaInfo).join(', ')}`);
                 }
+                
+                // Check if we need to update this variant in its master playlist
+                if (updatedVideo.masterUrl && updatedVideo.hasKnownMaster) {
+                    logDebug(`This variant belongs to master: ${updatedVideo.masterUrl}`);
+                }
             }
             
             // Make a clean copy of the video object for transmission
@@ -917,7 +912,13 @@ function getVideosForTab(tabId) {
         return [];
     }
     
-    return processVideosForBroadcast(videosPerTab.get(tabId));
+    // Filter out variants with known masters before processing
+    const videos = videosPerTab.get(tabId).filter(video => {
+        // Filter out variants that have a known master - they should only appear nested in their master playlists
+        return !(video.isVariant && video.hasKnownMaster);
+    });
+    
+    return processVideosForBroadcast(videos);
 }
 
 // Get playlists for tab - compatibility function
@@ -926,10 +927,10 @@ function getPlaylistsForTab(tabId) {
         return [];
     }
     
-    // Extract playlists from the videos array
+    // Extract playlists from the videos array - only include master playlists
     const videos = videosPerTab.get(tabId);
     const playlists = videos
-        .filter(v => v.type === 'hls' && v.url.includes('.m3u8') && !v.isVariant)
+        .filter(v => (v.type === 'hls' || v.type === 'dash') && v.isMasterPlaylist)
         .map(v => normalizeUrl(v.url));
     
     return Array.from(new Set(playlists));
@@ -953,10 +954,11 @@ async function fetchManifestContent(url) {
     }
 }
 
-// // Store manifest relationship - for compatibility
+// // Store manifest relationship - LEGACY APPROACH (no longer used)
 // function storeManifestRelationship(playlistUrl, variants) {
-//     // Since manifests are typically found in a single tab context,
-//     // we'll simplify by only updating the first matching tab
+//     // This function demonstrates the old approach where variants were added directly
+//     // to the main collection. In the new approach, variants are only stored within their
+//     // master playlist objects and are not added as standalone entries.
     
 //     for (const [tabId, videos] of videosPerTab.entries()) {
 //         const playlistIndex = videos.findIndex(v => normalizeUrl(v.url) === normalizeUrl(playlistUrl));
@@ -966,29 +968,16 @@ async function fetchManifestContent(url) {
 //             videos[playlistIndex].variants = variants;
 //             videos[playlistIndex].isMasterPlaylist = true;
             
-//             // Add any variants that don't already exist in this tab
-//             for (const variant of variants) {
-//                 const variantIndex = videos.findIndex(v => normalizeUrl(v.url) === normalizeUrl(variant.url));
-                
-//                 if (variantIndex === -1) {
-//                     // Only add new variants, don't duplicate
-//                     videos.push({
-//                         ...variant,
-//                         url: variant.url,
-//                         isVariant: true,
-//                         masterPlaylistUrl: playlistUrl,
-//                         isFullyParsed: false,
-//                         needsMetadata: true,
-//                         needsFullParsing: true
-//                     });
-//                 }
-//             }
+//             // OLD APPROACH (removed): Adding variants directly to the main collection
+//             // In the new system, variants are only stored within their master playlists
+//             // and filtered out of the main collection if they have a known master
             
 //             // Update UI and return after processing the first matching tab
 //             broadcastVideoUpdate(tabId);
 //             return true;
 //         }
 //     }
+    
     
 //     // No matching playlist found in any tab
 //     return false;
