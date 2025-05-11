@@ -63,9 +63,6 @@ export function groupVideosByType(videos) {
     return groups;
 }
 
-// Local cache for previews during popup session
-const previewCache = new Map();
-
 /**
  * Generate a preview image for a video
  * @param {string} url - Video URL
@@ -129,9 +126,6 @@ export function generatePreview(url, loader, previewImage, regenerateButton, for
                                 previewImage.src = response.previewUrl;
                             }
                             
-                            // Cache the preview URL locally for this session
-                            previewCache.set(url, response.previewUrl);
-                            
                             resolve(response);
                         } else {
                             // Preview generation failed
@@ -156,28 +150,6 @@ export function generatePreview(url, loader, previewImage, regenerateButton, for
             });
         });
 }
-
-/**
- * Get a cached preview URL for a video
- * @param {string} url - Video URL
- * @returns {string|null} Preview URL if cached, null otherwise
- */
-export function getCachedPreview(url) {
-    return previewCache.get(url) || null;
-}
-
-/**
- * Store a preview URL in the cache
- * @param {string} videoUrl - Video URL
- * @param {string} previewUrl - Preview URL
- */
-export function cachePreview(videoUrl, previewUrl) {
-    previewCache.set(videoUrl, previewUrl);
-}
-
-// Provide aliases for backward compatibility
-export const addPoster = cachePreview;
-export const getPoster = getCachedPreview;
 
 /**
  * Get all video groups from the background
@@ -465,25 +437,12 @@ export function createVideoElement(video) {
     // Track if preview has been generated
     let previewGenerated = false;
     
-    // Use cached poster if available - use our new service
-    if (getPoster(video.url)) {
-        previewImage.onload = () => {
-            previewImage.classList.remove('placeholder');
-            previewImage.classList.add('loaded');
-            loader.style.display = 'none';
-        };
-        previewImage.src = getPoster(video.url);
-        previewGenerated = true;
-    }
     // If we already have a preview URL, use it
-    else if (video.previewUrl) {
+    if (video.previewUrl) {
         previewImage.onload = () => {
             previewImage.classList.remove('placeholder');
             previewImage.classList.add('loaded');
             loader.style.display = 'none';
-            
-            // Cache the poster using our new service
-            addPoster(video.url, video.previewUrl);
         };
         previewImage.src = video.previewUrl;
         previewGenerated = true;
@@ -494,9 +453,6 @@ export function createVideoElement(video) {
             previewImage.classList.remove('placeholder');
             previewImage.classList.add('loaded');
             loader.style.display = 'none';
-            
-            // Cache the poster using our new service
-            addPoster(video.url, video.poster);
         };
         previewImage.src = video.poster;
         previewGenerated = true;
