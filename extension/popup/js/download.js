@@ -15,7 +15,7 @@
 import { showError } from './utilities.js';
 import { debounce } from './utilities.js';
 import { showQualityDialog } from './ui.js';
-import { getStreamQualities } from './video-processor.js';
+import { getStreamQualities } from './video-renderer.js'; 
 import { getBackgroundPort } from './index.js';
 
 let downloadPort = null;
