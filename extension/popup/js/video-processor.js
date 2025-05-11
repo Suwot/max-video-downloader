@@ -8,96 +8,11 @@
  * - Manages video quality variants
  */
 
-// popup/js/video-processor.js
-
-// Import from video-state-service
-import { 
-    videoStateService
-} from './services/video-state-service.js';
 
 import { sendPortMessage } from './index.js';
 
 // Cache for stream metadata
 const metadataCache = new Map();
-
-/**
- * Check if two videos have the same HLS base directory
- * @param {Object} video1 - First video
- * @param {Object} video2 - Second video
- * @returns {boolean} True if videos share base directory
- */
-function shareHLSBaseDirectory(video1, video2) {
-    try {
-        const getBaseDirectory = (url) => {
-            const parts = url.split('/');
-            parts.pop();
-            return parts.join('/');
-        };
-        
-        const dir1 = getBaseDirectory(video1.url);
-        const dir2 = getBaseDirectory(video2.url);
-        return dir1 === dir2;
-    } catch (e) {
-        console.error('Error checking HLS directory:', e);
-        return false;
-    }
-}
-
-/**
- * Get base URL (for grouping purposes)
- * @param {string} url - Full URL
- * @returns {string} Base URL
- */
-function getBaseUrl(url) {
-    try {
-        const urlObj = new URL(url);
-        return urlObj.origin + urlObj.pathname.split('/').slice(0, -1).join('/');
-    } catch (e) {
-        return url.split('/').slice(0, -1).join('/');
-    }
-}
-
-/**
- * Check if two videos should be grouped together
- * @param {Object} video1 - First video
- * @param {Object} video2 - Second video
- * @returns {boolean} True if videos should be grouped
- */
-export function shouldGroupVideos(video1, video2) {
-    // For HLS videos, use manifest relationships
-    if (video1.type === 'hls' && video2.type === 'hls') {
-        // Must be in same directory first
-        if (!shareHLSBaseDirectory(video1, video2)) {
-            return false;
-        }
-
-        // If one is a master playlist and has variants
-        if (video1.isMasterPlaylist && video1.variants?.some(v => v.url === video2.url)) {
-            return true;
-        }
-        if (video2.isMasterPlaylist && video2.variants?.some(v => v.url === video1.url)) {
-            return true;
-        }
-
-        // Both are variants - check if they're from same directory and have variant naming
-        if (!video1.isMasterPlaylist && !video2.isMasterPlaylist) {
-            const name1 = video1.url.split('/').pop();
-            const name2 = video2.url.split('/').pop();
-            if (name1.startsWith('video_') && name2.startsWith('video_')) {
-                return true;
-            }
-        }
-    }
-    
-    // For non-HLS videos, check base URL
-    const baseUrl1 = getBaseUrl(video1.url);
-    const baseUrl2 = getBaseUrl(video2.url);
-    
-    return (baseUrl1 === baseUrl2) && 
-           video1.resolution && video2.resolution && 
-           (video1.resolution.width !== video2.resolution.width || 
-            video1.resolution.height !== video2.resolution.height);
-}
 
 /**
  * Group videos by type for display
@@ -182,51 +97,6 @@ export function processStreamQualities(streamInfo) {
         }
         return bHeight - aHeight;
     });
-}
-
-/**
- * Process and cache stream metadata locally
- * @param {string} url - Stream URL
- * @param {Object} streamInfo - Stream information
- */
-export function processStreamMetadata(url, streamInfo) {
-    // Extract and normalize stream configuration
-    const config = {
-        format: streamInfo.container,
-        videoCodec: streamInfo.hasVideo ? {
-            name: streamInfo.videoCodec.name,
-            profile: streamInfo.videoCodec.profile,
-            level: streamInfo.videoCodec.level
-        } : null,
-        audioCodec: streamInfo.hasAudio ? {
-            name: streamInfo.audioCodec.name,
-            channels: streamInfo.audioCodec.channels,
-            sampleRate: streamInfo.audioCodec.sampleRate
-        } : null,
-        qualities: processStreamQualities(streamInfo)
-    };
-    
-    // Cache the processed metadata locally
-    metadataCache.set(url, config);
-    return config;
-}
-
-/**
- * Add stream metadata to local cache
- * @param {string} url - Video URL
- * @param {Object} metadata - Video metadata
- */
-export function addStreamMetadata(url, metadata) {
-    metadataCache.set(url, metadata);
-}
-
-/**
- * Get stream metadata from local cache
- * @param {string} url - Video URL
- * @returns {Object|undefined} Metadata if available
- */
-export function getStreamMetadata(url) {
-    return metadataCache.get(url);
 }
 
 /**
