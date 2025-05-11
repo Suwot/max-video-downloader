@@ -16,6 +16,7 @@ import nativeHostService from '../../js/native-host-service.js';
 import { validateAndFilterVideos } from '../../js/utilities/video-validator.js';
 import { processVideoRelationships } from '../../js/manifest-service.js';
 import { getActivePopupPortForTab } from './popup-ports.js';
+import { lightParseContent } from '../../js/utilities/simple-js-parser.js';
 
 // The primary data structure: Map<tabId, Array<VideoEntry>>
 // Each VideoEntry now contains all necessary information including metadata, preview, etc.
@@ -818,85 +819,6 @@ async function enrichWithPreview(video, tabId) {
     } finally {
         // Always remove from processing set when done
         processingRequests.previews.delete(normalizedUrl);
-    }
-}
-
-/**
- * Perform lightweight parsing of HLS/DASH content to determine its subtype
- * This fetches only the first 4KB to make a quick determination
- * @param {string} url - The URL to analyze
- * @param {string} type - The content type ('hls' or 'dash')
- * @returns {Promise<{isValid: boolean, subtype: string}>} - Analysis result
- */
-async function lightParseContent(url, type) {
-    const normalizedUrl = normalizeUrl(url);
-    
-    // Skip if already being processed
-    if (processingRequests.lightParsing.has(normalizedUrl)) {
-        return { isValid: true, subtype: 'processing' };
-    }
-    
-    // Mark as being processed
-    processingRequests.lightParsing.add(normalizedUrl);
-    
-    try {
-        // Get just the first 4KB of content to determine what it is
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 5000);  // 5 second timeout
-        
-        logDebug(`Light parsing ${url} to determine subtype`);
-        
-        const response = await fetch(url, {
-            signal: controller.signal,
-            headers: {
-                'Range': 'bytes=0-4095' // Request just the first 4KB
-            }
-        });
-        
-        clearTimeout(timeoutId);
-        
-        if (!response.ok) {
-            logDebug(`Failed to fetch ${url} for light parsing: ${response.status}`);
-            return { isValid: false, subtype: 'fetch-failed' };
-        }
-        
-        const content = await response.text();
-        
-        // Analyze the content based on type
-        if (type === 'hls') {
-            // Check if it's a master playlist (contains #EXT-X-STREAM-INF)
-            if (content.includes('#EXT-X-STREAM-INF')) {
-                return { isValid: true, subtype: 'hls-master' };
-            } 
-            // Check if it's a variant/media playlist (contains #EXTINF)
-            else if (content.includes('#EXTINF')) {
-                return { isValid: true, subtype: 'hls-variant' };
-            }
-            // Neither master nor variant markers found
-            return { isValid: false, subtype: 'not-a-video' };
-        } 
-        else if (type === 'dash') {
-            // Check for basic MPD structure
-            if (content.includes('<MPD') && (content.includes('</MPD') || 
-                content.includes('xmlns="urn:mpeg:dash:schema:mpd'))) {
-                
-                // Check if it contains AdaptationSet (indicates master)
-                if (content.includes('AdaptationSet')) {
-                    return { isValid: true, subtype: 'dash-master' };
-                } else {
-                    return { isValid: true, subtype: 'dash-variant' };
-                }
-            }
-            return { isValid: false, subtype: 'not-a-video' };
-        }
-        
-        return { isValid: false, subtype: 'unknown-type' };
-    } catch (error) {
-        logDebug(`Error during light parsing of ${url}: ${error.message}`);
-        return { isValid: false, subtype: 'parse-error' };
-    } finally {
-        // Clean up
-        processingRequests.lightParsing.delete(normalizedUrl);
     }
 }
 
