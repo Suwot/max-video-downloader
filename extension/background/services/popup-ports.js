@@ -4,7 +4,7 @@
  */
 
 // Add static imports at the top
-import { getVideosForTab, getPlaylistsForTab, getStreamQualities, 
+import { getVideosForTab, getStreamQualities, 
          fetchManifestContent, getManifestRelationship,
          getStreamMetadata, clearVideoCache } from './video-manager.js';
 import { getActiveDownloads, getDownloadDetails, startDownload } from './download-manager.js';
@@ -49,16 +49,6 @@ async function handlePortMessage(message, port, portId) {
         port.postMessage({
             action: 'videoListResponse',
             videos: videos
-        });
-    }
-    
-    // Handle stored playlists request
-    else if (message.action === 'getStoredPlaylists') {
-        const playlists = getPlaylistsForTab(message.tabId);
-            
-        port.postMessage({
-            action: 'storedPlaylistsResponse',
-            playlists: playlists
         });
     }
     

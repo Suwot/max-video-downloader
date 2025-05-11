@@ -991,20 +991,6 @@ function getVideosForTab(tabId) {
     return processVideosForBroadcast(videos);
 }
 
-// Get playlists for tab - compatibility function
-function getPlaylistsForTab(tabId) {
-    if (!videosPerTab.has(tabId)) {
-        return [];
-    }
-    
-    // Extract playlists from the videos array - only include master playlists
-    const videos = videosPerTab.get(tabId);
-    const playlists = videos
-        .filter(v => (v.type === 'hls' || v.type === 'dash') && v.isMasterPlaylist)
-        .map(v => normalizeUrl(v.url));
-    
-    return Array.from(new Set(playlists));
-}
 
 // Fetch manifest content
 async function fetchManifestContent(url) {
@@ -1245,7 +1231,6 @@ export {
     broadcastVideoUpdate,
     getStreamQualities,
     getVideosForTab,
-    getPlaylistsForTab,
     cleanupForTab,
     normalizeUrl,
     getAllDetectedVideos,
