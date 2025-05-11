@@ -268,6 +268,16 @@ function addVideoToTab(tabId, videoInfo) {
     // Normalize URL for deduplication - we'll need this for lookup
     const normalizedUrl = normalizeUrl(videoInfo.url);
     
+    // Get the video from the allDetectedVideos map if available
+    let videoToAdd = videoInfo;
+    const tabDetectedVideos = allDetectedVideos.get(tabId);
+    if (tabDetectedVideos && tabDetectedVideos.has(normalizedUrl)) {
+        // Use the enhanced video from the allDetectedVideos map
+        videoToAdd = tabDetectedVideos.get(normalizedUrl);
+    } else {
+        logDebug(`Warning: Video not found in allDetectedVideos map: ${videoInfo.url}`);
+    }
+    
     // If this is HLS or DASH, perform lightweight validation before adding to videosPerTab
     if ((videoInfo.type === 'hls' || videoInfo.type === 'dash') && !videoInfo.subtype) {
         // Don't block the main flow; perform validation asynchronously
