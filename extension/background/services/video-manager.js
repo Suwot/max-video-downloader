@@ -16,7 +16,7 @@ import nativeHostService from '../../js/native-host-service.js';
 import { validateAndFilterVideos } from '../../js/utilities/video-validator.js';
 import { processVideoRelationships } from '../../js/manifest-service.js';
 import { getActivePopupPortForTab } from './popup-ports.js';
-import { lightParseContent } from '../../js/utilities/simple-js-parser.js';
+import { lightParseContent, fullParseContent } from '../../js/utilities/simple-js-parser.js';
 
 // The primary data structure: Map<tabId, Array<VideoEntry>>
 // Each VideoEntry now contains all necessary information including metadata, preview, etc.
@@ -471,7 +471,69 @@ async function enrichWithPlaylistInfo(video, tabId) {
             }
         }
         
-        // Use the manifest service to process the video
+        // First, try using our fast JS-based parser for masters
+        if (video.isMasterPlaylist && (video.subtype === 'hls-master' || video.subtype === 'dash-master')) {
+            logDebug(`Using JS parser to extract variants from ${video.url} (${video.subtype})`);
+            
+            // Use our fast JS-based parser
+            const parseResult = await fullParseContent(video.url, video.subtype);
+            
+            if (parseResult.variants && parseResult.variants.length > 0) {
+                logDebug(`JS parser found ${parseResult.variants.length} variants in ${video.url}`);
+                
+                // Update video with the variants info
+                const normalizedUrl = normalizeUrl(video.url);
+                const videos = videosPerTab.get(tabId);
+                const index = videos.findIndex(v => normalizeUrl(v.url) === normalizedUrl);
+                
+                if (index !== -1) {
+                    // Update the video with duration if available
+                    if (parseResult.duration) {
+                        videos[index].duration = parseResult.duration;
+                    }
+                    
+                    // Enhanced variants with additional information
+                    const enhancedVariants = parseResult.variants.map(variant => {
+                        return {
+                            ...variant,
+                            type: video.type,
+                            source: 'js-parser',
+                            isVariant: true,
+                            masterUrl: video.url,
+                            hasKnownMaster: true,
+                            timestamp: Date.now(),
+                        };
+                    });
+                    
+                    // Update the master playlist's variants with the enhanced variants
+                    videos[index].variants = enhancedVariants;
+                    videos[index].parsedWithJsParser = true;
+                    logDebug(`Updated master playlist with ${enhancedVariants.length} variants from JS parser`);
+                    
+                    // Also update in allDetectedVideos map
+                    const tabMap = allDetectedVideos.get(tabId);
+                    if (tabMap && tabMap.has(normalizedUrl)) {
+                        const updatedEntry = {
+                            ...tabMap.get(normalizedUrl),
+                            variants: enhancedVariants,
+                            parsedWithJsParser: true,
+                            duration: parseResult.duration || tabMap.get(normalizedUrl).duration
+                        };
+                        tabMap.set(normalizedUrl, updatedEntry);
+                    }
+                    
+                    // Broadcast update with the new information about the master
+                    broadcastVideoUpdate(tabId);
+                    
+                    // If we successfully extracted variants, we can return early without using manifest service
+                    return;
+                }
+            } else {
+                logDebug(`JS parser couldn't extract variants from ${video.url}, falling back to manifest service`);
+            }
+        }
+        
+        // Fall back to the manifest service for more complex cases or if JS parser didn't find variants
         const processedVideo = await processVideoRelationships(video);
         
         if (processedVideo && processedVideo !== video) {
@@ -518,6 +580,16 @@ async function enrichWithPlaylistInfo(video, tabId) {
                     // Update the master playlist's variants with the enhanced variants
                     videos[index].variants = enhancedVariants;
                     logDebug(`Updated master playlist with ${enhancedVariants.length} enhanced variants`);
+                    
+                    // Also update in allDetectedVideos map
+                    const tabMap = allDetectedVideos.get(tabId);
+                    if (tabMap && tabMap.has(normalizedUrl)) {
+                        const updatedEntry = {
+                            ...tabMap.get(normalizedUrl),
+                            variants: enhancedVariants
+                        };
+                        tabMap.set(normalizedUrl, updatedEntry);
+                    }
                     
                     // Broadcast update with the new information about the master
                     broadcastVideoUpdate(tabId);
