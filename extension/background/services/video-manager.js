@@ -14,6 +14,9 @@ import { getActivePopupPortForTab } from './popup-ports.js';
 // Each VideoEntry now contains all necessary information including metadata, preview, etc.
 const videosPerTab = new Map();
 
+// Central store for all detected videos, keyed by normalized URL
+const allDetectedVideos = new Map();
+
 // Temporary processing trackers (not for storage)
 const processingRequests = {
   previews: new Set(), // Track URLs currently being processed for previews
@@ -221,13 +224,27 @@ const pendingVariantsMap = new Map(); // key = tabId, value = Map<normalizedUrl,
 
 // Add video to tab's collection
 function addVideoToTab(tabId, videoInfo) {
+    // Normalize URL for deduplication
+    const normalizedUrl = normalizeUrl(videoInfo.url);
+    
+    // Skip if already in global collection
+    if (allDetectedVideos.has(normalizedUrl)) {
+        return false;
+    }
+    
+    // Add to central collection
+    allDetectedVideos.set(normalizedUrl, {
+        ...videoInfo,
+        normalizedUrl,
+        timestamp: Date.now()
+    });
+    
     // Create array for tab if it doesn't exist
     if (!videosPerTab.has(tabId)) {
         videosPerTab.set(tabId, []);
     }
     
     const tabVideos = videosPerTab.get(tabId);
-    const normalizedUrl = normalizeUrl(videoInfo.url);
     
     // Special handling for variants - store in pending map first
     if (videoInfo.isVariant && !videoInfo.masterUrl) {
@@ -857,7 +874,7 @@ function getManifestRelationship(variantUrl) {
     // Find the variant in our videos collection
     for (const videos of videosPerTab.values()) {
         for (const video of videos) {
-            if (video.isVariant && normalizeUrl(video.url) === normalizeUrl(variantUrl)) {
+            if (video.isVariant && normalizeUrl(v.url) === normalizeUrl(variantUrl)) {
                 return {
                     playlistUrl: video.masterPlaylistUrl,
                     bandwidth: video.bandwidth,
@@ -1058,6 +1075,9 @@ function clearVideoCache() {
     
     // Clear all videos for all tabs
     videosPerTab.clear();
+    
+    // Clear central video collection
+    allDetectedVideos.clear();
     
     // Clear all processing trackers
     processingRequests.previews.clear();
