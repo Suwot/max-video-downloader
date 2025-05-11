@@ -15,7 +15,7 @@
 import { showError } from './utilities.js';
 import { debounce } from './utilities.js';
 import { showQualityDialog } from './ui.js';
-import { getStreamQualities } from './video-renderer.js'; 
+import { videoStateService } from './services/video-state-service.js';
 import { getBackgroundPort } from './index.js';
 
 let downloadPort = null;
@@ -291,7 +291,7 @@ export async function startDownload(video) {
 
         // Get available qualities for HLS/DASH streams
         if (video.type === 'hls' || video.type === 'dash') {
-            const qualities = await getStreamQualities(video.url);
+            const qualities = await videoStateService.fetchStreamQualities(video.url);
             if (qualities && qualities.length > 0) {
                 // Show quality selection dialog
                 quality = await showQualityDialog(qualities);
