@@ -224,9 +224,6 @@ function broadcastVideoUpdate(tabId) {
     return processedVideos;
 }
 
-// Add a new temporary map to track standalone variants before we know if they belong to a master
-const pendingVariantsMap = new Map(); // key = tabId, value = Map<normalizedUrl, variantInfo>
-
 // Add video to tab's collection
 function addVideoToTab(tabId, videoInfo) {
     // Normalize URL for deduplication
@@ -303,28 +300,9 @@ function addVideoToTab(tabId, videoInfo) {
     
     const tabVideos = videosPerTab.get(tabId);
     
-    // Special handling for variants - store in pending map first
-    if (videoInfo.isVariant && !videoInfo.masterUrl) {
-        // This looks like a variant that was detected standalone (not via a master)
-        // Store it in pending map for potential later processing
-        if (!pendingVariantsMap.has(tabId)) {
-            pendingVariantsMap.set(tabId, new Map());
-        }
-        
-        // Check if we already have this variant in pending map
-        const tabPendingVariants = pendingVariantsMap.get(tabId);
-        if (!tabPendingVariants.has(normalizedUrl)) {
-            logDebug(`Storing potential standalone variant in pending map: ${videoInfo.url}`);
-            tabPendingVariants.set(normalizedUrl, {
-                ...videoInfo,
-                timestamp: Date.now(),
-                detectionTimestamp: Date.now()
-            });
-        }
-        
-        // Don't add to main videos collection yet
-        return;
-    }
+    // Handle variants directly - no special handling required
+    // All variants are now added directly to the main collection
+    // regardless of whether they came from a master playlist or were detected standalone
     
     // Check if video already exists in main collection
     const existingIndex = tabVideos.findIndex(v => normalizeUrl(v.url) === normalizedUrl);
@@ -461,30 +439,17 @@ async function enrichWithPlaylistInfo(video, tabId) {
                 if (processedVideo.isMasterPlaylist && processedVideo.variants && processedVideo.variants.length > 0) {
                     logDebug(`Found master playlist with ${currentVariantsCount} variants (was ${previousVariantsCount})`);
                     
-                    // Get the pending variants map for this tab
-                    const pendingVariants = pendingVariantsMap.get(tabId) || new Map();
-                    
-                    // Instead of adding variants directly, store their relation to this master
-                    // in the pending map. This way they can all be processed in one place.
+                    // Add variants directly to the main collection
                     processedVideo.variants.forEach(variant => {
+                        // Add each variant directly to the videos collection
                         const variantNormalizedUrl = normalizeUrl(variant.url);
                         
-                        // If this variant already exists in pending map, update it with master info
-                        if (pendingVariants.has(variantNormalizedUrl)) {
-                            const existingVariant = pendingVariants.get(variantNormalizedUrl);
-                            pendingVariants.set(variantNormalizedUrl, {
-                                ...existingVariant,
-                                ...variant,
-                                isVariant: true,
-                                masterUrl: video.url, 
-                                isMasterPlaylist: false,
-                                // Set a flag to indicate this variant has a known master
-                                hasKnownMaster: true
-                            });
-                            logDebug(`Updated pending variant with master info: ${variant.url}`);
-                        } else {
-                            // Add new entry to pending map
-                            pendingVariants.set(variantNormalizedUrl, {
+                        // Only add if it doesn't already exist
+                        const existingVariantIndex = videos.findIndex(v => normalizeUrl(v.url) === variantNormalizedUrl);
+                        
+                        if (existingVariantIndex === -1) {
+                            // Add as a new video entry
+                            const newVariant = {
                                 ...variant,
                                 url: variant.url,
                                 type: video.type,
@@ -497,18 +462,34 @@ async function enrichWithPlaylistInfo(video, tabId) {
                                 hasKnownMaster: true, 
                                 timestamp: Date.now(),
                                 detectionTimestamp: Date.now()
-                            });
-                            logDebug(`Added new variant to pending map: ${variant.url}`);
+                            };
+                            
+                            videos.push(newVariant);
+                            logDebug(`Added variant directly to videos collection: ${variant.url}`);
+                            
+                            // Also add to the allDetectedVideos map
+                            const tabMap = allDetectedVideos.get(tabId);
+                            if (tabMap && !tabMap.has(variantNormalizedUrl)) {
+                                tabMap.set(variantNormalizedUrl, {
+                                    ...newVariant,
+                                    normalizedUrl: variantNormalizedUrl
+                                });
+                            }
+                        } else {
+                            // Update the existing variant with information from the master
+                            videos[existingVariantIndex] = {
+                                ...videos[existingVariantIndex],
+                                ...variant,
+                                isVariant: true,
+                                masterUrl: video.url,
+                                isMasterPlaylist: false,
+                                hasKnownMaster: true
+                            };
+                            logDebug(`Updated existing variant with master info: ${variant.url}`);
                         }
                     });
                     
-                    // Update the pending variants map
-                    pendingVariantsMap.set(tabId, pendingVariants);
-                    
-                    // Trigger processing of pending variants sooner since we found new ones
-                    schedulePendingVariantsProcessing(tabId);
-                    
-                    // Broadcast update with the new information about the master
+                    // Broadcast update with the new information about the master and variants
                     broadcastVideoUpdate(tabId);
                 } else if (currentVariantsCount === 0) {
                     logDebug(`⚠️ Master playlist has no variants: ${videos[index].url}`);
@@ -1051,17 +1032,6 @@ function getManifestRelationship(variantUrl) {
 function cleanupForTab(tabId) {
     logDebug('Tab removed:', tabId);
     
-    // Clear any pending variants timer
-    if (pendingVariantsTimers.has(tabId)) {
-        clearTimeout(pendingVariantsTimers.get(tabId));
-        pendingVariantsTimers.delete(tabId);
-    }
-    
-    // Clear pending variants
-    if (pendingVariantsMap.has(tabId)) {
-        pendingVariantsMap.delete(tabId);
-    }
-    
     // Clear videos from allDetectedVideos
     if (allDetectedVideos.has(tabId)) {
         allDetectedVideos.delete(tabId);
@@ -1079,9 +1049,6 @@ function cleanupForTab(tabId) {
  */
 function notifyNewVideoDetected(tabId) {
     try {
-        // Schedule processing of pending variants
-        schedulePendingVariantsProcessing(tabId);
-        
         // Check if a popup is open for this tab
         const port = getActivePopupPortForTab(tabId);
         
@@ -1100,62 +1067,6 @@ function notifyNewVideoDetected(tabId) {
     } catch (error) {
         logDebug(`Error in notifyNewVideoDetected: ${error.message}`);
     }
-}
-
-// Set up a timer to process pending variants after page activity settles
-// This will run when no new videos are detected for a period of time
-let pendingVariantsTimers = new Map(); // key = tabId, value = timer ID
-
-function schedulePendingVariantsProcessing(tabId) {
-    // Clear any existing timer for this tab
-    if (pendingVariantsTimers.has(tabId)) {
-        clearTimeout(pendingVariantsTimers.get(tabId));
-    }
-    
-    // Set a new timer
-    const timerId = setTimeout(() => {
-        processPendingVariants(tabId);
-        pendingVariantsTimers.delete(tabId);
-    }, 2000); // Wait 2 seconds after activity stops
-    
-    pendingVariantsTimers.set(tabId, timerId);
-}
-
-// Add a function to process pending variants after a certain idle time
-function processPendingVariants(tabId) {
-    if (!pendingVariantsMap.has(tabId)) {
-        return;
-    }
-    
-    const pendingVariants = pendingVariantsMap.get(tabId);
-    if (pendingVariants.size === 0) {
-        return;
-    }
-    
-    logDebug(`Processing ${pendingVariants.size} pending variants for tab ${tabId}`);
-    
-    // Add all variants to the main collection
-    for (const [url, variantInfo] of pendingVariants.entries()) {
-        // Check if this is a variant with a known master or a standalone variant
-        if (variantInfo.hasKnownMaster) {
-            logDebug(`Adding variant with known master to main collection: ${variantInfo.url}`);
-        } else {
-            logDebug(`Adding standalone variant to main collection: ${variantInfo.url}`);
-        }
-        
-        // Add to main videos collection with appropriate flags
-        addVideoToTab(tabId, {
-            ...variantInfo,
-            // Only mark as standalone if it doesn't have a known master
-            isStandaloneVariant: !variantInfo.hasKnownMaster
-        });
-    }
-    
-    // Clear the pending variants map for this tab
-    pendingVariants.clear();
-    
-    // Broadcast update with the new variants
-    broadcastVideoUpdate(tabId);
 }
 
 // Set up event listeners to clear videos when tabs are closed or navigated
@@ -1231,9 +1142,6 @@ function clearVideoCache() {
     // Clear processing requests
     processingRequests.previews.clear();
     processingRequests.metadata.clear();
-    
-    // Also clear pending variants
-    pendingVariantsMap.clear();
 }
 
 /**
