@@ -47,24 +47,27 @@ export async function lightParseContent(url, type) {
         clearTimeout(timeoutId);
         
         if (!response.ok) {
-            console.log(`[JS Parser] Failed to fetch ${url} for light parsing: ${response.status}`);
+            console.log(`[JS Parser] ❌ FAILED light parsing ${url}: ${response.status}`);
             return { isValid: false, subtype: 'fetch-failed' };
         }
         
         const content = await response.text();
         
         // Analyze the content based on type
+        let result;
         if (type === 'hls') {
             // Check if it's a master playlist (contains #EXT-X-STREAM-INF)
             if (content.includes('#EXT-X-STREAM-INF')) {
-                return { isValid: true, subtype: 'hls-master' };
+                result = { isValid: true, subtype: 'hls-master' };
             } 
             // Check if it's a variant/media playlist (contains #EXTINF)
             else if (content.includes('#EXTINF')) {
-                return { isValid: true, subtype: 'hls-variant' };
+                result = { isValid: true, subtype: 'hls-variant' };
             }
             // Neither master nor variant markers found
-            return { isValid: false, subtype: 'not-a-video' };
+            else {
+                result = { isValid: false, subtype: 'not-a-video' };
+            }
         } 
         else if (type === 'dash') {
             // Check for basic MPD structure
@@ -73,19 +76,25 @@ export async function lightParseContent(url, type) {
                 
                 // Check if it has AdaptationSet/Representation (master)
                 if (content.includes('<AdaptationSet') && content.includes('<Representation')) {
-                    return { isValid: true, subtype: 'dash-master' };
+                    result = { isValid: true, subtype: 'dash-master' };
                 }
                 // Otherwise it's probably a single representation variant
                 else {
-                    return { isValid: true, subtype: 'dash-variant' };
+                    result = { isValid: true, subtype: 'dash-variant' };
                 }
             }
-            return { isValid: false, subtype: 'not-a-dash-video' };
+            else {
+                result = { isValid: false, subtype: 'not-a-dash-video' };
+            }
+        }
+        else {
+            result = { isValid: false, subtype: 'unknown-type' };
         }
         
-        return { isValid: false, subtype: 'unknown-type' };
+        console.log(`[JS Parser] ✓ COMPLETED light parsing ${url}: ${result.subtype}`);
+        return result;
     } catch (error) {
-        console.log(`[JS Parser] Error during light parsing of ${url}: ${error.message}`);
+        console.log(`[JS Parser] ❌ ERROR light parsing ${url}: ${error.message}`);
         return { isValid: false, subtype: 'parse-error' };
     } finally {
         // Clean up
@@ -128,7 +137,7 @@ export async function fullParseContent(url, subtype) {
         clearTimeout(timeoutId);
         
         if (!response.ok) {
-            console.log(`[JS Parser] Failed to fetch ${url} for full parsing: ${response.status}`);
+            console.log(`[JS Parser] ❌ FAILED full parsing ${url}: ${response.status}`);
             return { variants: [], status: 'fetch-failed' };
         }
         
@@ -136,16 +145,20 @@ export async function fullParseContent(url, subtype) {
         const baseUrl = getBaseDirectory(url);
         
         // Process based on subtype
+        let result;
         if (subtype === 'hls-master') {
-            return parseHlsMaster(content, baseUrl, url);
+            result = parseHlsMaster(content, baseUrl, url);
         } else if (subtype === 'dash-master') {
-            return parseDashMaster(content, baseUrl, url);
+            result = parseDashMaster(content, baseUrl, url);
         } else {
-            console.log(`[JS Parser] Unsupported subtype for full parsing: ${subtype}`);
+            console.log(`[JS Parser] ❌ FAILED full parsing ${url}: unsupported subtype ${subtype}`);
             return { variants: [], status: 'unsupported-subtype' };
         }
+        
+        console.log(`[JS Parser] ✓ COMPLETED full parsing ${url}: found ${result.variants.length} variants`);
+        return result;
     } catch (error) {
-        console.error(`[JS Parser] Error during full parsing of ${url}: ${error.message}`);
+        console.error(`[JS Parser] ❌ ERROR full parsing ${url}: ${error.message}`);
         return { variants: [], status: 'parse-error', error: error.message };
     } finally {
         // Clean up
@@ -306,7 +319,7 @@ function parseDashMaster(content, baseUrl, masterUrl) {
             status: 'success'
         };
     } catch (error) {
-        console.error(`[JS Parser] Error parsing DASH MPD: ${error.message}`);
+        console.error(`[JS Parser] ❌ ERROR parsing DASH MPD: ${error.message}`);
         return { variants: [], status: 'xml-parse-error' };
     }
 }
