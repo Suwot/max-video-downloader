@@ -14,7 +14,8 @@ import { getActivePopupPortForTab } from './popup-ports.js';
 // Each VideoEntry now contains all necessary information including metadata, preview, etc.
 const videosPerTab = new Map();
 
-// Central store for all detected videos, keyed by normalized URL
+// Central store for all detected videos, keyed by tab ID, then normalized URL
+// Map<tabId, Map<normalizedUrl, videoInfo>>
 const allDetectedVideos = new Map();
 
 // Temporary processing trackers (not for storage)
@@ -227,13 +228,21 @@ function addVideoToTab(tabId, videoInfo) {
     // Normalize URL for deduplication
     const normalizedUrl = normalizeUrl(videoInfo.url);
     
-    // Skip if already in global collection
-    if (allDetectedVideos.has(normalizedUrl)) {
+    // Initialize tab's video collection if it doesn't exist
+    if (!allDetectedVideos.has(tabId)) {
+        allDetectedVideos.set(tabId, new Map());
+    }
+    
+    // Get the map for this specific tab
+    const tabDetectedVideos = allDetectedVideos.get(tabId);
+    
+    // Skip if already in this tab's collection
+    if (tabDetectedVideos.has(normalizedUrl)) {
         return false;
     }
     
-    // Add to central collection
-    allDetectedVideos.set(normalizedUrl, {
+    // Add to tab's collection
+    tabDetectedVideos.set(normalizedUrl, {
         ...videoInfo,
         normalizedUrl,
         timestamp: Date.now()
@@ -918,6 +927,11 @@ function cleanupForTab(tabId) {
         pendingVariantsMap.delete(tabId);
     }
     
+    // Clear videos from allDetectedVideos
+    if (allDetectedVideos.has(tabId)) {
+        allDetectedVideos.delete(tabId);
+    }
+    
     // Clear videos
     if (videosPerTab.has(tabId)) {
         logDebug('Cleaning up videos for tab:', tabId);
@@ -1079,15 +1093,12 @@ function clearVideoCache() {
     // Clear central video collection
     allDetectedVideos.clear();
     
-    // Clear all processing trackers
+    // Clear processing requests
     processingRequests.previews.clear();
     processingRequests.metadata.clear();
     
-    // Reset rate limiter queues
-    rateLimiter.queue = [];
-    rateLimiter.activeRequests = 0;
-    
-    return true;
+    // Also clear pending variants
+    pendingVariantsMap.clear();
 }
 
 /**
@@ -1103,6 +1114,27 @@ function estimateFileSize(bitrate, duration) {
     return Math.round((bitrate * duration) / 8);
 }
 
+/**
+ * Get all detected videos, optionally filtered by tab
+ * @param {number} [tabId] - Optional tab ID to filter by
+ * @returns {Map} Map of videos
+ */
+function getAllDetectedVideos(tabId) {
+    if (tabId === undefined) {
+        // Return a flattened map of all videos across all tabs (for debugging)
+        const allVideos = new Map();
+        for (const [currentTabId, tabVideos] of allDetectedVideos.entries()) {
+            for (const [url, video] of tabVideos.entries()) {
+                allVideos.set(url, { ...video, tabId: currentTabId });
+            }
+        }
+        return allVideos;
+    }
+    
+    // Return videos for specific tab or empty map if tab doesn't exist
+    return allDetectedVideos.get(tabId) || new Map();
+}
+
 export {
     addVideoToTab,
     broadcastVideoUpdate,
@@ -1114,5 +1146,6 @@ export {
     fetchManifestContent,
     getManifestRelationship,
     getStreamMetadata,
-    clearVideoCache
+    clearVideoCache,
+    getAllDetectedVideos
 };
