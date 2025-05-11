@@ -21,17 +21,6 @@ import { sendPortMessage } from './index.js';
 const metadataCache = new Map();
 
 /**
- * [DEPRECATED] Process videos - pass through only
- * @deprecated Use background-processed videos directly, this method is only for backward compatibility
- * @param {Array} videos - Videos to process
- * @returns {Array} The same videos (passthrough)
- */
-export function processVideos(videos) {
-    console.warn('processVideos is deprecated - videos are now processed in the background script');
-    return videos;
-}
-
-/**
  * Check if two videos have the same HLS base directory
  * @param {Object} video1 - First video
  * @param {Object} video2 - Second video
@@ -108,17 +97,6 @@ export function shouldGroupVideos(video1, video2) {
            video1.resolution && video2.resolution && 
            (video1.resolution.width !== video2.resolution.width || 
             video1.resolution.height !== video2.resolution.height);
-}
-
-/**
- * [DEPRECATED] Group videos - pass through only 
- * @deprecated Use background-processed videos directly, this method is only for backward compatibility
- * @param {Array} videos - Videos to group
- * @returns {Array} The same videos (passthrough)
- */
-export function groupVideos(videos) {
-    console.warn('groupVideos is deprecated - grouping is now handled in the background script');
-    return videos;
 }
 
 /**
@@ -339,17 +317,4 @@ export async function getStreamQualities(url) {
         // Listen for response
         document.addEventListener('qualities-response', handleResponse);
     });
-}
-
-/**
- * Clear HLS relationships
- */
-export function clearHLSRelationships() {
-    // HLS relationships are now managed entirely in the background
-    console.log('HLS relationships now managed in background script');
-}
-
-// Export a minimal setVideoGroups function for backward compatibility
-export function setVideoGroups(groups) {
-    // No-op - groups are maintained in background
 }
