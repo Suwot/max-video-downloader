@@ -17,9 +17,6 @@ import {
 
 import { sendPortMessage } from './index.js';
 
-// Import the video validation and filtering functions
-import { filterRedundantVariants } from '../../js/utilities/video-validator.js';
-
 // Cache for stream metadata
 const metadataCache = new Map();
 
