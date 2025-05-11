@@ -1114,27 +1114,6 @@ function estimateFileSize(bitrate, duration) {
     return Math.round((bitrate * duration) / 8);
 }
 
-/**
- * Get all detected videos, optionally filtered by tab
- * @param {number} [tabId] - Optional tab ID to filter by
- * @returns {Map} Map of videos
- */
-function getAllDetectedVideos(tabId) {
-    if (tabId === undefined) {
-        // Return a flattened map of all videos across all tabs (for debugging)
-        const allVideos = new Map();
-        for (const [currentTabId, tabVideos] of allDetectedVideos.entries()) {
-            for (const [url, video] of tabVideos.entries()) {
-                allVideos.set(url, { ...video, tabId: currentTabId });
-            }
-        }
-        return allVideos;
-    }
-    
-    // Return videos for specific tab or empty map if tab doesn't exist
-    return allDetectedVideos.get(tabId) || new Map();
-}
-
 export {
     addVideoToTab,
     broadcastVideoUpdate,
@@ -1146,6 +1125,5 @@ export {
     fetchManifestContent,
     getManifestRelationship,
     getStreamMetadata,
-    clearVideoCache,
-    getAllDetectedVideos
+    clearVideoCache
 };
