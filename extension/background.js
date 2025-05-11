@@ -18,7 +18,7 @@
 // background.js - Service worker for the extension
 
 // Import our modularized services
-import { addVideoToTab } from './background/services/video-manager.js';
+import { addVideoToTab, getAllDetectedVideos } from './background/services/video-manager.js';
 import { initTabTracking } from './background/services/tab-tracker.js';
 import { setupDownloadPort } from './background/services/download-manager.js';
 import { setupPopupPort } from './background/services/popup-ports.js';
@@ -27,6 +27,84 @@ import { setupPopupPort } from './background/services/popup-ports.js';
 function logDebug(...args) {
     console.log('[Background]', new Date().toISOString(), ...args);
 }
+
+// Debug logger for allDetectedVideos - will log every 10 seconds
+// TO BE REMOVED AFTER DEBUGGING
+let debugInterval;
+function startDebugLogger() {
+  if (debugInterval) {
+    clearInterval(debugInterval);
+  }
+  
+  debugInterval = setInterval(() => {
+    console.log('=== DEBUG: allDetectedVideos Map ===');
+    
+    try {
+      // Get direct access to the internal structure via globalThis
+      const rawStructure = globalThis.allDetectedVideosInternal;
+      if (rawStructure && rawStructure instanceof Map) {
+        // This is the raw nested Map structure
+        console.log('Total tabs with videos:', rawStructure.size);
+        
+        // Display each tab's data separately for clearer output
+        for (const [tabId, urlMap] of rawStructure.entries()) {
+          if (urlMap instanceof Map) {
+            console.log(`Tab ${tabId}: (${urlMap.size} videos)`);
+            // Convert urlMap entries to a regular object for easier console viewing
+            // Make sure to check if urlMap has entries method before using it
+            try {
+              const urlMapObj = {};
+              for (const [url, videoInfo] of urlMap.entries()) {
+                urlMapObj[url] = videoInfo;
+              }
+              console.log('  Videos:', urlMapObj);
+            } catch (err) {
+              console.log('  Videos:', urlMap);
+              console.error('  Error processing tab videos:', err);
+            }
+          } else {
+            console.log(`Tab ${tabId}: (urlMap is not a Map)`, urlMap);
+          }
+        }
+      } else {
+        // Fallback to using the getAllDetectedVideos function
+        console.log('Using getAllDetectedVideos() - flattened view:');
+        const videos = getAllDetectedVideos();
+        if (videos instanceof Map) {
+          console.log('Total videos across all tabs:', videos.size);
+          
+          // Group by tab ID
+          const byTab = {};
+          try {
+            for (const [url, video] of videos.entries()) {
+              const tabId = video.tabId;
+              if (!byTab[tabId]) byTab[tabId] = [];
+              byTab[tabId].push({ url, ...video });
+            }
+            
+            // Print the grouping
+            for (const tabId in byTab) {
+              console.log(`Tab ${tabId}: (${byTab[tabId].length} videos)`);
+              console.log('  Videos:', byTab[tabId]);
+            }
+          } catch (err) {
+            console.error('  Error processing videos by tab:', err);
+            console.log('  Raw videos object:', videos);
+          }
+        } else {
+          console.log('getAllDetectedVideos() did not return a Map:', videos);
+        }
+      }
+    } catch (e) {
+      console.error('Error in debug logger:', e);
+    }
+    
+    console.log('================================');
+  }, 10000); // Log every 10 seconds
+}
+
+// Start the debug logger
+startDebugLogger();
 
 // Initialize tab tracking
 initTabTracking();
