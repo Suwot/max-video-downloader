@@ -155,6 +155,7 @@ export async function fullParseContent(url, subtype) {
             return { variants: [], status: 'unsupported-subtype' };
         }
         
+        // Log success message here inside the try block to ensure it only happens on success
         console.log(`[JS Parser] ✓ COMPLETED full parsing ${url}: found ${result.variants.length} variants`);
         return result;
     } catch (error) {
@@ -243,51 +244,37 @@ function parseDashMaster(content, baseUrl, masterUrl) {
     const variants = [];
     
     try {
-        // Parse XML content
-        const parser = new DOMParser();
-        const xmlDoc = parser.parseFromString(content, "text/xml");
+        // Use regex-based approach instead of DOMParser which isn't available in background context
+        console.log(`[JS Parser] Using regex-based parser for DASH MPD`);
         
-        // Extract duration information
-        let duration = 0;
-        const mpdNode = xmlDoc.querySelector('MPD');
-        if (mpdNode) {
-            const mediaPresentationDuration = mpdNode.getAttribute('mediaPresentationDuration');
-            if (mediaPresentationDuration) {
-                duration = parseDashDuration(mediaPresentationDuration);
-            }
-        }
+        // Extract duration from MPD tag
+        const durationMatch = content.match(/mediaPresentationDuration="([^"]+)"/);
+        const duration = durationMatch ? parseDashDuration(durationMatch[1]) : 0;
         
-        // Process each adaptation set
-        const adaptationSets = xmlDoc.querySelectorAll('AdaptationSet');
+        // Extract all AdaptationSet blocks
+        const adaptationSets = extractAdaptationSets(content);
+        
         for (const adaptationSet of adaptationSets) {
             // Determine if this is video, audio, or other
-            const mimeType = adaptationSet.getAttribute('mimeType') || '';
-            const contentType = adaptationSet.getAttribute('contentType') || '';
+            const mimeType = extractAttribute(adaptationSet, 'mimeType') || '';
+            const contentType = extractAttribute(adaptationSet, 'contentType') || '';
             const isVideo = mimeType.includes('video') || contentType === 'video';
             
             // We primarily care about video adaptations for variant selection
             if (isVideo) {
                 // Process each representation
-                const representations = adaptationSet.querySelectorAll('Representation');
+                const representations = extractRepresentations(adaptationSet);
                 for (const representation of representations) {
                     // Extract variant details
-                    const id = representation.getAttribute('id') || '';
-                    const bandwidth = parseInt(representation.getAttribute('bandwidth') || '0', 10);
-                    const codecs = representation.getAttribute('codecs') || '';
-                    const width = parseInt(representation.getAttribute('width') || '0', 10);
-                    const height = parseInt(representation.getAttribute('height') || '0', 10);
-                    const frameRate = parseFrameRate(representation.getAttribute('frameRate') || '');
+                    const id = extractAttribute(representation, 'id') || '';
+                    const bandwidth = parseInt(extractAttribute(representation, 'bandwidth') || '0', 10);
+                    const codecs = extractAttribute(representation, 'codecs') || '';
+                    const width = parseInt(extractAttribute(representation, 'width') || '0', 10);
+                    const height = parseInt(extractAttribute(representation, 'height') || '0', 10);
+                    const frameRate = parseFrameRate(extractAttribute(representation, 'frameRate') || '');
                     
-                    // Find BaseURL - could be in representation, adaptationSet, or MPD
-                    let segmentTemplate = representation.querySelector('SegmentTemplate') || 
-                                         adaptationSet.querySelector('SegmentTemplate');
-                    
-                    let variantUrl = masterUrl;
-                    if (segmentTemplate) {
-                        // For standard DASH, we point to the master since we need the MPD
-                        // to properly resolve segments
-                        variantUrl = masterUrl + `#representation=${id}`;
-                    }
+                    // For standard DASH, we point to the master with representation ID
+                    const variantUrl = masterUrl + `#representation=${id}`;
                     
                     // Create a variant entry with all the information
                     const variant = {
@@ -472,4 +459,49 @@ function getBaseDirectory(url) {
     } catch (error) {
         return url;
     }
+}
+
+/**
+ * Helper function to extract attributes from XML tags
+ * 
+ * @param {string} xmlString - The XML string to extract from
+ * @param {string} attributeName - The attribute name to extract
+ * @returns {string|null} The attribute value or null
+ */
+function extractAttribute(xmlString, attributeName) {
+    const regex = new RegExp(`${attributeName}="([^"]*)"`, 'i');
+    const match = xmlString.match(regex);
+    return match ? match[1] : null;
+}
+
+/**
+ * Helper function to extract AdaptationSet sections
+ * 
+ * @param {string} content - The MPD content
+ * @returns {Array<string>} Array of AdaptationSet XML strings
+ */
+function extractAdaptationSets(content) {
+    const adaptationSets = [];
+    const regex = /<AdaptationSet[^>]*>[\s\S]*?<\/AdaptationSet>/g;
+    let match;
+    while ((match = regex.exec(content)) !== null) {
+        adaptationSets.push(match[0]);
+    }
+    return adaptationSets;
+}
+
+/**
+ * Helper function to extract Representation sections
+ * 
+ * @param {string} adaptationSetContent - The AdaptationSet XML content
+ * @returns {Array<string>} Array of Representation XML strings
+ */
+function extractRepresentations(adaptationSetContent) {
+    const representations = [];
+    const regex = /<Representation[^>]*>[\s\S]*?<\/Representation>|<Representation[^\/]*\/>/g;
+    let match;
+    while ((match = regex.exec(adaptationSetContent)) !== null) {
+        representations.push(match[0]);
+    }
+    return representations;
 }
