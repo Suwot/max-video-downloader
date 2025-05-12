@@ -521,6 +521,49 @@ async function enrichWithPlaylistInfo(video, tabId) {
                     tabMap.set(normalizedUrl, updatedEntry);
                 }
                 
+                // NEW CODE: Enrich each variant with FFprobe metadata
+                logDebug(`Enriching ${enhancedVariants.length} variants with FFprobe metadata`);
+                
+                // Process each variant sequentially to avoid overwhelming the system
+                for (let i = 0; i < enhancedVariants.length; i++) {
+                    const variant = enhancedVariants[i];
+                    logDebug(`Getting FFprobe metadata for variant ${i+1}/${enhancedVariants.length}: ${variant.url}`);
+                    
+                    try {
+                        // Get FFprobe data directly
+                        const ffprobeData = await rateLimiter.enqueue(async () => {
+                            const response = await nativeHostService.sendMessage({
+                                type: 'getQualities',
+                                url: variant.url,
+                                light: false  // Always use full mode
+                            });
+                            return response?.streamInfo || null;
+                        });
+                        
+                        if (ffprobeData) {
+                            // Store FFprobe data in a dedicated field without merging
+                            videos[index].variants[i].ffprobeMeta = ffprobeData;
+                            // Mark as having ffprobe metadata
+                            videos[index].variants[i].hasFFprobeMetadata = true;
+                            
+                            // Also update in allDetectedVideos map
+                            if (tabMap && tabMap.has(normalizedUrl)) {
+                                const currentEntry = tabMap.get(normalizedUrl);
+                                if (currentEntry.variants && currentEntry.variants[i]) {
+                                    currentEntry.variants[i].ffprobeMeta = ffprobeData;
+                                    currentEntry.variants[i].hasFFprobeMetadata = true;
+                                    // Update the entry in the map
+                                    tabMap.set(normalizedUrl, currentEntry);
+                                }
+                            }
+                            
+                            logDebug(`Successfully added FFprobe metadata to variant ${i+1}`);
+                        }
+                    } catch (error) {
+                        console.error(`Error getting FFprobe metadata for variant ${variant.url}:`, error);
+                    }
+                }
+                
                 // Broadcast update with the new information about the master
                 broadcastVideoUpdate(tabId);
             } else {
@@ -598,13 +641,34 @@ async function enrichWithMetadata(video, tabId) {
         // For variant streams with a known master, we might already have some basic metadata,
         // but we want to ensure we get full metadata for all variants
         if (video.isVariant && video.masterUrl) {
+            // NEW: Skip variants that already have ffprobeMeta from the master playlist process
+            if (video.hasFFprobeMetadata || video.ffprobeMeta) {
+                logDebug(`Skipping metadata enrichment for variant with existing ffprobeMeta: ${video.url}`);
+                processingRequests.metadata.delete(normalizedUrl);
+                return;
+            }
+            
             const videos = videosPerTab.get(tabId);
             const masterVideo = videos.find(v => normalizeUrl(v.url) === normalizeUrl(video.masterUrl));
             
+            // Check if the variant has ffprobeMeta in its master's variants array
             if (masterVideo && masterVideo.variants) {
                 const matchingVariantIndex = masterVideo.variants.findIndex(
                     v => normalizeUrl(v.url) === normalizedUrl
                 );
+                
+                if (matchingVariantIndex !== -1 && 
+                    masterVideo.variants[matchingVariantIndex].hasFFprobeMetadata) {
+                    logDebug(`Variant ${video.url} already has ffprobeMeta in its master, using that data`);
+                    // Apply the ffprobeMeta from the master playlist to this variant
+                    const ffprobeData = masterVideo.variants[matchingVariantIndex].ffprobeMeta;
+                    if (ffprobeData) {
+                        video.ffprobeMeta = ffprobeData;
+                        video.hasFFprobeMetadata = true;
+                        applyMetadataToVideo(tabId, normalizedUrl, ffprobeData);
+                        return;
+                    }
+                }
                 
                 if (matchingVariantIndex !== -1) {
                     // Get the variant's base info from the master, but always continue to full metadata fetch
@@ -723,6 +787,9 @@ function applyMetadataToVideo(tabId, normalizedUrl, mediaInfo) {
             ...mediaInfo,
         };
         
+        // Check if this is ffprobe metadata that should be stored separately
+        const isFFprobeData = mediaInfo.source === 'ffprobe' || (videos[index].isVariant && videos[index].hasFFprobeMetadata);
+        
         // Update video with stream info
         videos[index] = {
             ...videos[index],
@@ -739,6 +806,12 @@ function applyMetadataToVideo(tabId, normalizedUrl, mediaInfo) {
             fileSize: mediaInfo.estimatedSize || videos[index].fileSize
         };
         
+        // If this is FFprobe data, store it separately as well
+        if (isFFprobeData && !videos[index].ffprobeMeta) {
+            videos[index].ffprobeMeta = mediaInfo;
+            videos[index].hasFFprobeMetadata = true;
+        }
+        
         // Special handling for variants - ensure they have proper flag set
         if (videos[index].isVariant) {
             videos[index].isVariantFullyProcessed = true;
@@ -753,8 +826,9 @@ function applyMetadataToVideo(tabId, normalizedUrl, mediaInfo) {
                     
                     if (variantIndex !== -1) {
                         logDebug(`Updating variant in master playlist: ${normalizedUrl}`);
+                        
                         // Update the variant in the master playlist with the new metadata
-                        masterVideo.variants[variantIndex] = {
+                        const updatedVariant = {
                             ...masterVideo.variants[variantIndex],
                             mediaInfo: mergedMediaInfo,
                             isFullyParsed: true,
@@ -762,9 +836,39 @@ function applyMetadataToVideo(tabId, normalizedUrl, mediaInfo) {
                             resolution: videos[index].resolution,
                             fileSize: videos[index].fileSize
                         };
+                        
+                        // If this is FFprobe data, also update the ffprobeMeta field
+                        if (isFFprobeData && !masterVideo.variants[variantIndex].ffprobeMeta) {
+                            updatedVariant.ffprobeMeta = mediaInfo;
+                            updatedVariant.hasFFprobeMetadata = true;
+                        }
+                        
+                        masterVideo.variants[variantIndex] = updatedVariant;
                     }
                 }
             }
+        }
+        
+        // Also update in allDetectedVideos map if it exists there
+        const tabMap = allDetectedVideos.get(tabId);
+        if (tabMap && tabMap.has(normalizedUrl)) {
+            const currentEntry = tabMap.get(normalizedUrl);
+            const updatedEntry = {
+                ...currentEntry,
+                mediaInfo: mergedMediaInfo,
+                isFullyParsed: true,
+                needsMetadata: false,
+                resolution: videos[index].resolution,
+                fileSize: videos[index].fileSize
+            };
+            
+            // If this is FFprobe data, also update the ffprobeMeta field
+            if (isFFprobeData && !currentEntry.ffprobeMeta) {
+                updatedEntry.ffprobeMeta = mediaInfo;
+                updatedEntry.hasFFprobeMetadata = true;
+            }
+            
+            tabMap.set(normalizedUrl, updatedEntry);
         }
         
         // Use the unified notification method instead
