@@ -4,8 +4,7 @@
  */
 
 // Add static imports at the top
-import { getVideosForTab, getStreamQualities, 
-         getStreamMetadata, clearVideoCache } from './video-manager.js';
+import { getVideosForTab, getStreamQualities, clearVideoCache } from './video-manager.js';
 import { getActiveDownloads, getDownloadDetails, startDownload } from './download-manager.js';
 
 // Track all popup connections for universal communication
@@ -107,25 +106,6 @@ async function handlePortMessage(message, port, portId) {
             url: message.url,
             ...response
         });
-    }
-    
-    // Handle stream metadata request from popup
-    else if (message.action === 'getStreamMetadata') {
-        try {
-            const streamInfo = await getStreamMetadata(message.url);
-            
-            if (streamInfo) {
-                // Send metadata update to popup
-                port.postMessage({
-                    type: 'metadataUpdate',
-                    url: message.url,
-                    mediaInfo: streamInfo
-                });
-                logDebug(`Sent metadata for ${message.url} to popup`);
-            }
-        } catch (error) {
-            console.error(`Error getting stream metadata for ${message.url}:`, error);
-        }
     }
 
     // Handle download details request

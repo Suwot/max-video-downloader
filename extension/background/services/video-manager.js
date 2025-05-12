@@ -970,50 +970,6 @@ chrome.webNavigation.onCommitted.addListener((details) => {
     }
 });
 
-// Get stream metadata for a URL
-async function getStreamMetadata(url) {
-    try {
-        // Check if we already have this video's metadata
-        for (const videos of videosPerTab.values()) {
-            const video = videos.find(v => normalizeUrl(v.url) === normalizeUrl(url));
-            if (video && video.mediaInfo) {
-                return video.mediaInfo;
-            }
-        }
-        
-        // Skip blob URLs as they can't be analyzed
-        if (url.startsWith('blob:')) {
-            logDebug(`Skipping metadata request for blob URL: ${url}`);
-            return {
-                isBlob: true,
-                type: 'blob',
-                format: 'blob',
-                container: 'blob',
-                hasVideo: true,
-                hasAudio: true
-            };
-        }
-        
-        // Use our rate limiter to prevent too many concurrent requests
-        return await rateLimiter.enqueue(async () => {
-            logDebug(`Getting stream metadata for ${url}`);
-            
-            const response = await nativeHostService.sendMessage({
-                type: 'getQualities',
-                url: url
-            });
-
-            if (response?.streamInfo) {
-                return response.streamInfo;
-            }
-            return null;
-        });
-    } catch (error) {
-        console.error('Failed to get stream metadata:', error);
-        return null;
-    }
-}
-
 /**
  * Clear all video caches for all tabs
  * This is used by the UI to force a complete refresh
@@ -1077,6 +1033,5 @@ export {
     cleanupForTab,
     normalizeUrl,
     getAllDetectedVideos,
-    getStreamMetadata,
     clearVideoCache
 };
