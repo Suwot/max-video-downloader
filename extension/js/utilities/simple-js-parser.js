@@ -335,6 +335,39 @@ function parseDashMaster(content, baseUrl, masterUrl) {
         // Extract all AdaptationSet blocks
         const adaptationSets = extractAdaptationSets(content);
         
+        // First pass: Identify which adaptation set is audio
+        let audioAdaptationSet = null;
+        let globalAudioCodec = null;
+        
+        for (const adaptationSet of adaptationSets) {
+            // Determine if this is audio
+            const mimeType = extractAttribute(adaptationSet, 'mimeType') || '';
+            const contentType = extractAttribute(adaptationSet, 'contentType') || '';
+            
+            if (mimeType.includes('audio') || contentType === 'audio') {
+                audioAdaptationSet = adaptationSet;
+                
+                // Check representations first for audio codec
+                const audioRepresentations = extractRepresentations(audioAdaptationSet);
+                if (audioRepresentations.length > 0) {
+                    // Try to get codec from first audio representation
+                    globalAudioCodec = extractAttribute(audioRepresentations[0], 'codecs');
+                }
+                
+                // If not found in representations, check adaptation set level
+                if (!globalAudioCodec) {
+                    globalAudioCodec = extractAttribute(audioAdaptationSet, 'codecs');
+                }
+                
+                if (globalAudioCodec) {
+                    console.log(`[JS Parser] Found audio codec: ${globalAudioCodec}`);
+                }
+                
+                break;
+            }
+        }
+        
+        // Second pass: Process video adaptations
         for (const adaptationSet of adaptationSets) {
             // Determine if this is video, audio, or other
             const mimeType = extractAttribute(adaptationSet, 'mimeType') || null;
@@ -343,13 +376,34 @@ function parseDashMaster(content, baseUrl, masterUrl) {
             
             // We primarily care about video adaptations for variant selection
             if (isVideo) {
+                // Get adaptation level codec (fallback)
+                const adaptationSetVideoCodec = extractAttribute(adaptationSet, 'codecs');
+                
                 // Process each representation
                 const representations = extractRepresentations(adaptationSet);
                 for (const representation of representations) {
                     // Extract variant details
                     const id = extractAttribute(representation, 'id') || null;
                     const bandwidth = parseInt(extractAttribute(representation, 'bandwidth') || '0', 10);
-                    const codecs = extractAttribute(representation, 'codecs') || null;
+                    
+                    // First check for codec at representation level (preferred)
+                    let videoCodec = extractAttribute(representation, 'codecs');
+                    
+                    // If not found, fall back to adaptation set level
+                    if (!videoCodec) {
+                        videoCodec = adaptationSetVideoCodec;
+                    }
+                    
+                    // Combine codecs in "videoCodec,audioCodec" format (consistent with HLS)
+                    let combinedCodecs = null;
+                    if (videoCodec && globalAudioCodec) {
+                        combinedCodecs = `${videoCodec},${globalAudioCodec}`;
+                    } else if (videoCodec) {
+                        combinedCodecs = videoCodec;
+                    } else if (globalAudioCodec) {
+                        combinedCodecs = globalAudioCodec;
+                    }
+                    
                     const width = parseInt(extractAttribute(representation, 'width') || '0', 10);
                     const height = parseInt(extractAttribute(representation, 'height') || '0', 10);
                     const frameRate = parseFrameRate(extractAttribute(representation, 'frameRate') || null);
@@ -369,11 +423,13 @@ function parseDashMaster(content, baseUrl, masterUrl) {
                         isVariant: true,
                         jsMeta: {
                             bandwidth: bandwidth,
-                            codecs: codecs,
+                            codecs: combinedCodecs,
+                            videoCodec: videoCodec,
+                            audioCodec: globalAudioCodec,
                             width: width,
                             height: height,
                             frameRate: frameRate,
-                            resolution: `${width}x${height}` || null
+                            resolution: width && height ? `${width}x${height}` : null
                         },
                         source: 'js-parser',
                         timestamp: Date.now()
@@ -558,7 +614,7 @@ function getBaseDirectory(url) {
  * @returns {string|null} The attribute value or null
  */
 function extractAttribute(xmlString, attributeName) {
-    const regex = new RegExp(`${attributeName}="([^"]*)"`, 'i');
+    const regex = new RegExp(`\\b${attributeName}="([^"]*)"`, 'i');
     const match = xmlString.match(regex);
     return match ? match[1] : null;
 }
