@@ -935,69 +935,6 @@ async function fetchManifestContent(url) {
     }
 }
 
-// // Store manifest relationship - LEGACY APPROACH (no longer used)
-// function storeManifestRelationship(playlistUrl, variants) {
-//     // This function demonstrates the old approach where variants were added directly
-//     // to the main collection. In the new approach, variants are only stored within their
-//     // master playlist objects and are not added as standalone entries.
-    
-//     for (const [tabId, videos] of videosPerTab.entries()) {
-//         const playlistIndex = videos.findIndex(v => normalizeUrl(v.url) === normalizeUrl(playlistUrl));
-        
-//         if (playlistIndex !== -1) {
-//             // Found the playlist in this tab, update it
-//             videos[playlistIndex].variants = variants;
-//             videos[playlistIndex].isMasterPlaylist = true;
-            
-//             // OLD APPROACH (removed): Adding variants directly to the main collection
-//             // In the new system, variants are only stored within their master playlists
-//             // and filtered out of the main collection if they have a known master
-            
-//             // Update UI and return after processing the first matching tab
-//             broadcastVideoUpdate(tabId);
-//             return true;
-//         }
-//     }
-    
-    
-//     // No matching playlist found in any tab
-//     return false;
-// }
-
-// Get manifest relationship - for compatibility
-function getManifestRelationship(variantUrl) {
-    // Find the variant in our videos collection
-    for (const videos of videosPerTab.values()) {
-        for (const video of videos) {
-            if (video.isVariant && normalizeUrl(v.url) === normalizeUrl(variantUrl)) {
-                return {
-                    playlistUrl: video.masterPlaylistUrl,
-                    bandwidth: video.bandwidth,
-                    resolution: video.resolution,
-                    codecs: video.codecs,
-                    fps: video.fps
-                };
-            }
-            
-            // Also check variants list
-            if (video.variants) {
-                const variant = video.variants.find(v => normalizeUrl(v.url) === normalizeUrl(variantUrl));
-                if (variant) {
-                    return {
-                        playlistUrl: video.url,
-                        bandwidth: variant.bandwidth,
-                        resolution: variant.resolution,
-                        codecs: variant.codecs,
-                        fps: variant.fps
-                    };
-                }
-            }
-        }
-    }
-    
-    return null;
-}
-
 // Clean up for tab
 function cleanupForTab(tabId) {
     logDebug('Tab removed:', tabId);
@@ -1160,7 +1097,6 @@ export {
     normalizeUrl,
     getAllDetectedVideos,
     fetchManifestContent,
-    getManifestRelationship,
     getStreamMetadata,
     clearVideoCache
 };
