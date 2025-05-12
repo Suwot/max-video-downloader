@@ -471,132 +471,63 @@ async function enrichWithPlaylistInfo(video, tabId) {
             }
         }
         
-        // First, try using our fast JS-based parser for masters
-        if (video.isMasterPlaylist && (video.subtype === 'hls-master' || video.subtype === 'dash-master')) {
-            logDebug(`Using JS parser to extract variants from ${video.url} (${video.subtype})`);
-            
-            // Use our fast JS-based parser
-            const parseResult = await fullParseContent(video.url, video.subtype);
-            
-            if (parseResult.variants && parseResult.variants.length > 0) {
-                logDebug(`JS parser found ${parseResult.variants.length} variants in ${video.url}`);
-                
-                // Update video with the variants info
-                const normalizedUrl = normalizeUrl(video.url);
-                const videos = videosPerTab.get(tabId);
-                const index = videos.findIndex(v => normalizeUrl(v.url) === normalizedUrl);
-                
-                if (index !== -1) {
-                    // Update the video with duration if available
-                    if (parseResult.duration) {
-                        videos[index].duration = parseResult.duration;
-                    }
-                    
-                    // Enhanced variants with additional information
-                    const enhancedVariants = parseResult.variants.map(variant => {
-                        return {
-                            ...variant,
-                            type: video.type,
-                            source: 'simple-js-parser',
-                            isVariant: true,
-                            masterUrl: video.url,
-                            hasKnownMaster: true,
-                            timestamp: Date.now(),
-                        };
-                    });
-                    
-                    // Update the master playlist's variants with the enhanced variants
-                    videos[index].variants = enhancedVariants;
-                    videos[index].parsedWithJsParser = true;
-                    logDebug(`Updated master playlist with ${enhancedVariants.length} variants from JS parser`);
-                    
-                    // Also update in allDetectedVideos map
-                    const tabMap = allDetectedVideos.get(tabId);
-                    if (tabMap && tabMap.has(normalizedUrl)) {
-                        const updatedEntry = {
-                            ...tabMap.get(normalizedUrl),
-                            variants: enhancedVariants,
-                            parsedWithJsParser: true,
-                            duration: parseResult.duration || tabMap.get(normalizedUrl).duration
-                        };
-                        tabMap.set(normalizedUrl, updatedEntry);
-                    }
-                    
-                    // Broadcast update with the new information about the master
-                    broadcastVideoUpdate(tabId);
-                    
-                    // If we successfully extracted variants, we can return early without using manifest service
-                    return;
-                }
-            } else {
-                logDebug(`JS parser couldn't extract variants from ${video.url}, falling back to manifest service`);
-            }
-        }
+        // Use only our JS-based parser for all playlists, no fallback
+        logDebug(`Using JS parser to extract variants from ${video.url} (${video.subtype || video.type})`);
         
-        // Fall back to the manifest service for more complex cases or if JS parser didn't find variants
-        const processedVideo = await processVideoRelationships(video);
+        // Use our fast JS-based parser
+        const parseResult = await fullParseContent(video.url, video.subtype || video.type);
         
-        if (processedVideo && processedVideo !== video) {
-            // Update video with new information
+        if (parseResult.variants && parseResult.variants.length > 0) {
+            logDebug(`JS parser found ${parseResult.variants.length} variants in ${video.url}`);
+            
+            // Update video with the variants info
             const normalizedUrl = normalizeUrl(video.url);
             const videos = videosPerTab.get(tabId);
             const index = videos.findIndex(v => normalizeUrl(v.url) === normalizedUrl);
             
             if (index !== -1) {
-                // Update the video with new information
-                // Save previous variants count for comparison
-                const previousVariantsCount = videos[index].variants?.length || 0;
-                
-                videos[index] = {
-                    ...videos[index],
-                    ...processedVideo,
-                    // Preserve original fields
-                    timestamp: videos[index].timestamp,
-                    detectionTimestamp: videos[index].detectionTimestamp,
-                    // Ensure variants array is populated
-                    variants: processedVideo.variants || videos[index].variants || []
-                };
-                
-                // Log variants info for debugging
-                const currentVariantsCount = videos[index].variants?.length || 0;
-                
-                // If this is a master playlist with variants, just log the information
-                if (processedVideo.isMasterPlaylist && processedVideo.variants && processedVideo.variants.length > 0) {
-                    logDebug(`Found master playlist with ${currentVariantsCount} variants (was ${previousVariantsCount})`);
-                    
-                    // Enhanced variants with additional information
-                    const enhancedVariants = processedVideo.variants.map(variant => {
-                        return {
-                            ...variant,
-                            type: video.type,
-                            source: 'variantExtraction',
-                            isVariant: true,
-                            masterUrl: video.url,
-                            hasKnownMaster: true,
-                            timestamp: Date.now(),
-                        };
-                    });
-                    
-                    // Update the master playlist's variants with the enhanced variants
-                    videos[index].variants = enhancedVariants;
-                    logDebug(`Updated master playlist with ${enhancedVariants.length} enhanced variants`);
-                    
-                    // Also update in allDetectedVideos map
-                    const tabMap = allDetectedVideos.get(tabId);
-                    if (tabMap && tabMap.has(normalizedUrl)) {
-                        const updatedEntry = {
-                            ...tabMap.get(normalizedUrl),
-                            variants: enhancedVariants
-                        };
-                        tabMap.set(normalizedUrl, updatedEntry);
-                    }
-                    
-                    // Broadcast update with the new information about the master
-                    broadcastVideoUpdate(tabId);
-                } else if (currentVariantsCount === 0) {
-                    logDebug(`⚠️ Master playlist has no variants: ${videos[index].url}`);
+                // Update the video with duration if available
+                if (parseResult.duration) {
+                    videos[index].duration = parseResult.duration;
                 }
+                
+                // Enhanced variants with additional information
+                const enhancedVariants = parseResult.variants.map(variant => {
+                    return {
+                        ...variant,
+                        type: video.type,
+                        source: 'simple-js-parser',
+                        isVariant: true,
+                        masterUrl: video.url,
+                        hasKnownMaster: true,
+                        timestamp: Date.now(),
+                    };
+                });
+                
+                // Update the master playlist's variants with the enhanced variants
+                videos[index].variants = enhancedVariants;
+                videos[index].parsedWithJsParser = true;
+                logDebug(`Updated master playlist with ${enhancedVariants.length} variants from JS parser`);
+                
+                // Also update in allDetectedVideos map
+                const tabMap = allDetectedVideos.get(tabId);
+                if (tabMap && tabMap.has(normalizedUrl)) {
+                    const updatedEntry = {
+                        ...tabMap.get(normalizedUrl),
+                        variants: enhancedVariants,
+                        parsedWithJsParser: true,
+                        duration: parseResult.duration || tabMap.get(normalizedUrl).duration
+                    };
+                    tabMap.set(normalizedUrl, updatedEntry);
+                }
+                
+                // Broadcast update with the new information about the master
+                broadcastVideoUpdate(tabId);
+            } else {
+                logDebug(`Video no longer exists in tab videos: ${video.url}`);
             }
+        } else {
+            logDebug(`JS parser couldn't extract variants from ${video.url}`);
         }
     } catch (error) {
         console.error('Error processing playlist relationships:', error);
