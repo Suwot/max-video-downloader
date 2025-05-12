@@ -146,6 +146,34 @@ export async function fullParseContent(url, subtype) {
         let result;
         if (subtype === 'hls-master') {
             result = parseHlsMaster(content, baseUrl, url);
+            
+            // For HLS masters, calculate the duration for all variants
+            if (result.variants.length > 0) {
+                console.log(`[JS Parser] Calculating duration for ${result.variants.length} variants`);
+                
+                // Process all variants sequentially using Promise.all for better parallel processing
+                const durationPromises = result.variants.map(async (variant, index) => {
+                    try {
+                        // Calculate duration for each variant separately
+                        const durationInfo = await calculateHlsVariantDuration(variant.url);
+                        
+                        // Add duration info to variant metadata only (not to master)
+                        if (durationInfo.duration > 0) {
+                            console.log(`[JS Parser] Calculated duration for variant ${index+1}/${result.variants.length}: ${durationInfo.duration}s`);
+                            
+                            // Store duration only in variant's metadata
+                            variant.duration = durationInfo.duration;
+                            variant.jsMeta.duration = durationInfo.duration;
+                            variant.isComplete = durationInfo.isComplete;
+                        }
+                    } catch (error) {
+                        console.error(`[JS Parser] Failed to calculate duration for variant ${index+1}: ${error.message}`);
+                    }
+                });
+                
+                // Wait for all variant duration calculations to complete
+                await Promise.all(durationPromises);
+            }
         } else if (subtype === 'dash-master') {
             result = parseDashMaster(content, baseUrl, url);
         } else {
@@ -162,6 +190,59 @@ export async function fullParseContent(url, subtype) {
     } finally {
         // Clean up
         processingRequests.full.delete(normalizedUrl);
+    }
+}
+
+/**
+ * Calculate the actual duration of an HLS variant playlist by summing segment durations
+ * @param {string} variantUrl - URL of the HLS variant playlist
+ * @returns {Promise<{duration: number, isComplete: boolean}>} - Calculated duration and endlist status
+ */
+async function calculateHlsVariantDuration(variantUrl) {
+    try {
+        // Set up request with timeout
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000);  // 5 second timeout
+        
+        const response = await fetch(variantUrl, {
+            signal: controller.signal
+        });
+        
+        clearTimeout(timeoutId);
+        
+        if (!response.ok) {
+            console.log(`[JS Parser] ❌ FAILED fetching variant ${variantUrl}: ${response.status}`);
+            return { duration: 0, isComplete: false };
+        }
+        
+        const content = await response.text();
+        const lines = content.split(/\r?\n/);
+        
+        let totalDuration = 0;
+        
+        // Parse #EXTINF lines which contain segment durations
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i].trim();
+            if (line.startsWith('#EXTINF:')) {
+                // Extract the duration value (format: #EXTINF:4.5,)
+                const durationStr = line.substring(8).split(',')[0];
+                const segmentDuration = parseFloat(durationStr);
+                if (!isNaN(segmentDuration)) {
+                    totalDuration += segmentDuration;
+                }
+            }
+        }
+        
+        // Check if this is a VOD (complete) or live stream
+        const isComplete = content.includes('#EXT-X-ENDLIST');
+        
+        return {
+            duration: totalDuration,
+            isComplete: isComplete
+        };
+    } catch (error) {
+        console.error(`[JS Parser] ❌ ERROR calculating variant duration for ${variantUrl}: ${error.message}`);
+        return { duration: 0, isComplete: false };
     }
 }
 
