@@ -173,6 +173,3 @@ export function initVideoFetcher() {
         }
     });
 }
-
-// Export previously existing functions that might be used elsewhere
-export const refreshInBackground = requestNewVideoScan;
