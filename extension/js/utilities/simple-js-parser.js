@@ -102,8 +102,6 @@ export async function lightParseContent(url, type) {
     }
 }
 
-// TODO: Add fullParseContent function in future implementation
-
 /**
  * Perform full parsing of HLS/DASH master playlists to extract variant information
  * This function extracts complete information about all variants in a master playlist
@@ -419,17 +417,22 @@ function resolveUrl(baseUrl, relativeUrl) {
 function parseDashDuration(durationStr) {
     if (!durationStr) return 0;
     
-    // Handle ISO 8601 duration format
-    const regex = /PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+(?:\.\d+)?)S)?/;
+    // Handle full ISO 8601 duration format including years, months, days
+    // P[n]Y[n]M[n]DT[n]H[n]M[n]S
+    const regex = /P(?:(\d+)Y)?(?:(\d+)M)?(?:(\d+)D)?T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+(?:\.\d+)?)S)?/;
     const matches = durationStr.match(regex);
     
     if (!matches) return 0;
     
-    const hours = matches[1] ? parseInt(matches[1], 10) : 0;
-    const minutes = matches[2] ? parseInt(matches[2], 10) : 0;
-    const seconds = matches[3] ? parseFloat(matches[3]) : 0;
+    // Extract time components (we're simplifying by using approximate values for years/months)
+    const years = matches[1] ? parseInt(matches[1], 10) * 31536000 : 0;   // Approximate year as 365 days
+    const months = matches[2] ? parseInt(matches[2], 10) * 2592000 : 0;   // Approximate month as 30 days
+    const days = matches[3] ? parseInt(matches[3], 10) * 86400 : 0;
+    const hours = matches[4] ? parseInt(matches[4], 10) * 3600 : 0;
+    const minutes = matches[5] ? parseInt(matches[5], 10) * 60 : 0;
+    const seconds = matches[6] ? parseFloat(matches[6]) : 0;
     
-    return hours * 3600 + minutes * 60 + seconds;
+    return years + months + days + hours + minutes + seconds;
 }
 
 /**
