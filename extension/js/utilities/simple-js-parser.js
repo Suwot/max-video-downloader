@@ -209,13 +209,15 @@ function parseHlsMaster(content, baseUrl, masterUrl) {
                 type: 'hls',
                 subtype: 'hls-variant',
                 isVariant: true,
-                bandwidth: currentStreamInf.bandwidth,
-                averageBandwidth: currentStreamInf.averageBandwidth,
-                codecs: currentStreamInf.codecs,
-                resolution: currentStreamInf.resolution,
-                width: currentStreamInf.width,
-                height: currentStreamInf.height,
-                frameRate: currentStreamInf.frameRate,
+                jsMeta: {
+                    bandwidth: currentStreamInf.bandwidth,
+                    averageBandwidth: currentStreamInf.averageBandwidth,
+                    codecs: currentStreamInf.codecs,
+                    resolution: currentStreamInf.resolution,
+                    width: currentStreamInf.width,
+                    height: currentStreamInf.height,
+                    frameRate: currentStreamInf.frameRate
+                },
                 source: 'js-parser',
                 timestamp: Date.now()
             };
@@ -256,8 +258,8 @@ function parseDashMaster(content, baseUrl, masterUrl) {
         
         for (const adaptationSet of adaptationSets) {
             // Determine if this is video, audio, or other
-            const mimeType = extractAttribute(adaptationSet, 'mimeType') || '';
-            const contentType = extractAttribute(adaptationSet, 'contentType') || '';
+            const mimeType = extractAttribute(adaptationSet, 'mimeType') || null;
+            const contentType = extractAttribute(adaptationSet, 'contentType') || null;
             const isVideo = mimeType.includes('video') || contentType === 'video';
             
             // We primarily care about video adaptations for variant selection
@@ -266,12 +268,12 @@ function parseDashMaster(content, baseUrl, masterUrl) {
                 const representations = extractRepresentations(adaptationSet);
                 for (const representation of representations) {
                     // Extract variant details
-                    const id = extractAttribute(representation, 'id') || '';
+                    const id = extractAttribute(representation, 'id') || null;
                     const bandwidth = parseInt(extractAttribute(representation, 'bandwidth') || '0', 10);
-                    const codecs = extractAttribute(representation, 'codecs') || '';
+                    const codecs = extractAttribute(representation, 'codecs') || null;
                     const width = parseInt(extractAttribute(representation, 'width') || '0', 10);
                     const height = parseInt(extractAttribute(representation, 'height') || '0', 10);
-                    const frameRate = parseFrameRate(extractAttribute(representation, 'frameRate') || '');
+                    const frameRate = parseFrameRate(extractAttribute(representation, 'frameRate') || null);
                     
                     // For standard DASH, we point to the master with representation ID
                     const variantUrl = masterUrl + `#representation=${id}`;
@@ -286,11 +288,14 @@ function parseDashMaster(content, baseUrl, masterUrl) {
                         type: 'dash',
                         subtype: 'dash-variant',
                         isVariant: true,
-                        bandwidth: bandwidth,
-                        codecs: codecs,
-                        width: width,
-                        height: height,
-                        frameRate: frameRate,
+                        jsMeta: {
+                            bandwidth: bandwidth,
+                            codecs: codecs,
+                            width: width,
+                            height: height,
+                            frameRate: frameRate,
+                            resolution: `${width}x${height}` || null
+                        },
                         source: 'js-parser',
                         timestamp: Date.now()
                     };
