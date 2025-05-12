@@ -916,25 +916,6 @@ function getVideosForTab(tabId) {
     return processVideosForBroadcast(videos);
 }
 
-
-// Fetch manifest content
-async function fetchManifestContent(url) {
-    try {
-        const response = await fetch(url);
-        if (!response.ok) {
-            throw new Error(`Failed to fetch manifest: ${response.statusText}`);
-        }
-        const content = await response.text();
-        return content;
-    } catch (error) {
-        console.error('Error fetching manifest:', error);
-        if (error instanceof TypeError && error.message === 'Failed to fetch') {
-            console.error('This might be due to CORS restrictions or the server being unavailable');
-        }
-        return null;
-    }
-}
-
 // Clean up for tab
 function cleanupForTab(tabId) {
     logDebug('Tab removed:', tabId);
@@ -1096,7 +1077,6 @@ export {
     cleanupForTab,
     normalizeUrl,
     getAllDetectedVideos,
-    fetchManifestContent,
     getStreamMetadata,
     clearVideoCache
 };

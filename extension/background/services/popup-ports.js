@@ -5,7 +5,6 @@
 
 // Add static imports at the top
 import { getVideosForTab, getStreamQualities, 
-         fetchManifestContent,
          getStreamMetadata, clearVideoCache } from './video-manager.js';
 import { getActiveDownloads, getDownloadDetails, startDownload } from './download-manager.js';
 
@@ -127,16 +126,6 @@ async function handlePortMessage(message, port, portId) {
         } catch (error) {
             console.error(`Error getting stream metadata for ${message.url}:`, error);
         }
-    }
-    
-    // Handle manifest-related operations
-    else if (message.type === 'fetchManifest') {
-        const content = await fetchManifestContent(message.url);
-        port.postMessage({
-            type: 'manifestContent',
-            url: message.url,
-            content: content
-        });
     }
 
     // Handle download details request

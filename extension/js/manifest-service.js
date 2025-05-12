@@ -627,38 +627,6 @@ export function clearCaches() {
 }
 
 /**
- * Helper to fetch manifest content with timeout and caching
- * @param {string} url - URL to fetch
- * @returns {Promise<string>} Manifest content
- */
-async function fetchManifestContent(url) {
-    try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
-        
-        const response = await fetch(url, {
-            credentials: 'include',
-            mode: 'cors',
-            signal: controller.signal,
-            headers: {
-                'Accept': '*/*'
-            }
-        });
-        
-        clearTimeout(timeoutId);
-        
-        if (!response.ok) {
-            throw new Error(`Failed to fetch manifest: ${response.status} ${response.statusText}`);
-        }
-        
-        return await response.text();
-    } catch (error) {
-        console.error('Error fetching manifest:', error);
-        return null;
-    }
-}
-
-/**
  * Helper to normalize URLs for comparison
  * @param {string} url - URL to normalize
  * @returns {string} Normalized URL
