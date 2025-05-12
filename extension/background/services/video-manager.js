@@ -421,8 +421,8 @@ function addVideoToTab(tabId, videoInfo) {
                 type: 'blob',
                 format: 'blob',
                 container: 'blob',
-                hasVideo: true,
-                hasAudio: true
+                hasVideo: null,
+                hasAudio: null
             };
             video.needsMetadata = false;
             video.needsPreview = false;
