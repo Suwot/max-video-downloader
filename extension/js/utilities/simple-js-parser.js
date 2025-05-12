@@ -176,7 +176,7 @@ export async function fullParseContent(url, subtype) {
  */
 function parseHlsMaster(content, baseUrl, masterUrl) {
     const variants = [];
-    const lines = content.split(/\\r?\\n/);
+    const lines = content.split(/\r?\n/);
     
     let currentStreamInf = null;
     let globalDuration = 0;
