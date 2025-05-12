@@ -162,9 +162,14 @@ export async function fullParseContent(url, subtype) {
                             console.log(`[JS Parser] Calculated duration for variant ${index+1}/${result.variants.length}: ${durationInfo.duration}s`);
                             
                             // Store duration only in variant's metadata
-                            variant.duration = durationInfo.duration;
                             variant.jsMeta.duration = durationInfo.duration;
-                            variant.isComplete = durationInfo.isComplete;
+                            variant.jsMeta.isComplete = durationInfo.isComplete;
+
+                            // Add the isLive flag (opposite of isComplete)
+                            variant.jsMeta.isLive = !durationInfo.isComplete;
+                            
+                            // Log the stream type
+                            console.log(`[JS Parser] Variant ${index+1} is ${!durationInfo.isComplete ? 'LIVE' : 'VOD'}`);
                         }
                     } catch (error) {
                         console.error(`[JS Parser] Failed to calculate duration for variant ${index+1}: ${error.message}`);
@@ -464,13 +469,13 @@ function parseStreamInf(line) {
     
     // Initialize result object
     const result = {
-        bandwidth: 0,
-        averageBandwidth: 0,
-        codecs: '',
-        resolution: '',
-        width: 0,
-        height: 0,
-        frameRate: 0
+        bandwidth: null,
+        averageBandwidth: null,
+        codecs: null,
+        resolution: null,
+        width: null,
+        height: null,
+        frameRate: null
     };
     
     // Pattern for parsing attribute expressions, handling quoted values properly
