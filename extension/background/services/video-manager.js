@@ -307,50 +307,6 @@ function addVideoToTab(tabId, videoInfo) {
         logDebug(`Warning: Video not found in allDetectedVideos map: ${videoInfo.url}`);
     }
     
-    // If this is HLS or DASH, perform lightweight validation before adding to videosPerTab
-    if ((videoInfo.type === 'hls' || videoInfo.type === 'dash') && !videoInfo.subtype) {
-        // Don't block the main flow; perform validation asynchronously
-        (async () => {
-            try {
-                const parseResult = await lightParseContent(videoInfo.url, videoInfo.type);
-                
-                // Get the video from the map (it might have been updated since)
-                const tabMap = allDetectedVideos.get(tabId);
-                if (!tabMap || !tabMap.has(normalizedUrl)) return;
-                
-                const videoEntry = tabMap.get(normalizedUrl);
-                
-                // Update the video entry with subtype info
-                const updatedEntry = {
-                    ...videoEntry,
-                    subtype: parseResult.subtype,
-                    isValid: parseResult.isValid,
-                };
-                
-                // Update type flags based on subtype
-                if (parseResult.subtype === 'hls-master' || parseResult.subtype === 'dash-master') {
-                    updatedEntry.isMasterPlaylist = true;
-                    updatedEntry.isVariant = false;
-                } else if (parseResult.subtype === 'hls-variant' || parseResult.subtype === 'dash-variant') {
-                    updatedEntry.isVariant = true;
-                    updatedEntry.isMasterPlaylist = false;
-                }
-                
-                // Update the entry in the map
-                tabMap.set(normalizedUrl, updatedEntry);
-                
-                // Log result
-                if (parseResult.isValid) {
-                    logDebug(`[LightParse] Validated ${videoInfo.url} as ${parseResult.subtype}`);
-                } else {
-                    logDebug(`[LightParse] Invalid video: ${videoInfo.url} (${parseResult.subtype})`);
-                }
-            } catch (error) {
-                logDebug(`Error validating ${videoInfo.url}: ${error.message}`);
-            }
-        })();
-    }
-    
     // Create array for tab if it doesn't exist
     if (!videosPerTab.has(tabId)) {
         videosPerTab.set(tabId, []);
