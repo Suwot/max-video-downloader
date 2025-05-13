@@ -53,8 +53,7 @@ function addDetectedVideo(tabId, videoInfo) {
         ...videoInfo,
         normalizedUrl,
         tabId, // Store the tab ID for reference
-        timestamp: Date.now(),
-        detectionTimestamp: Date.now()
+        timestamp: Date.now()
     });
     
     logDebug(`Added new video to detection map: ${videoInfo.url} (type: ${videoInfo.type})`);

@@ -200,7 +200,8 @@ chrome.webRequest.onBeforeRequest.addListener(
                 addDetectedVideo(details.tabId, {
                     url: url,
                     type: type,
-                    source: 'webRequest'
+                    source: 'webRequest',
+                    detectionTimestamp: Date.now()
                 });
             }
         } catch (err) {
@@ -225,7 +226,8 @@ chrome.webRequest.onBeforeRequest.addListener(
                 addDetectedVideo(details.tabId, {
                     url: url,
                     type: type,
-                    source: 'webRequest'
+                    source: 'webRequest',
+                    detectionTimestamp: Date.now()
                 });
             }
         }
@@ -251,7 +253,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                 poster: video.poster,
                 title: video.title,
                 foundFromQueryParam: video.foundFromQueryParam || false,
-                originalUrl: video.originalUrl
+                originalUrl: video.originalUrl,
+                detectionTimestamp: Date.now()
             });
         });
         
@@ -262,7 +265,10 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === 'addVideo') {
         const tabId = sender.tab?.id;
         if (tabId && tabId > 0) {
-            addDetectedVideo(tabId, request);
+            addDetectedVideo(tabId, {
+                ...request,
+                detectionTimestamp: Date.now()
+            });
         }
         return false;
     }
