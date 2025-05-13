@@ -24,85 +24,6 @@ const allDetectedVideos = new Map();
 // Expose allDetectedVideos for debugging
 globalThis.allDetectedVideosInternal = allDetectedVideos;
 
-/**
- * Add detected video to the central tracking map
- * This is the first step in the video processing pipeline
- * @param {number} tabId - The tab ID where the video was detected
- * @param {Object} videoInfo - Information about the detected video
- * @returns {boolean} - True if this is a new video, false if it's a duplicate
- */
-function addDetectedVideo(tabId, videoInfo) {
-    // Normalize URL for deduplication
-    const normalizedUrl = normalizeUrl(videoInfo.url);
-    
-    // Initialize tab's video collection if it doesn't exist
-    if (!allDetectedVideos.has(tabId)) {
-        allDetectedVideos.set(tabId, new Map());
-    }
-    
-    // Get the map for this specific tab
-    const tabDetectedVideos = allDetectedVideos.get(tabId);
-    
-    // Skip if already in this tab's collection
-    if (tabDetectedVideos.has(normalizedUrl)) {
-        return false;
-    }
-    
-    // Add to tab's collection with timestamp
-    tabDetectedVideos.set(normalizedUrl, {
-        ...videoInfo,
-        normalizedUrl,
-        tabId, // Store the tab ID for reference
-        timestamp: Date.now()
-    });
-    
-    logDebug(`Added new video to detection map: ${videoInfo.url} (type: ${videoInfo.type})`);
-    
-    // Now process based on video type
-    if (videoInfo.type === 'direct' || videoInfo.url.startsWith('blob:')) {
-        // Direct videos and blobs can go straight to addVideoToTab
-        addVideoToTab(tabId, videoInfo);
-    } else if (videoInfo.type === 'hls' || videoInfo.type === 'dash') {
-        // First determine subtype via lightweight parsing before adding to tab
-    (async () => {
-        try {
-            const parseResult = await lightParseContent(videoInfo.url, videoInfo.type);
-            
-            // Update the entry in allDetectedVideos with subtype info
-            const tabMap = allDetectedVideos.get(tabId);
-            if (tabMap && tabMap.has(normalizedUrl)) {
-                const updatedEntry = {
-                    ...tabMap.get(normalizedUrl),
-                    subtype: parseResult.subtype,
-                    isValid: parseResult.isValid,
-                    ...(parseResult.isMaster ? { isMaster: true } : {}),
-                    ...(parseResult.isVariant ? { isVariant: true } : {})
-                };
-                
-                tabMap.set(normalizedUrl, updatedEntry);
-                
-                // Only add master playlists to the tab collection
-                if (parseResult.isValid && (parseResult.isMaster)) {
-                    logDebug(`Adding master playlist to tab: ${videoInfo.url} (${parseResult.subtype})`);
-                    addVideoToTab(tabId, updatedEntry);
-                } else if (parseResult.isValid) {
-                    logDebug(`Skipping variant in main tab collection: ${videoInfo.url} (${parseResult.subtype})`);
-                }
-            }
-        } catch (error) {
-            logDebug(`Error determining subtype for ${videoInfo.url}: ${error.message}`);
-            // Fall back to adding video as-is if parsing fails
-            addVideoToTab(tabId, videoInfo);
-        }
-    })();
-    } else {
-        // Unknown types also go straight to addVideoToTab
-        addVideoToTab(tabId, videoInfo);
-    }
-    
-    return true;
-}
-
 // Temporary processing trackers (not for storage)
 const processingRequests = {
   previews: new Set(), // Track URLs currently being processed for previews
@@ -257,277 +178,6 @@ function broadcastVideoUpdate(tabId) {
     }
     
     return processedVideos;
-}
-
-// Add video to tab's collection (now only updates allDetectedVideos map)
-function addVideoToTab(tabId, videoInfo) {
-    // Normalize URL for deduplication - we'll need this for lookup
-    const normalizedUrl = normalizeUrl(videoInfo.url);
-    
-    // Ensure tab's video collection exists
-    if (!allDetectedVideos.has(tabId)) {
-        allDetectedVideos.set(tabId, new Map());
-    }
-    
-    // Get the map for this tab
-    const tabVideosMap = allDetectedVideos.get(tabId);
-    
-    // Check if the video already exists in the map
-    const existingVideo = tabVideosMap.has(normalizedUrl) ? 
-                           tabVideosMap.get(normalizedUrl) : null;
-    
-    // The video object to work with
-    let video;
-    
-    if (existingVideo) {
-        // Update existing video
-        video = {
-            ...existingVideo,
-            ...videoInfo,
-            timestamp: existingVideo.timestamp || Date.now(),
-            // Preserve existing fields if new data doesn't have them
-            poster: videoInfo.poster || existingVideo.poster,
-            title: videoInfo.title || existingVideo.title,
-            // Preserve parsing states if they exist
-            isLightParsed: videoInfo.isLightParsed || existingVideo.isLightParsed || false, 
-            isFullyParsed: videoInfo.isFullyParsed || existingVideo.isFullyParsed || false,
-            // Preserve variants information
-            variants: videoInfo.variants || existingVideo.variants || [],
-            isMaster: videoInfo.isMaster || existingVideo.isMaster, 
-            isVariant: videoInfo.isVariant || existingVideo.isVariant || false
-        };
-    } else {
-        // Create new video object
-        video = {
-            ...videoInfo,
-            timestamp: Date.now(),
-            // Important flags for tracking processing status
-            isBeingProcessed: false,
-            needsMetadata: true,
-            needsPreview: !videoInfo.poster && !videoInfo.previewUrl,
-            // Add parsing state flags
-            isLightParsed: videoInfo.isLightParsed || false,
-            isFullyParsed: videoInfo.isFullyParsed || false,
-            // Master/variant status
-            isMaster: videoInfo.isMaster || false,
-            isVariant: videoInfo.isVariant || false
-        };
-        
-        // Notify any open popup about the new video
-        notifyNewVideoDetected(tabId);
-    }
-    
-    // Store the updated video in the map
-    tabVideosMap.set(normalizedUrl, video);
-    
-    // Check if this is a blob URL - skip enrichment completely for blobs
-    const isBlob = video.url.startsWith('blob:');
-    
-    // For blob URLs, add placeholder metadata immediately and skip enrichment
-    if (isBlob) {
-        if (!video.mediaInfo) {
-            // Set basic blob metadata if not already present
-            const blobMetadata = {
-                isBlob: true,
-                type: 'blob',
-                format: 'blob',
-                container: 'blob',
-                hasVideo: null,
-                hasAudio: null
-            };
-            
-            // Update video with blob metadata
-            video.mediaInfo = blobMetadata;
-            video.needsMetadata = false;
-            video.needsPreview = false;
-            video.isFullyParsed = true; // Mark blob URLs as fully parsed
-            tabVideosMap.set(normalizedUrl, video);
-        }
-    } else {
-        // For HLS/DASH playlists, process to detect master-variant relationships
-        if ((video.type === 'hls' || video.type === 'dash') && 
-            ((!video.isLightParsed && !video.isFullyParsed) || !video.variants)) {
-            // Check if this video seems to be a master playlist
-            const likelyMaster = video.type === 'hls' ? 
-                (!video.isVariant && (video.contentType?.includes('application') || video.url.includes('m3u8'))) :
-                (!video.isVariant && (video.contentType?.includes('application') || video.url.includes('mpd')));
-            
-            if (likelyMaster) {
-                logDebug(`Identified likely master playlist: ${video.url}`);
-                video.isMaster = true;
-                tabVideosMap.set(normalizedUrl, video);
-            }
-            
-            enrichWithPlaylistInfo(video, tabId);
-        }
-        
-        // Enrich with metadata if needed, only if not fully parsed already
-        if (!video.isFullyParsed && !video.mediaInfo && !processingRequests.metadata.has(normalizedUrl)) {
-            enrichWithMetadata(video, tabId);
-        }
-        
-        // Generate preview if needed
-        if (!video.previewUrl && !video.poster && !processingRequests.previews.has(normalizedUrl)) {
-            enrichWithPreview(video, tabId);
-        }
-    }
-    
-    // Broadcast update
-    broadcastVideoUpdate(tabId);
-}
-
-// Enrich video with playlist information (for HLS/DASH)
-async function enrichWithPlaylistInfo(video, tabId) {
-    const normalizedUrl = normalizeUrl(video.url);
-    
-    // Skip processing if already being handled
-    if (processingRequests.playlist.has(normalizedUrl)) {
-        logDebug(`Skipping duplicate enrichment for already processing playlist: ${video.url}`);
-        return;
-    }
-    
-    // Mark as being processed
-    processingRequests.playlist.add(normalizedUrl);
-    
-    try {
-        // Skip if already light parsed and we know its type
-        if (video.isLightParsed || (video.subtype && video.subtype !== 'processing')) {
-            logDebug(`Skipping playlist info enrichment for already parsed video: ${video.url} (${video.subtype || 'no subtype'})`);
-            
-            // If it's a light-parsed master, we still want to extract variants
-            if (video.isMaster) {
-                logDebug(`Processing master playlist for variants: ${video.url}`);
-                // Continue with variant extraction
-            } else if (video.subtype === 'not-a-video' || video.subtype === 'fetch-failed') {
-                // Skip further processing for non-videos
-                return;
-            }
-        }
-        
-        // Use only our JS-based parser for all playlists, no fallback
-        logDebug(`Using JS parser to extract variants from ${video.url} (${video.subtype || video.type})`);
-        
-        // Use our fast JS-based parser
-        const parseResult = await fullParseContent(video.url, video.subtype || video.type);
-        
-        if (parseResult.variants && parseResult.variants.length > 0) {
-            logDebug(`JS parser found ${parseResult.variants.length} variants in ${video.url}`);
-            
-            // Update video with the variants info
-            const normalizedUrl = normalizeUrl(video.url);
-            const tabMap = allDetectedVideos.get(tabId);
-            
-            if (tabMap && tabMap.has(normalizedUrl)) {
-                const currentVideo = tabMap.get(normalizedUrl);
-                
-                // Check if parseResult.variants exists and is an array
-                if (!parseResult.variants || !Array.isArray(parseResult.variants)) {
-                    console.error(`Unexpected parseResult format for ${video.url}:`, parseResult);
-                    logDebug(`Invalid parseResult format: variants property is ${parseResult.variants ? typeof parseResult.variants : 'undefined'}`);
-                    
-                    // Initialize an empty array if variants is missing or not an array
-                    parseResult.variants = [];
-                }
-                
-                // Enhanced variants with additional information
-                const enhancedVariants = parseResult.variants.map(variant => {
-                    return {
-                        ...variant,
-                        type: video.type,
-                        source: 'simple-js-parser',
-                        isVariant: true,
-                        masterUrl: video.url,
-                        hasKnownMaster: true,
-                        timestamp: Date.now(),
-                        // Make sure jsMeta exists for bandwidth data
-                        jsMeta: variant.jsMeta || {
-                            bandwidth: variant.bandwidth || 0,
-                            averageBandwidth: variant.averageBandwidth || 0
-                        }
-                    };
-                });
-                
-                logDebug(`Enhanced ${enhancedVariants.length} variants for ${video.url}`);
-                
-                // Update the master playlist with the enhanced variants
-                const updatedVideo = {
-                    ...currentVideo,
-                    variants: enhancedVariants,
-                    parsedWithJsParser: true,
-                    duration: parseResult.duration || currentVideo.duration,
-                    isFullyParsed: true,
-                    isMaster: enhancedVariants.length > 0 ? true : currentVideo.isMaster
-                };
-                
-                logDebug(`Updated master playlist with ${enhancedVariants.length} variants from JS parser`);
-                tabMap.set(normalizedUrl, updatedVideo);
-                
-                // NEW CODE: Enrich each variant with FFprobe metadata
-                logDebug(`Enriching ${enhancedVariants.length} variants with FFprobe metadata`);
-                
-                // Process each variant sequentially to avoid overwhelming the system
-                for (let i = 0; i < enhancedVariants.length; i++) {
-                    const variant = enhancedVariants[i];
-                    logDebug(`Getting FFprobe metadata for variant ${i+1}/${enhancedVariants.length}: ${variant.url}`);
-                    
-                    try {
-                        // Get FFprobe data directly
-                        const ffprobeData = await rateLimiter.enqueue(async () => {
-                            const response = await nativeHostService.sendMessage({
-                                type: 'getQualities',
-                                url: variant.url,
-                                light: false  // Always use full mode
-                            });
-                            return response?.streamInfo || null;
-                        });
-                        
-                        if (ffprobeData) {
-                            // Get the current state of the video from the map
-                            const currentMasterVideo = tabMap.get(normalizedUrl);
-                            if (!currentMasterVideo || !currentMasterVideo.variants) {
-                                logDebug(`Master video no longer exists or has no variants: ${normalizedUrl}`);
-                                continue;
-                            }
-                            
-                            // Create a new variants array with the updated variant
-                            const updatedVariants = [...currentMasterVideo.variants];
-                            if (i < updatedVariants.length) {
-                                updatedVariants[i] = {
-                                    ...updatedVariants[i],
-                                    ffprobeMeta: ffprobeData,
-                                    hasFFprobeMetadata: true
-                                };
-                                
-                                // Update the master in the map with the updated variants
-                                tabMap.set(normalizedUrl, {
-                                    ...currentMasterVideo,
-                                    variants: updatedVariants
-                                });
-                                
-                                logDebug(`Successfully added FFprobe metadata to variant ${i+1}`);
-                            } else {
-                                logDebug(`Variant index ${i} is out of bounds for variants array of length ${updatedVariants.length}`);
-                            }
-                        }
-                    } catch (error) {
-                        console.error(`Error getting FFprobe metadata for variant ${variant.url}:`, error);
-                    }
-                }
-                
-                // Broadcast update with the new information about the master
-                broadcastVideoUpdate(tabId);
-            } else {
-                logDebug(`Video no longer exists in tab videos: ${video.url}`);
-            }
-        } else {
-            logDebug(`JS parser couldn't extract variants from ${video.url}`);
-        }
-    } catch (error) {
-        console.error('Error processing playlist relationships:', error);
-    } finally {
-        // Remove from processing requests to allow retry
-        processingRequests.playlist.delete(normalizedUrl);
-    }
 }
 
 // Enrich video with metadata - only for direct videos
@@ -689,65 +339,6 @@ function applyMetadataToVideo(tabId, normalizedUrl, mediaInfo) {
     }
 }
 
-// Enrich video with preview image
-async function enrichWithPreview(video, tabId) {
-    const normalizedUrl = normalizeUrl(video.url);
-    
-    // Skip blob URLs early - they can't generate previews
-    if (video.url.startsWith('blob:')) {
-        // Mark as processed to avoid repeated attempts
-        const tabMap = allDetectedVideos.get(tabId);
-        if (tabMap && tabMap.has(normalizedUrl)) {
-            const updatedVideo = {
-                ...tabMap.get(normalizedUrl),
-                needsPreview: false
-            };
-            tabMap.set(normalizedUrl, updatedVideo);
-            logDebug(`Skipping preview generation for blob URL: ${video.url}`);
-        }
-        return;
-    }
-    
-    // Mark as being processed
-    processingRequests.previews.add(normalizedUrl);
-    
-    try {
-        // Use rate limiter to prevent too many concurrent requests
-        const response = await rateLimiter.enqueue(async () => {
-            logDebug(`Generating preview for ${video.url}`);
-            return await nativeHostService.sendMessage({
-                type: 'generatePreview',
-                url: video.url
-            });
-        });
-        
-        // If we successfully generated a preview, update the video
-        if (response && response.previewUrl && allDetectedVideos.has(tabId)) {
-            const tabMap = allDetectedVideos.get(tabId);
-            
-            if (tabMap && tabMap.has(normalizedUrl)) {
-                const currentVideo = tabMap.get(normalizedUrl);
-                const updatedVideo = {
-                    ...currentVideo,
-                    previewUrl: response.previewUrl,
-                    needsPreview: false
-                };
-                
-                // Update the video in the map
-                tabMap.set(normalizedUrl, updatedVideo);
-                
-                // Notify UI about update
-                notifyVideoUpdated(tabId, normalizedUrl, updatedVideo);
-            }
-        }
-    } catch (error) {
-        console.error(`Error generating preview for ${video.url}:`, error);
-    } finally {
-        // Always remove from processing set when done
-        processingRequests.previews.delete(normalizedUrl);
-    }
-}
-
 /**
  * Notify any open popup about a video update (for any property)
  * @param {number} tabId - Tab ID
@@ -822,12 +413,6 @@ async function getStreamQualities(url) {
         console.error('Error getting media info:', error);
         return { error: error.message };
     }
-}
-
-// Get videos for tab
-function getVideosForTab(tabId) {
-    // Use the map-based approach
-    return getVideosArrayFromMap(tabId);
 }
 
 // Clean up for tab
@@ -954,13 +539,425 @@ function getVideosArrayFromMap(tabId) {
     return processVideosForBroadcast(resultArray);
 }
 
+// addition of all new suggested logic
+
+/**
+ * Add detected video to the central tracking map
+ * This is the first step in the video processing pipeline
+ * @param {number} tabId - The tab ID where the video was detected
+ * @param {Object} videoInfo - Information about the detected video
+ * @returns {boolean} - True if this is a new video, false if it's a duplicate
+ */
+function addDetectedVideo(tabId, videoInfo) {
+    // Normalize URL for deduplication
+    const normalizedUrl = normalizeUrl(videoInfo.url);
+    
+    // Initialize tab's video collection if it doesn't exist
+    if (!allDetectedVideos.has(tabId)) {
+        allDetectedVideos.set(tabId, new Map());
+    }
+    
+    // Get the map for this specific tab
+    const tabDetectedVideos = allDetectedVideos.get(tabId);
+    
+    // Skip if already in this tab's collection
+    if (tabDetectedVideos.has(normalizedUrl)) {
+        return false;
+    }
+    
+    // Add to tab's collection with basic info
+    const newVideo = {
+        ...videoInfo,
+        normalizedUrl,
+        tabId,
+        timestamp: Date.now(),
+        // Important flags for tracking processing status
+        isBeingProcessed: false,
+        needsMetadata: true,
+        needsPreview: !videoInfo.poster && !videoInfo.previewUrl
+    };
+    
+    tabDetectedVideos.set(normalizedUrl, newVideo);
+    
+    logDebug(`Added new video to detection map: ${videoInfo.url} (type: ${videoInfo.type})`);
+    
+    // Notify any open popup about the new video
+    notifyNewVideoDetected(tabId);
+    
+    // Now process based on video type
+    if (videoInfo.url.startsWith('blob:')) {
+        // Handle blob URLs differently - they need special metadata
+        handleBlobVideo(tabId, normalizedUrl);
+    } else if (videoInfo.type === 'hls' || videoInfo.type === 'dash') {
+        // For streaming content, first run JS parser
+        runJSParser(tabId, normalizedUrl, videoInfo.type);
+    } else if (videoInfo.type === 'direct') {
+        // For direct videos, get FFprobe metadata
+        runFFProbeParser(tabId, normalizedUrl);
+        // Also generate preview
+        generateVideoPreview(tabId, normalizedUrl);
+    } else {
+        // Unknown types - try FFprobe anyway as fallback
+        runFFProbeParser(tabId, normalizedUrl);
+        // Also generate preview
+        generateVideoPreview(tabId, normalizedUrl);
+    }
+    
+    // Broadcast initial state to UI
+    broadcastVideoUpdate(tabId);
+    
+    return true;
+}
+
+/**
+ * Run JS parser for streaming content (both light and full parsing)
+ * @param {number} tabId - Tab ID
+ * @param {string} normalizedUrl - Normalized video URL
+ * @param {string} type - Content type (hls/dash)
+ */
+async function runJSParser(tabId, normalizedUrl, type) {
+    // Skip if already being processed
+    if (processingRequests.lightParsing.has(normalizedUrl)) {
+        return;
+    }
+    
+    processingRequests.lightParsing.add(normalizedUrl);
+    
+    try {
+        const tabMap = allDetectedVideos.get(tabId);
+        if (!tabMap || !tabMap.has(normalizedUrl)) {
+            return;
+        }
+        
+        const video = tabMap.get(normalizedUrl);
+        
+        // First do light parsing to determine content type
+        logDebug(`Running light parsing for ${video.url}`);
+        const lightParseResult = await lightParseContent(video.url, type);
+        
+        // Update video with light parse results
+        const updatedVideoAfterLightParse = {
+            ...video,
+            subtype: lightParseResult.subtype,
+            isValid: lightParseResult.isValid,
+            isLightParsed: true,
+            isMaster: lightParseResult.isMaster || false,
+            isVariant: lightParseResult.isVariant || false
+        };
+        
+        tabMap.set(normalizedUrl, updatedVideoAfterLightParse);
+        
+        // Stop here if not a valid video
+        if (!lightParseResult.isValid) {
+            logDebug(`${video.url} is not a valid ${type} video`);
+            return;
+        }
+        
+        // For master playlists, extract variants with full parsing
+        if (lightParseResult.isMaster) {
+            logDebug(`Processing master playlist: ${video.url}`);
+            
+            // Run full parsing to extract variants
+            const fullParseResult = await fullParseContent(video.url, lightParseResult.subtype);
+            
+            if (fullParseResult.variants && fullParseResult.variants.length > 0) {
+                // Process variants
+                const enhancedVariants = fullParseResult.variants.map(variant => ({
+                    ...variant,
+                    type,
+                    source: 'simple-js-parser',
+                    isVariant: true,
+                    masterUrl: video.url,
+                    hasKnownMaster: true,
+                    timestamp: Date.now(),
+                    jsMeta: variant.jsMeta || {
+                        bandwidth: variant.bandwidth || 0,
+                        averageBandwidth: variant.averageBandwidth || 0
+                    }
+                }));
+                
+                // Update master with variants
+                const updatedVideoAfterFullParse = {
+                    ...updatedVideoAfterLightParse,
+                    variants: enhancedVariants,
+                    parsedWithJsParser: true,
+                    duration: fullParseResult.duration || updatedVideoAfterLightParse.duration,
+                    isFullyParsed: true
+                };
+                
+                tabMap.set(normalizedUrl, updatedVideoAfterFullParse);
+                
+                // For each variant, get FFprobe metadata
+                // Process sequentially to avoid overwhelming the system
+                processVariantsWithFFprobe(tabId, normalizedUrl, enhancedVariants);
+            }
+        } else if (lightParseResult.isVariant) {
+            // For variants, just update basic info
+            // (variants are usually managed through their master playlist)
+            logDebug(`Detected variant: ${video.url}`);
+        }
+        
+        // Always generate a preview
+        generateVideoPreview(tabId, normalizedUrl);
+        
+        // Update UI
+        broadcastVideoUpdate(tabId);
+        
+    } catch (error) {
+        console.error(`Error in runJSParser for ${normalizedUrl}:`, error);
+    } finally {
+        processingRequests.lightParsing.delete(normalizedUrl);
+    }
+}
+
+/**
+ * Process variants with FFprobe
+ * @param {number} tabId - Tab ID
+ * @param {string} masterUrl - Normalized master URL
+ * @param {Array} variants - Array of variant objects
+ */
+async function processVariantsWithFFprobe(tabId, masterUrl, variants) {
+    logDebug(`Processing ${variants.length} variants with FFprobe`);
+    
+    // Process each variant sequentially
+    for (let i = 0; i < variants.length; i++) {
+        const variant = variants[i];
+        logDebug(`Processing variant ${i+1}/${variants.length}: ${variant.url}`);
+        
+        try {
+            // Get FFprobe metadata
+            const ffprobeData = await rateLimiter.enqueue(async () => {
+                const response = await nativeHostService.sendMessage({
+                    type: 'getQualities',
+                    url: variant.url,
+                    light: false
+                });
+                return response?.streamInfo || null;
+            });
+            
+            if (ffprobeData) {
+                // Update variant in master's variants array
+                updateVariantWithFFprobeData(tabId, masterUrl, i, ffprobeData);
+            }
+        } catch (error) {
+            console.error(`Error getting FFprobe data for variant ${variant.url}:`, error);
+        }
+    }
+}
+
+/**
+ * Update variant with FFprobe data
+ * @param {number} tabId - Tab ID
+ * @param {string} masterUrl - Normalized master URL
+ * @param {number} variantIndex - Index of variant in master's variants array
+ * @param {Object} ffprobeData - FFprobe metadata
+ */
+function updateVariantWithFFprobeData(tabId, masterUrl, variantIndex, ffprobeData) {
+    const tabMap = allDetectedVideos.get(tabId);
+    if (!tabMap || !tabMap.has(masterUrl)) {
+        return;
+    }
+    
+    const masterVideo = tabMap.get(masterUrl);
+    if (!masterVideo.variants || variantIndex >= masterVideo.variants.length) {
+        return;
+    }
+    
+    // Create updated variants array
+    const updatedVariants = [...masterVideo.variants];
+    updatedVariants[variantIndex] = {
+        ...updatedVariants[variantIndex],
+        ffprobeMeta: ffprobeData,
+        hasFFprobeMetadata: true,
+        isFullyParsed: true
+    };
+    
+    // Update master with new variants array
+    tabMap.set(masterUrl, {
+        ...masterVideo,
+        variants: updatedVariants
+    });
+    
+    // Update UI
+    broadcastVideoUpdate(tabId);
+}
+
+/**
+ * Run FFprobe parser for direct videos
+ * @param {number} tabId - Tab ID
+ * @param {string} normalizedUrl - Normalized video URL
+ */
+async function runFFProbeParser(tabId, normalizedUrl) {
+    // Skip if already being processed
+    if (processingRequests.metadata.has(normalizedUrl)) {
+        return;
+    }
+    
+    processingRequests.metadata.add(normalizedUrl);
+    
+    try {
+        const tabMap = allDetectedVideos.get(tabId);
+        if (!tabMap || !tabMap.has(normalizedUrl)) {
+            return;
+        }
+        
+        const video = tabMap.get(normalizedUrl);
+        
+        // Skip if already fully parsed
+        if (video.isFullyParsed) {
+            return;
+        }
+        
+        // Get metadata from FFprobe
+        logDebug(`Getting FFprobe metadata for ${video.url}`);
+        
+        const streamInfo = await rateLimiter.enqueue(async () => {
+            const response = await nativeHostService.sendMessage({
+                type: 'getQualities',
+                url: video.url,
+                light: false
+            });
+            return response?.streamInfo || null;
+        });
+        
+        if (streamInfo) {
+            // Calculate estimated size if possible
+            if (streamInfo.totalBitrate && video.duration) {
+                streamInfo.estimatedSize = estimateFileSize(streamInfo.totalBitrate, video.duration);
+            }
+            
+            // Create updated video with metadata
+            const updatedVideo = {
+                ...video,
+                mediaInfo: streamInfo,
+                ffprobeMeta: streamInfo,  // Store FFprobe data separately
+                hasFFprobeMetadata: true,
+                needsMetadata: false,
+                isFullyParsed: true,
+                // Update resolution data from the mediaInfo
+                resolution: streamInfo.width && streamInfo.height ? {
+                    width: streamInfo.width,
+                    height: streamInfo.height,
+                    fps: streamInfo.fps,
+                    bitrate: streamInfo.videoBitrate || streamInfo.totalBitrate
+                } : video.resolution,
+                fileSize: streamInfo.sizeBytes || streamInfo.estimatedSize || video.fileSize
+            };
+            
+            // Update in map
+            tabMap.set(normalizedUrl, updatedVideo);
+            
+            // Update UI
+            notifyVideoUpdated(tabId, normalizedUrl, updatedVideo);
+            broadcastVideoUpdate(tabId);
+        }
+    } catch (error) {
+        console.error(`Error in runFFProbeParser for ${normalizedUrl}:`, error);
+    } finally {
+        processingRequests.metadata.delete(normalizedUrl);
+    }
+}
+
+/**
+ * Generate preview for a video
+ * @param {number} tabId - Tab ID
+ * @param {string} normalizedUrl - Normalized video URL
+ */
+async function generateVideoPreview(tabId, normalizedUrl) {
+    // Skip if already being processed
+    if (processingRequests.previews.has(normalizedUrl)) {
+        return;
+    }
+    
+    processingRequests.previews.add(normalizedUrl);
+    
+    try {
+        const tabMap = allDetectedVideos.get(tabId);
+        if (!tabMap || !tabMap.has(normalizedUrl)) {
+            return;
+        }
+        
+        const video = tabMap.get(normalizedUrl);
+        
+        // Skip if already has preview or is a blob
+        if (video.previewUrl || video.poster || video.url.startsWith('blob:')) {
+            return;
+        }
+        
+        // Generate preview
+        logDebug(`Generating preview for ${video.url}`);
+        
+        const response = await rateLimiter.enqueue(async () => {
+            return await nativeHostService.sendMessage({
+                type: 'generatePreview',
+                url: video.url
+            });
+        });
+        
+        if (response && response.previewUrl) {
+            // Update video with preview URL
+            const updatedVideo = {
+                ...video,
+                previewUrl: response.previewUrl,
+                needsPreview: false
+            };
+            
+            // Update in map
+            tabMap.set(normalizedUrl, updatedVideo);
+            
+            // Update UI
+            notifyVideoUpdated(tabId, normalizedUrl, updatedVideo);
+            broadcastVideoUpdate(tabId);
+        }
+    } catch (error) {
+        console.error(`Error in generateVideoPreview for ${normalizedUrl}:`, error);
+    } finally {
+        processingRequests.previews.delete(normalizedUrl);
+    }
+}
+
+/**
+ * Handle blob URLs (which need special treatment)
+ * @param {number} tabId - Tab ID
+ * @param {string} normalizedUrl - Normalized video URL
+ */
+function handleBlobVideo(tabId, normalizedUrl) {
+    const tabMap = allDetectedVideos.get(tabId);
+    if (!tabMap || !tabMap.has(normalizedUrl)) {
+        return;
+    }
+    
+    const video = tabMap.get(normalizedUrl);
+    
+    // Set placeholder metadata for blob URLs
+    const updatedVideo = {
+        ...video,
+        mediaInfo: {
+            isBlob: true,
+            type: 'blob',
+            format: 'blob',
+            container: 'blob',
+            hasVideo: true,
+            hasAudio: true
+        },
+        needsMetadata: false,
+        needsPreview: false,
+        isFullyParsed: true
+    };
+    
+    // Update in map
+    tabMap.set(normalizedUrl, updatedVideo);
+    
+    // Update UI
+    notifyVideoUpdated(tabId, normalizedUrl, updatedVideo);
+    broadcastVideoUpdate(tabId);
+}
+
 
 export {
     addDetectedVideo,
-    addVideoToTab,
     broadcastVideoUpdate,
     getStreamQualities,
-    getVideosForTab,
     cleanupForTab,
     normalizeUrl,
     getAllDetectedVideos,

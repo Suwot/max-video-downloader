@@ -4,7 +4,7 @@
  */
 
 // Add static imports at the top
-import { getVideosForTab, getVideosArrayFromMap, getStreamQualities, clearVideoCache } from './video-manager.js';
+import { getVideosArrayFromMap, getStreamQualities, clearVideoCache } from './video-manager.js';
 import { getActiveDownloads, getDownloadDetails, startDownload } from './download-manager.js';
 
 // Track all popup connections for universal communication
