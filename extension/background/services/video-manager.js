@@ -205,37 +205,9 @@ function getFilenameFromUrl(url) {
 
 // Process videos for sending to popup - fully prepare videos for instant display
 function processVideosForBroadcast(videos) {
-    // First apply validation filter to remove unwanted videos
-    const validatedVideos = validateAndFilterVideos ? validateAndFilterVideos(videos) : videos;
-    
-    // Second pass: process each variant to ensure it has full metadata
-    const processedWithVariants = validatedVideos.map(video => {
-        // If this is a master playlist with variants, enhance each variant with available info
-        if (video.isMaster && video.variants && video.variants.length > 0) {
-            const processedVariants = video.variants.map(variant => {
-                // The variant info is already stored in the master playlist
-                // No need to look for standalone variants anymore
-                return {
-                    ...variant,
-                    // Add any missing properties needed for UI display
-                    isVariant: true,
-                    hasKnownMaster: true,
-                    mediaInfo: variant.mediaInfo || null
-                };
-            });
-            
-            // Replace the variants array with the processed variants
-            return {
-                ...video,
-                variants: processedVariants
-            };
-        }
-        
-        return video;
-    });
     
     // Third pass: final preparation for display
-    const processedVideos = processedWithVariants.map(video => {
+    const processedVideos = videos.map(video => {
         // Add additional information needed for immediate display
         return {
             ...video,
@@ -247,8 +219,8 @@ function processVideosForBroadcast(videos) {
             title: video.title || getFilenameFromUrl(video.url),
             poster: video.poster || video.previewUrl || null,
             downloadable: true,
-            // Preserve source information or default to 'background'
-            source: video.source || 'background',
+            // Preserve source information or default to null
+            source: video.source || null,
             // Preserve the detection timestamp for debugging duplicates
             detectionTimestamp: video.detectionTimestamp || null,
             // Ensure variants are properly preserved
