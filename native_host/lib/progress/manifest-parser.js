@@ -123,7 +123,7 @@ class ManifestParser {
                 
                 return {
                     ...result,
-                    isMasterPlaylist: isMaster,
+                    isMaster: isMaster,
                     isVariant: !isMaster
                 };
             }
@@ -136,7 +136,7 @@ class ManifestParser {
                 
                 return {
                     ...result,  
-                    isMasterPlaylist: hasMasterElements,
+                    isMaster: hasMasterElements,
                     isVariant: !hasMasterElements
                 };
             }

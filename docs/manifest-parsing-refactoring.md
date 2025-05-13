@@ -26,7 +26,7 @@ The manifest parsing system has been refactored to follow a simplified two-stage
 
 - Enhanced video object with standardized fields
 - Added calculated fields like estimated size based on bandwidth and duration
-- Normalized properties like `isMasterPlaylist`/`isVariant`
+- Normalized properties like `isMaster`/`isVariant`
 - Added format information for better user experience
 
 ### New Utility Functions
@@ -44,7 +44,6 @@ The manifest parsing system has been refactored to follow a simplified two-stage
   - `targetDuration`: Maximum segment duration for HLS variants
   - `version`: HLS protocol version
   - `playlistType`: Indicates 'master' or 'variant' for more explicit typing
-  
 - **DASH-Specific Properties**:
   - `version`: DASH manifest version
   - `totalDuration`: Total presentation duration calculated from manifest
@@ -58,7 +57,6 @@ The manifest parsing system has been refactored to follow a simplified two-stage
   - `needsMetadata`: Flag for videos requiring additional metadata extraction
   - `needsPreview`: Flag for videos requiring thumbnail generation
   - `processed`: Main status indicator for completed processing pipeline
-  
 - **Image Handling**:
   - `poster`: Main thumbnail image for displaying in UI
   - `previewUrl`: Secondary image reference, made consistent with poster for streaming media
@@ -77,12 +75,10 @@ The manifest parsing system has been refactored to follow a simplified two-stage
   - Added `manifestContentCache` with 5-minute expiration time
   - Prevents redundant fetches of the same manifest within a short timeframe
   - Reduces network load and speeds up repeat operations
-  
 - **Optimized Fetching**:
   - Added `getManifestContent()` helper that uses Range requests when possible
   - Allows for efficient light parsing by fetching only the manifest header when supported
   - Falls back to full fetching when Range requests aren't supported
-  
 - **Rich Metadata Caching**:
   - Caches extracted metadata to speed up processing of related manifests
   - Maintains relationship mappings between master playlists and their variants
@@ -94,7 +90,6 @@ The manifest parsing system has been refactored to follow a simplified two-stage
   - Added explicit try/catch blocks around network and parsing operations
   - Provides detailed error logging for debugging
   - Ensures errors in one manifest don't affect processing of others
-  
 - **Graceful Fallbacks**:
   - When light parsing fails, falls back to full parsing
   - When full parsing fails, uses light parsing results if available
@@ -105,21 +100,25 @@ The manifest parsing system has been refactored to follow a simplified two-stage
 The refactoring of the manifest parsing flow delivers several key benefits:
 
 ### Performance Improvements
+
 - **Reduced Network Traffic**: By implementing content caching with expiration, network requests are minimized for frequently accessed manifests
 - **Faster Processing**: Two-stage parsing approach allows quick identification of video types without full parsing overhead
 - **Efficient Resource Utilization**: Range requests fetch only necessary data for light parsing, reducing bandwidth usage
 
 ### Code Quality & Maintainability
+
 - **Consistent Data Model**: Standardized object structure makes the codebase more predictable and easier to maintain
 - **Clear Processing States**: Well-defined states (isLightParsed, isFullyParsed) make the code's behavior more transparent
 - **Simplified Integration**: The standardizeVideoObject function provides a single point for ensuring consistency
 
 ### User Experience
+
 - **More Reliable Metadata**: Enhanced metadata extraction provides better information for user display (quality, size estimates)
 - **Faster UI Updates**: Light parsing allows quick display of basic information while full details are being processed
 - **Better Error Handling**: Graceful fallbacks ensure users still get functional results even when optimal parsing isn't possible
 
 ### Future Extensibility
+
 - **Support for New Formats**: The standardized approach makes it easier to add support for new streaming formats
 - **Easier Testing**: Clear separation of concerns makes the codebase more testable
 - **Simplified Analytics**: Consistent metadata fields enable better tracking and analysis of user behavior

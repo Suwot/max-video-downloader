@@ -281,7 +281,7 @@ class GetQualitiesCommand extends BaseCommand {
                                     if (type === 'hls') {
                                         const isMaster = data.includes('#EXT-X-STREAM-INF:');
                                         resolve({
-                                            isMasterPlaylist: isMaster,
+                                            isMaster: isMaster,
                                             isVariant: !isMaster,
                                             type: 'hls',
                                             format: 'hls', 
@@ -291,7 +291,7 @@ class GetQualitiesCommand extends BaseCommand {
                                         const isMaster = data.includes('<AdaptationSet') && 
                                                         data.includes('<Representation');
                                         resolve({
-                                            isMasterPlaylist: isMaster,
+                                            isMaster: isMaster,
                                             isVariant: !isMaster,
                                             type: 'dash',
                                             format: 'dash',
@@ -315,7 +315,7 @@ class GetQualitiesCommand extends BaseCommand {
             const result = await manifestParser.lightParse(url, type);
             
             if (result) {
-                logDebug(`🔎 [LIGHT-ANALYSIS] Success for ${url}: isMaster=${result.isMasterPlaylist}, isVariant=${result.isVariant}`);
+                logDebug(`🔎 [LIGHT-ANALYSIS] Success for ${url}: isMaster=${result.isMaster}, isVariant=${result.isVariant}`);
                 return { 
                     success: true,
                     streamInfo: {

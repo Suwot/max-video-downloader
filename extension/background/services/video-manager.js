@@ -80,14 +80,14 @@ function addDetectedVideo(tabId, videoInfo) {
                     ...tabMap.get(normalizedUrl),
                     subtype: parseResult.subtype,
                     isValid: parseResult.isValid,
-                    isMasterPlaylist: parseResult.subtype === 'hls-master' || parseResult.subtype === 'dash-master',
-                    isVariant: parseResult.subtype === 'hls-variant' || parseResult.subtype === 'dash-variant'
+                    ...(parseResult.isMaster ? { isMaster: true } : {}),
+                    ...(parseResult.isVariant ? { isVariant: true } : {})
                 };
                 
                 tabMap.set(normalizedUrl, updatedEntry);
                 
                 // Only add master playlists to the tab collection
-                if (parseResult.isValid && (parseResult.subtype === 'hls-master' || parseResult.subtype === 'dash-master')) {
+                if (parseResult.isValid && (parseResult.isMaster)) {
                     logDebug(`Adding master playlist to tab: ${videoInfo.url} (${parseResult.subtype})`);
                     addVideoToTab(tabId, updatedEntry);
                 } else if (parseResult.isValid) {
@@ -211,7 +211,7 @@ function processVideosForBroadcast(videos) {
     // Second pass: process each variant to ensure it has full metadata
     const processedWithVariants = validatedVideos.map(video => {
         // If this is a master playlist with variants, enhance each variant with available info
-        if (video.isMasterPlaylist && video.variants && video.variants.length > 0) {
+        if (video.isMaster && video.variants && video.variants.length > 0) {
             const processedVariants = video.variants.map(variant => {
                 // The variant info is already stored in the master playlist
                 // No need to look for standalone variants anymore
@@ -256,7 +256,7 @@ function processVideosForBroadcast(videos) {
             // Preserve parsing state flags
             isLightParsed: video.isLightParsed || false,
             isFullyParsed: video.isFullyParsed || false,
-            isMasterPlaylist: video.isMasterPlaylist || false,
+            isMaster: video.isMaster || false,
             isVariant: video.isVariant || false,
             // File size information
             fileSize: video.fileSize || video.mediaInfo?.sizeBytes || video.mediaInfo?.estimatedSize || null
@@ -337,7 +337,7 @@ function addVideoToTab(tabId, videoInfo) {
             isFullyParsed: videoInfo.isFullyParsed || tabVideos[existingIndex].isFullyParsed || false,
             // Preserve variants information
             variants: videoInfo.variants || tabVideos[existingIndex].variants || [],
-            isMasterPlaylist: videoInfo.isMasterPlaylist || tabVideos[existingIndex].isMasterPlaylist, 
+            isMaster: videoInfo.isMaster || tabVideos[existingIndex].isMaster, 
             isVariant: videoInfo.isVariant || tabVideos[existingIndex].isVariant || false
         };
         video = tabVideos[existingIndex];
@@ -354,7 +354,7 @@ function addVideoToTab(tabId, videoInfo) {
             isLightParsed: videoInfo.isLightParsed || false,
             isFullyParsed: videoInfo.isFullyParsed || false,
             // Master/variant status
-            isMasterPlaylist: videoInfo.isMasterPlaylist || false,
+            isMaster: videoInfo.isMaster || false,
             isVariant: videoInfo.isVariant || false
         };
         
@@ -542,7 +542,7 @@ async function enrichWithMetadata(video, tabId) {
     }
     
     // Skip all non-direct videos
-    if (video.isVariant || video.isMasterPlaylist || video.url.startsWith('blob:')) {
+    if (video.isVariant || video.isMaster || video.url.startsWith('blob:')) {
         return;
     }
     

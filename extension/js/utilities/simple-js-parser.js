@@ -58,11 +58,11 @@ export async function lightParseContent(url, type) {
         if (type === 'hls') {
             // Check if it's a master playlist (contains #EXT-X-STREAM-INF)
             if (content.includes('#EXT-X-STREAM-INF')) {
-                result = { isValid: true, subtype: 'hls-master' };
+                result = { isValid: true, subtype: 'hls-master', isMaster: true };
             } 
             // Check if it's a variant/media playlist (contains #EXTINF)
             else if (content.includes('#EXTINF')) {
-                result = { isValid: true, subtype: 'hls-variant' };
+                result = { isValid: true, subtype: 'hls-variant', isVariant: true };
             }
             // Neither master nor variant markers found
             else {
@@ -76,11 +76,11 @@ export async function lightParseContent(url, type) {
                 
                 // Check if it has AdaptationSet/Representation (master)
                 if (content.includes('<AdaptationSet') && content.includes('<Representation')) {
-                    result = { isValid: true, subtype: 'dash-master' };
+                    result = { isValid: true, subtype: 'dash-master', isMaster: true };
                 }
                 // Otherwise it's probably a single representation variant
                 else {
-                    result = { isValid: true, subtype: 'dash-variant' };
+                    result = { isValid: true, subtype: 'dash-variant', isVariant: true };
                 }
             }
             else {
