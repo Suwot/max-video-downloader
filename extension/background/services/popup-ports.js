@@ -4,7 +4,7 @@
  */
 
 // Add static imports at the top
-import { getVideosForTab, getStreamQualities, clearVideoCache } from './video-manager.js';
+import { getVideosForTab, getVideosArrayFromMap, getStreamQualities, clearVideoCache } from './video-manager.js';
 import { getActiveDownloads, getDownloadDetails, startDownload } from './download-manager.js';
 
 // Track all popup connections for universal communication
@@ -42,7 +42,7 @@ async function handlePortMessage(message, port, portId) {
     
     // Handle video list request
     if (message.action === 'getVideos') {
-        const videos = getVideosForTab(message.tabId);
+        const videos = getVideosArrayFromMap(message.tabId);
         
         port.postMessage({
             action: 'videoListResponse',

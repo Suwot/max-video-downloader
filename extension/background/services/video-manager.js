@@ -241,13 +241,12 @@ function processVideosForBroadcast(videos) {
 
 // Broadcast videos to popup
 function broadcastVideoUpdate(tabId) {
-    if (!videosPerTab.has(tabId) || videosPerTab.get(tabId).length === 0) {
+    // Use new array-from-map function instead of videosPerTab
+    const processedVideos = getVideosArrayFromMap(tabId);
+    
+    if (processedVideos.length === 0) {
         return [];
     }
-    
-    // Get videos for tab and process them
-    const videos = videosPerTab.get(tabId);
-    const processedVideos = processVideosForBroadcast(videos);
     
     // Send with chrome.runtime.sendMessage for compatibility
     try {
@@ -920,6 +919,27 @@ function getAllDetectedVideos(tabId) {
     return allDetectedVideos.get(tabId) || new Map();
 }
 
+// experimental function as alternative to getVideosForTab
+// This function returns an array of videos for a specific tab ID
+// It filters out variants with known masters and processes the videos for broadcast
+function getVideosArrayFromMap(tabId) {
+    if (!allDetectedVideos.has(tabId)) {
+        return [];
+    }
+    
+    const tabVideosMap = allDetectedVideos.get(tabId);
+    const resultArray = [];
+    
+    // Convert map to array, filtering out variants with known masters
+    for (const [normalizedUrl, videoObj] of tabVideosMap.entries()) {
+        if (!(videoObj.isVariant && videoObj.hasKnownMaster)) {
+            resultArray.push({...videoObj});
+        }
+    }
+    
+    return processVideosForBroadcast(resultArray);
+}
+
 
 export {
     addDetectedVideo,
@@ -930,5 +950,6 @@ export {
     cleanupForTab,
     normalizeUrl,
     getAllDetectedVideos,
+    getVideosArrayFromMap,
     clearVideoCache
 };
