@@ -465,11 +465,11 @@ export function createVideoElement(video) {
     previewImage.src = chrome.runtime.getURL('icons/video-placeholder.png');
     previewImage.alt = 'Video preview';
     
-    // Add duration display if available in video.mediaInfo
-    if (video.mediaInfo?.duration) {
+    // Add duration display if available in video.variants.jsMeta
+    if (video.variants.jsMeta?.duration) {
         const durationElement = document.createElement('div');
         durationElement.className = 'video-duration';
-        durationElement.textContent = formatDuration(video.mediaInfo.duration);
+        durationElement.textContent = formatDuration(video.variants.jsMeta.duration);
         previewContainer.appendChild(durationElement);
     }
     
@@ -1076,7 +1076,7 @@ function updateVideoMetadataUI(videoElement, mediaInfo, videoData = null) {
         }
         
         // Update duration if available
-        if (mediaInfo.duration) {
+        if (variant.jsMeta.duration) {
             let durationElement = videoElement.querySelector('.video-duration');
             if (!durationElement) {
                 // Create duration element if it doesn't exist
@@ -1084,12 +1084,12 @@ function updateVideoMetadataUI(videoElement, mediaInfo, videoData = null) {
                 if (previewContainer) {
                     durationElement = document.createElement('div');
                     durationElement.className = 'video-duration';
-                    durationElement.textContent = formatDuration(mediaInfo.duration);
+                    durationElement.textContent = formatDuration(variant.jsMeta.duration);
                     previewContainer.appendChild(durationElement);
                 }
             } else {
                 // Update existing duration element
-                durationElement.textContent = formatDuration(mediaInfo.duration);
+                durationElement.textContent = formatDuration(variant.jsMeta.duration);
             }
         }
         

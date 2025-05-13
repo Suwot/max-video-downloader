@@ -417,7 +417,7 @@ async function enrichWithPlaylistInfo(video, tabId) {
             logDebug(`Skipping playlist info enrichment for already parsed video: ${video.url} (${video.subtype || 'no subtype'})`);
             
             // If it's a light-parsed master, we still want to extract variants
-            if (video.subtype === 'hls-master' || video.subtype === 'dash-master') {
+            if (video.isMaster) {
                 logDebug(`Processing master playlist for variants: ${video.url}`);
                 // Continue with variant extraction
             } else if (video.subtype === 'not-a-video' || video.subtype === 'fetch-failed') {
