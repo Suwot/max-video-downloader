@@ -154,29 +154,33 @@ export async function fullParseContent(url, subtype) {
                 // Process all variants sequentially using Promise.all for better parallel processing
                 const durationPromises = result.variants.map(async (variant, index) => {
                     try {
-                        // Calculate duration for each variant separately
-                        const durationInfo = await calculateHlsVariantDuration(variant.url);
+                        // Parse the variant to extract all metadata
+                        const variantInfo = await parseHlsVariant(variant.url);
                         
-                        // Add duration info to variant metadata only (not to master)
-                        if (durationInfo.duration > 0) {
-                            console.log(`[JS Parser] Calculated duration for variant ${index+1}/${result.variants.length}: ${durationInfo.duration}s`);
+                        // Add metadata to variant only if we got valid duration
+                        if (variantInfo.duration > 0) {
+                            console.log(`[JS Parser] Calculated duration for variant ${index+1}/${result.variants.length}: ${variantInfo.duration}s`);
                             
-                            // Store duration only in variant's metadata
-                            variant.jsMeta.duration = durationInfo.duration;
-                            variant.jsMeta.isComplete = durationInfo.isComplete;
-
-                            // Add the isLive flag (opposite of isComplete)
-                            variant.jsMeta.isLive = !durationInfo.isComplete;
+                            // Store duration and other metadata in variant's jsMeta
+                            variant.jsMeta.duration = variantInfo.duration;
+                            variant.jsMeta.isComplete = variantInfo.isComplete;
+                            variant.jsMeta.isLive = variantInfo.isLive;
+                            variant.jsMeta.isEncrypted = variantInfo.isEncrypted || false;
+                            
+                            // Add encryption type only if encryption is detected
+                            if (variantInfo.isEncrypted && variantInfo.encryptionType) {
+                                variant.jsMeta.encryptionType = variantInfo.encryptionType;
+                            }
                             
                             // Update estimated file size with accurate duration
                             const effectiveBandwidth = variant.jsMeta.averageBandwidth || variant.jsMeta.bandwidth;
-                            variant.jsMeta.estimatedFileSize = calculateEstimatedFileSize(effectiveBandwidth, durationInfo.duration);
+                            variant.jsMeta.estimatedFileSize = calculateEstimatedFileSize(effectiveBandwidth, variantInfo.duration);
                             
                             // Log the stream type
-                            console.log(`[JS Parser] Variant ${index+1} is ${!durationInfo.isComplete ? 'LIVE' : 'VOD'}`);
+                            console.log(`[JS Parser] Variant ${index+1} is ${variantInfo.isLive ? 'LIVE' : 'VOD'}`);
                         }
                     } catch (error) {
-                        console.error(`[JS Parser] Failed to calculate duration for variant ${index+1}: ${error.message}`);
+                        console.error(`[JS Parser] Failed to parse variant ${index+1}: ${error.message}`);
                     }
                 });
                 
@@ -203,11 +207,11 @@ export async function fullParseContent(url, subtype) {
 }
 
 /**
- * Calculate the actual duration of an HLS variant playlist by summing segment durations
+ * Parse an HLS variant playlist to extract full metadata
  * @param {string} variantUrl - URL of the HLS variant playlist
- * @returns {Promise<{duration: number, isComplete: boolean}>} - Calculated duration and endlist status
+ * @returns {Promise<Object>} - Complete variant metadata
  */
-async function calculateHlsVariantDuration(variantUrl) {
+async function parseHlsVariant(variantUrl) {
     try {
         // Set up request with timeout
         const controller = new AbortController();
@@ -225,34 +229,90 @@ async function calculateHlsVariantDuration(variantUrl) {
         }
         
         const content = await response.text();
-        const lines = content.split(/\r?\n/);
         
-        let totalDuration = null;
+        // Extract different types of metadata from variant playlist
+        const durationInfo = calculateHlsVariantDuration(content);
+        const encryptionInfo = extractHlsEncryptionInfo(content);
         
-        // Parse #EXTINF lines which contain segment durations
-        for (let i = 0; i < lines.length; i++) {
-            const line = lines[i].trim();
-            if (line.startsWith('#EXTINF:')) {
-                // Extract the duration value (format: #EXTINF:4.5,)
-                const durationStr = line.substring(8).split(',')[0];
-                const segmentDuration = parseFloat(durationStr);
-                if (!isNaN(segmentDuration)) {
-                    totalDuration += segmentDuration;
-                }
-            }
+        // Build a complete result object
+        const result = {
+            duration: durationInfo.duration,
+            isComplete: durationInfo.isComplete,
+            isLive: !durationInfo.isComplete,
+            isEncrypted: encryptionInfo.isEncrypted
+        };
+        
+        // Only add encryptionType if encryption is detected
+        if (encryptionInfo.isEncrypted && encryptionInfo.encryptionType) {
+            result.encryptionType = encryptionInfo.encryptionType;
         }
         
-        // Check if this is a VOD (complete) or live stream
-        const isComplete = content.includes('#EXT-X-ENDLIST');
-        
-        return {
-            duration: totalDuration,
-            isComplete: isComplete
-        };
+        return result;
     } catch (error) {
-        console.error(`[JS Parser] ❌ ERROR calculating variant duration for ${variantUrl}: ${error.message}`);
+        console.error(`[JS Parser] ❌ ERROR parsing variant ${variantUrl}: ${error.message}`);
         return { duration: null, isComplete: false };
     }
+}
+
+/**
+ * Calculate the duration of an HLS variant playlist by summing segment durations
+ * @param {string} content - The playlist content 
+ * @returns {Object} - Duration information
+ */
+function calculateHlsVariantDuration(content) {
+    const lines = content.split(/\r?\n/);
+    let totalDuration = 0;
+    
+    // Parse #EXTINF lines which contain segment durations
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (line.startsWith('#EXTINF:')) {
+            // Extract the duration value (format: #EXTINF:4.5,)
+            const durationStr = line.substring(8).split(',')[0];
+            const segmentDuration = parseFloat(durationStr);
+            if (!isNaN(segmentDuration)) {
+                totalDuration += segmentDuration;
+            }
+        }
+    }
+    
+    // Check if this is a VOD (complete) or live stream
+    const isComplete = content.includes('#EXT-X-ENDLIST');
+    
+    return {
+        duration: totalDuration,
+        isComplete: isComplete
+    };
+}
+
+/**
+ * Extract encryption information from HLS playlist content
+ * @param {string} content - HLS playlist content
+ * @returns {Object} - Encryption information
+ */
+function extractHlsEncryptionInfo(content) {
+    let isEncrypted = false;
+    let encryptionType = null;
+    
+    // Check for encryption by looking for EXT-X-KEY tags
+    const lines = content.split(/\r?\n/);
+    for (const line of lines) {
+        if (line.trim().startsWith('#EXT-X-KEY:')) {
+            isEncrypted = true;
+            
+            // Try to extract encryption method
+            const methodMatch = line.match(/METHOD=([^,]+)/);
+            if (methodMatch && methodMatch[1]) {
+                encryptionType = methodMatch[1].replace(/"/g, '');  // Remove quotes if present
+            }
+            break; // Found what we need
+        }
+    }
+    
+    return {
+        isEncrypted: isEncrypted,
+        encryptionType: encryptionType
+    };
 }
 
 /**
@@ -355,6 +415,29 @@ function parseDashMaster(content, baseUrl, masterUrl) {
         const durationMatch = content.match(/mediaPresentationDuration="([^"]+)"/);
         const duration = durationMatch ? parseDashDuration(durationMatch[1]) : 0;
         
+        // Check if this is a live stream (type="dynamic")
+        const isLive = content.match(/type="dynamic"/i) !== null;
+        
+        // Check for encryption/DRM
+        const isEncrypted = content.includes('<ContentProtection') || content.includes('cenc:') || content.includes('dashif:');
+        
+        // Try to extract encryption type if present
+        let encryptionType = null;
+        if (isEncrypted) {
+            // Check for common encryption schemes
+            if (content.includes('urn:mpeg:dash:mp4protection:2011')) {
+                encryptionType = 'cenc';
+            } else if (content.includes('urn:uuid:edef8ba9-79d6-4ace-a3c8-27dcd51d21ed')) {
+                encryptionType = 'widevine';
+            } else if (content.includes('urn:uuid:9a04f079-9840-4286-ab92-e65be0885f95')) {
+                encryptionType = 'playready';
+            } else if (content.includes('urn:uuid:f239e769-efa3-4850-9c16-a903c6932efb')) {
+                encryptionType = 'clearkey';
+            } else if (content.includes('urn:uuid:94ce86fb-07ff-4f43-adb8-93d2fa968ca2')) {
+                encryptionType = 'fairplay';
+            }
+        }
+        
         // Extract all AdaptationSet blocks
         const adaptationSets = extractAdaptationSets(content);
         
@@ -456,11 +539,18 @@ function parseDashMaster(content, baseUrl, masterUrl) {
                             height: height,
                             frameRate: frameRate,
                             resolution: width && height ? `${width}x${height}` : null,
-                            estimatedFileSize: estimatedFileSize
+                            estimatedFileSize: estimatedFileSize,
+                            isEncrypted: isEncrypted,
+                            isLive: isLive
                         },
                         source: 'js-parser',
                         timestamp: Date.now()
                     };
+                    
+                    // Add encryption type only if encryption is detected
+                    if (isEncrypted && encryptionType) {
+                        variant.jsMeta.encryptionType = encryptionType;
+                    }
                     
                     variants.push(variant);
                 }
