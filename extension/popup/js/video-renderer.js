@@ -640,9 +640,12 @@ function createVideoActions(video) {
     // Create quality selector if variants are available
     if (video.variants && video.variants.length > 0) {
         // Sort variants by resolution height (highest first)
-        const sortedVariants = [...video.variants].sort((a, b) => 
-            (b.height || 0) - (a.height || 0)
-        );
+        const sortedVariants = [...video.variants].sort((a, b) => {
+            // Try to get height from various sources in order of reliability
+            const aHeight = a.jsMeta?.height || a.height || (a.resolution ? a.resolution.height : 0);
+            const bHeight = b.jsMeta?.height || b.height || (b.resolution ? b.resolution.height : 0);
+            return bHeight - aHeight;
+        });
 
         // Check if original quality matches the best quality variant
         const bestQuality = sortedVariants[0];
@@ -695,12 +698,8 @@ function createVideoActions(video) {
             
             // Get height info from the best possible source
             let height = null;
-            if (variant.mediaInfo && variant.mediaInfo.height) {
-                height = variant.mediaInfo.height;
-            } else if (variant.height) {
-                height = variant.height;
-            } else if (variant.resolution && variant.resolution.height) {
-                height = variant.resolution.height;
+            if (variant.jsMeta && variant.jsMeta.height) {
+                height = variant.jsMeta.height;
             }
             
             if (height) {
@@ -711,25 +710,16 @@ function createVideoActions(video) {
             
             // Add fps from various possible sources
             let fps = null;
-            if (variant.fps) {
-                fps = variant.fps;
-            } else if (variant.frameRate) {
-                fps = variant.frameRate;
-            } else if (variant.mediaInfo && variant.mediaInfo.fps) {
-                fps = variant.mediaInfo.fps;
-            } else if (variant.mediaInfo && variant.mediaInfo.videoCodec && variant.mediaInfo.videoCodec.frameRate) {
-                fps = variant.mediaInfo.videoCodec.frameRate;
+            if (variant.jsMeta.frameRate) {
+                fps = variant.jsMeta.frameRate;
             }
-            
+
             if (fps) {
                 qualityLabel += ` ${fps}fps`;
             }
             
             // Add bandwidth info for better comparison
-            let bandwidth = variant.bandwidth;
-            if (!bandwidth && variant.mediaInfo) {
-                bandwidth = variant.mediaInfo.videoBitrate || variant.mediaInfo.totalBitrate;
-            }
+            let bandwidth = variant.jsMeta.averageBandwidth || variant.jsMeta.bandwidth;
             
             if (bandwidth) {
                 const mbps = (bandwidth / 1000000).toFixed(1);
@@ -739,14 +729,7 @@ function createVideoActions(video) {
             }
             
             // Add codec info if available
-            let codecs = variant.codecs;
-            if (!codecs && variant.mediaInfo && variant.mediaInfo.videoCodec) {
-                if (typeof variant.mediaInfo.videoCodec === 'object') {
-                    codecs = variant.mediaInfo.videoCodec.name;
-                } else {
-                    codecs = variant.mediaInfo.videoCodec;
-                }
-            }
+            let codecs = variant.jsMeta.codecs;
             
             if (codecs) {
                 // Extract main codec name without profile details
