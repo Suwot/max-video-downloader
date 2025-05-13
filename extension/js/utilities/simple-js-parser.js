@@ -163,7 +163,6 @@ export async function fullParseContent(url, subtype) {
                             
                             // Store duration and other metadata in variant's jsMeta
                             variant.jsMeta.duration = variantInfo.duration;
-                            variant.jsMeta.isComplete = variantInfo.isComplete;
                             variant.jsMeta.isLive = variantInfo.isLive;
                             variant.jsMeta.isEncrypted = variantInfo.isEncrypted || false;
                             
@@ -225,7 +224,7 @@ async function parseHlsVariant(variantUrl) {
         
         if (!response.ok) {
             console.log(`[JS Parser] ❌ FAILED fetching variant ${variantUrl}: ${response.status}`);
-            return { duration: null, isComplete: false };
+            return { duration: null, isLive: true };
         }
         
         const content = await response.text();
@@ -237,8 +236,7 @@ async function parseHlsVariant(variantUrl) {
         // Build a complete result object
         const result = {
             duration: durationInfo.duration,
-            isComplete: durationInfo.isComplete,
-            isLive: !durationInfo.isComplete,
+            isLive: durationInfo.isLive,
             isEncrypted: encryptionInfo.isEncrypted
         };
         
@@ -250,7 +248,7 @@ async function parseHlsVariant(variantUrl) {
         return result;
     } catch (error) {
         console.error(`[JS Parser] ❌ ERROR parsing variant ${variantUrl}: ${error.message}`);
-        return { duration: null, isComplete: false };
+        return { duration: null, isLive: true };
     }
 }
 
@@ -276,12 +274,12 @@ function calculateHlsVariantDuration(content) {
         }
     }
     
-    // Check if this is a VOD (complete) or live stream
-    const isComplete = content.includes('#EXT-X-ENDLIST');
+    // Check if this is a live stream (no EXT-X-ENDLIST tag)
+    const isLive = !content.includes('#EXT-X-ENDLIST');
     
     return {
-        duration: totalDuration,
-        isComplete: isComplete
+        duration: Math.round(totalDuration), // Round to full seconds
+        isLive: isLive
     };
 }
 
@@ -686,7 +684,8 @@ function parseDashDuration(durationStr) {
     const minutes = matches[5] ? parseInt(matches[5], 10) * 60 : 0;
     const seconds = matches[6] ? parseFloat(matches[6]) : 0;
     
-    return years + months + days + hours + minutes + seconds;
+    // Calculate the total and round to full seconds
+    return Math.round(years + months + days + hours + minutes + seconds);
 }
 
 /**
