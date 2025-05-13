@@ -142,10 +142,15 @@ export async function fullParseContent(url, subtype) {
         const content = await response.text();
         const baseUrl = getBaseDirectory(url);
         
-        // Process based on subtype
+        // Process based on subtype, or detect if not provided
         let result;
-        if (subtype === 'hls-master') {
+        const actualSubtype = subtype || detectPlaylistType(content, url);
+        
+        if (actualSubtype === 'hls-master') {
             result = parseHlsMaster(content, baseUrl, url);
+            
+            // Ensure result.variants is always an array
+            result.variants = result.variants || [];
             
             // For HLS masters, calculate the duration for all variants
             if (result.variants.length > 0) {
@@ -188,6 +193,9 @@ export async function fullParseContent(url, subtype) {
             }
         } else if (subtype === 'dash-master') {
             result = parseDashMaster(content, baseUrl, url);
+            
+            // Ensure result.variants is always an array
+            result.variants = result.variants || [];
         } else {
             console.log(`[JS Parser] ❌ FAILED full parsing ${url}: unsupported subtype ${subtype}`);
             return { variants: [], status: 'unsupported-subtype' };
