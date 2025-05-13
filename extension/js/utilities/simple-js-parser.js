@@ -217,13 +217,13 @@ async function calculateHlsVariantDuration(variantUrl) {
         
         if (!response.ok) {
             console.log(`[JS Parser] ❌ FAILED fetching variant ${variantUrl}: ${response.status}`);
-            return { duration: 0, isComplete: false };
+            return { duration: null, isComplete: false };
         }
         
         const content = await response.text();
         const lines = content.split(/\r?\n/);
         
-        let totalDuration = 0;
+        let totalDuration = null;
         
         // Parse #EXTINF lines which contain segment durations
         for (let i = 0; i < lines.length; i++) {
@@ -247,7 +247,7 @@ async function calculateHlsVariantDuration(variantUrl) {
         };
     } catch (error) {
         console.error(`[JS Parser] ❌ ERROR calculating variant duration for ${variantUrl}: ${error.message}`);
-        return { duration: 0, isComplete: false };
+        return { duration: null, isComplete: false };
     }
 }
 
@@ -264,7 +264,7 @@ function parseHlsMaster(content, baseUrl, masterUrl) {
     const lines = content.split(/\r?\n/);
     
     let currentStreamInf = null;
-    let globalDuration = 0;
+    let globalDuration = null;
     
     // Check for duration in the main playlist
     const durationMatch = content.match(/#EXT-X-TARGETDURATION:([0-9.]+)/);
