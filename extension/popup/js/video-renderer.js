@@ -25,6 +25,85 @@ import { handleDownload } from './download.js';
 import { showQualityDialog } from './ui.js';
 import { sendPortMessage } from './index.js';
 
+// Cache the hover preview elements for better performance
+let hoverPreviewContainer = null;
+let hoverPreviewImg = null;
+
+/**
+ * Initialize hover preview elements
+ */
+function initHoverPreview() {
+    if (!hoverPreviewContainer) {
+        hoverPreviewContainer = document.getElementById('preview-hover');
+        hoverPreviewImg = document.getElementById('hover-preview-img');
+    }
+}
+
+/**
+ * Show hover preview at specific position
+ * @param {string} previewUrl - URL of the full-size preview image
+ * @param {MouseEvent} event - Mouse event to position the preview
+ */
+export function showHoverPreview(previewUrl, event) {
+    initHoverPreview();
+    
+    // Only proceed if we have both the container and a valid preview URL
+    if (!hoverPreviewContainer || !hoverPreviewImg || !previewUrl) return;
+    
+    // Set the image source
+    hoverPreviewImg.src = previewUrl;
+    
+    // Position the preview near the cursor but within viewport bounds
+    const rect = hoverPreviewContainer.getBoundingClientRect();
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    
+    // Initial positioning
+    let left = event.clientX + 10;
+    let top = event.clientY - 10;
+    
+    // Adjust horizontal position if it goes off screen
+    if (left + rect.width > viewportWidth - 20) {
+        left = event.clientX - rect.width - 10;
+    }
+    
+    // Adjust vertical position if it goes off screen
+    if (top + rect.height > viewportHeight - 20) {
+        top = viewportHeight - rect.height - 20;
+    }
+    
+    // Make sure we don't go off the top or left either
+    left = Math.max(10, left);
+    top = Math.max(10, top);
+    
+    // Apply the position
+    hoverPreviewContainer.style.left = `${left}px`;
+    hoverPreviewContainer.style.top = `${top}px`;
+    
+    // Show the preview
+    hoverPreviewContainer.style.display = 'block';
+    
+    // Use requestAnimationFrame to ensure display property change takes effect before adding the visible class
+    requestAnimationFrame(() => {
+        hoverPreviewContainer.classList.add('visible');
+    });
+}
+
+/**
+ * Hide the hover preview
+ */
+export function hideHoverPreview() {
+    if (hoverPreviewContainer) {
+        // First remove the visible class to trigger transition
+        hoverPreviewContainer.classList.remove('visible');
+        
+        // Then hide after transition completes
+        setTimeout(() => {
+            hoverPreviewContainer.style.display = 'none';
+        }, 200); // Matching the transition duration
+    }
+}
+
 /**
  * Group videos by type for display
  * @param {Array} videos - The videos to group
@@ -446,6 +525,23 @@ export function createVideoElement(video) {
         };
         previewImage.src = video.previewUrl;
         previewGenerated = true;
+        
+        // Add hover functionality for preview if available
+        previewContainer.addEventListener('mouseenter', (event) => {
+            if (video.previewUrl) {
+                showHoverPreview(video.previewUrl, event);
+            }
+        });
+        
+        previewContainer.addEventListener('mousemove', (event) => {
+            if (video.previewUrl) {
+                showHoverPreview(video.previewUrl, event);
+            }
+        });
+        
+        previewContainer.addEventListener('mouseleave', () => {
+            hideHoverPreview();
+        });
     } 
     // If we have a poster, use it directly
     else if (video.poster) {
@@ -456,6 +552,23 @@ export function createVideoElement(video) {
         };
         previewImage.src = video.poster;
         previewGenerated = true;
+        
+        // Add hover functionality for poster if available
+        previewContainer.addEventListener('mouseenter', (event) => {
+            if (video.poster) {
+                showHoverPreview(video.poster, event);
+            }
+        });
+        
+        previewContainer.addEventListener('mousemove', (event) => {
+            if (video.poster) {
+                showHoverPreview(video.poster, event);
+            }
+        });
+        
+        previewContainer.addEventListener('mouseleave', () => {
+            hideHoverPreview();
+        });
     } 
     // No preview available yet
     else {
@@ -478,6 +591,13 @@ export function createVideoElement(video) {
         loader.style.display = 'block';
         generatePreview(video.url, loader, previewImage, regenerateButton, true); // Use true for forceRegenerate
     });
+    
+    // Add hover preview functionality
+    previewImage.addEventListener('mouseenter', (event) => {
+        showHoverPreview(video.previewUrl || video.poster, event);
+    });
+    
+    previewImage.addEventListener('mouseleave', hideHoverPreview);
     
     // Create info column
     const infoColumn = document.createElement('div');
@@ -810,6 +930,7 @@ export function updateVideoElement(url, updatedVideo, isMetadataOnly = false) {
         const previewImage = videoElement.querySelector('.preview-image');
         const loader = videoElement.querySelector('.loader');
         const regenerateButton = videoElement.querySelector('.regenerate-button');
+        const previewContainer = videoElement.querySelector('.preview-container');
         
         if (previewImage) {
             // Only update if the src is different
@@ -821,6 +942,15 @@ export function updateVideoElement(url, updatedVideo, isMetadataOnly = false) {
                     if (regenerateButton) regenerateButton.classList.add('hidden');
                 };
                 previewImage.src = updatedVideo.previewUrl;
+                
+                // Add hover functionality for the newly loaded preview
+                if (previewContainer) {
+                    // Remove any existing listeners to avoid duplicates
+                    const newPreviewUrl = updatedVideo.previewUrl;
+                    previewContainer.addEventListener('mouseenter', (event) => showHoverPreview(newPreviewUrl, event));
+                    previewContainer.addEventListener('mousemove', (event) => showHoverPreview(newPreviewUrl, event));
+                    previewContainer.addEventListener('mouseleave', hideHoverPreview);
+                }
             }
         }
     }

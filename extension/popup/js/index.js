@@ -263,6 +263,30 @@ function handlePortMessage(message) {
                 
                 // Set the preview source
                 previewImage.src = message.previewUrl;
+                
+                // Add hover functionality for the newly loaded preview
+                const previewContainer = videoElement.querySelector('.preview-container');
+                if (previewContainer) {
+                    import('./video-renderer.js').then(module => {
+                        previewContainer.addEventListener('mouseenter', (event) => {
+                            if (module.showHoverPreview) {
+                                module.showHoverPreview(message.previewUrl, event);
+                            }
+                        });
+                        
+                        previewContainer.addEventListener('mousemove', (event) => {
+                            if (module.showHoverPreview) {
+                                module.showHoverPreview(message.previewUrl, event);
+                            }
+                        });
+                        
+                        previewContainer.addEventListener('mouseleave', () => {
+                            if (module.hideHoverPreview) {
+                                module.hideHoverPreview();
+                            }
+                        });
+                    });
+                }
             }
         }
         return;
