@@ -168,6 +168,10 @@ export async function fullParseContent(url, subtype) {
                             // Add the isLive flag (opposite of isComplete)
                             variant.jsMeta.isLive = !durationInfo.isComplete;
                             
+                            // Update estimated file size with accurate duration
+                            const effectiveBandwidth = variant.jsMeta.averageBandwidth || variant.jsMeta.bandwidth;
+                            variant.jsMeta.estimatedFileSize = calculateEstimatedFileSize(effectiveBandwidth, durationInfo.duration);
+                            
                             // Log the stream type
                             console.log(`[JS Parser] Variant ${index+1} is ${!durationInfo.isComplete ? 'LIVE' : 'VOD'}`);
                         }
@@ -252,6 +256,22 @@ async function calculateHlsVariantDuration(variantUrl) {
 }
 
 /**
+ * Calculate estimated file size from bitrate and duration
+ * 
+ * @param {number} bitrate - Bitrate in bits per second
+ * @param {number} duration - Duration in seconds
+ * @returns {number|null} - Estimated file size in bytes or null if inputs are invalid
+ */
+function calculateEstimatedFileSize(bitrate, duration) {
+    if (!bitrate || !duration || isNaN(bitrate) || isNaN(duration)) {
+        return null;
+    }
+    
+    // Convert bitrate (bits/s) * duration (s) to bytes (divide by 8)
+    return Math.round((bitrate * duration) / 8);
+}
+
+/**
  * Parse HLS master playlist content to extract variant information
  * 
  * @param {string} content - The playlist content
@@ -264,13 +284,9 @@ function parseHlsMaster(content, baseUrl, masterUrl) {
     const lines = content.split(/\r?\n/);
     
     let currentStreamInf = null;
-    let globalDuration = null;
     
-    // Check for duration in the main playlist
-    const durationMatch = content.match(/#EXT-X-TARGETDURATION:([0-9.]+)/);
-    if (durationMatch) {
-        globalDuration = parseFloat(durationMatch[1]);
-    }
+    // No longer tracking TARGETDURATION as it's not accurate for file size calculation
+    // Accurate duration will be calculated per variant in fullParseContent
     
     for (let i = 0; i < lines.length; i++) {
         const line = lines[i].trim();
@@ -285,6 +301,7 @@ function parseHlsMaster(content, baseUrl, masterUrl) {
             const variantUrl = resolveUrl(baseUrl, line);
             
             // Create a variant entry with all extracted information
+            // File size will be calculated later when we have accurate duration
             const variant = {
                 url: variantUrl,
                 normalizedUrl: normalizeUrl(variantUrl),
@@ -301,6 +318,7 @@ function parseHlsMaster(content, baseUrl, masterUrl) {
                     width: currentStreamInf.width,
                     height: currentStreamInf.height,
                     frameRate: currentStreamInf.frameRate
+                    // estimatedFileSize will be added later with accurate duration
                 },
                 source: 'js-parser',
                 timestamp: Date.now()
@@ -313,8 +331,8 @@ function parseHlsMaster(content, baseUrl, masterUrl) {
     
     return { 
         variants,
-        duration: globalDuration,
         status: 'success'
+        // No longer returning duration as it wasn't accurate
     };
 }
 
@@ -413,6 +431,9 @@ function parseDashMaster(content, baseUrl, masterUrl) {
                     const height = parseInt(extractAttribute(representation, 'height') || '0', 10);
                     const frameRate = parseFrameRate(extractAttribute(representation, 'frameRate') || null);
                     
+                    // Calculate estimated file size if we have bandwidth and duration
+                    const estimatedFileSize = calculateEstimatedFileSize(bandwidth, duration);
+                    
                     // For standard DASH, we point to the master with representation ID
                     const variantUrl = masterUrl + `#representation=${id}`;
                     
@@ -434,7 +455,8 @@ function parseDashMaster(content, baseUrl, masterUrl) {
                             width: width,
                             height: height,
                             frameRate: frameRate,
-                            resolution: width && height ? `${width}x${height}` : null
+                            resolution: width && height ? `${width}x${height}` : null,
+                            estimatedFileSize: estimatedFileSize
                         },
                         source: 'js-parser',
                         timestamp: Date.now()
