@@ -532,13 +532,17 @@ async function enrichWithPlaylistInfo(video, tabId) {
     }
 }
 
-// Enrich video with metadata
+// Enrich video with metadata - only for direct videos
 async function enrichWithMetadata(video, tabId) {
     const normalizedUrl = normalizeUrl(video.url);
     
-    // Skip if already fully parsed or being processed
+    // Skip if already parsed or being processed
     if (video.isFullyParsed || processingRequests.metadata.has(normalizedUrl)) {
-        logDebug(`[DEBUG] ⏭️ Skipping metadata enrichment for ${video.url} - already ${video.isFullyParsed ? 'fully parsed' : 'in progress'}`);
+        return;
+    }
+    
+    // Skip all non-direct videos
+    if (video.isVariant || video.isMasterPlaylist || video.url.startsWith('blob:')) {
         return;
     }
     
@@ -546,166 +550,28 @@ async function enrichWithMetadata(video, tabId) {
     processingRequests.metadata.add(normalizedUrl);
     
     try {
-        // Skip blob URLs as they can't be analyzed
-        if (video.url.startsWith('blob:')) {
-            // For blob URLs, set placeholder media info
-            applyMetadataToVideo(tabId, normalizedUrl, {
-                isBlob: true,
-                type: 'blob',
-                format: 'blob',
-                container: 'blob',
-                hasVideo: true,
-                hasAudio: true
-            });
-            return;
-        }
+        // Get metadata only for direct videos
+        logDebug(`Getting metadata for direct video: ${video.url}`);
         
-        // For master playlists, we might not need detailed metadata
-        // since we'll get that from the variants
-        if (video.isLightParsed && video.isMasterPlaylist) {
-            // If we have variants, apply basic metadata and mark as processed
-            if (video.variants && video.variants.length > 0) {
-                logDebug(`[DEBUG] ⚡ OPTIMIZATION: Using variant info for master playlist ${video.url}`);
-                
-                // Calculate basic info from variants if available
-                const highestQuality = [...video.variants].sort((a, b) => 
-                    (b.bandwidth || 0) - (a.bandwidth || 0)
-                )[0];
-                
-                if (highestQuality) {
-                    // Create basic metadata from variant info
-                    applyMetadataToVideo(tabId, normalizedUrl, {
-                        type: video.type,
-                        format: video.type,
-                        container: video.type,
-                        isMasterPlaylist: true,
-                        hasVideo: true,
-                        hasAudio: true,
-                        width: highestQuality.width,
-                        height: highestQuality.height,
-                        fps: highestQuality.fps || highestQuality.frameRate,
-                        videoBitrate: highestQuality.bandwidth,
-                        totalBitrate: highestQuality.bandwidth,
-                        estimatedSize: estimateFileSize(highestQuality.bandwidth, video.duration)
-                    });
-                    return;
-                }
-            }
-        }
-        
-        // For variant streams with a known master, we might already have some basic metadata,
-        // but we want to ensure we get full metadata for all variants
-        if (video.isVariant && video.masterUrl) {
-            // NEW: Skip variants that already have ffprobeMeta from the master playlist process
-            if (video.hasFFprobeMetadata || video.ffprobeMeta) {
-                logDebug(`Skipping metadata enrichment for variant with existing ffprobeMeta: ${video.url}`);
-                processingRequests.metadata.delete(normalizedUrl);
-                return;
-            }
-            
-            const videos = videosPerTab.get(tabId);
-            const masterVideo = videos.find(v => normalizeUrl(v.url) === normalizeUrl(video.masterUrl));
-            
-            // Check if the variant has ffprobeMeta in its master's variants array
-            if (masterVideo && masterVideo.variants) {
-                const matchingVariantIndex = masterVideo.variants.findIndex(
-                    v => normalizeUrl(v.url) === normalizedUrl
-                );
-                
-                if (matchingVariantIndex !== -1 && 
-                    masterVideo.variants[matchingVariantIndex].hasFFprobeMetadata) {
-                    logDebug(`Variant ${video.url} already has ffprobeMeta in its master, using that data`);
-                    // Apply the ffprobeMeta from the master playlist to this variant
-                    const ffprobeData = masterVideo.variants[matchingVariantIndex].ffprobeMeta;
-                    if (ffprobeData) {
-                        video.ffprobeMeta = ffprobeData;
-                        video.hasFFprobeMetadata = true;
-                        applyMetadataToVideo(tabId, normalizedUrl, ffprobeData);
-                        return;
-                    }
-                }
-                
-                if (matchingVariantIndex !== -1) {
-                    // Get the variant's base info from the master, but always continue to full metadata fetch
-                    logDebug(`Variant ${video.url} found in master ${video.masterUrl} at index ${matchingVariantIndex}`);
-                    
-                    // Extract basic info from the matching variant in the master playlist
-                    const variantBaseInfo = {
-                        type: video.type,
-                        format: video.type,
-                        container: video.type,
-                        isVariant: true,
-                        hasVideo: true,
-                        hasAudio: true,
-                        width: masterVideo.variants[matchingVariantIndex].width,
-                        height: masterVideo.variants[matchingVariantIndex].height,
-                        fps: masterVideo.variants[matchingVariantIndex].fps || masterVideo.variants[matchingVariantIndex].frameRate,
-                        videoBitrate: masterVideo.variants[matchingVariantIndex].bandwidth,
-                        totalBitrate: masterVideo.variants[matchingVariantIndex].bandwidth,
-                        estimatedSize: estimateFileSize(masterVideo.variants[matchingVariantIndex].bandwidth, video.duration)
-                    };
-                    
-                    // Update the variant in the master playlist with this metadata
-                    masterVideo.variants[matchingVariantIndex] = {
-                        ...masterVideo.variants[matchingVariantIndex],
-                        ...variantBaseInfo,
-                        mediaInfo: variantBaseInfo,
-                        isFullyParsed: true
-                    };
-                    
-                    // Store this info, but don't return - continue to get full metadata below
-                    video.partialMediaInfo = variantBaseInfo;
-                    
-                    // If this is just for partial metadata and we don't want full parsing, return now
-                    if (!video.isFullyParsed && video.isLightParsed) {
-                        applyMetadataToVideo(tabId, normalizedUrl, variantBaseInfo);
-                        return;
-                    }
-                    
-                    // Otherwise continue to full metadata fetch below
-                    logDebug(`Getting full metadata for variant: ${video.url}`);
-                }
-            }
-        }
-        
-        // If we made it here, get the full metadata from the native host
-        // Use our rate limiter to prevent too many concurrent requests
         const streamInfo = await rateLimiter.enqueue(async () => {
-            logDebug(`Getting stream metadata for ${video.url}`);
-            
-            // Always get full metadata for variants - this is the key to fixing the issue
-            const useLight = false; // Force full parsing for all HLS/DASH content
-            
-            // Detailed logging for debugging
-            if (video.isVariant) {
-                logDebug(`🔍 Getting FULL metadata for variant: ${video.url} (from master: ${video.masterUrl})`);
-            } else if (video.isMasterPlaylist) {
-                logDebug(`🔍 Getting FULL metadata for master playlist: ${video.url}`);
-            } else {
-                logDebug(`🔍 Getting FULL metadata for: ${video.url}`);
-            }
-            
             const response = await nativeHostService.sendMessage({
                 type: 'getQualities',
                 url: video.url,
-                light: useLight
+                light: false
             });
-
             return response?.streamInfo || null;
         });
         
+        if (streamInfo && streamInfo.totalBitrate && video.duration) {
+            streamInfo.estimatedSize = estimateFileSize(streamInfo.totalBitrate, video.duration);
+        }
+        
         if (streamInfo) {
-            // Add file size estimation for normal (non-adaptive) streams
-            if (streamInfo.totalBitrate && video.duration) {
-                streamInfo.estimatedSize = estimateFileSize(streamInfo.totalBitrate, video.duration);
-            }
-            
             applyMetadataToVideo(tabId, normalizedUrl, streamInfo);
         }
     } catch (error) {
         console.error(`Failed to get metadata for ${video.url}:`, error);
     } finally {
-        // Remove from processing set
         processingRequests.metadata.delete(normalizedUrl);
     }
 }
