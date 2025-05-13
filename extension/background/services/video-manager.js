@@ -933,7 +933,10 @@ function getVideosArrayFromMap(tabId) {
     // Convert map to array, filtering out variants with known masters
     for (const [normalizedUrl, videoObj] of tabVideosMap.entries()) {
         if (!(videoObj.isVariant && videoObj.hasKnownMaster)) {
-            resultArray.push({...videoObj});
+            resultArray.push({
+                ...videoObj,
+                fromArrayMap: true // Mark as coming from map
+            });
         }
     }
     

@@ -55,7 +55,7 @@ async function handlePortMessage(message, port, portId) {
         logDebug(`Preview request received for URL: ${message.url}`);
         try {
             // Just get the videos and check if any have a matching URL
-            const videos = getVideosForTab(message.tabId);
+            const videos = getVideosArrayFromMap(message.tabId);
             const matchingVideo = videos.find(v => v.url === message.url);
             
             // Return any existing preview or let the popup know we're working on it
