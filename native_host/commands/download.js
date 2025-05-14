@@ -35,8 +35,13 @@ class DownloadCommand extends BaseCommand {
      * @param {string} params.manifestUrl Optional manifest URL for streaming media
      */
     async execute(params) {
-        const { url, filename, savePath, quality = 'best', manifestUrl } = params;
+        const { url, filename, savePath, quality = 'best', manifestUrl, headers = {} } = params;
         logDebug('Starting download:', { url, filename, savePath, quality });
+        
+        // Log received headers
+        if (headers && Object.keys(headers).length > 0) {
+            logDebug('🔑 Using headers for download request:', Object.keys(headers));
+        }
         
         try {
             // Get required services
@@ -88,6 +93,21 @@ class DownloadCommand extends BaseCommand {
             
             // Force progress output format by adding -stats and -progress pipe:2
             ffmpegArgs.push('-stats', '-progress', 'pipe:2');
+            
+            // Add headers if provided
+            let headerArg = '';
+            if (headers && Object.keys(headers).length > 0) {
+                // Format headers for FFmpeg as "Key: Value\r\n" pairs
+                const headerLines = Object.entries(headers)
+                    .map(([key, value]) => `${key}: ${value}`)
+                    .join('\r\n');
+                
+                if (headerLines) {
+                    headerArg = headerLines + '\r\n';
+                    ffmpegArgs.push('-headers', headerArg);
+                    logDebug('🔑 Added headers to FFmpeg command');
+                }
+            }
             
             // Common input parameters for all types
             if (videoType === 'hls' || videoType === 'dash') {
@@ -163,7 +183,7 @@ class DownloadCommand extends BaseCommand {
                 });
 
                 // Try to get duration first with FFprobe for more accurate initial progress
-                this.probeMediaDuration(ffmpegService, url).then(duration => {
+                this.probeMediaDuration(ffmpegService, url, headers).then(duration => {
                     if (duration) {
                         totalDuration = duration;
                         logDebug('Got total duration from probe:', totalDuration);
@@ -236,15 +256,32 @@ class DownloadCommand extends BaseCommand {
      * @param {string} url Media URL
      * @returns {Promise<number|null>} Duration in seconds or null if not available
      */
-    async probeMediaDuration(ffmpegService, url) {
+    async probeMediaDuration(ffmpegService, url, headers = {}) {
         return new Promise(resolve => {
             try {
-                const ffprobe = spawn(ffmpegService.getFFprobePath(), [
+                // Build FFprobe args
+                const ffprobeArgs = [
                     '-v', 'quiet',
                     '-print_format', 'json',
-                    '-show_format',
-                    url
-                ], { env: getFullEnv(), timeout: 10000 });
+                    '-show_format'
+                ];
+                
+                // Add headers if provided
+                if (headers && Object.keys(headers).length > 0) {
+                    // Format headers for FFprobe as "Key: Value\r\n" pairs
+                    const headerLines = Object.entries(headers)
+                        .map(([key, value]) => `${key}: ${value}`)
+                        .join('\r\n');
+                    
+                    if (headerLines) {
+                        ffprobeArgs.push('-headers', headerLines + '\r\n');
+                    }
+                }
+                
+                // Add URL as the last argument
+                ffprobeArgs.push(url);
+                
+                const ffprobe = spawn(ffmpegService.getFFprobePath(), ffprobeArgs, { env: getFullEnv(), timeout: 10000 });
                 
                 let probeOutput = '';
                 

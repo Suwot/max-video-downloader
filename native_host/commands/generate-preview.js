@@ -30,7 +30,7 @@ class GeneratePreviewCommand extends BaseCommand {
      * @param {string} params.url Video URL to generate preview for
      */
     async execute(params) {
-        const { url } = params;
+        const { url, headers = {} } = params;
         logDebug('Generating preview for video:', url);
         
         // Skip for blob URLs
@@ -39,20 +39,43 @@ class GeneratePreviewCommand extends BaseCommand {
             return { error: 'Cannot generate preview for blob URLs' };
         }
         
+        // Log received headers
+        if (headers && Object.keys(headers).length > 0) {
+            logDebug('🔑 Using headers for preview request:', Object.keys(headers));
+        }
+        
         try {
             // Get required services
             const ffmpegService = this.getService('ffmpeg');
             
             return new Promise((resolve, reject) => {
                 const previewPath = path.join(process.env.HOME || os.homedir(), '.cache', 'video-preview-' + Date.now() + '.jpg');
-                const ffmpeg = spawn(ffmpegService.getFFmpegPath(), [
-                    '-ss', '00:00:01',  // Skip to 1 second in
+                
+                // Build FFmpeg args
+                let ffmpegArgs = ['-ss', '00:00:01'];  // Skip to 1 second in
+                
+                // Add headers if provided
+                if (headers && Object.keys(headers).length > 0) {
+                    // Format headers for FFmpeg as "Key: Value\r\n" pairs
+                    const headerLines = Object.entries(headers)
+                        .map(([key, value]) => `${key}: ${value}`)
+                        .join('\r\n');
+                    
+                    if (headerLines) {
+                        ffmpegArgs.push('-headers', headerLines + '\r\n');
+                    }
+                }
+                
+                // Add the rest of the arguments
+                ffmpegArgs = ffmpegArgs.concat([
                     '-i', url,
-                    '-vframes', '1',    // Extract one frame
+                    '-vframes', '1',     // Extract one frame
                     '-vf', 'scale=120:-1',  // Scale to 120px width
-                    '-q:v', '2',        // High quality
+                    '-q:v', '2',         // High quality
                     previewPath
-                ], { env: getFullEnv() });
+                ]);
+                
+                const ffmpeg = spawn(ffmpegService.getFFmpegPath(), ffmpegArgs, { env: getFullEnv() });
         
                 let errorOutput = '';
         

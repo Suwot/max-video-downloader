@@ -28,7 +28,7 @@ class GetQualitiesCommand extends BaseCommand {
      * @param {boolean} [params.light] Whether to do light analysis only
      */
     async execute(params) {
-        const { url, light = false } = params;
+        const { url, light = false, headers = {} } = params;
         logDebug('🎥 Analyzing media from:', url, light ? '(light mode)' : '(full mode)');
         
         // Skip for blob URLs
@@ -36,6 +36,11 @@ class GetQualitiesCommand extends BaseCommand {
             logDebug('❌ Cannot analyze blob URLs');
             this.sendError('Cannot analyze blob URLs');
             return { error: 'Cannot analyze blob URLs' };
+        }
+        
+        // Log received headers
+        if (headers && Object.keys(headers).length > 0) {
+            logDebug('🔑 Received headers:', headers);
         }
         
         try {
@@ -61,13 +66,31 @@ class GetQualitiesCommand extends BaseCommand {
             const ffmpegService = this.getService('ffmpeg');
             
             return new Promise((resolve, reject) => {
-                const ffprobe = spawn(ffmpegService.getFFprobePath(), [
+                // Build FFprobe args
+                const ffprobeArgs = [
                     '-v', 'quiet',
                     '-print_format', 'json',
                     '-show_streams',
-                    '-show_format',
-                    url
-                ], { env: getFullEnv() });
+                    '-show_format'
+                ];
+                
+                // Add headers if provided
+                if (headers && Object.keys(headers).length > 0) {
+                    // Format headers for FFprobe as "Key: Value\r\n" pairs
+                    const headerLines = Object.entries(headers)
+                        .map(([key, value]) => `${key}: ${value}`)
+                        .join('\r\n');
+                    
+                    if (headerLines) {
+                        ffprobeArgs.push('-headers', headerLines + '\r\n');
+                        logDebug('🔑 Using headers for FFprobe request');
+                    }
+                }
+                
+                // Add URL as the last argument
+                ffprobeArgs.push(url);
+                
+                const ffprobe = spawn(ffmpegService.getFFprobePath(), ffprobeArgs, { env: getFullEnv() });
     
                 let output = '';
                 let errorOutput = '';
@@ -265,8 +288,9 @@ class GetQualitiesCommand extends BaseCommand {
                                 timeout: 5000,
                                 headers: {
                                     'Range': 'bytes=0-2047', // Just get first 2KB
-                                    'User-Agent': 'Mozilla/5.0',
-                                    'Accept': '*/*'
+                                    'User-Agent': headers?.['User-Agent'] || 'Mozilla/5.0',
+                                    'Accept': '*/*',
+                                    'Referer': headers?.['Referer'] || undefined
                                 }
                             };
                             
