@@ -197,12 +197,42 @@ chrome.webRequest.onBeforeRequest.addListener(
             
             // Add video if it passed all the filtering
             if (isVideoUrl) {
-                addDetectedVideo(details.tabId, {
-                    url: url,
-                    type: type,
-                    source: 'webRequest',
-                    timestampDetected: Date.now()
-                });
+                // For direct videos, check the file size first
+                if (type === 'direct') {
+                    // Perform a HEAD request to check content-length
+                    fetch(url, { method: 'HEAD' })
+                        .then(response => {
+                            const contentLength = response.headers.get('content-length');
+                            // Only add if size is at least 100KB (102400 bytes) or size is unknown
+                            if (!contentLength || parseInt(contentLength, 10) >= 102400) {
+                                addDetectedVideo(details.tabId, {
+                                    url: url,
+                                    type: type,
+                                    source: 'webRequest',
+                                    timestampDetected: Date.now()
+                                });
+                            } else {
+                                console.log(`Skipped small video file (${contentLength} bytes): ${url}`);
+                            }
+                        })
+                        .catch(() => {
+                            // If the HEAD request fails, add anyway as we can't determine size
+                            addDetectedVideo(details.tabId, {
+                                url: url,
+                                type: type,
+                                source: 'webRequest',
+                                timestampDetected: Date.now()
+                            });
+                        });
+                } else {
+                    // For HLS/DASH, add without size check as they're manifest files
+                    addDetectedVideo(details.tabId, {
+                        url: url,
+                        type: type,
+                        source: 'webRequest',
+                        timestampDetected: Date.now()
+                    });
+                }
             }
         } catch (err) {
             // If URL parsing fails, fall back to the original simpler checks
@@ -222,13 +252,42 @@ chrome.webRequest.onBeforeRequest.addListener(
                     type = 'direct';
                 }
                 
-                // Add video
-                addDetectedVideo(details.tabId, {
-                    url: url,
-                    type: type,
-                    source: 'webRequest',
-                    timestampDetected: Date.now()
-                });
+                // For direct videos, check size; for manifests, add directly
+                if (type === 'direct') {
+                    // Perform a HEAD request to check content-length
+                    fetch(url, { method: 'HEAD' })
+                        .then(response => {
+                            const contentLength = response.headers.get('content-length');
+                            // Only add if size is at least 100KB (102400 bytes) or size is unknown
+                            if (!contentLength || parseInt(contentLength, 10) >= 102400) {
+                                addDetectedVideo(details.tabId, {
+                                    url: url,
+                                    type: type,
+                                    source: 'webRequest',
+                                    timestampDetected: Date.now()
+                                });
+                            } else {
+                                console.log(`Skipped small video file (${contentLength} bytes): ${url}`);
+                            }
+                        })
+                        .catch(() => {
+                            // If the HEAD request fails, add anyway as we can't determine size
+                            addDetectedVideo(details.tabId, {
+                                url: url,
+                                type: type,
+                                source: 'webRequest',
+                                timestampDetected: Date.now()
+                            });
+                        });
+                } else {
+                    // For HLS/DASH, add without size check
+                    addDetectedVideo(details.tabId, {
+                        url: url,
+                        type: type,
+                        source: 'webRequest',
+                        timestampDetected: Date.now()
+                    });
+                }
             }
         }
     },

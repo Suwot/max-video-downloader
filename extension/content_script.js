@@ -968,9 +968,8 @@ function notifyBackground(videos) {
         action: 'newVideoDetected',
         videos: validVideos.map(video => ({
             ...video,
-            source: 'content_script' // Explicitly set source for all videos
-        })),
-        timestamp: Date.now()
+            source: 'content_script'
+        }))
     }).catch(err => {
         // Suppress errors when popup is not open
         // This is expected behavior
