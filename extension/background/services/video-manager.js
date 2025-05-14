@@ -106,7 +106,7 @@ async function getHeadersForVideo(tabId, videoUrl) {
     try {
         // Get tab information to extract the actual referer
         const tabInfo = await chrome.tabs.get(tabId);
-        const referer = tabInfo?.url || 'https://www.example.com/';
+        const referer = tabInfo?.url || 'https://www.imaginarysite.com/';
         
         return {
             'Referer': referer,
@@ -117,7 +117,7 @@ async function getHeadersForVideo(tabId, videoUrl) {
         console.error('Error getting headers:', error);
         // Return basic headers as fallback
         return {
-            'Referer': 'https://www.example.com/',
+            'Referer': 'https://www.imaginarysite.com/',
             'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko)',
             'Range': 'bytes=0-'
         };
@@ -502,7 +502,7 @@ async function runJSParser(tabId, normalizedUrl, type) {
             isLightParsed: true,
             timestampLP: Date.now(),
             ...(lightParseResult.isMaster ? { isMaster: true } : {}),
-            ...(lightParseResult.isVariant ? { isVariant: true } : {})
+            ...(lightParseResult.isVariant ? { isVariant: true, hasKnownMaster: false } : {})
         };
         
         tabMap.set(normalizedUrl, updatedVideoAfterLightParse);
@@ -525,7 +525,7 @@ async function runJSParser(tabId, normalizedUrl, type) {
                 const updatedVideoAfterFullParse = {
                     ...updatedVideoAfterLightParse,
                     variants: fullParseResult.variants,
-                    duration: (fullParseResult.variants[0]?.jsMeta?.duration) || 7777777,
+                    duration: (fullParseResult.variants[0]?.jsMeta?.duration),
                     timestampFP: Date.now()
                 };
                 
