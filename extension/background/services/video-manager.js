@@ -96,6 +96,34 @@ const rateLimiter = {
   }
 };
 
+/**
+ * Get headers for video requests
+ * @param {number} tabId - Tab ID where the video is located
+ * @param {string} videoUrl - Video URL
+ * @returns {Object} - Headers object
+ */
+async function getHeadersForVideo(tabId, videoUrl) {
+    try {
+        // Get tab information to extract the actual referer
+        const tabInfo = await chrome.tabs.get(tabId);
+        const referer = tabInfo?.url || 'https://www.example.com/';
+        
+        return {
+            'Referer': referer,
+            'User-Agent': navigator.userAgent || 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko)',
+            'Range': 'bytes=0-'
+        };
+    } catch (error) {
+        console.error('Error getting headers:', error);
+        // Return basic headers as fallback
+        return {
+            'Referer': 'https://www.example.com/',
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko)',
+            'Range': 'bytes=0-'
+        };
+    }
+}
+
 // Debug logging helper
 function logDebug(...args) {
     console.log('[Video Manager]', new Date().toISOString(), ...args);
@@ -180,165 +208,6 @@ function broadcastVideoUpdate(tabId) {
     return processedVideos;
 }
 
-// Enrich video with metadata - only for direct videos
-async function enrichWithMetadata(video, tabId) {
-    const normalizedUrl = normalizeUrl(video.url);
-    
-    // Skip if already parsed or being processed
-    if (video.isFullyParsed || processingRequests.metadata.has(normalizedUrl)) {
-        return;
-    }
-    
-    // Skip all non-direct videos
-    if (video.isVariant || video.isMaster || video.url.startsWith('blob:')) {
-        return;
-    }
-    
-    // Mark as being processed
-    processingRequests.metadata.add(normalizedUrl);
-    
-    try {
-        // Get metadata only for direct videos
-        logDebug(`Getting metadata for direct video: ${video.url}`);
-        
-        const streamInfo = await rateLimiter.enqueue(async () => {
-            const response = await nativeHostService.sendMessage({
-                type: 'getQualities',
-                url: video.url,
-                light: false
-            });
-            return response?.streamInfo || null;
-        });
-        
-        if (streamInfo && streamInfo.totalBitrate && video.duration) {
-            streamInfo.estimatedSize = estimateFileSize(streamInfo.totalBitrate, video.duration);
-        }
-        
-        if (streamInfo) {
-            applyMetadataToVideo(tabId, normalizedUrl, streamInfo);
-        }
-    } catch (error) {
-        console.error(`Failed to get metadata for ${video.url}:`, error);
-    } finally {
-        processingRequests.metadata.delete(normalizedUrl);
-    }
-}
-
-// Apply metadata to a video and notify popup
-function applyMetadataToVideo(tabId, normalizedUrl, mediaInfo) {
-    if (!allDetectedVideos.has(tabId)) return;
-    
-    const tabMap = allDetectedVideos.get(tabId);
-    
-    if (tabMap && tabMap.has(normalizedUrl)) {
-        const video = tabMap.get(normalizedUrl);
-        
-        // Special logging for variants
-        if (video.isVariant) {
-            logDebug(`Applying metadata to variant video: ${video.url}`);
-            
-            // If this is a variant with partial media info from its master,
-            // ensure we merge all properties properly
-            if (video.partialMediaInfo) {
-                logDebug(`Merging partial variant info with full metadata`);
-                // Combine the full media info with any partial info we've already gathered
-                mediaInfo = {
-                    ...video.partialMediaInfo,
-                    ...mediaInfo,
-                };
-            }
-        }
-        
-        // Create a merged mediaInfo object with proper priority
-        const mergedMediaInfo = {
-            // Start with any existing mediaInfo
-            ...(video.mediaInfo || {}),
-            // Then apply new mediaInfo, which takes precedence
-            ...mediaInfo,
-        };
-        
-        // Check if this is ffprobe metadata that should be stored separately
-        const isFFprobeData = mediaInfo.source === 'ffprobe' || (video.isVariant && video.hasFFprobeMetadata);
-        
-        // Create updated video with stream info
-        const updatedVideo = {
-            ...video,
-            mediaInfo: mergedMediaInfo,
-            needsMetadata: false,  // Mark as processed
-            isFullyParsed: true,   // Mark as fully parsed
-            // Update resolution data from the mediaInfo
-            resolution: mediaInfo.width && mediaInfo.height ? {
-                width: mediaInfo.width,
-                height: mediaInfo.height,
-                fps: mediaInfo.fps,
-                bitrate: mediaInfo.videoBitrate || mediaInfo.totalBitrate
-            } : video.resolution,
-            fileSize: mediaInfo.estimatedSize || video.fileSize
-        };
-        
-        // If this is FFprobe data, store it separately as well
-        if (isFFprobeData && !updatedVideo.ffprobeMeta) {
-            updatedVideo.ffprobeMeta = mediaInfo;
-            updatedVideo.hasFFprobeMetadata = true;
-        }
-        
-        // Special handling for variants - ensure they have proper flag set
-        if (updatedVideo.isVariant) {
-            updatedVideo.isVariantFullyProcessed = true;
-            
-            // If this is a variant with a known master, update the variant in the master playlist too
-            if (updatedVideo.hasKnownMaster && updatedVideo.masterUrl) {
-                const masterUrl = normalizeUrl(updatedVideo.masterUrl);
-                
-                if (tabMap.has(masterUrl)) {
-                    const masterVideo = tabMap.get(masterUrl);
-                    
-                    if (masterVideo && masterVideo.variants) {
-                        const variantIndex = masterVideo.variants.findIndex(
-                            v => normalizeUrl(v.url) === normalizedUrl
-                        );
-                        
-                        if (variantIndex !== -1) {
-                            logDebug(`Updating variant in master playlist: ${normalizedUrl}`);
-                            
-                            // Create updated variants array
-                            const updatedVariants = [...masterVideo.variants];
-                            
-                            // Update the variant in the master playlist with the new metadata
-                            updatedVariants[variantIndex] = {
-                                ...updatedVariants[variantIndex],
-                                mediaInfo: mergedMediaInfo,
-                                isFullyParsed: true,
-                                isVariantFullyProcessed: true,
-                                resolution: updatedVideo.resolution,
-                                fileSize: updatedVideo.fileSize
-                            };
-                            
-                            // If this is FFprobe data, also update the ffprobeMeta field
-                            if (isFFprobeData && !updatedVariants[variantIndex].ffprobeMeta) {
-                                updatedVariants[variantIndex].ffprobeMeta = mediaInfo;
-                                updatedVariants[variantIndex].hasFFprobeMetadata = true;
-                            }
-                            
-                            // Update master with updated variants
-                            tabMap.set(masterUrl, {
-                                ...masterVideo,
-                                variants: updatedVariants
-                            });
-                        }
-                    }
-                }
-            }
-        }
-        
-        // Update the video in the map
-        tabMap.set(normalizedUrl, updatedVideo);
-        
-        // Use the unified notification method to update UI
-        notifyVideoUpdated(tabId, normalizedUrl, updatedVideo);
-    }
-}
-
 /**
  * Notify any open popup about a video update (for any property)
  * @param {number} tabId - Tab ID
@@ -399,13 +268,28 @@ function notifyVideoUpdated(tabId, url, updatedVideo) {
 }
 
 // Get stream qualities
-async function getStreamQualities(url) {
+async function getStreamQualities(url, tabId) {
     try {
         console.log('🎥 Requesting media info from native host for:', url);
         
+        // Get headers, using mock headers as fallback if tabId is not provided
+        let headers;
+        if (tabId) {
+            headers = await getHeadersForVideo(tabId, url);
+        } else {
+            headers = {
+                'Referer': 'https://www.imaginarysite.com/',
+                'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko)',
+                'Range': 'bytes=0-'
+            };
+        }
+        
+        logDebug(`Using headers for stream qualities: ${JSON.stringify(headers)}`);
+        
         const response = await nativeHostService.sendMessage({
             type: 'getQualities',
-            url: url
+            url: url,
+            headers: headers
         });
         
         return response;
@@ -683,26 +567,31 @@ async function processVariantsWithFFprobe(tabId, masterUrl, variants) {
     // Process each variant sequentially
     for (let i = 0; i < variants.length; i++) {
         const variant = variants[i];
-        logDebug(`Processing variant ${i+1}/${variants.length}: ${variant.url}`);
+        logDebug(`FFPROBE Processing variant ${i+1}/${variants.length}: ${variant.url}`);
         
         try {
+            // Get headers for the request
+            const headers = await getHeadersForVideo(tabId, variant.url);
+            logDebug(`Using headers for FFPROBE request: ${JSON.stringify(headers)}`);
+            
             // Get FFprobe metadata
             const ffprobeData = await rateLimiter.enqueue(async () => {
                 const response = await nativeHostService.sendMessage({
                     type: 'getQualities',
                     url: variant.url,
-                    light: false
+                    light: false,
+                    headers: headers
                 });
                 return response?.streamInfo || null;
             });
             
             if (ffprobeData) {
-                 logDebug(`Success FFprobe data for variant URL: ${variant.url}, ${i+1}:`, ffprobeData);
+                 logDebug(`Success FFPROBE data for variant URL: ${variant.url}, ${i+1}:`, ffprobeData);
                 // Update variant in master's variants array
                 updateVariantWithFFprobeData(tabId, masterUrl, i, ffprobeData);
             }
         } catch (error) {
-            console.error(`Error getting FFprobe data for variant ${variant.url}:`, error);
+            console.error(`Error getting FFPROBE data for variant ${variant.url}:`, error);
         }
     }
 }
@@ -772,13 +661,18 @@ async function runFFProbeParser(tabId, normalizedUrl) {
         }
         
         // Get metadata from FFprobe
-        logDebug(`Getting FFprobe metadata for ${video.url}`);
+        logDebug(`Getting FFPROBE metadata for ${video.url}`);
+        
+        // Get headers for the request
+        const headers = await getHeadersForVideo(tabId, video.url);
+        logDebug(`Using headers for FFPROBE request: ${JSON.stringify(headers)}`);
         
         const streamInfo = await rateLimiter.enqueue(async () => {
             const response = await nativeHostService.sendMessage({
                 type: 'getQualities',
                 url: video.url,
-                light: false
+                light: false,
+                headers: headers
             });
             return response?.streamInfo || null;
         });
@@ -850,10 +744,15 @@ async function generateVideoPreview(tabId, normalizedUrl) {
         // Generate preview
         logDebug(`Generating preview for ${video.url}`);
         
+        // Get headers for the request
+        const headers = await getHeadersForVideo(tabId, video.url);
+        logDebug(`Using headers for preview request: ${JSON.stringify(headers)}`);
+        
         const response = await rateLimiter.enqueue(async () => {
             return await nativeHostService.sendMessage({
                 type: 'generatePreview',
-                url: video.url
+                url: video.url,
+                headers: headers
             });
         });
         
