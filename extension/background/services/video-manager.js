@@ -515,30 +515,6 @@ function getAllDetectedVideos(tabId) {
     return allDetectedVideos.get(tabId) || new Map();
 }
 
-// experimental function as alternative to getVideosForTab
-// This function returns an array of videos for a specific tab ID
-// It filters out variants with known masters and processes the videos for broadcast
-function getVideosArrayFromMap(tabId) {
-    if (!allDetectedVideos.has(tabId)) {
-        return [];
-    }
-    
-    const tabVideosMap = allDetectedVideos.get(tabId);
-    const resultArray = [];
-    
-    // Convert map to array, filtering out variants with known masters
-    for (const [normalizedUrl, videoObj] of tabVideosMap.entries()) {
-        if (!(videoObj.isVariant && videoObj.hasKnownMaster)) {
-            resultArray.push({
-                ...videoObj,
-                fromArrayMap: true // Mark as coming from map
-            });
-        }
-    }
-    
-    return processVideosForBroadcast(resultArray);
-}
-
 // addition of all new suggested logic
 
 /**
@@ -641,8 +617,9 @@ async function runJSParser(tabId, normalizedUrl, type) {
             subtype: lightParseResult.subtype,
             isValid: lightParseResult.isValid,
             isLightParsed: true,
-            isMaster: lightParseResult.isMaster || false,
-            isVariant: lightParseResult.isVariant || false
+            timestampLP: Date.now(),
+            ...(lightParseResult.isMaster ? { isMaster: true } : {}),
+            ...(lightParseResult.isVariant ? { isVariant: true } : {})
         };
         
         tabMap.set(normalizedUrl, updatedVideoAfterLightParse);
@@ -661,35 +638,19 @@ async function runJSParser(tabId, normalizedUrl, type) {
             const fullParseResult = await fullParseContent(video.url, lightParseResult.subtype);
             
             if (fullParseResult.variants && fullParseResult.variants.length > 0) {
-                // Process variants
-                const enhancedVariants = fullParseResult.variants.map(variant => ({
-                    ...variant,
-                    type,
-                    source: 'simple-js-parser',
-                    isVariant: true,
-                    masterUrl: video.url,
-                    hasKnownMaster: true,
-                    timestamp: Date.now(),
-                    jsMeta: variant.jsMeta || {
-                        bandwidth: variant.bandwidth || 0,
-                        averageBandwidth: variant.averageBandwidth || 0
-                    }
-                }));
-                
                 // Update master with variants
                 const updatedVideoAfterFullParse = {
                     ...updatedVideoAfterLightParse,
-                    variants: enhancedVariants,
-                    parsedWithJsParser: true,
-                    duration: fullParseResult.duration || updatedVideoAfterLightParse.duration,
-                    isFullyParsed: true
+                    variants: fullParseResult.variants,
+                    duration: (fullParseResult.variants[0]?.jsMeta?.duration) || 7777777,
+                    timestampFP: Date.now()
                 };
                 
                 tabMap.set(normalizedUrl, updatedVideoAfterFullParse);
                 
                 // For each variant, get FFprobe metadata
                 // Process sequentially to avoid overwhelming the system
-                processVariantsWithFFprobe(tabId, normalizedUrl, enhancedVariants);
+                processVariantsWithFFprobe(tabId, normalizedUrl, fullParseResult.variants);
             }
         } else if (lightParseResult.isVariant) {
             // For variants, just update basic info
@@ -736,6 +697,7 @@ async function processVariantsWithFFprobe(tabId, masterUrl, variants) {
             });
             
             if (ffprobeData) {
+                 logDebug(`Success FFprobe data for variant URL: ${variant.url}, ${i+1}:`, ffprobeData);
                 // Update variant in master's variants array
                 updateVariantWithFFprobeData(tabId, masterUrl, i, ffprobeData);
             }
@@ -769,7 +731,8 @@ function updateVariantWithFFprobeData(tabId, masterUrl, variantIndex, ffprobeDat
         ...updatedVariants[variantIndex],
         ffprobeMeta: ffprobeData,
         hasFFprobeMetadata: true,
-        isFullyParsed: true
+        isFullyParsed: true,
+        timestampFFProbe: Date.now()
     };
     
     // Update master with new variants array
@@ -937,8 +900,8 @@ function handleBlobVideo(tabId, normalizedUrl) {
             type: 'blob',
             format: 'blob',
             container: 'blob',
-            hasVideo: true,
-            hasAudio: true
+            hasVideo: null,
+            hasAudio: null
         },
         needsMetadata: false,
         needsPreview: false,
@@ -951,6 +914,31 @@ function handleBlobVideo(tabId, normalizedUrl) {
     // Update UI
     notifyVideoUpdated(tabId, normalizedUrl, updatedVideo);
     broadcastVideoUpdate(tabId);
+}
+
+
+// experimental function as alternative to getVideosForTab
+// This function returns an array of videos for a specific tab ID
+// It filters out variants with known masters and processes the videos for broadcast
+function getVideosArrayFromMap(tabId) {
+    if (!allDetectedVideos.has(tabId)) {
+        return [];
+    }
+    
+    const tabVideosMap = allDetectedVideos.get(tabId);
+    const resultArray = [];
+    
+    // Convert map to array, filtering out variants with known masters
+    for (const [normalizedUrl, videoObj] of tabVideosMap.entries()) {
+        if (!(videoObj.isVariant && videoObj.hasKnownMaster)) {
+            resultArray.push({
+                ...videoObj,
+                fromArrayMap: true // Mark as coming from map
+            });
+        }
+    }
+    
+    return processVideosForBroadcast(resultArray);
 }
 
 
