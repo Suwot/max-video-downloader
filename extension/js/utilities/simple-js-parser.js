@@ -394,7 +394,7 @@ function parseHlsMaster(content, baseUrl, masterUrl) {
                     // estimatedFileSize will be added later with accurate duration
                 },
                 source: 'parseHlsMaster()',
-                detectionTimestamp: Date.now()
+                timestampDetected: Date.now()
             };
             
             variants.push(variant);
@@ -556,7 +556,7 @@ function parseDashMaster(content, baseUrl, masterUrl) {
                             isLive: isLive
                         },
                         source: 'parseDashMaster()',
-                        detectionTimestamp: Date.now()
+                        timestampDetected: Date.now()
                     };
                     
                     // Add encryption type only if encryption is detected

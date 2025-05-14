@@ -167,7 +167,7 @@ function processVideosForBroadcast(videos) {
             // Preserve source information or default to null
             source: video.source || null,
             // Preserve the detection timestamp for debugging duplicates
-            detectionTimestamp: video.detectionTimestamp || null,
+            timestampDetected: video.timestampDetected || null,
             // Ensure variants are properly preserved
             variants: video.variants || [],
             // Preserve parsing state flags
@@ -430,7 +430,6 @@ function addDetectedVideo(tabId, videoInfo) {
         ...videoInfo,
         normalizedUrl,
         tabId,
-        timestamp: Date.now(),
         // Important flags for tracking processing status
         isBeingProcessed: false,
         needsMetadata: true,

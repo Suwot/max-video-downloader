@@ -405,9 +405,6 @@ function sendVideoToBackground(url, source, additionalInfo = {}) {
     // Add to detected videos
     detectedVideos.add(normalizedUrl);
 
-    // Create precise detection timestamp with ISO format and milliseconds
-    const detectionTimestamp = new Date().toISOString();
-
     // Send to background
     chrome.runtime.sendMessage({
         action: 'addVideo',
@@ -415,7 +412,7 @@ function sendVideoToBackground(url, source, additionalInfo = {}) {
         source: 'content_script', // Explicitly set source as content_script
         type: type,
         foundFromQueryParam: foundFromQueryParam,
-        detectionTimestamp: detectionTimestamp, // Add precise detection timestamp
+        timestampDetected: Date.now(), // Add precise detection timestamp
         ...additionalInfo
     });
 }

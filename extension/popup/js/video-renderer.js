@@ -484,23 +484,6 @@ export function createVideoElement(video) {
     sourceBadge.className = `source-badge ${video.source || 'background'}`;
     sourceBadge.textContent = video.source === 'content_script' ? 'CS' : 'BG';
     previewContainer.appendChild(sourceBadge);
- 
-    // Add detection timestamp badge if available (for debugging duplicates)
-    if (video.detectionTimestamp) {
-        const timestampBadge = document.createElement('div');
-        timestampBadge.className = 'detection-timestamp';
-        // Format timestamp for display
-        const timestampDate = new Date(video.detectionTimestamp);
-        const formattedTime = timestampDate.toLocaleTimeString(undefined, { 
-            hour: '2-digit', 
-            minute: '2-digit', 
-            second: '2-digit',
-            fractionalSecondDigits: 3
-        });
-        timestampBadge.title = `Detected at: ${video.detectionTimestamp}`;
-        timestampBadge.textContent = formattedTime;
-        previewContainer.appendChild(timestampBadge);
-    }
     
     const loader = document.createElement('div');
     loader.className = 'loader';

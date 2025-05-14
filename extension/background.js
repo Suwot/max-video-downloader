@@ -201,7 +201,7 @@ chrome.webRequest.onBeforeRequest.addListener(
                     url: url,
                     type: type,
                     source: 'webRequest',
-                    detectionTimestamp: Date.now()
+                    timestampDetected: Date.now()
                 });
             }
         } catch (err) {
@@ -227,7 +227,7 @@ chrome.webRequest.onBeforeRequest.addListener(
                     url: url,
                     type: type,
                     source: 'webRequest',
-                    detectionTimestamp: Date.now()
+                    timestampDetected: Date.now()
                 });
             }
         }
@@ -254,7 +254,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                 title: video.title,
                 foundFromQueryParam: video.foundFromQueryParam || false,
                 originalUrl: video.originalUrl,
-                detectionTimestamp: Date.now()
+                timestampDetected: Date.now()
             });
         });
         
@@ -267,7 +267,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         if (tabId && tabId > 0) {
             addDetectedVideo(tabId, {
                 ...request,
-                detectionTimestamp: Date.now()
+                timestampDetected: Date.now()
             });
         }
         return false;
