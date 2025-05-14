@@ -650,7 +650,7 @@ async function runJSParser(tabId, normalizedUrl, type) {
                 
                 // For each variant, get FFprobe metadata
                 // Process sequentially to avoid overwhelming the system
-                processVariantsWithFFprobe(tabId, normalizedUrl, fullParseResult.variants);
+                await processVariantsWithFFprobe(tabId, normalizedUrl, fullParseResult.variants);
             }
         } else if (lightParseResult.isVariant) {
             // For variants, just update basic info
