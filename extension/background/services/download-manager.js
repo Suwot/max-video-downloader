@@ -5,6 +5,7 @@
 
 // Add static import at the top
 import nativeHostService from '../../js/native-host-service.js';
+import { getHeadersForVideo } from './video-manager.js';
 
 // Track downloads by ID for better connection persistence
 const downloads = new Map(); // key = downloadId, value = { url, progress, status, startTime, etc. }
@@ -220,25 +221,56 @@ function startDownload(request, port) {
     // Send to native host using our service with enhanced parameters
     console.log('🔄 Forwarding download request to native host:', request.url);
     
-    // Using imported nativeHostService instead of dynamic import
-    nativeHostService.sendMessage({
-        type: 'download',
-        url: request.url,
-        filename: request.filename || 'video.mp4',
-        savePath: request.savePath,
-        quality: request.quality,
-        manifestUrl: request.manifestUrl || request.url // Pass manifest URL for better progress tracking
-    }, responseHandler).catch(error => {
-        console.error('❌ Native host error:', error);
+    // Fetch headers for the video first
+    getHeadersForVideo(request.tabId || -1, request.url).then(headers => {
+        logDebug('Using headers for download request:', Object.keys(headers));
         
-        // Update download status
-        const download = downloads.get(downloadId);
-        if (download) {
-            download.status = 'error';
-            download.error = error.message;
-        }
+        // Using imported nativeHostService with headers
+        nativeHostService.sendMessage({
+            type: 'download',
+            url: request.url,
+            filename: request.filename || 'video.mp4',
+            savePath: request.savePath,
+            quality: request.quality,
+            manifestUrl: request.manifestUrl || request.url, // Pass manifest URL for better progress tracking
+            headers: headers // Include headers for authentication/authorization
+        }, responseHandler).catch(error => {
+            console.error('❌ Native host error:', error);
+            
+            // Update download status
+            const download = downloads.get(downloadId);
+            if (download) {
+                download.status = 'error';
+                download.error = error.message;
+            }
+            
+            handleDownloadError(error.message, notificationId);
+        });
+    }).catch(error => {
+        console.error('❌ Error getting headers:', error);
         
-        handleDownloadError(error.message, notificationId);
+        // Continue with download without headers as fallback
+        logDebug('Continuing download without custom headers');
+        
+        nativeHostService.sendMessage({
+            type: 'download',
+            url: request.url,
+            filename: request.filename || 'video.mp4',
+            savePath: request.savePath,
+            quality: request.quality,
+            manifestUrl: request.manifestUrl || request.url
+        }, responseHandler).catch(error => {
+            console.error('❌ Native host error:', error);
+            
+            // Update download status
+            const download = downloads.get(downloadId);
+            if (download) {
+                download.status = 'error';
+                download.error = error.message;
+            }
+            
+            handleDownloadError(error.message, notificationId);
+        });
     });
     
     return downloadId;

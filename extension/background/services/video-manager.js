@@ -849,5 +849,6 @@ export {
     normalizeUrl,
     getAllDetectedVideos,
     getVideosArrayFromMap,
-    clearVideoCache
+    clearVideoCache,
+    getHeadersForVideo
 };

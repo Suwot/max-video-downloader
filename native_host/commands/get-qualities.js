@@ -65,6 +65,17 @@ class GetQualitiesCommand extends BaseCommand {
             // Get required services
             const ffmpegService = this.getService('ffmpeg');
             
+            // Format headers for FFprobe if available
+            let headerArg = '';
+            if (headers && Object.keys(headers).length > 0) {
+                // Format headers for FFprobe as "Key: Value\r\n" pairs
+                headerArg = Object.entries(headers)
+                    .map(([key, value]) => `${key}: ${value}`)
+                    .join('\r\n') + '\r\n';
+                
+                logDebug('🔑 Using headers for FFprobe command');
+            }
+            
             return new Promise((resolve, reject) => {
                 // Build FFprobe args
                 const ffprobeArgs = [
@@ -73,6 +84,19 @@ class GetQualitiesCommand extends BaseCommand {
                     '-show_streams',
                     '-show_format'
                 ];
+                
+                // Add headers if provided
+                if (headers && Object.keys(headers).length > 0) {
+                    // Format headers for FFprobe as "Key: Value\r\n" pairs
+                    const headerLines = Object.entries(headers)
+                        .map(([key, value]) => `${key}: ${value}`)
+                        .join('\r\n');
+                    
+                    if (headerLines) {
+                        ffprobeArgs.push('-headers', headerLines + '\r\n');
+                        logDebug('🔑 Using headers for FFprobe request');
+                    }
+                }
                 
                 // Add headers if provided
                 if (headers && Object.keys(headers).length > 0) {
