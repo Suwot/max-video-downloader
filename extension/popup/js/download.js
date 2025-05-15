@@ -346,7 +346,8 @@ export async function startDownload(video) {
                         resolution: quality.resolution,
                         codecs: quality.codecs,
                         bitrate: quality.bandwidth || quality.videoBitrate
-                    } : null
+                    } : null,
+                    tabId: getCurrentTabId()
                 });
             }
         });

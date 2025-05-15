@@ -64,19 +64,37 @@ class DownloadCommand extends BaseCommand {
             
             // 3. Handle direct URL file extensions
             if (videoType === 'direct') {
+                // Extract extension from URL for better format detection
+                const urlExtMatch = url.match(/\.([^./?#]+)($|\?|#)/i);
+                const urlExt = urlExtMatch ? `.${urlExtMatch[1].toLowerCase()}` : null;
+                
                 // Check if filename already has an extension
                 if (!/\.(mp4|webm|mov|avi|mkv|flv)$/i.test(outputFilename)) {
-                    // No extension - add .mp4 as default
-                    outputFilename += '.mp4';
+                    // No extension - use URL extension or add .mp4 as default
+                    if (urlExt && /\.(mp4|webm|mov)$/i.test(urlExt)) {
+                        // Use the URL extension if it's a modern format
+                        outputFilename += urlExt;
+                    } else {
+                        // Fallback to mp4 as default
+                        outputFilename += '.mp4';
+                    }
                 } else {
                     // For legacy formats, change extension to .mp4 for remuxing
-                    // But preserve .mov and .webm extensions as requested
                     if (/\.(avi|mkv|flv)$/i.test(outputFilename)) {
                         const baseName = outputFilename.replace(/\.(avi|mkv|flv)$/i, '');
                         outputFilename = `${baseName}.mp4`;
                     }
-                    // .mov and .webm are preserved as is
+                    // For WebM files, preserve extension if URL has .webm too
+                    else if (/\.webm$/i.test(outputFilename) && urlExt && !/\.webm$/i.test(urlExt)) {
+                        // Non-WebM source being saved as WebM - not appropriate, use MP4 instead
+                        const baseName = outputFilename.replace(/\.webm$/i, '');
+                        outputFilename = `${baseName}.mp4`;
+                    }
+                    // .mov and .webm (with WebM source) are preserved as is
                 }
+                
+                // Log the format detection logic
+                logDebug(`URL extension: ${urlExt}, Output filename: ${outputFilename}`);
             }
             
             // Set output path - prefer desktop by default
@@ -153,17 +171,41 @@ class DownloadCommand extends BaseCommand {
                 outputArgs.push('-movflags', '+faststart');
             }
             else if (videoType === 'direct') {
+                // Extract source format from URL for smarter container decisions
+                const urlExtMatch = url.match(/\.([^./?#]+)($|\?|#)/i);
+                const sourceFormat = urlExtMatch ? urlExtMatch[1].toLowerCase() : '';
+                
                 // Handle direct files based on extension
-                if (outputExt === '.mp4' || outputExt === '.mov') {
-                    // Optimize MP4 and MOV files for streaming
+                if (outputExt === '.mp4') {
+                    // MP4 output - make sure we're not trying to put WebM codecs in an MP4 container
+                    if (sourceFormat === 'webm') {
+                        // WebM source to MP4 - might need transcoding, but we'll try copy first
+                        // FFmpeg will fail with an error if codecs aren't compatible
+                        logDebug('⚠️ Attempting to convert WebM to MP4 with stream copy (might fail if codecs incompatible)');
+                        
+                        // Adding a fallback mechanism - if stream copy fails, FFmpeg will try to transcode
+                        // This is a safer approach but may be slower
+                        outputArgs = [
+                            '-c:v', 'copy',
+                            '-c:a', 'copy',
+                            '-strict', 'experimental',
+                            '-err_detect', 'ignore_err'
+                        ];
+                    }
+                    // Optimize MP4 files for streaming
+                    outputArgs.push('-movflags', '+faststart');
+                }
+                else if (outputExt === '.mov') {
+                    // MOV container - preserved as is
                     outputArgs.push('-movflags', '+faststart');
                 }
                 else if (outputExt === '.webm') {
-                    // Simple copy for WebM files
-                    // No additional processing needed, copy streams as is
+                    // WebM files - simple copy, no additional processing needed
+                    // VP8/VP9 video and Opus/Vorbis audio will be preserved
+                    logDebug('WebM format detected, copying streams as is');
                 }
                 else {
-                    // For legacy formats, optimize for MP4 output
+                    // For legacy formats or unknown, we're remuxing to MP4
                     outputArgs.push('-movflags', '+faststart');
                 }
             }

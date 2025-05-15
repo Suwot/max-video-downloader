@@ -126,12 +126,21 @@ export function getFilenameFromUrl(url) {
         // Remove query parameters and fragments
         const cleanFilename = filename.split(/[?#]/)[0];
         
+        // Extract extension from URL for better format detection
+        const urlExtMatch = url.match(/\.([^./?#]+)($|\?|#)/i);
+        const urlExt = urlExtMatch ? urlExtMatch[1].toLowerCase() : null;
+        
         // Use the clean filename if it has a video extension
-        if (/\.(mp4|webm|mkv|m3u8|mpd|ts)$/i.test(cleanFilename)) {
+        if (/\.(mp4|webm|mkv|mov|m3u8|mpd|ts)$/i.test(cleanFilename)) {
             return cleanFilename;
         }
         
-        // If no video extension, add .mp4
+        // If URL has a WebM extension, preserve it for container compatibility
+        if (urlExt && urlExt === 'webm') {
+            return cleanFilename + '.webm';
+        }
+        
+        // If no video extension, add .mp4 as default
         if (!/\.\w+$/.test(cleanFilename)) {
             return cleanFilename + '.mp4';
         }

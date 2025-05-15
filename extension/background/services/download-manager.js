@@ -31,7 +31,27 @@ function getFilenameFromUrl(url) {
     try {
         const urlObj = new URL(url);
         const pathname = urlObj.pathname;
-        const filename = pathname.split('/').pop();
+        let filename = pathname.split('/').pop();
+        
+        // Clean up filename (remove query params)
+        filename = filename.replace(/[?#].*$/, '');
+        
+        // Make sure we preserve the original file extension if it exists
+        // This ensures container format compatibility (especially for WebM files)
+        const fileExtMatch = url.match(/\.([^./?#]+)($|\?|#)/i);
+        if (fileExtMatch) {
+            const ext = fileExtMatch[1].toLowerCase();
+            
+            // If URL has extension but filename doesn't, add it
+            if (!filename.includes('.')) {
+                filename += `.${ext}`;
+            } 
+            // If both have extensions but they're different, and URL extension is webm/mov, use URL extension
+            else if (['webm', 'mov'].includes(ext) && !filename.toLowerCase().endsWith(`.${ext}`)) {
+                const baseFilename = filename.replace(/\.[^.]+$/, '');
+                filename = `${baseFilename}.${ext}`;
+            }
+        }
         
         if (filename && filename.length > 0) {
             return filename;
@@ -229,13 +249,46 @@ function startDownload(request, port) {
         nativeHostService.sendMessage({
             type: 'download',
             url: request.url,
-            filename: request.filename || 'video.mp4',
+            filename: request.filename || getFilenameFromUrl(request.url),
             savePath: request.savePath,
             quality: request.quality,
             manifestUrl: request.manifestUrl || request.url, // Pass manifest URL for better progress tracking
             headers: headers // Include headers for authentication/authorization
         }, responseHandler).catch(error => {
             console.error('❌ Native host error:', error);
+            
+            // If error contains "codec not currently supported in container", attempt to retry with webm extension
+            if (error.message && error.message.includes("codec not currently supported in container") && 
+                request.url.toLowerCase().includes(".webm")) {
+                
+                console.log('⚠️ Codec incompatibility detected. Retrying with WebM extension...');
+                
+                // Force WebM extension for this download
+                let updatedFilename = request.filename || getFilenameFromUrl(request.url);
+                if (!/\.webm$/i.test(updatedFilename)) {
+                    updatedFilename = updatedFilename.replace(/\.[^.]+$/, '') + '.webm';
+                }
+                
+                nativeHostService.sendMessage({
+                    type: 'download',
+                    url: request.url,
+                    filename: updatedFilename,
+                    savePath: request.savePath,
+                    quality: request.quality,
+                    manifestUrl: request.manifestUrl || request.url,
+                    headers: headers
+                }, responseHandler).catch(retryError => {
+                    // Update download status for retry error
+                    const download = downloads.get(downloadId);
+                    if (download) {
+                        download.status = 'error';
+                        download.error = retryError.message;
+                    }
+                    
+                    handleDownloadError(retryError.message, notificationId);
+                });
+                return;
+            }
             
             // Update download status
             const download = downloads.get(downloadId);
@@ -255,12 +308,44 @@ function startDownload(request, port) {
         nativeHostService.sendMessage({
             type: 'download',
             url: request.url,
-            filename: request.filename || 'video.mp4',
+            filename: request.filename || getFilenameFromUrl(request.url),
             savePath: request.savePath,
             quality: request.quality,
             manifestUrl: request.manifestUrl || request.url
         }, responseHandler).catch(error => {
             console.error('❌ Native host error:', error);
+            
+            // If error contains "codec not currently supported in container", attempt to retry with webm extension
+            if (error.message && error.message.includes("codec not currently supported in container") && 
+                request.url.toLowerCase().includes(".webm")) {
+                
+                console.log('⚠️ Codec incompatibility detected. Retrying with WebM extension...');
+                
+                // Force WebM extension for this download
+                let updatedFilename = request.filename || getFilenameFromUrl(request.url);
+                if (!/\.webm$/i.test(updatedFilename)) {
+                    updatedFilename = updatedFilename.replace(/\.[^.]+$/, '') + '.webm';
+                }
+                
+                nativeHostService.sendMessage({
+                    type: 'download',
+                    url: request.url,
+                    filename: updatedFilename,
+                    savePath: request.savePath,
+                    quality: request.quality,
+                    manifestUrl: request.manifestUrl || request.url
+                }, responseHandler).catch(retryError => {
+                    // Update download status for retry error
+                    const download = downloads.get(downloadId);
+                    if (download) {
+                        download.status = 'error';
+                        download.error = retryError.message;
+                    }
+                    
+                    handleDownloadError(retryError.message, notificationId);
+                });
+                return;
+            }
             
             // Update download status
             const download = downloads.get(downloadId);
