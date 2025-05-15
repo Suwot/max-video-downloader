@@ -504,17 +504,23 @@ async function runJSParser(tabId, normalizedUrl, type) {
                 tabMap.set(normalizedUrl, updatedVideoAfterFullParse);
                 
                 // For each variant, get FFprobe metadata
-                // Process sequentially to avoid overwhelming the system
+                // Preview will be generated for the best quality variant in processVariantsWithFFprobe
                 await processVariantsWithFFprobe(tabId, normalizedUrl, fullParseResult.variants);
+                
+                // No need to generate preview for master here - it's handled in processVariantsWithFFprobe
+            } else {
+                // No variants found in master playlist; do not generate preview for master,
+                // as master playlists are not media files and cannot have previews.
+                logDebug(`No variants found in master playlist: ${video.url} (no preview generated)`);
             }
         } else if (lightParseResult.isVariant) {
-            // For variants, just update basic info
-            // (variants are usually managed through their master playlist)
-            logDebug(`Detected variant: ${video.url}`);
+            // For standalone variants, generate preview
+            logDebug(`Detected standalone variant: ${video.url}`);
+            generateVideoPreview(tabId, normalizedUrl);
+        } else {
+            // For other content types, generate preview
+            generateVideoPreview(tabId, normalizedUrl);
         }
-        
-        // Always generate a preview
-        generateVideoPreview(tabId, normalizedUrl);
         
         // Update UI
         broadcastVideoUpdate(tabId);
@@ -557,9 +563,68 @@ async function processVariantsWithFFprobe(tabId, masterUrl, variants) {
             });
             
             if (ffprobeData) {
-                 logDebug(`Success FFPROBE data for variant URL: ${variant.url}, ${i+1}:`, ffprobeData);
+                logDebug(`Success FFPROBE data for variant URL: ${variant.url}, ${i+1}:`, ffprobeData);
                 // Update variant in master's variants array
                 updateVariantWithFFprobeData(tabId, masterUrl, i, ffprobeData);
+                
+                // Only generate preview for the best quality variant (index 0)
+                if (i === 0) {
+                    logDebug(`Generating preview for best quality variant: ${variant.url}`);
+                    
+                    // Skip if already being processed
+                    if (!processingRequests.previews.has(variant.url)) {
+                        processingRequests.previews.add(variant.url);
+                        
+                        try {
+                            // Generate preview
+                            const response = await rateLimiter.enqueue(async () => {
+                                return await nativeHostService.sendMessage({
+                                    type: 'generatePreview',
+                                    url: variant.url,
+                                    headers: headers
+                                });
+                            });
+                            
+                            if (response && response.previewUrl) {
+                                // Get the master video
+                                const tabMap = allDetectedVideos.get(tabId);
+                                if (!tabMap || !tabMap.has(masterUrl)) {
+                                    return;
+                                }
+                                
+                                const masterVideo = tabMap.get(masterUrl);
+                                if (!masterVideo.variants || !masterVideo.variants[i]) {
+                                    return;
+                                }
+                                
+                                // Create updated variants array with the preview URL added to the first variant
+                                const updatedVariants = [...masterVideo.variants];
+                                updatedVariants[i] = {
+                                    ...updatedVariants[i],
+                                    previewUrl: response.previewUrl,
+                                    needsPreview: false
+                                };
+                                
+                                // Update master with the new variants array
+                                tabMap.set(masterUrl, {
+                                    ...masterVideo,
+                                    variants: updatedVariants
+                                });
+                                
+                                logDebug(`Preview generated for best quality variant: ${response.previewUrl}`);
+                                
+                                // Update UI
+                                notifyVideoUpdated(tabId, masterUrl, {
+                                    ...masterVideo,
+                                    variants: updatedVariants
+                                });
+                                broadcastVideoUpdate(tabId);
+                            }
+                        } finally {
+                            processingRequests.previews.delete(variant.url);
+                        }
+                    }
+                }
             }
         } catch (error) {
             console.error(`Error getting FFPROBE data for variant ${variant.url}:`, error);
