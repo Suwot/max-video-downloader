@@ -422,6 +422,13 @@ function parseHlsMaster(content, baseUrl, masterUrl) {
         }
     }
     
+    // Sort variants by bandwidth (highest first for best quality)
+    variants.sort((a, b) => {
+        const aBandwidth = a.jsMeta.averageBandwidth || a.jsMeta.bandwidth || 0;
+        const bBandwidth = b.jsMeta.averageBandwidth || b.jsMeta.bandwidth || 0;
+        return bBandwidth - aBandwidth;
+    });
+    
     return { 
         variants,
         status: 'success'
@@ -588,6 +595,11 @@ function parseDashMaster(content, baseUrl, masterUrl) {
                 }
             }
         }
+        
+        // Sort variants by bandwidth (highest first for best quality)
+        variants.sort((a, b) => {
+            return (b.jsMeta.bandwidth || 0) - (a.jsMeta.bandwidth || 0);
+        });
         
         return {
             variants,
