@@ -379,12 +379,18 @@ function sendVideoToBackground(url, source, additionalInfo = {}) {
     const typeInfo = getVideoType(url);
     let type = source;
     let foundFromQueryParam = additionalInfo.foundFromQueryParam || false;
+    let originalContainer = null;
     
     // If getVideoType returns an object, use its values
-    if (typeof typeInfo === 'object' && typeInfo.url && typeInfo.type) {
-        url = typeInfo.url;
-        type = typeInfo.type;
-        foundFromQueryParam = typeInfo.foundFromQueryParam || foundFromQueryParam;
+    if (typeof typeInfo === 'object') {
+        if (typeInfo.url && typeInfo.type) {
+            url = typeInfo.url;
+            type = typeInfo.type;
+            foundFromQueryParam = typeInfo.foundFromQueryParam || foundFromQueryParam;
+        } else if (typeInfo.type === 'direct' && typeInfo.container) {
+            type = typeInfo.type;
+            originalContainer = typeInfo.container;
+        }
     } else if (typeInfo !== 'ignored' && typeInfo !== 'unknown') {
         type = typeInfo; // Use the type detected by getVideoType
     }
@@ -412,6 +418,7 @@ function sendVideoToBackground(url, source, additionalInfo = {}) {
         source: 'content_script', // Explicitly set source as content_script
         type: type,
         foundFromQueryParam: foundFromQueryParam,
+        originalContainer: originalContainer, // Add container information
         timestampDetected: Date.now(), // Add precise detection timestamp
         ...additionalInfo
     });
@@ -563,8 +570,13 @@ function getVideoType(url) {
             return 'dash';
         }
         
-        if (/\.(mp4|webm|ogg|mov|avi|mkv|flv)$/i.test(baseUrl)) {
-            return 'direct';
+        // For direct video files, extract container and return both type and container
+        const directVideoMatch = baseUrl.match(/\.(mp4|webm|ogg|mov|avi|mkv|flv|3gp|m4v|wmv)$/i);
+        if (directVideoMatch) {
+            return {
+                type: 'direct',
+                container: directVideoMatch[1].toLowerCase()
+            };
         }
     } catch (e) {
         console.error('Error parsing URL:', e);

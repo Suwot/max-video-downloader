@@ -23,6 +23,24 @@ import { initTabTracking } from './background/services/tab-tracker.js';
 import { setupDownloadPort } from './background/services/download-manager.js';
 import { setupPopupPort } from './background/services/popup-ports.js';
 
+// Helper function to extract container format from URL
+function getContainerFromUrl(url) {
+    try {
+        const urlObj = new URL(url);
+        const directVideoMatch = urlObj.pathname.match(/\.(mp4|webm|ogg|mov|avi|mkv|flv|3gp|m4v|wmv)(\?|$)/i);
+        if (directVideoMatch && directVideoMatch[1]) {
+            return directVideoMatch[1].toLowerCase();
+        }
+    } catch (e) {
+        // If URL parsing fails, try simple regex matching
+        const directVideoMatch = url.match(/\.(mp4|webm|ogg|mov|avi|mkv|flv|3gp|m4v|wmv)(\?|$)/i);
+        if (directVideoMatch && directVideoMatch[1]) {
+            return directVideoMatch[1].toLowerCase();
+        }
+    }
+    return null;
+}
+
 // Debug logging helper
 function logDebug(...args) {
     console.log('[Background]', new Date().toISOString(), ...args);
@@ -199,6 +217,9 @@ chrome.webRequest.onBeforeRequest.addListener(
             if (isVideoUrl) {
                 // For direct videos, check the file size first
                 if (type === 'direct') {
+                    // Get container format
+                    const originalContainer = getContainerFromUrl(url);
+                    
                     // Perform a HEAD request to check content-length
                     fetch(url, { method: 'HEAD' })
                         .then(response => {
@@ -209,6 +230,7 @@ chrome.webRequest.onBeforeRequest.addListener(
                                     url: url,
                                     type: type,
                                     source: 'webRequest',
+                                    originalContainer: originalContainer,
                                     timestampDetected: Date.now()
                                 });
                             } else {
@@ -221,6 +243,7 @@ chrome.webRequest.onBeforeRequest.addListener(
                                 url: url,
                                 type: type,
                                 source: 'webRequest',
+                                originalContainer: originalContainer,
                                 timestampDetected: Date.now()
                             });
                         });
@@ -254,6 +277,9 @@ chrome.webRequest.onBeforeRequest.addListener(
                 
                 // For direct videos, check size; for manifests, add directly
                 if (type === 'direct') {
+                    // Get container format
+                    const originalContainer = getContainerFromUrl(url);
+                    
                     // Perform a HEAD request to check content-length
                     fetch(url, { method: 'HEAD' })
                         .then(response => {
@@ -264,6 +290,7 @@ chrome.webRequest.onBeforeRequest.addListener(
                                     url: url,
                                     type: type,
                                     source: 'webRequest',
+                                    originalContainer: originalContainer,
                                     timestampDetected: Date.now()
                                 });
                             } else {
@@ -276,6 +303,7 @@ chrome.webRequest.onBeforeRequest.addListener(
                                 url: url,
                                 type: type,
                                 source: 'webRequest',
+                                originalContainer: originalContainer,
                                 timestampDetected: Date.now()
                             });
                         });
