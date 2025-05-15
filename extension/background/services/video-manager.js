@@ -16,6 +16,7 @@ import nativeHostService from '../../js/native-host-service.js';
 import { validateAndFilterVideos } from '../../js/utilities/video-validator.js';
 import { getActivePopupPortForTab } from './popup-ports.js';
 import { lightParseContent, fullParseContent } from '../../js/utilities/simple-js-parser.js';
+import { buildRequestHeaders } from '../../js/utilities/headers-utils.js';
 
 // Central store for all detected videos, keyed by tab ID, then normalized URL
 // Map<tabId, Map<normalizedUrl, videoInfo>>
@@ -95,34 +96,6 @@ const rateLimiter = {
     }, delayNeeded);
   }
 };
-
-/**
- * Get headers for video requests
- * @param {number} tabId - Tab ID where the video is located
- * @param {string} videoUrl - Video URL
- * @returns {Object} - Headers object
- */
-async function getHeadersForVideo(tabId, videoUrl) {
-    try {
-        // Get tab information to extract the actual referer
-        const tabInfo = await chrome.tabs.get(tabId);
-        const referer = tabInfo?.url || 'https://www.imaginarysite.com/';
-        
-        return {
-            'Referer': referer,
-            'User-Agent': navigator.userAgent || 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko)',
-            'Range': 'bytes=0-'
-        };
-    } catch (error) {
-        console.error('Error getting headers:', error);
-        // Return basic headers as fallback
-        return {
-            'Referer': 'https://www.imaginarysite.com/',
-            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko)',
-            'Range': 'bytes=0-'
-        };
-    }
-}
 
 // Debug logging helper
 function logDebug(...args) {
@@ -272,16 +245,12 @@ async function getStreamQualities(url, tabId) {
     try {
         console.log('🎥 Requesting media info from native host for:', url);
         
-        // Get headers, using mock headers as fallback if tabId is not provided
+        // Get headers, using basic headers as fallback if tabId is not provided
         let headers;
         if (tabId) {
-            headers = await getHeadersForVideo(tabId, url);
+            headers = await buildRequestHeaders(tabId, url);
         } else {
-            headers = {
-                'Referer': 'https://www.imaginarysite.com/',
-                'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko)',
-                'Range': 'bytes=0-'
-            };
+            headers = await buildRequestHeaders(null, url);
         }
         
         logDebug(`Using headers for stream qualities: ${JSON.stringify(headers)}`);
@@ -490,9 +459,13 @@ async function runJSParser(tabId, normalizedUrl, type) {
         
         const video = tabMap.get(normalizedUrl);
         
+        // Get headers for the request
+        const headers = await buildRequestHeaders(tabId, video.url);
+        logDebug(`Using headers for JS Parser request: ${JSON.stringify(headers)}, URL: ${normalizedUrl}`);
+        
         // First do light parsing to determine content type
         logDebug(`Running light parsing for ${video.url}`);
-        const lightParseResult = await lightParseContent(video.url, type);
+        const lightParseResult = await lightParseContent(video.url, type, headers);
         
         // Update video with light parse results
         const updatedVideoAfterLightParse = {
@@ -518,7 +491,7 @@ async function runJSParser(tabId, normalizedUrl, type) {
             logDebug(`Processing master playlist: ${video.url}`);
             
             // Run full parsing to extract variants
-            const fullParseResult = await fullParseContent(video.url, lightParseResult.subtype);
+            const fullParseResult = await fullParseContent(video.url, lightParseResult.subtype, headers);
             
             if (fullParseResult.variants && fullParseResult.variants.length > 0) {
                 // Update master with variants
@@ -570,7 +543,7 @@ async function processVariantsWithFFprobe(tabId, masterUrl, variants) {
         
         try {
             // Get headers for the request
-            const headers = await getHeadersForVideo(tabId, variant.url);
+            const headers = await buildRequestHeaders(tabId, variant.url);
             logDebug(`Using headers for FFPROBE request: ${JSON.stringify(headers)}`);
             
             // Get FFprobe metadata
@@ -663,7 +636,7 @@ async function runFFProbeParser(tabId, normalizedUrl) {
         logDebug(`Getting FFPROBE metadata for ${video.url}`);
         
         // Get headers for the request
-        const headers = await getHeadersForVideo(tabId, video.url);
+        const headers = await buildRequestHeaders(tabId, video.url);
         logDebug(`Using headers for FFPROBE request: ${JSON.stringify(headers)}`);
         
         const streamInfo = await rateLimiter.enqueue(async () => {
@@ -744,7 +717,7 @@ async function generateVideoPreview(tabId, normalizedUrl) {
         logDebug(`Generating preview for ${video.url}`);
         
         // Get headers for the request
-        const headers = await getHeadersForVideo(tabId, video.url);
+        const headers = await buildRequestHeaders(tabId, video.url);
         logDebug(`Using headers for preview request: ${JSON.stringify(headers)}`);
         
         const response = await rateLimiter.enqueue(async () => {
@@ -848,6 +821,5 @@ export {
     normalizeUrl,
     getAllDetectedVideos,
     getVideosArrayFromMap,
-    clearVideoCache,
-    getHeadersForVideo
+    clearVideoCache
 };

@@ -5,6 +5,7 @@
  */
 
 import { normalizeUrl } from './normalize-url.js';
+import { buildRequestHeaders } from './headers-utils.js';
 
 // Tracking URLs currently being processed
 const processingRequests = {
@@ -17,9 +18,10 @@ const processingRequests = {
  * This fetches only the first 4KB to make a quick determination
  * @param {string} url - The URL to analyze
  * @param {string} type - The content type ('hls' or 'dash')
+ * @param {Object} [headers] - Optional custom headers to use for the request
  * @returns {Promise<{isValid: boolean, subtype: string}>} - Analysis result
  */
-export async function lightParseContent(url, type) {
+export async function lightParseContent(url, type, headers = null) {
     const normalizedUrl = normalizeUrl(url);
     
     // Skip if already being processed
@@ -37,11 +39,19 @@ export async function lightParseContent(url, type) {
         
         console.log(`[JS Parser] Light parsing ${url} to determine subtype`);
         
+        // Use provided headers or build basic headers with range
+        const requestHeaders = headers || await buildRequestHeaders(null, url, {
+            range: 'bytes=0-4095' // Request just the first 4KB
+        });
+        
+        // Ensure Range header is set for light parsing
+        if (!requestHeaders['Range']) {
+            requestHeaders['Range'] = 'bytes=0-4095';
+        }
+        
         const response = await fetch(url, {
             signal: controller.signal,
-            headers: {
-                'Range': 'bytes=0-4095' // Request just the first 4KB
-            }
+            headers: requestHeaders
         });
         
         clearTimeout(timeoutId);
@@ -108,9 +118,10 @@ export async function lightParseContent(url, type) {
  * 
  * @param {string} url - The URL of the master playlist
  * @param {string} subtype - The subtype from light parsing ('hls-master' or 'dash-master')
+ * @param {Object} [headers] - Optional custom headers to use for the request
  * @returns {Promise<{variants: Array, duration: number}>} - Complete variant information
  */
-export async function fullParseContent(url, subtype) {
+export async function fullParseContent(url, subtype, headers = null) {
     const normalizedUrl = normalizeUrl(url);
     
     // Skip if already being processed
@@ -128,8 +139,12 @@ export async function fullParseContent(url, subtype) {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 10000);  // 10 second timeout
         
+        // Use provided headers or build basic headers
+        const requestHeaders = headers || await buildRequestHeaders(null, url);
+        
         const response = await fetch(url, {
-            signal: controller.signal
+            signal: controller.signal,
+            headers: requestHeaders
         });
         
         clearTimeout(timeoutId);
@@ -160,7 +175,7 @@ export async function fullParseContent(url, subtype) {
                 const durationPromises = result.variants.map(async (variant, index) => {
                     try {
                         // Parse the variant to extract all metadata
-                        const variantInfo = await parseHlsVariant(variant.url);
+                        const variantInfo = await parseHlsVariant(variant.url, headers);
                         
                         // Duration info
                         if (variantInfo.duration !== null && variantInfo.duration >= 0) {
@@ -215,16 +230,21 @@ export async function fullParseContent(url, subtype) {
 /**
  * Parse an HLS variant playlist to extract full metadata
  * @param {string} variantUrl - URL of the HLS variant playlist
+ * @param {Object} [headers] - Optional headers to use for the request
  * @returns {Promise<Object>} - Complete variant metadata
  */
-async function parseHlsVariant(variantUrl) {
+async function parseHlsVariant(variantUrl, headers = null) {
     try {
         // Set up request with timeout
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 5000);  // 5 second timeout
         
+        // Use provided headers or build basic headers
+        const requestHeaders = headers || await buildRequestHeaders(null, variantUrl);
+        
         const response = await fetch(variantUrl, {
-            signal: controller.signal
+            signal: controller.signal,
+            headers: requestHeaders
         });
         
         clearTimeout(timeoutId);
