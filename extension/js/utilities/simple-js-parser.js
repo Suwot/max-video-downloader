@@ -39,15 +39,15 @@ export async function lightParseContent(url, type, headers = null) {
         
         console.log(`[JS Parser] Light parsing ${url} to determine subtype`);
         
-        // Use provided headers or build basic headers with range
-        const requestHeaders = headers || await buildRequestHeaders(null, url, {
-            range: 'bytes=0-4095' // Request just the first 4KB
-        });
+        // Use provided headers or build basic headers
+        const requestHeaders = headers || await buildRequestHeaders(null, url);
         
-        // Ensure Range header is set for light parsing
-        if (!requestHeaders['Range']) {
-            requestHeaders['Range'] = 'bytes=0-4095';
-        }
+        // Add Range header directly for light parsing
+        requestHeaders['Range'] = 'bytes=0-4095'; // Request just the first 4KB
+
+        // Final headers used for fetch
+        console.log(`[JS Parser] Final request headers: ${JSON.stringify(requestHeaders)}`);
+
         
         const response = await fetch(url, {
             signal: controller.signal,

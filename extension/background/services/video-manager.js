@@ -461,7 +461,6 @@ async function runJSParser(tabId, normalizedUrl, type) {
         
         // Get headers for the request
         const headers = await buildRequestHeaders(tabId, video.url);
-        logDebug(`Using headers for JS Parser request: ${JSON.stringify(headers)}, URL: ${normalizedUrl}`);
         
         // First do light parsing to determine content type
         logDebug(`Running light parsing for ${video.url}`);
