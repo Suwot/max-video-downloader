@@ -112,17 +112,48 @@ class FFmpegService {
 
     /**
      * Determine the type of video from the URL
+     * @param {string} url - Video URL
+     * @returns {string} - Video type: 'hls', 'dash', 'direct', 'blob', or 'unknown'
      */
     getVideoTypeFromUrl(url) {
-        if (url.includes('.m3u8')) {
-            return 'hls';
-        } else if (url.includes('.mpd')) {
-            return 'dash';
-        } else if (/\.(mp4|webm|ogg|mov|avi|mkv|flv)/i.test(url)) {
-            return 'direct';
-        } else if (url.startsWith('blob:')) {
-            return 'blob';
-        } else {
+        try {
+            // Check for streaming formats first
+            if (url.includes('.m3u8')) {
+                return 'hls';
+            } else if (url.includes('.mpd')) {
+                return 'dash';
+            } 
+            
+            // Handle direct media files - check for file extensions
+            const fileExtensionMatch = url.match(/\.([^./?#]+)($|\?|#)/i);
+            if (fileExtensionMatch) {
+                const extension = fileExtensionMatch[1].toLowerCase();
+                
+                // Modern container formats - MP4, WebM, MOV
+                if (['mp4', 'webm', 'mov'].includes(extension)) {
+                    return 'direct';
+                }
+                
+                // Legacy container formats - AVI, MKV, FLV, OGG
+                if (['avi', 'mkv', 'flv', 'ogg'].includes(extension)) {
+                    return 'direct';
+                }
+                
+                // Audio formats
+                if (['mp3', 'aac', 'wav', 'm4a'].includes(extension)) {
+                    return 'direct';
+                }
+            }
+            
+            // Handle blob URLs
+            if (url.startsWith('blob:')) {
+                return 'blob';
+            }
+            
+            // Default to unknown if no match
+            return 'unknown';
+        } catch (err) {
+            logDebug('Error determining video type:', err);
             return 'unknown';
         }
     }

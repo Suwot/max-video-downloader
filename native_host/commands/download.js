@@ -57,14 +57,26 @@ class DownloadCommand extends BaseCommand {
             // 1. Remove query params
             outputFilename = outputFilename.replace(/[?#].*$/, '');
             
-            // 2. Replace manifest extensions with MP4
+            // 2. Replace streaming manifest extensions with MP4
             if (videoType === 'hls' || videoType === 'dash') {
                 outputFilename = outputFilename.replace(/\.(m3u8|mpd|ts)$/, '.mp4');
             }
             
-            // 3. Make sure we have a video extension for direct URLs
-            if (videoType === 'direct' && !/\.(mp4|webm|mov|avi|mkv|flv)$/i.test(outputFilename)) {
-                outputFilename += '.mp4';
+            // 3. Handle direct URL file extensions
+            if (videoType === 'direct') {
+                // Check if filename already has an extension
+                if (!/\.(mp4|webm|mov|avi|mkv|flv)$/i.test(outputFilename)) {
+                    // No extension - add .mp4 as default
+                    outputFilename += '.mp4';
+                } else {
+                    // For legacy formats, change extension to .mp4 for remuxing
+                    // But preserve .mov and .webm extensions as requested
+                    if (/\.(avi|mkv|flv)$/i.test(outputFilename)) {
+                        const baseName = outputFilename.replace(/\.(avi|mkv|flv)$/i, '');
+                        outputFilename = `${baseName}.mp4`;
+                    }
+                    // .mov and .webm are preserved as is
+                }
             }
             
             // Set output path - prefer desktop by default
@@ -121,13 +133,46 @@ class DownloadCommand extends BaseCommand {
                 ffmpegArgs.push('-i', url);
             }
             
-            // Output parameters - try to copy streams without re-encoding
-            ffmpegArgs = ffmpegArgs.concat([
-                '-c', 'copy',            // Copy streams without re-encoding
-                '-bsf:a', 'aac_adtstoasc', // Fix for certain audio streams
-                '-movflags', '+faststart',  // Optimize for streaming playback
-                uniqueOutput
-            ]);
+            // Output parameters based on the video type and file extension
+            const outputExt = path.extname(uniqueOutput).toLowerCase();
+            
+            // Default to copy streams without re-encoding for all cases
+            let outputArgs = ['-c', 'copy'];
+            
+            if (videoType === 'hls') {
+                // HLS streams should be remuxed to MP4 (TS to MP4 without re-encoding)
+                // Fix for certain audio streams commonly found in HLS
+                outputArgs.push('-bsf:a', 'aac_adtstoasc');
+                
+                // Optimize for streaming playback
+                outputArgs.push('-movflags', '+faststart');
+            } 
+            else if (videoType === 'dash') {
+                // DASH streams should be muxed (init + segments) without re-encoding
+                // Most DASH streams are already in fragmented MP4 format, so simple copy is sufficient
+                outputArgs.push('-movflags', '+faststart');
+            }
+            else if (videoType === 'direct') {
+                // Handle direct files based on extension
+                if (outputExt === '.mp4' || outputExt === '.mov') {
+                    // Optimize MP4 and MOV files for streaming
+                    outputArgs.push('-movflags', '+faststart');
+                }
+                else if (outputExt === '.webm') {
+                    // Simple copy for WebM files
+                    // No additional processing needed, copy streams as is
+                }
+                else {
+                    // For legacy formats, optimize for MP4 output
+                    outputArgs.push('-movflags', '+faststart');
+                }
+            }
+            
+            // Add output arguments to ffmpeg command
+            ffmpegArgs = ffmpegArgs.concat(outputArgs);
+            
+            // Add the output file path
+            ffmpegArgs.push(uniqueOutput);
 
             logDebug('FFmpeg command:', ffmpegService.getFFmpegPath(), ffmpegArgs.join(' '));
 
