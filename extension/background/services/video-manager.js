@@ -134,7 +134,6 @@ function processVideosForBroadcast(videos) {
             // Ensure video has all necessary fields for display
             title: video.title || getFilenameFromUrl(video.url),
             ...(video.poster ? { poster: video.poster } : {}),
-            downloadable: true,
             // Preserve the detection timestamp for debugging duplicates
             timestampDetected: video.timestampDetected || null,
             ...(video.variants ? { variants: video.variants } : {})
