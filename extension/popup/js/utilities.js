@@ -31,50 +31,6 @@ export function debounce(func, wait) {
 }
 
 /**
- * Format resolution for display
- * @param {number} width - Video width
- * @param {number} height - Video height
- * @param {number} fps - Frames per second
- * @param {number} bitrate - Video bitrate
- * @param {Object} codecInfo - Codec information
- * @returns {string} Formatted resolution string
- */
-export function formatResolution(width, height, fps, bitrate, codecInfo = {}) {
-    const parts = [];
-    
-    // Resolution info
-    if (width && height) {
-        parts.push(`${width}x${height}`);
-    }
-    
-    // Codec info
-    if (codecInfo.videoCodec) {
-        const codec = codecInfo.videoCodec;
-        const codecStr = codec.profile ? 
-            `${codec.name} ${codec.profile}` : 
-            codec.name;
-        parts.push(`(${codecStr})`);
-        
-        if (codec.bitDepth) {
-            parts.push(`${codec.bitDepth}-bit`);
-        }
-    }
-    
-    // FPS info
-    if (fps) {
-        parts.push(`@ ${Math.round(fps)}fps`);
-    }
-    
-    // Bitrate info
-    if (bitrate) {
-        const bitrateStr = formatBitrate(bitrate);
-        if (bitrateStr) parts.push(bitrateStr);
-    }
-    
-    return parts.length > 0 ? parts.join(' ') : 'Unknown resolution';
-}
-
-/**
  * Format bitrate for display
  * @param {number|string} bitrate - Video bitrate
  * @returns {string|null} Formatted bitrate string

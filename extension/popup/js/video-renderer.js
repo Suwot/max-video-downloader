@@ -17,7 +17,7 @@
 
 // popup/js/video-renderer.js
 
-import { getFilenameFromUrl, formatResolution, formatDuration, normalizeUrl } from './utilities.js';
+import { getFilenameFromUrl, formatDuration, normalizeUrl } from './utilities.js';
 // Import functions from services instead of state.js
 import { getAllGroupStates, setGroupState } from './services/group-state-service.js';
 import { videoStateService } from './services/video-state-service.js';
@@ -132,7 +132,7 @@ export function groupVideosByType(videos) {
             groups.dash.push(video);
         } else if (type === 'blob') {
             groups.blob.push(video);
-        } else if (type === 'direct' || type === 'mp4' || type === 'mp3' || type === 'video') {
+        } else if (type === 'direct') {
             groups.direct.push(video);
         } else {
             groups.unknown.push(video);
@@ -351,20 +351,6 @@ export async function renderVideos(videos) {
                 margin-left: 8px;
                 vertical-align: middle;
                 font-weight: 500;
-            }
-            
-            .detection-timestamp {
-                position: absolute;
-                bottom: 20px;
-                right: 2px;
-                background-color: rgba(0, 0, 0, 0.6);
-                color: #fff;
-                font-size: 9px;
-                padding: 1px 3px;
-                border-radius: 3px;
-                font-family: monospace;
-                z-index: 5;
-                cursor: help;
             }
         `;
         document.head.appendChild(style);
@@ -769,15 +755,12 @@ function createVideoActions(video) {
             }
             
             // Add codec info if available
-            let codecs = variant.metaJS?.codecs;
-            if (codecs) {
-                // Extract main codec name without profile details
-                const mainCodec = codecs.split('.')[0];
-                if (mainCodec && !qualityLabel.includes(mainCodec)) {
-                    qualityLabel += ` - ${mainCodec}`;
-                }
+            let estimatedFileSizeBytes = variant.metaJS?.estimatedFileSizeBytes || null;
+            if (estimatedFileSizeBytes) {
+                const mb = (estimatedFileSizeBytes / 1000000).toFixed(1);
+                qualityLabel += ` (~${mb} MB)`;
             }
-            
+
             option.textContent = qualityLabel;
             qualitySelector.appendChild(option);
         });

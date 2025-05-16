@@ -226,11 +226,13 @@ chrome.webRequest.onBeforeRequest.addListener(
                             const contentLength = response.headers.get('content-length');
                             // Only add if size is at least 100KB (102400 bytes) or size is unknown
                             if (!contentLength || parseInt(contentLength, 10) >= 102400) {
+                                const fileSizeBytes = contentLength ? parseInt(contentLength, 10) : null;
                                 addDetectedVideo(details.tabId, {
                                     url: url,
                                     type: type,
                                     source: 'webRequest',
                                     originalContainer: originalContainer,
+                                    fileSizeBytes: fileSizeBytes, // Store file size from HEAD request
                                     timestampDetected: Date.now()
                                 });
                             } else {
@@ -286,11 +288,13 @@ chrome.webRequest.onBeforeRequest.addListener(
                             const contentLength = response.headers.get('content-length');
                             // Only add if size is at least 100KB (102400 bytes) or size is unknown
                             if (!contentLength || parseInt(contentLength, 10) >= 102400) {
+                                const fileSizeBytes = contentLength ? parseInt(contentLength, 10) : null;
                                 addDetectedVideo(details.tabId, {
                                     url: url,
                                     type: type,
                                     source: 'webRequest',
                                     originalContainer: originalContainer,
+                                    fileSizeBytes: fileSizeBytes, // Store file size from HEAD request
                                     timestampDetected: Date.now()
                                 });
                             } else {
