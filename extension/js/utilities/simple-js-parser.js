@@ -182,7 +182,7 @@ export async function fullParseContent(url, subtype, headers = null) {
                             variant.jsMeta.duration = variantInfo.duration;
                             // File size calculation depends on valid duration
                             const effectiveBandwidth = variant.jsMeta.averageBandwidth || variant.jsMeta.bandwidth;
-                            variant.jsMeta.estimatedFileSize = calculateEstimatedFileSize(effectiveBandwidth, variantInfo.duration);
+                            variant.jsMeta.estimatedFileSizeBytes = calculateestimatedFileSizeBytes(effectiveBandwidth, variantInfo.duration);
                             console.log(`[JS Parser] Calculated duration for variant ${index+1}/${result.variants.length}: ${variantInfo.duration}s`);
                         }
 
@@ -355,7 +355,7 @@ function extractHlsEncryptionInfo(content) {
  * @param {number} duration - Duration in seconds
  * @returns {number|null} - Estimated file size in bytes or null if inputs are invalid
  */
-function calculateEstimatedFileSize(bitrate, duration) {
+function calculateestimatedFileSizeBytes(bitrate, duration) {
     if (!bitrate || !duration || isNaN(bitrate) || isNaN(duration)) {
         return null;
     }
@@ -411,7 +411,7 @@ function parseHlsMaster(content, baseUrl, masterUrl) {
                     width: currentStreamInf.width,
                     height: currentStreamInf.height,
                     frameRate: currentStreamInf.frameRate
-                    // estimatedFileSize will be added later with accurate duration
+                    // estimatedFileSizeBytes will be added later with accurate duration
                 },
                 source: 'parseHlsMaster()',
                 timestampDetected: Date.now()
@@ -554,7 +554,7 @@ function parseDashMaster(content, baseUrl, masterUrl) {
                     const frameRate = parseFrameRate(extractAttribute(representation, 'frameRate') || null);
                     
                     // Calculate estimated file size if we have bandwidth and duration
-                    const estimatedFileSize = calculateEstimatedFileSize(bandwidth, duration);
+                    const estimatedFileSizeBytes = calculateestimatedFileSizeBytes(bandwidth, duration);
                     
                     // For standard DASH, we point to the master with representation ID
                     const variantUrl = masterUrl + `#representation=${id}`;
@@ -578,7 +578,7 @@ function parseDashMaster(content, baseUrl, masterUrl) {
                             height: height,
                             frameRate: frameRate,
                             resolution: width && height ? `${width}x${height}` : null,
-                            estimatedFileSize: estimatedFileSize,
+                            estimatedFileSizeBytes: estimatedFileSizeBytes,
                             isEncrypted: isEncrypted,
                             isLive: isLive
                         },
