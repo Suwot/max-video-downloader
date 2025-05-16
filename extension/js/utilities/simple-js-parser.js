@@ -179,20 +179,20 @@ export async function fullParseContent(url, subtype, headers = null) {
                         
                         // Duration info
                         if (variantInfo.duration !== null && variantInfo.duration >= 0) {
-                            variant.jsMeta.duration = variantInfo.duration;
+                            variant.metaJS.duration = variantInfo.duration;
                             // File size calculation depends on valid duration
-                            const effectiveBandwidth = variant.jsMeta.averageBandwidth || variant.jsMeta.bandwidth;
-                            variant.jsMeta.estimatedFileSizeBytes = calculateestimatedFileSizeBytes(effectiveBandwidth, variantInfo.duration);
+                            const effectiveBandwidth = variant.metaJS.averageBandwidth || variant.metaJS.bandwidth;
+                            variant.metaJS.estimatedFileSizeBytes = calculateestimatedFileSizeBytes(effectiveBandwidth, variantInfo.duration);
                             console.log(`[JS Parser] Calculated duration for variant ${index+1}/${result.variants.length}: ${variantInfo.duration}s`);
                         }
 
                         // Live status can be determined even if duration calculation failed
-                        variant.jsMeta.isLive = variantInfo.isLive === undefined ? false : variantInfo.isLive;
+                        variant.metaJS.isLive = variantInfo.isLive === undefined ? false : variantInfo.isLive;
 
                         // Encryption info can be determined independently of duration
-                        variant.jsMeta.isEncrypted = variantInfo.isEncrypted || false;
+                        variant.metaJS.isEncrypted = variantInfo.isEncrypted || false;
                         if (variantInfo.isEncrypted && variantInfo.encryptionType) {
-                            variant.jsMeta.encryptionType = variantInfo.encryptionType;
+                            variant.metaJS.encryptionType = variantInfo.encryptionType;
                         }
 
                         // Log the stream type
@@ -403,7 +403,7 @@ function parseHlsMaster(content, baseUrl, masterUrl) {
                 type: 'hls',
                 subtype: 'hls-variant',
                 isVariant: true,
-                jsMeta: {
+                metaJS: {
                     bandwidth: currentStreamInf.bandwidth,
                     averageBandwidth: currentStreamInf.averageBandwidth,
                     codecs: currentStreamInf.codecs,
@@ -424,8 +424,8 @@ function parseHlsMaster(content, baseUrl, masterUrl) {
     
     // Sort variants by bandwidth (highest first for best quality)
     variants.sort((a, b) => {
-        const aBandwidth = a.jsMeta.averageBandwidth || a.jsMeta.bandwidth || 0;
-        const bBandwidth = b.jsMeta.averageBandwidth || b.jsMeta.bandwidth || 0;
+        const aBandwidth = a.metaJS.averageBandwidth || a.metaJS.bandwidth || 0;
+        const bBandwidth = b.metaJS.averageBandwidth || b.metaJS.bandwidth || 0;
         return bBandwidth - aBandwidth;
     });
     
@@ -569,7 +569,7 @@ function parseDashMaster(content, baseUrl, masterUrl) {
                         type: 'dash',
                         subtype: 'dash-variant',
                         isVariant: true,
-                        jsMeta: {
+                        metaJS: {
                             bandwidth: bandwidth,
                             codecs: combinedCodecs,
                             videoCodec: videoCodec,
@@ -588,7 +588,7 @@ function parseDashMaster(content, baseUrl, masterUrl) {
                     
                     // Add encryption type only if encryption is detected
                     if (isEncrypted && encryptionType) {
-                        variant.jsMeta.encryptionType = encryptionType;
+                        variant.metaJS.encryptionType = encryptionType;
                     }
                     
                     variants.push(variant);
@@ -598,7 +598,7 @@ function parseDashMaster(content, baseUrl, masterUrl) {
         
         // Sort variants by bandwidth (highest first for best quality)
         variants.sort((a, b) => {
-            return (b.jsMeta.bandwidth || 0) - (a.jsMeta.bandwidth || 0);
+            return (b.metaJS.bandwidth || 0) - (a.metaJS.bandwidth || 0);
         });
         
         return {

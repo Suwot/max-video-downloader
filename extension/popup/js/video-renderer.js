@@ -455,11 +455,11 @@ export function createVideoElement(video) {
     previewImage.src = chrome.runtime.getURL('icons/video-placeholder.png');
     previewImage.alt = 'Video preview';
     
-    // Add duration display if available in video.variants.jsMeta
-    if (video.variants.jsMeta?.duration) {
+    // Add duration display if available in video.variants.metaJS
+    if (video.variants.metaJS?.duration) {
         const durationElement = document.createElement('div');
         durationElement.className = 'video-duration';
-        durationElement.textContent = formatDuration(video.variants.jsMeta.duration);
+        durationElement.textContent = formatDuration(video.variants.metaJS.duration);
         previewContainer.appendChild(durationElement);
     }
     
@@ -745,7 +745,7 @@ function createVideoActions(video) {
             let qualityLabel = '';
             
             // Get height info
-            let height = variant.jsMeta?.height || null;
+            let height = variant.metaJS?.height || null;
             
             if (height) {
                 qualityLabel = `${height}p`;
@@ -754,13 +754,13 @@ function createVideoActions(video) {
             }
             
             // Add fps if available
-            let fps = variant.jsMeta?.frameRate || null;
+            let fps = variant.metaJS?.frameRate || null;
             if (fps) {
                 qualityLabel += ` @${fps}fps`;
             }
             
             // Add bandwidth info if available
-            let bandwidth = variant.jsMeta?.averageBandwidth || variant.jsMeta?.bandwidth || null;
+            let bandwidth = variant.metaJS?.averageBandwidth || variant.metaJS?.bandwidth || null;
             if (bandwidth) {
                 const mbps = (bandwidth / 1000000).toFixed(1);
                 if (mbps > 0) {
@@ -769,7 +769,7 @@ function createVideoActions(video) {
             }
             
             // Add codec info if available
-            let codecs = variant.jsMeta?.codecs;
+            let codecs = variant.metaJS?.codecs;
             if (codecs) {
                 // Extract main codec name without profile details
                 const mainCodec = codecs.split('.')[0];
@@ -995,7 +995,7 @@ function updateVideoMetadataUI(videoElement, mediaInfo, videoData = null) {
         }
         
         // Update duration if available
-        if (variant.jsMeta.duration) {
+        if (variant.metaJS.duration) {
             let durationElement = videoElement.querySelector('.video-duration');
             if (!durationElement) {
                 // Create duration element if it doesn't exist
@@ -1003,12 +1003,12 @@ function updateVideoMetadataUI(videoElement, mediaInfo, videoData = null) {
                 if (previewContainer) {
                     durationElement = document.createElement('div');
                     durationElement.className = 'video-duration';
-                    durationElement.textContent = formatDuration(variant.jsMeta.duration);
+                    durationElement.textContent = formatDuration(variant.metaJS.duration);
                     previewContainer.appendChild(durationElement);
                 }
             } else {
                 // Update existing duration element
-                durationElement.textContent = formatDuration(variant.jsMeta.duration);
+                durationElement.textContent = formatDuration(variant.metaJS.duration);
             }
         }
         

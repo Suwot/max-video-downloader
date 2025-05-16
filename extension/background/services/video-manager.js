@@ -497,7 +497,7 @@ async function runJSParser(tabId, normalizedUrl, type) {
                 const updatedVideoAfterFullParse = {
                     ...updatedVideoAfterLightParse,
                     variants: fullParseResult.variants,
-                    duration: (fullParseResult.variants[0]?.jsMeta?.duration),
+                    duration: (fullParseResult.variants[0]?.metaJS?.duration),
                     timestampFP: Date.now()
                 };
                 
@@ -654,7 +654,7 @@ function updateVariantWithFFprobeData(tabId, masterUrl, variantIndex, ffprobeDat
     const updatedVariants = [...masterVideo.variants];
     updatedVariants[variantIndex] = {
         ...updatedVariants[variantIndex],
-        ffprobeMeta: ffprobeData,
+        metaFFprobe: ffprobeData,
         hasFFprobeMetadata: true,
         isFullyParsed: true,
         timestampFFProbe: Date.now()
@@ -723,7 +723,7 @@ async function runFFProbeParser(tabId, normalizedUrl) {
             const updatedVideo = {
                 ...video,
                 mediaInfo: streamInfo,
-                ffprobeMeta: streamInfo,  // Store FFprobe data separately
+                metaFFprobe: streamInfo,  // Store FFprobe data separately
                 hasFFprobeMetadata: true,
                 needsMetadata: false,
                 isFullyParsed: true,
