@@ -410,7 +410,7 @@ function parseHlsMaster(content, baseUrl, masterUrl) {
                     resolution: currentStreamInf.resolution,
                     width: currentStreamInf.width,
                     height: currentStreamInf.height,
-                    frameRate: currentStreamInf.frameRate
+                    fps: currentStreamInf.fps
                     // estimatedFileSizeBytes will be added later with accurate duration
                 },
                 source: 'parseHlsMaster()',
@@ -576,7 +576,7 @@ function parseDashMaster(content, baseUrl, masterUrl) {
                             audioCodec: globalAudioCodec,
                             width: width,
                             height: height,
-                            frameRate: frameRate,
+                            fps: frameRate,
                             resolution: width && height ? `${width}x${height}` : null,
                             estimatedFileSizeBytes: estimatedFileSizeBytes,
                             isEncrypted: isEncrypted,
@@ -631,7 +631,7 @@ function parseStreamInf(line) {
         resolution: null,
         width: null,
         height: null,
-        frameRate: null
+        fps: null
     };
     
     // Pattern for parsing attribute expressions, handling quoted values properly
@@ -660,7 +660,7 @@ function parseStreamInf(line) {
                 result.height = parseInt(height, 10);
                 break;
             case 'FRAME-RATE':
-                result.frameRate = parseFloat(value);
+                result.fps = parseFloat(value);
                 break;
         }
     }

@@ -740,7 +740,7 @@ function createVideoActions(video) {
             }
             
             // Add fps if available
-            let fps = variant.metaJS?.frameRate || null;
+            let fps = variant.metaJS?.fps || variant.metaFFprobe?.fps || null;
             if (fps) {
                 qualityLabel += ` @${fps}fps`;
             }
@@ -1022,10 +1022,10 @@ function updateVideoMetadataUI(videoElement, mediaInfo, videoData = null) {
                 let fps = null;
                 if (mediaInfo.fps) {
                     fps = mediaInfo.fps;
-                } else if (mediaInfo.frameRate) {
-                    fps = mediaInfo.frameRate;
-                } else if (mediaInfo.videoCodec && mediaInfo.videoCodec.frameRate) {
-                    fps = mediaInfo.videoCodec.frameRate;
+                } else if (mediaInfo.fps) {
+                    fps = mediaInfo.fps;
+                } else if (mediaInfo.videoCodec && mediaInfo.videoCodec.fps) {
+                    fps = mediaInfo.videoCodec.fps;
                 } else if (videoData && videoData.fps) {
                     fps = videoData.fps;
                 } else if (videoData && videoData.resolution && videoData.resolution.fps) {
@@ -1069,10 +1069,10 @@ function updateVideoMetadataUI(videoElement, mediaInfo, videoData = null) {
                 let fps = null;
                 if (mediaInfo.fps) {
                     fps = mediaInfo.fps;
-                } else if (mediaInfo.frameRate) {
-                    fps = mediaInfo.frameRate;
-                } else if (mediaInfo.videoCodec && mediaInfo.videoCodec.frameRate) {
-                    fps = mediaInfo.videoCodec.frameRate;
+                } else if (mediaInfo.fps) {
+                    fps = mediaInfo.fps;
+                } else if (mediaInfo.videoCodec && mediaInfo.videoCodec.fps) {
+                    fps = mediaInfo.videoCodec.fps;
                 } else if (videoData && videoData.fps) {
                     fps = videoData.fps;
                 } else if (videoData && videoData.resolution && videoData.resolution.fps) {
