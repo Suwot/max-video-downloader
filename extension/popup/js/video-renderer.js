@@ -732,68 +732,20 @@ function createVideoActions(video) {
     
     // Create quality selector if variants are available
     if (video.variants && video.variants.length > 0) {
-        // Sort variants by resolution height (highest first)
-        const sortedVariants = [...video.variants].sort((a, b) => {
-            // Try to get height from various sources in order of reliability
-            const aHeight = a.jsMeta?.height || a.height || (a.resolution ? a.resolution.height : 0);
-            const bHeight = b.jsMeta?.height || b.height || (b.resolution ? b.resolution.height : 0);
-            return bHeight - aHeight;
-        });
-
-        // Check if original quality matches the best quality variant
-        const bestQuality = sortedVariants[0];
-        const originalMatchesBest = video.resolution && bestQuality && (
-            // Compare base URLs (without query params or hash)
-            video.url.split('?')[0].split('#')[0] === bestQuality.url.split('?')[0].split('#')[0] ||
-            // Or compare resolution if both have it
-            (video.resolution.width === bestQuality.width &&
-             video.resolution.height === bestQuality.height)
-        );
-
+        // Create quality selector only if we have actual variants
         const qualitySelector = document.createElement('select');
         qualitySelector.className = 'quality-selector';
-        
-        // Only add original quality if it doesn't match best variant
-        if (!originalMatchesBest) {
-            const mainQuality = document.createElement('option');
-            mainQuality.value = video.url;
-            
-            // Create more descriptive label
-            let qualityLabel = 'Original Quality';
-            if (video.resolution) {
-                qualityLabel = `${video.resolution.height}p`;
-                if (video.resolution.fps) {
-                    qualityLabel += ` ${video.resolution.fps}fps`;
-                }
-                if (video.mediaInfo?.hasAudio === false) {
-                    qualityLabel += ' (no audio)';
-                }
-            }
-            mainQuality.textContent = qualityLabel;
-            qualitySelector.appendChild(mainQuality);
-        }
-        
-        // Add sorted variant qualities with improved labels
-        sortedVariants.forEach(variant => {
+
+        // Simply render each variant as provided without sorting or special processing
+        video.variants.forEach(variant => {
             const option = document.createElement('option');
             option.value = variant.url;
-            
-            // Check if this variant has full mediaInfo available
-            const hasFullMediaInfo = variant.mediaInfo && Object.keys(variant.mediaInfo).length > 5;
-            
-            console.log(`Variant ${variant.url} has ${hasFullMediaInfo ? 'full' : 'basic'} mediaInfo`);
-            if (hasFullMediaInfo) {
-                console.log('  - Fields:', Object.keys(variant.mediaInfo).join(', '));
-            }
             
             // Create user-friendly quality label
             let qualityLabel = '';
             
-            // Get height info from the best possible source
-            let height = null;
-            if (variant.jsMeta && variant.jsMeta.height) {
-                height = variant.jsMeta.height;
-            }
+            // Get height info
+            let height = variant.jsMeta?.height || null;
             
             if (height) {
                 qualityLabel = `${height}p`;
@@ -801,19 +753,14 @@ function createVideoActions(video) {
                 qualityLabel = 'Alternative Quality';
             }
             
-            // Add fps from various possible sources
-            let fps = null;
-            if (variant.jsMeta.frameRate) {
-                fps = variant.jsMeta.frameRate;
-            }
-
+            // Add fps if available
+            let fps = variant.jsMeta?.frameRate || null;
             if (fps) {
-                qualityLabel += ` ${fps}fps`;
+                qualityLabel += ` @${fps}fps`;
             }
             
-            // Add bandwidth info for better comparison
-            let bandwidth = variant.jsMeta.averageBandwidth || variant.jsMeta.bandwidth;
-            
+            // Add bandwidth info if available
+            let bandwidth = variant.jsMeta?.averageBandwidth || variant.jsMeta?.bandwidth || null;
             if (bandwidth) {
                 const mbps = (bandwidth / 1000000).toFixed(1);
                 if (mbps > 0) {
@@ -822,8 +769,7 @@ function createVideoActions(video) {
             }
             
             // Add codec info if available
-            let codecs = variant.jsMeta.codecs;
-            
+            let codecs = variant.jsMeta?.codecs;
             if (codecs) {
                 // Extract main codec name without profile details
                 const mainCodec = codecs.split('.')[0];
@@ -851,7 +797,7 @@ function createVideoActions(video) {
         
         if (video.type === 'hls' || video.type === 'dash') {
             // Only fetch stream qualities if we don't have variants
-            if (!video.variants) {
+            if (!video.variants || video.variants.length === 0) {
                 const qualities = await videoStateService.fetchStreamQualities(selectedUrl);
                 if (qualities && qualities.length > 0) {
                     const selectedQuality = await showQualityDialog(qualities);
