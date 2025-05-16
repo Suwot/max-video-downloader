@@ -250,7 +250,6 @@ function handlePortMessage(message) {
             // Find the preview image
             const previewImage = videoElement.querySelector('.preview-image');
             const loader = videoElement.querySelector('.loader');
-            const regenerateButton = videoElement.querySelector('.regenerate-button');
             
             if (previewImage) {
                 // Add load handler before setting src
@@ -258,7 +257,6 @@ function handlePortMessage(message) {
                     previewImage.classList.remove('placeholder');
                     previewImage.classList.add('loaded');
                     if (loader) loader.style.display = 'none';
-                    if (regenerateButton) regenerateButton.classList.add('hidden');
                 };
                 
                 // Set the preview source

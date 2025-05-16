@@ -18,7 +18,6 @@
 // popup/js/video-renderer.js
 
 import { getFilenameFromUrl, formatDuration, normalizeUrl } from './utilities.js';
-// Import functions from services instead of state.js
 import { getAllGroupStates, setGroupState } from './services/group-state-service.js';
 import { videoStateService } from './services/video-state-service.js';
 import { handleDownload } from './download.js';
@@ -143,174 +142,12 @@ export function groupVideosByType(videos) {
 }
 
 /**
- * Generate a preview image for a video
- * @param {string} url - Video URL
- * @param {HTMLElement} loader - Loader element
- * @param {HTMLImageElement} previewImage - Preview image element
- * @param {HTMLButtonElement} regenerateButton - Regenerate button element 
- * @param {boolean} forceRegenerate - Whether to force regeneration
- * @returns {Promise<Object>} Generated preview info
- */
-export function generatePreview(url, loader, previewImage, regenerateButton, forceRegenerate = false) {
-    // Skip preview generation for blob URLs
-    if (url.startsWith('blob:')) {
-        if (loader) loader.style.display = 'none';
-        return Promise.resolve(null);
-    }
-    
-    // Show loader, hide regenerate button
-    if (loader) loader.style.display = 'block';
-    if (regenerateButton) regenerateButton.classList.add('hidden');
-    
-    // Get current tab ID
-    return chrome.tabs.query({ active: true, currentWindow: true })
-        .then(tabs => {
-            const tabId = tabs[0]?.id;
-            
-            if (!tabId) {
-                console.error('Cannot determine active tab');
-                if (loader) loader.style.display = 'none';
-                if (regenerateButton) regenerateButton.classList.remove('hidden');
-                return null;
-            }
-            
-            // Send message to generate preview
-            sendPortMessage({
-                type: 'generatePreview',
-                url: url,
-                tabId: tabId,
-                forceRegenerate: forceRegenerate
-            });
-            
-            // Wait for response via event
-            return new Promise((resolve, reject) => {
-                let timeoutId;
-                
-                const handleResponse = (event) => {
-                    const response = event.detail;
-                    
-                    // Only process responses for our URL
-                    if (response.requestUrl === url) {
-                        clearTimeout(timeoutId);
-                        document.removeEventListener('preview-ready', handleResponse);
-                        
-                        if (response.previewUrl) {
-                            // Update the image
-                            if (previewImage) {
-                                previewImage.onload = () => {
-                                    previewImage.classList.remove('placeholder');
-                                    previewImage.classList.add('loaded');
-                                    if (loader) loader.style.display = 'none';
-                                };
-                                previewImage.src = response.previewUrl;
-                            }
-                            
-                            resolve(response);
-                        } else {
-                            // Preview generation failed
-                            if (loader) loader.style.display = 'none';
-                            if (regenerateButton) regenerateButton.classList.remove('hidden');
-                            resolve(null);
-                        }
-                    }
-                };
-                
-                // Set timeout for response
-                timeoutId = setTimeout(() => {
-                    document.removeEventListener('preview-ready', handleResponse);
-                    // Preview generation timed out
-                    if (loader) loader.style.display = 'none';
-                    if (regenerateButton) regenerateButton.classList.remove('hidden');
-                    resolve(null);
-                }, 10000);
-                
-                // Listen for response
-                document.addEventListener('preview-ready', handleResponse);
-            });
-        });
-}
-
-/**
- * Get all video groups from the background
- * @returns {Object} Video groups by type
- */
-function getAllVideoGroups() {
-    // Return the videos grouped by type from the video state service
-    return videoStateService.getState().videoGroups || {};
-}
-
-/**
- * Final validation to ensure tracking pixels and similar unwanted content isn't rendered
- * @param {Object} video - Video object to validate
- * @returns {boolean} Whether the video is valid for rendering
- */
-function isValidVideoForRendering(video) {
-    if (!video || !video.url) return false;
-    
-    // If the video was explicitly found from a query parameter, always trust it
-    // This means content_script.js already extracted a legitimate video URL from a tracking pixel
-    if (video.foundFromQueryParam === true) {
-        return true;
-    }
-    
-    try {
-        // Skip blob URLs which should already be properly validated
-        if (video.url.startsWith('blob:')) return true;
-        
-        const urlObj = new URL(video.url);
-        
-        // Reject ping.gif and other tracking pixels directly
-        if (video.url.includes('ping.gif') || video.url.includes('jwpltx.com')) {
-            return false;
-        }
-        
-        // Check for image extensions that shouldn't be rendered as videos
-        const badExtensions = /\.(gif|png|jpg|jpeg|webp|bmp|svg)(\?|$)/i;
-        if (badExtensions.test(urlObj.pathname)) {
-            // Only allow HLS and DASH videos that were already validated
-            if (video.type === 'hls' || video.type === 'dash') {
-                return true;
-            }
-            return false;
-        }
-        
-        // Known tracking/analytics endpoints that shouldn't be rendered
-        const trackingPatterns = [
-            /\/ping/i, 
-            /\/track/i, 
-            /\/pixel/i, 
-            /\/telemetry/i,
-            /\/analytics/i,
-            /\/stats/i,
-            /\/metrics/i,
-            /jwpltx/i
-        ];
-        
-        // Only apply tracking pattern check if this isn't a specific video type we trust
-        if (video.type !== 'hls' && video.type !== 'dash' && 
-            trackingPatterns.some(pattern => 
-                pattern.test(urlObj.pathname) || pattern.test(urlObj.hostname)
-            )) {
-            return false;
-        }
-        
-        return true;
-    } catch (e) {
-        console.error('Error validating video for rendering:', e, video);
-        return false;
-    }
-}
-
-/**
  * Render a list of videos in the UI
  * @param {Array} videos - Videos to render
  */
 export async function renderVideos(videos) {
     const container = document.getElementById('videos');
-    
-    // Apply final validation filter to ensure we don't show invalid videos
-    videos = videos ? videos.filter(isValidVideoForRendering) : [];
-    
+        
     if (!videos || videos.length === 0) {
         // Use the shared function for showing "no videos" message
         // This ensures consistent UI and proper theming
@@ -465,11 +302,7 @@ export function createVideoElement(video) {
     loader.className = 'loader';
     loader.style.display = 'block'; // Always show loader initially
     
-    const regenerateButton = document.createElement('button');
-    regenerateButton.className = 'regenerate-button hidden';
-    regenerateButton.textContent = 'Regenerate';
-    
-    previewContainer.append(previewImage, loader, regenerateButton);
+    previewContainer.append(previewImage, loader);
     previewColumn.appendChild(previewContainer);
     
     // Track if preview has been generated
@@ -502,6 +335,7 @@ export function createVideoElement(video) {
             hideHoverPreview();
         });
     } 
+
     // If we have a poster, use it directly
     else if (video.poster) {
         previewImage.onload = () => {
@@ -531,25 +365,13 @@ export function createVideoElement(video) {
     } 
     // No preview available yet
     else {
-        // Don't manually request preview generation - it's now handled in the background
-        // Just keep the loader spinning until a preview becomes available
+        // Keep the loader spinning until a preview becomes available
         if (video.type === 'blob' && !video.poster) {
             // For blob URLs without a poster, still show the placeholder instead of trying to generate
             previewImage.classList.add('loaded');
             loader.style.display = 'none';
         }
     }
-    
-    // Show regenerate button if preview generation failed
-    if (!previewGenerated && !loader.style.display) {
-        regenerateButton.classList.remove('hidden');
-    }
-    
-    regenerateButton.addEventListener('click', () => {
-        regenerateButton.classList.add('hidden');
-        loader.style.display = 'block';
-        generatePreview(video.url, loader, previewImage, regenerateButton, true); // Use true for forceRegenerate
-    });
     
     // Add hover preview functionality
     previewImage.addEventListener('mouseenter', (event) => {
@@ -831,7 +653,6 @@ export function updateVideoElement(url, updatedVideo, isMetadataOnly = false) {
     if (updatedVideo.previewUrl) {
         const previewImage = videoElement.querySelector('.preview-image');
         const loader = videoElement.querySelector('.loader');
-        const regenerateButton = videoElement.querySelector('.regenerate-button');
         const previewContainer = videoElement.querySelector('.preview-container');
         
         if (previewImage) {
@@ -841,7 +662,6 @@ export function updateVideoElement(url, updatedVideo, isMetadataOnly = false) {
                     previewImage.classList.remove('placeholder');
                     previewImage.classList.add('loaded');
                     if (loader) loader.style.display = 'none';
-                    if (regenerateButton) regenerateButton.classList.add('hidden');
                 };
                 previewImage.src = updatedVideo.previewUrl;
                 

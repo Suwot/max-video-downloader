@@ -807,26 +807,6 @@ body.theme-light {
     pointer-events: none;
 }
 
-/* Preview regeneration button */
-.regenerate-button {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    background-color: rgba(0,0,0,0.7);
-    color: white;
-    border: none;
-    border-radius: 2px;
-    padding: 3px 6px;
-    font-size: 9px;
-    cursor: pointer;
-    z-index: 2;
-}
-
-.regenerate-button.hidden {
-    display: none;
-}
-
 /* Improved Loader */
 .loader {
     position: absolute;
