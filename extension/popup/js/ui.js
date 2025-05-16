@@ -138,7 +138,7 @@ export function initializeUI() {
  * @param {number} tabId - Tab ID
  * @param {number} position - Scroll position
  */
-export function saveScrollPosition(tabId, position) {
+export function setScrollPosition(tabId, position) {
   chrome.storage.local.get(['scrollPositions'], (result) => {
     const scrollPositions = result.scrollPositions || {};
     scrollPositions[tabId] = position;

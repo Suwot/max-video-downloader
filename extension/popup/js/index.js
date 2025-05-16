@@ -18,7 +18,7 @@ import { initializeServices, getActiveTab } from './services/service-initializer
 import { themeService, applyTheme } from './services/theme-service.js';
 import { videoStateService } from './services/video-state-service.js';
 
-import { initializeUI, saveScrollPosition, getScrollPosition, showLoadingState, hideLoadingState, showNoVideosMessage } from './ui.js';
+import { initializeUI, setScrollPosition, getScrollPosition, showLoadingState, hideLoadingState, showNoVideosMessage } from './ui.js';
 import { renderVideos } from './video-renderer.js';
 
 // Global port connection for communicating with the background script
@@ -471,7 +471,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (container && currentTabId) {
             // Save position when scrolling
             container.addEventListener('scroll', () => {
-                saveScrollPosition(currentTabId, container.scrollTop);
+                setScrollPosition(currentTabId, container.scrollTop);
             });
             
             // Restore position for this tab
@@ -505,7 +505,7 @@ window.addEventListener('unload', () => {
     // Save final scroll position
     const container = document.getElementById('videos');
     if (container && currentTabId) {
-        saveScrollPosition(currentTabId, container.scrollTop);
+        setScrollPosition(currentTabId, container.scrollTop);
     }
     
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
