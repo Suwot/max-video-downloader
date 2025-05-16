@@ -279,10 +279,11 @@ export function createVideoElement(video) {
     previewImage.alt = 'Video preview';
     
     // Add duration display if available in video.variants.metaJS
-    if (video.variants[0]?.metaJS?.duration) {
+    if (video.variants) {
+        const duration = video.variants[0].metaJS?.duration;
         const durationElement = document.createElement('div');
         durationElement.className = 'video-duration';
-        durationElement.textContent = formatDuration(video.variants[0].metaJS.duration);
+        durationElement.textContent = formatDuration(duration);
         previewContainer.appendChild(durationElement);
     }
     
@@ -414,7 +415,7 @@ export function createVideoElement(video) {
         // Create a new tooltip element each time
         const tooltip = document.createElement('div');
         tooltip.className = 'tooltip';
-        tooltip.textContent = 'Copied!';
+        tooltip.textContent = 'Copied';
         
         // Position the tooltip
         copyButton.appendChild(tooltip);
@@ -426,103 +427,15 @@ export function createVideoElement(video) {
     });
     
     titleRow.append(title, copyButton);
-    
-    // Create file info section
-    const fileInfo = document.createElement('div');
-    fileInfo.className = 'file-info';
 
-    // Create media type info
-    const mediaTypeInfo = document.createElement('div');
-    mediaTypeInfo.className = 'media-type-info';
-    
-    let mediaContentType = "Unknown";
-    let codecDetails = [];
-    
-    if (video.mediaInfo) {
-        if (video.mediaInfo.hasVideo && video.mediaInfo.hasAudio) {
-            mediaContentType = "Video & Audio";
-            if (video.mediaInfo.videoCodec) {
-                codecDetails.push(`Video: ${video.mediaInfo.videoCodec.name}`);
-            }
-            if (video.mediaInfo.audioCodec) {
-                codecDetails.push(`Audio: ${video.mediaInfo.audioCodec.name}`);
-                if (video.mediaInfo.audioCodec.channels) {
-                    codecDetails.push(`${video.mediaInfo.audioCodec.channels} channels`);
-                }
-            }
-        } else if (video.mediaInfo.hasVideo) {
-            mediaContentType = "Video Only";
-            if (video.mediaInfo.videoCodec) {
-                codecDetails.push(`Codec: ${video.mediaInfo.videoCodec.name}`);
-            }
-        } else if (video.mediaInfo.hasAudio) {
-            mediaContentType = "Audio Only";
-            if (video.mediaInfo.audioCodec) {
-                codecDetails.push(`Codec: ${video.mediaInfo.audioCodec.name}`);
-                if (video.mediaInfo.audioCodec.channels) {
-                    codecDetails.push(`${video.mediaInfo.audioCodec.channels} channels`);
-                }
-                if (video.mediaInfo.audioCodec.sampleRate) {
-                    codecDetails.push(`${video.mediaInfo.audioCodec.sampleRate}Hz`);
-                }
-            }
-        }
-    } else {
-        mediaContentType = video.type ? video.type.toUpperCase() : "Unknown";
-    }
-    
-    let mediaIcon = '';
-    if (mediaContentType === "Audio Only") {
-        mediaIcon = '<path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4s4-1.79 4-4V7h4V3h-6z"/>';
-    } else if (mediaContentType === "Video Only") {
-        mediaIcon = '<path d="M21 3H3c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H3V5h18v14z"/><path d="M9 8h2v8H9zm4 0h2v8h-2z"/>';
-    } else {
-        mediaIcon = '<path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/>';
-    }
-    
-    mediaTypeInfo.innerHTML = `
-        <svg viewBox="0 0 24 24" width="12" height="12" xmlns="http://www.w3.org/2000/svg">
-            ${mediaIcon}
-        </svg>
-        <span>${mediaContentType}</span>
-    `;
-    
-    // Create a separate container for media type info
-    const mediaTypeContainer = document.createElement('div');
-    mediaTypeContainer.className = 'media-type-container';
-    mediaTypeContainer.appendChild(mediaTypeInfo);
-    
-    // Always create codec-info element even if we don't have codec details yet
-    const codecInfo = document.createElement('div');
-    codecInfo.className = 'codec-info';
-    
-    if (codecDetails.length > 0) {
-        codecInfo.textContent = codecDetails.join(' • ');
-    } else {
-        // Add a placeholder that will be replaced when metadata is loaded
-        codecInfo.textContent = 'Loading codec info...';
-        codecInfo.classList.add('loading');
-    }
-    
-    mediaTypeContainer.appendChild(codecInfo);
-    fileInfo.appendChild(mediaTypeContainer);
-    
-    // Progress bar (initially hidden)
-    const progressContainer = document.createElement('div');
-    progressContainer.className = 'progress-container';
-    
-    const progressBar = document.createElement('div');
-    progressBar.className = 'progress-bar';
-    progressContainer.appendChild(progressBar);
-    
     // For blob URLs, add warning about potential limitations
     if (video.type === 'blob') {
         const blobWarning = document.createElement('div');
         blobWarning.className = 'blob-warning';
-        blobWarning.textContent = 'Blob URL: May not work for all sites';
-        infoColumn.append(titleRow, fileInfo, blobWarning, progressContainer);
+        blobWarning.textContent = 'Blob URL: for debug only';
+        infoColumn.append(titleRow, blobWarning);
     } else {
-        infoColumn.append(titleRow, fileInfo, progressContainer);
+        infoColumn.append(titleRow);
     }
     
     // Create download button 

@@ -130,26 +130,14 @@ function processVideosForBroadcast(videos) {
         return {
             ...video,
             // Add additional metadata needed by UI
-            timestamp: video.timestamp || Date.now(),
-            processed: true,
-            lastProcessedAt: Date.now(),
+            timestampLastProcessed: Date.now(),
             // Ensure video has all necessary fields for display
             title: video.title || getFilenameFromUrl(video.url),
-            poster: video.poster || video.previewUrl || null,
+            ...(video.poster ? { poster: video.poster } : {}),
             downloadable: true,
-            // Preserve source information or default to null
-            source: video.source || null,
             // Preserve the detection timestamp for debugging duplicates
             timestampDetected: video.timestampDetected || null,
-            // Ensure variants are properly preserved
-            variants: video.variants || [],
-            // Preserve parsing state flags
-            isLightParsed: video.isLightParsed || false,
-            isFullyParsed: video.isFullyParsed || false,
-            isMaster: video.isMaster || false,
-            isVariant: video.isVariant || false,
-            // File size information
-            fileSize: video.fileSize || video.mediaInfo?.sizeBytes || video.mediaInfo?.estimatedSize || null
+            ...(video.variants ? { variants: video.variants } : {})
         };
     });
     
@@ -400,9 +388,7 @@ function addDetectedVideo(tabId, videoInfo) {
         normalizedUrl,
         tabId,
         // Important flags for tracking processing status
-        isBeingProcessed: false,
-        needsMetadata: true,
-        needsPreview: !videoInfo.poster && !videoInfo.previewUrl
+        isBeingProcessed: false
     };
     
     tabDetectedVideos.set(normalizedUrl, newVideo);
@@ -601,8 +587,7 @@ async function processVariantsWithFFprobe(tabId, masterUrl, variants) {
                                 const updatedVariants = [...masterVideo.variants];
                                 updatedVariants[i] = {
                                     ...updatedVariants[i],
-                                    previewUrl: response.previewUrl,
-                                    needsPreview: false
+                                    previewUrl: response.previewUrl
                                 };
                                 
                                 // Update master with the new variants array
@@ -725,7 +710,6 @@ async function runFFProbeParser(tabId, normalizedUrl) {
                 mediaInfo: streamInfo,
                 metaFFprobe: streamInfo,  // Store FFprobe data separately
                 hasFFprobeMetadata: true,
-                needsMetadata: false,
                 isFullyParsed: true,
                 // Update resolution data from the mediaInfo
                 resolution: streamInfo.width && streamInfo.height ? {
@@ -796,8 +780,7 @@ async function generateVideoPreview(tabId, normalizedUrl) {
             // Update video with preview URL
             const updatedVideo = {
                 ...video,
-                previewUrl: response.previewUrl,
-                needsPreview: false
+                previewUrl: response.previewUrl
             };
             
             // Update in map
@@ -838,8 +821,6 @@ function handleBlobVideo(tabId, normalizedUrl) {
             hasVideo: null,
             hasAudio: null
         },
-        needsMetadata: false,
-        needsPreview: false,
         isFullyParsed: true
     };
     
