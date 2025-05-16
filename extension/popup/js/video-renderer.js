@@ -456,10 +456,10 @@ export function createVideoElement(video) {
     previewImage.alt = 'Video preview';
     
     // Add duration display if available in video.variants.metaJS
-    if (video.variants.metaJS?.duration) {
+    if (video.variants[0]?.metaJS?.duration) {
         const durationElement = document.createElement('div');
         durationElement.className = 'video-duration';
-        durationElement.textContent = formatDuration(video.variants.metaJS.duration);
+        durationElement.textContent = formatDuration(video.variants[0].metaJS.duration);
         previewContainer.appendChild(durationElement);
     }
     

@@ -124,7 +124,7 @@ function getFilenameFromUrl(url) {
 // Process videos for sending to popup - fully prepare videos for instant display
 function processVideosForBroadcast(videos) {
     
-    // Third pass: final preparation for display
+    // Preparation for display
     const processedVideos = videos.map(video => {
         // Add additional information needed for immediate display
         return {
@@ -154,7 +154,7 @@ function processVideosForBroadcast(videos) {
     });
     
     // Sort by newest first
-    return processedVideos.sort((a, b) => b.timestamp - a.timestamp);
+    return processedVideos.sort((a, b) => b.timestampDetected - a.timestampDetected);
 }
 
 // Broadcast videos to popup

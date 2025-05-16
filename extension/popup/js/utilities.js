@@ -97,15 +97,19 @@ export function formatBitrate(bitrate) {
 }
 
 /**
- * Format duration in seconds to MM:SS format
+ * Format duration in seconds to HH:MM:SS or MM:SS format
  * @param {number} seconds - Duration in seconds
  * @returns {string} Formatted duration
  */
 export function formatDuration(seconds) {
     if (!seconds) return '';
-    const minutes = Math.floor(seconds / 60);
+    const hrs = Math.floor(seconds / 3600);
+    const mins = Math.floor((seconds % 3600) / 60);
     const secs = Math.floor(seconds % 60);
-    return `${minutes}:${secs.toString().padStart(2, '0')}`;
+    if (hrs > 0) {
+        return `${hrs}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    }
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
 }
 
 /**
