@@ -26,7 +26,16 @@ console.log('Content script loading...');
 // Dynamically import the validation utility
 (async function loadModules() {
   try {
-    const module = await import(chrome.runtime.getURL('js/utilities/video-validator.js'));
+    // Get the URL and log it for debugging
+    const validatorUrl = chrome.runtime.getURL('js/utilities/video-validator.js');
+    console.log('Attempting to load validator from:', validatorUrl);
+    
+    // Add a small delay before import to ensure extension is fully initialized
+    await new Promise(resolve => setTimeout(resolve, 100));
+    
+    const module = await import(validatorUrl);
+    console.log('Module import successful:', module);
+    
     validateAndFilterVideos = module.validateAndFilterVideos;
     isValidVideo = module.isValidVideo;
     isValidVideoUrl = module.isValidVideoUrl;
@@ -76,7 +85,11 @@ console.log('Content script loading...');
           return false;
       }
     };
-    init(); // Initialize with fallbacks
+    
+    // Make sure we don't initialize twice
+    if (!isInitialized) {
+      init(); // Initialize with fallbacks
+    }
   }
 })();
 
