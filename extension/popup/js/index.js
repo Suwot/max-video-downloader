@@ -18,7 +18,7 @@ import { initializeServices, getActiveTab } from './services/service-initializer
 import { themeService, applyTheme } from './services/theme-service.js';
 import { videoStateService } from './services/video-state-service.js';
 
-import { initializeUI, setupScrollPersistence, scrollToLastPosition, showLoadingState, hideLoadingState, showNoVideosMessage } from './ui.js';
+import { initializeUI, saveScrollPosition, getScrollPosition, showLoadingState, hideLoadingState, showNoVideosMessage } from './ui.js';
 import { renderVideos } from './video-renderer.js';
 
 // Global port connection for communicating with the background script
@@ -466,11 +466,23 @@ document.addEventListener('DOMContentLoaded', async () => {
         const darkModeMediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
         darkModeMediaQuery.addEventListener('change', themeService.handleSystemThemeChange.bind(themeService));
 
-        // Setup scroll persistence
-        setupScrollPersistence();
-        
-        // Restore scroll position if needed
-        scrollToLastPosition();
+        // Set up scroll position handling
+        const container = document.getElementById('videos');
+        if (container && currentTabId) {
+            // Save position when scrolling
+            container.addEventListener('scroll', () => {
+                saveScrollPosition(currentTabId, container.scrollTop);
+            });
+            
+            // Restore position for this tab
+            getScrollPosition(currentTabId, (position) => {
+                setTimeout(() => {
+                    if (container.scrollHeight > container.clientHeight) {
+                        container.scrollTop = position;
+                    }
+                }, 50);
+            });
+        }
         
     } catch (error) {
         console.error('Initialization error:', error);
@@ -489,6 +501,12 @@ document.addEventListener('DOMContentLoaded', async () => {
 window.addEventListener('unload', () => {
     // Clean up the refresh interval
     cleanupPeriodicRefresh();
+    
+    // Save final scroll position
+    const container = document.getElementById('videos');
+    if (container && currentTabId) {
+        saveScrollPosition(currentTabId, container.scrollTop);
+    }
     
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
         if (tabs[0]) {

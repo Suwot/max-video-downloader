@@ -302,16 +302,6 @@ function isValidVideoForRendering(video) {
 }
 
 /**
- * Get the current scroll position from the videos container
- * Local replacement for the removed state.js function
- * @returns {number} Current scroll position
- */
-function getScrollPosition() {
-    const container = document.getElementById('videos');
-    return container ? container.scrollTop : 0;
-}
-
-/**
  * Render a list of videos in the UI
  * @param {Array} videos - Videos to render
  */

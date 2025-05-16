@@ -14,7 +14,6 @@ import {
     on
 } from './services/video-state-service.js';
 
-import { showLoader, restoreScrollPosition } from './ui.js';
 import { renderVideos } from './video-renderer.js';
 import { sendPortMessage } from './index.js';
 import { validateAndFilterVideos } from '../../js/utilities/video-validator.js';
@@ -163,7 +162,6 @@ export function initVideoFetcher() {
     on('videosUpdated', (videos) => {
         logDebug(`Received ${videos.length} videos from state service`);
         renderVideos(videos);
-        restoreScrollPosition();
     });
     
     // Start background refresh

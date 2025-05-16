@@ -124,12 +124,7 @@ export function initializeUI() {
     refreshContainer.appendChild(rightButtonsContainer);
     
     container.parentElement.insertBefore(refreshContainer, container);
-    
-    // Save scroll position on scroll
-    container.addEventListener('scroll', function() {
-        setScrollPosition(this.scrollTop);
-    });
-    
+        
     return {
         container,
         clearCacheButton,
@@ -139,25 +134,28 @@ export function initializeUI() {
 }
 
 /**
- * Local implementation of scroll position tracking using localStorage
- * @param {number} position - Scroll position to save
+ * Save scroll position for a specific tab
+ * @param {number} tabId - Tab ID
+ * @param {number} position - Scroll position
  */
-function setScrollPosition(position) {
-    // Use localStorage directly instead of the state management system
-    localStorage.setItem('popupScrollPosition', position.toString());
+export function saveScrollPosition(tabId, position) {
+  chrome.storage.local.get(['scrollPositions'], (result) => {
+    const scrollPositions = result.scrollPositions || {};
+    scrollPositions[tabId] = position;
+    chrome.storage.local.set({ scrollPositions });
+  });
 }
 
 /**
- * Restore scroll position with a slight delay
- * @param {HTMLElement} container - Scroll container
- * @param {number} scrollPosition - Position to scroll to
+ * Get saved scroll position for a specific tab
+ * @param {number} tabId - Tab ID
+ * @param {function} callback - Callback function that receives the position
  */
-export function restoreScrollPosition(container, scrollPosition) {
-    setTimeout(() => {
-        if (container && container.scrollHeight > container.clientHeight) {
-            container.scrollTop = scrollPosition;
-        }
-    }, 50);
+export function getScrollPosition(tabId, callback) {
+  chrome.storage.local.get(['scrollPositions'], (result) => {
+    const position = result.scrollPositions?.[tabId] || 0;
+    callback(position);
+  });
 }
 
 /**
@@ -235,29 +233,6 @@ export function showNoVideosMessage() {
                 <p>Try playing a video or refreshing the page.</p>
             </div>
         `;
-    }
-}
-
-/**
- * Save scroll position before closing
- */
-export function setupScrollPersistence() {
-    window.addEventListener('beforeunload', function() {
-        const scrollPosition = document.getElementById('videos').scrollTop;
-        localStorage.setItem('popupScrollPosition', scrollPosition.toString());
-    });
-}
-
-/**
- * Scroll to last saved position
- */
-export function scrollToLastPosition() {
-    const scrollPosition = parseInt(localStorage.getItem('popupScrollPosition') || '0');
-    if (scrollPosition > 0) {
-        // Add a small delay to ensure content is rendered
-        setTimeout(() => {
-            document.getElementById('videos').scrollTop = scrollPosition;
-        }, 50);
     }
 }
 
