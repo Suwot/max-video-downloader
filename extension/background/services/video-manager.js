@@ -677,6 +677,7 @@ async function runFFProbeParser(tabId, normalizedUrl) {
         
         // Skip if already fully parsed
         if (video.isFullyParsed) {
+            logDebug(`Video ${video.url} is already fully parsed, skipping FFprobe`);
             return;
         }
         
