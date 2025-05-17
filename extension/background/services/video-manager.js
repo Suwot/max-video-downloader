@@ -148,7 +148,8 @@ function processVideosForBroadcast(videos) {
 function broadcastVideoUpdate(tabId) {
     // Use new array-from-map function instead of videosPerTab
     const processedVideos = getVideosArrayFromMap(tabId);
-    
+    logDebug(`Broadcasting ${processedVideos.length} videos for tab ${tabId} with this content: `, processedVideos);
+
     if (processedVideos.length === 0) {
         return [];
     }
@@ -182,29 +183,13 @@ function notifyVideoUpdated(tabId, url, updatedVideo) {
         if (port) {
             logDebug(`Notifying popup for tab ${tabId} about video update for ${url}`);
             
-            // Special handling for variants - include more detailed logging
-            if (updatedVideo.isVariant) {
-                const mediaInfoFieldCount = updatedVideo.mediaInfo ? Object.keys(updatedVideo.mediaInfo).length : 0;
-                logDebug(`Sending variant update with ${mediaInfoFieldCount} mediaInfo fields: ${url}`);
-                
-                // Add detailed logging of available fields for debugging
-                if (updatedVideo.mediaInfo) {
-                    logDebug(`Variant mediaInfo fields: ${Object.keys(updatedVideo.mediaInfo).join(', ')}`);
-                }
-                
-                // Check if we need to update this variant in its master playlist
-                if (updatedVideo.masterUrl && updatedVideo.hasKnownMaster) {
-                    logDebug(`This variant belongs to master: ${updatedVideo.masterUrl}`);
-                }
-            }
-            
             // Make a clean copy of the video object for transmission
             const videoForTransmission = {
                 ...updatedVideo,
-                // Force a deep clone of mediaInfo to ensure all properties are transmitted
-                mediaInfo: updatedVideo.mediaInfo ? JSON.parse(JSON.stringify(updatedVideo.mediaInfo)) : null,
-                // Also deep clone any variants
-                variants: updatedVideo.variants ? JSON.parse(JSON.stringify(updatedVideo.variants)) : [],
+                // Force a deep clone of metaFFprobe to ensure all properties are transmitted
+                metaFFprobe: updatedVideo.metaFFprobe ? JSON.parse(JSON.stringify(updatedVideo.metaFFprobe)) : null,
+                metaJS: updatedVideo.metaJS ? JSON.parse(JSON.stringify(updatedVideo.metaJS)) : null,
+                ...(updatedVideo.variants ? { variants: JSON.parse(JSON.stringify(updatedVideo.variants)) } : {}),
                 // Add a marker so we can track which videos have been processed
                 _processedByVideoManager: true
             };
@@ -699,30 +684,20 @@ async function runFFProbeParser(tabId, normalizedUrl) {
         });
         
         if (streamInfo) {
-            // Calculate estimated size if possible
-            if (streamInfo.totalBitrate && video.duration) {
-                streamInfo.estimatedSize = estimateFileSize(streamInfo.totalBitrate, video.duration);
-            }
             
             // Create updated video with metadata
             const updatedVideo = {
                 ...video,
-                mediaInfo: streamInfo,
                 metaFFprobe: streamInfo,  // Store FFprobe data separately
                 hasFFprobeMetadata: true,
                 isFullyParsed: true,
-                // Update resolution data from the mediaInfo
-                resolution: streamInfo.width && streamInfo.height ? {
-                    width: streamInfo.width,
-                    height: streamInfo.height,
-                    fps: streamInfo.fps,
-                    bitrate: streamInfo.videoBitrate || streamInfo.totalBitrate
-                } : video.resolution,
-                fileSize: streamInfo.sizeBytes || streamInfo.estimatedSize || video.fileSize
+                estimatedFileSizeBytes: streamInfo.estimatedFileSizeBytes || video.fileSize,
+                fileSize: streamInfo.sizeBytes || null
             };
             
             // Update in map
             tabMap.set(normalizedUrl, updatedVideo);
+            logDebug(`Updated map entry after FFprobe for URL ${video.url}: `, updatedVideo);
             
             // Update UI
             notifyVideoUpdated(tabId, normalizedUrl, updatedVideo);

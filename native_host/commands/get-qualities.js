@@ -73,7 +73,7 @@ class GetQualitiesCommand extends BaseCommand {
                     .map(([key, value]) => `${key}: ${value}`)
                     .join('\r\n') + '\r\n';
                 
-                logDebug('🔑 Using headers for FFprobe command');
+                logDebug(`🔑 Using headers for FFprobe command: ${headerArg}`);
             }
             
             return new Promise((resolve, reject) => {
@@ -222,10 +222,15 @@ class GetQualitiesCommand extends BaseCommand {
                             
                             // Duration if available
                             if (info.format.duration) {
-                                streamInfo.duration = parseFloat(info.format.duration);
-                                const minutes = Math.floor(streamInfo.duration / 60);
-                                const seconds = Math.floor(streamInfo.duration % 60);
-                                logDebug(`⏱️ Duration: ${minutes}:${seconds.toString().padStart(2, '0')}`);
+                                streamInfo.duration = Math.round(parseFloat(info.format.duration));
+                                const hours = Math.floor(streamInfo.duration / 3600);
+                                const minutes = Math.floor((streamInfo.duration % 3600) / 60);
+                                const seconds = streamInfo.duration % 60;
+                                if (hours > 0) {
+                                    logDebug(`⏱️ Duration: ${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`);
+                                } else {
+                                    logDebug(`⏱️ Duration: ${minutes}:${seconds.toString().padStart(2, '0')}`);
+                                }
                             }
                             
                             // File size if available
@@ -236,10 +241,10 @@ class GetQualitiesCommand extends BaseCommand {
                             }
                             
                             // Calculate estimated size based on bitrate and duration if exact size not available
-                            if (!streamInfo.sizeBytes && streamInfo.totalBitrate && streamInfo.duration) {
+                            if (streamInfo.totalBitrate && streamInfo.duration) {
                                 // Formula: (bitrate in bps * duration in seconds) / 8 = bytes
-                                streamInfo.estimatedSize = Math.round((streamInfo.totalBitrate * streamInfo.duration) / 8);
-                                const sizeMB = (streamInfo.estimatedSize / (1024 * 1024)).toFixed(1);
+                                streamInfo.estimatedFileSizeBytes = Math.round((streamInfo.totalBitrate * streamInfo.duration) / 8);
+                                const sizeMB = (streamInfo.estimatedFileSizeBytes / (1024 * 1024)).toFixed(1);
                                 logDebug(`📊 Estimated size: ${sizeMB}MB (based on bitrate × duration)`);
                             }
                             
