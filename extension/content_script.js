@@ -736,7 +736,7 @@ function findVideos() {
                     url: source.src,
                     poster: video.poster || null,
                     title: getVideoTitle(video),
-                    timestamp: Date.now()
+                    timestampDetected: Date.now()
                 };
                 
                 const validVideo = validateVideoInfo(videoInfo);
@@ -755,7 +755,7 @@ function findVideos() {
             type: 'blob',
             poster: info.poster || null,
             title: info.title || 'Blob Video',
-            timestamp: info.time || Date.now()
+            timestampDetected: info.time || Date.now()
         });
     });
     

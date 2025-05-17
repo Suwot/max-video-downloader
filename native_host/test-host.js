@@ -5,7 +5,7 @@ const { spawn } = require('child_process');
 const path = require('path');
 
 // Create a process to run the host
-const hostProcess = spawn('./index.js', [], {
+const hostProcess = spawn('node', ['./index.js'], {
   stdio: ['pipe', 'pipe', 'pipe']
 });
 
