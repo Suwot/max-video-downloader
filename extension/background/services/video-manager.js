@@ -359,10 +359,16 @@ function addDetectedVideo(tabId, videoInfo) {
     }
     
     // Get the map for this specific tab
-    const tabDetectedVideos = allDetectedVideos.get(tabId);
+    const tabMap = allDetectedVideos.get(tabId);
+    
+    // Log caller context for debugging
+    const callerContext = videoInfo.callerContext || 'unknown';
+    logDebug(`Video detection from context: ${callerContext} for URL: ${videoInfo.url} with timestamp: ${videoInfo.timestampDetected}`);
     
     // Skip if already in this tab's collection
-    if (tabDetectedVideos.has(normalizedUrl)) {
+    if (tabMap.has(normalizedUrl)) {
+        const existingVideo = tabMap.get(normalizedUrl);
+        logDebug(`Duplicate video detection from ${callerContext}. URL: ${videoInfo.url}, Existing timestamp: ${existingVideo.timestampDetected}, New timestamp: ${videoInfo.timestampDetected}`);
         return false;
     }
     
@@ -375,9 +381,9 @@ function addDetectedVideo(tabId, videoInfo) {
         isBeingProcessed: false
     };
     
-    tabDetectedVideos.set(normalizedUrl, newVideo);
+    tabMap.set(normalizedUrl, newVideo);
     
-    logDebug(`Added new video to detection map: ${videoInfo.url} (type: ${videoInfo.type})`);
+    logDebug(`Added new video to detection map: ${videoInfo.url} (type: ${videoInfo.type}, context: ${callerContext})`);
     
     // Notify any open popup about the new video
     notifyNewVideoDetected(tabId);

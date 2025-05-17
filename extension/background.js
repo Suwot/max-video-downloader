@@ -233,7 +233,8 @@ chrome.webRequest.onBeforeRequest.addListener(
                                     source: 'webRequest',
                                     originalContainer: originalContainer,
                                     fileSizeBytes: fileSizeBytes, // Store file size from HEAD request
-                                    timestampDetected: Date.now()
+                                    timestampDetected: Date.now(),
+                                    callerContext: 'webRequest_directVideo_withSize_try'
                                 });
                             } else {
                                 console.log(`Skipped small video file (${contentLength} bytes): ${url}`);
@@ -246,7 +247,8 @@ chrome.webRequest.onBeforeRequest.addListener(
                                 type: type,
                                 source: 'webRequest',
                                 originalContainer: originalContainer,
-                                timestampDetected: Date.now()
+                                timestampDetected: Date.now(),
+                                callerContext: 'webRequest_directVideo_noSize_try'
                             });
                         });
                 } else {
@@ -255,7 +257,8 @@ chrome.webRequest.onBeforeRequest.addListener(
                         url: url,
                         type: type,
                         source: 'webRequest',
-                        timestampDetected: Date.now()
+                        timestampDetected: Date.now(),
+                        callerContext: 'webRequest_streaming_try'
                     });
                 }
             }
@@ -295,7 +298,8 @@ chrome.webRequest.onBeforeRequest.addListener(
                                     source: 'webRequest',
                                     originalContainer: originalContainer,
                                     fileSizeBytes: fileSizeBytes, // Store file size from HEAD request
-                                    timestampDetected: Date.now()
+                                    timestampDetected: Date.now(),
+                                    callerContext: 'webRequest_directVideo_withSize_catch'
                                 });
                             } else {
                                 console.log(`Skipped small video file (${contentLength} bytes): ${url}`);
@@ -308,7 +312,8 @@ chrome.webRequest.onBeforeRequest.addListener(
                                 type: type,
                                 source: 'webRequest',
                                 originalContainer: originalContainer,
-                                timestampDetected: Date.now()
+                                timestampDetected: Date.now(),
+                                callerContext: 'webRequest_directVideo_noSize_catch'
                             });
                         });
                 } else {
@@ -317,7 +322,8 @@ chrome.webRequest.onBeforeRequest.addListener(
                         url: url,
                         type: type,
                         source: 'webRequest',
-                        timestampDetected: Date.now()
+                        timestampDetected: Date.now(),
+                        callerContext: 'webRequest_streaming_catch'
                     });
                 }
             }
@@ -345,7 +351,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                 title: video.title,
                 foundFromQueryParam: video.foundFromQueryParam || false,
                 originalUrl: video.originalUrl,
-                timestampDetected: Date.now()
+                timestampDetected: Date.now(),
+                callerContext: 'contentScript_newVideoDetected'
             });
         });
         
@@ -358,7 +365,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         if (tabId && tabId > 0) {
             addDetectedVideo(tabId, {
                 ...request,
-                timestampDetected: Date.now()
+                timestampDetected: Date.now(),
+                callerContext: 'contentScript_legacy'
             });
         }
         return false;
