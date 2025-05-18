@@ -17,10 +17,10 @@
 
 // State management for the content script
 const state = {
-  detectedVideos: new Set(),
-  blobUrls: new Map(),
-  autoDetectionEnabled: true,
-  isInitialized: false,
+  detectedVideos: new Set(),  // Track normalized URLs that have been processed
+  blobUrls: new Map(),        // Track blob URLs that have been processed
+  autoDetectionEnabled: true, // Whether automatic detection is enabled
+  isInitialized: false,       // Whether the content script has been initialized
   observedVideoElements: new WeakSet() // Track already observed video elements
 };
 
@@ -81,18 +81,23 @@ console.log('Content script loading...');
   initializeVideoDetection();
 })();
 
-// Core video detection logic
+/**
+ * Initialize the video detection pipeline
+ * This sets up all detection methods and observers in a single function
+ */
 function initializeVideoDetection() {
   if (state.isInitialized) return;
   state.isInitialized = true;
   
-  console.log('Initializing video detection...');
+  console.log('Initializing optimized video detection pipeline...');
   
-  // Set up all detection methods
-  setupNetworkInterception();
-  setupDOMObservers();
-  setupMessageListeners();
-
+  // Set up all detection methods - now with a unified processing flow:
+  // 1. Detect video through XHR/Fetch interception or DOM observation
+  // 2. Validate, normalize, and deduplicate using validateVideo
+  // 3. Process and report unique videos through processVideo
+  setupNetworkInterception();  // Network request monitoring
+  setupDOMObservers();         // DOM video element detection
+  setupMessageListeners();     // Background script communication
 }
 
 // Network request monitoring
@@ -109,7 +114,7 @@ function setupNetworkInterception() {
         const responseUrl = xhr.responseURL;
         
         if (isVideoContent(responseUrl, contentType)) {
-          // Process video directly without queueing
+          // Process video through our optimized validation, normalization and deduplication pipeline
           processVideo(responseUrl, null, {
             contentType,
             responseHeaders: parseHeaders(xhr.getAllResponseHeaders()),
@@ -151,27 +156,34 @@ function setupNetworkInterception() {
   };
 }
 
-// This function has been replaced by direct processing
-
 // DOM observation for videos
 function setupDOMObservers() {
-  // Process a new video element - avoids duplicate processing
+  /**
+   * Process a new video element while avoiding duplicate processing
+   * Track with WeakSet to ensure each element is only processed once
+   * 
+   * @param {HTMLVideoElement} video - The video element to process
+   */
   function processNewVideoElement(video) {
-    // Skip if already processed
+    // Skip if this element was already processed
     if (state.observedVideoElements.has(video)) return;
+    
+    // Mark as processed using WeakSet (memory-efficient tracking)
     state.observedVideoElements.add(video);
     
-    // Observe for attribute changes
+    // Set up observer for future attribute changes
     videoObserver.observe(video, { attributes: true });
     
-    // Process initial state
+    // Special handling for blob URLs
     if (video.src?.startsWith('blob:')) {
       processBlobURL(video);
     }
     
-    // Process regular video sources
+    // Process regular video sources through our unified pipeline
     const videoInfo = extractVideoInfo(video);
     if (videoInfo) {
+      // The extractVideoInfo function already calls validateVideo
+      // so the video is already normalized and validated
       processVideo(videoInfo.url, videoInfo.type, {
         poster: videoInfo.poster,
         title: videoInfo.title,
@@ -256,22 +268,24 @@ function setupDOMObservers() {
   }
 }
 
-// Message communication
+// Set up message listeners for communication with background script
 function setupMessageListeners() {
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     console.log('Content script received message:', message.action);
     
     switch (message.action) {
       case 'startBackgroundDetection':
+        // Enable automatic video detection
         state.autoDetectionEnabled = true;
         sendResponse({ status: 'ok' });
         return true;
         
       case 'stopBackgroundDetection':
+        // Disable automatic video detection
         state.autoDetectionEnabled = false;
         sendResponse({ status: 'ok' });
         return true;
-
+      
       default:
         sendResponse({ error: 'Unknown message type' });
         return true;
@@ -279,9 +293,13 @@ function setupMessageListeners() {
   });
 }
 
-// Video detection is now handled entirely through DOM observation and network interception
-
-// Extract video information
+/**
+ * Extract video information from a video element
+ * Gets source, metadata, and validates in a single function
+ * 
+ * @param {HTMLVideoElement} videoElement - The video element to extract info from
+ * @returns {Object|null} - Validated video info or null if invalid
+ */
 function extractVideoInfo(videoElement) {
   // Get source from either src attribute or first source child
   let src = videoElement.src;
@@ -290,9 +308,10 @@ function extractVideoInfo(videoElement) {
     src = source?.src;
   }
   
+  // Skip if no valid source found
   if (!src) return null;
   
-  // Create and validate video info
+  // Gather metadata from the video element
   const videoInfo = {
     url: src,
     poster: videoElement.poster || null,
@@ -300,6 +319,8 @@ function extractVideoInfo(videoElement) {
     timestampDetected: Date.now()
   };
   
+  // Run through our unified validation pipeline
+  // This handles normalization, deduplication, and type identification
   return validateVideo(videoInfo);
 }
 
@@ -326,49 +347,105 @@ function findNearbyHeading(element) {
   return null;
 }
 
-// Process blob URL from video element
+/**
+ * Process blob URL from video element
+ * Special handling for blob URLs since they're ephemeral and need to be tracked separately
+ * 
+ * @param {HTMLVideoElement} videoElement - The video element with a blob URL
+ * @returns {boolean} - Whether the blob URL was processed
+ */
 function processBlobURL(videoElement) {
   const blobUrl = videoElement.src;
+  
+  // Skip invalid blobs or already processed ones
   if (!blobUrl || !blobUrl.startsWith('blob:') || state.blobUrls.has(blobUrl)) {
     return false;
   }
   
-  // Store basic info about the blob
-  const info = {
+  // Extract metadata from the video element
+  const videoData = {
     url: blobUrl,
     type: 'blob',
-    time: Date.now(),
+    timestampDetected: Date.now(),
     poster: videoElement.poster || null,
     title: getVideoTitle(videoElement)
   };
   
-  state.blobUrls.set(blobUrl, info);
-  sendToBackground(blobUrl, 'blob', info);
-  return true;
+  // Validate using the enhanced validation flow
+  const validatedVideo = validateVideo(videoData);
+  
+  if (!validatedVideo) {
+    return false;
+  }
+  
+  // Store blob URL data for reference and to avoid duplicates
+  state.blobUrls.set(blobUrl, {
+    url: blobUrl,
+    type: 'blob',
+    timestampDetected: validatedVideo.timestampDetected,
+    poster: validatedVideo.poster || null,
+    title: validatedVideo.title
+  });
+  
+  // Use central processing function to handle the video
+  return processVideo(validatedVideo.url, validatedVideo.type, validatedVideo);
 }
 
-// Utility functions
+/**
+ * Enhanced video validation function that handles normalization,
+ * deduplication, type identification, and filtering in one place
+ * 
+ * @param {Object} videoInfo - The video information object
+ * @returns {Object|null} - Validated video info or null if invalid/duplicate
+ */
 function validateVideo(videoInfo) {
+  // Validate basic input
   if (!videoInfo?.url) return null;
   
+  // Early normalization to handle embedded URLs in query params
+  const normalizedUrl = normalizeUrl(videoInfo.url);
+  
+  // Early deduplication check to avoid unnecessary processing
+  if (state.detectedVideos.has(normalizedUrl)) {
+    return null;
+  }
+  
+  // Identify the video type once
   const videoType = identifyVideoType(videoInfo.url);
   
-  // If type is ignored, skip this video
+  // Filter out ignored types immediately
   if (videoType === 'ignored' || (typeof videoType === 'object' && videoType.type === 'ignored')) {
     return null;
   }
   
-  // Skip invalid URLs using the centralized validation function
-  if (typeof videoType !== 'object' && videoType !== 'ignored' && !isValidVideoUrl(videoInfo.url)) {
+  // Basic URL validation
+  if (typeof videoType !== 'object' && videoType !== 'ignored' && 
+      !videoInfo.url.startsWith('blob:') && !isValidVideoUrl(videoInfo.url)) {
     return null;
   }
   
-  // If type is an object with URL and type, update videoInfo with extracted URL
-  if (typeof videoType === 'object' && videoType.url && videoType.type) {
-    videoInfo.originalUrl = videoInfo.url;
-    videoInfo.url = videoType.url;
-    videoInfo.type = videoType.type;
-    videoInfo.foundFromQueryParam = videoType.foundFromQueryParam || false;
+  // Set normalized URL for tracking and deduplication
+  videoInfo.normalizedUrl = normalizedUrl;
+  
+  // Process extracted URLs from query parameters
+  if (typeof videoType === 'object') {
+    if (videoType.url && videoType.type) {
+      // Store original URL before updating
+      videoInfo.originalUrl = videoInfo.url;
+      videoInfo.url = videoType.url;
+      
+      // Re-normalize the extracted URL and check again for duplicates
+      videoInfo.normalizedUrl = normalizeUrl(videoType.url);
+      if (state.detectedVideos.has(videoInfo.normalizedUrl)) {
+        return null;
+      }
+      
+      videoInfo.type = videoType.type;
+      videoInfo.foundFromQueryParam = videoType.foundFromQueryParam || false;
+    } else if (videoType.type === 'direct' && videoType.container) {
+      videoInfo.type = videoType.type;
+      videoInfo.originalContainer = videoType.container;
+    }
   } else if (videoType !== 'unknown') {
     videoInfo.type = videoType;
   }
@@ -478,18 +555,26 @@ function identifyVideoType(url) {
   return 'unknown';
 }
 
-// Check if a URL or content type indicates video content
+/**
+ * Check if a URL or content type indicates video content
+ * Determines whether a URL should be processed as potential video
+ * 
+ * @param {string} url - URL to check
+ * @param {string} contentType - Content-Type HTTP header value (if available)
+ * @returns {boolean} - Whether the content appears to be video
+ */
 function isVideoContent(url, contentType) {
   try {
-    // Quick check for tracking pixels
+    // Quick check for tracking pixels and analytics
     const urlObj = new URL(url);
     if (url.includes('ping.gif') || url.includes('jwpltx.com') || 
         urlObj.pathname.includes('/pixel') || urlObj.pathname.includes('/track')) {
       
-      // Check for embedded videos in tracking pixels
+      // Check for embedded videos in tracking pixel parameters
       for (const [_, value] of urlObj.searchParams.entries()) {
         try {
           const decoded = decodeURIComponent(value);
+          // Look for streaming URLs in parameters
           if ((decoded.includes('.m3u8') || decoded.includes('.mpd')) &&
               (decoded.includes('http') || decoded.startsWith('/') || decoded.includes('://'))) {
             return true;
@@ -501,12 +586,14 @@ function isVideoContent(url, contentType) {
     }
   } catch {}
   
-  // Check URL patterns for video extensions
+  // Check URL patterns for common video extensions and paths
   const videoPatterns = [
     /\.(mp4|webm|ogg|mov|avi|mkv|flv)(\?|$)/i,
     /\.(m3u8|m3u)(\?|$)/i,
     /\.(mpd)(\?|$)/i,
-    /\/(playlist|manifest|master)\.json(\?|$)/i
+    /\/(playlist|manifest|master)\.json(\?|$)/i,
+    /\/hls\/.*\/(index|master|playlist)/i,
+    /\/dash\/.*\/manifest/i
   ];
   
   if (videoPatterns.some(pattern => pattern.test(url))) {
@@ -518,7 +605,8 @@ function isVideoContent(url, contentType) {
     'video/',
     'application/x-mpegURL',
     'application/dash+xml',
-    'application/vnd.apple.mpegURL'
+    'application/vnd.apple.mpegURL',
+    'application/octet-stream' // Sometimes used for video content
   ];
   
   if (contentType && videoMimeTypes.some(type => contentType.includes(type))) {
@@ -537,22 +625,33 @@ function parseHeaders(headerStr) {
   }, {});
 }
 
-// Normalize URL to avoid duplicates
+/**
+ * Normalize URL to avoid duplicates
+ * Creates a canonical form of URLs for effective deduplication
+ * 
+ * @param {string} url - URL to normalize
+ * @returns {string} - Normalized URL
+ */
 function normalizeUrl(url) {
+  // Blob URLs are unique by nature and can't be normalized
   if (url.startsWith('blob:')) return url;
   
   try {
     const urlObj = new URL(url);
     
-    // Handle tracking pixels with embedded URLs
-    if (url.includes('ping.gif') || url.includes('jwpltx.com') || urlObj.pathname.includes('/pixel')) {
+    // Handle tracking pixels with embedded video URLs
+    if (url.includes('ping.gif') || url.includes('jwpltx.com') || 
+        urlObj.pathname.includes('/pixel') || urlObj.pathname.includes('/track')) {
+      // Extract video URLs from query parameters
       for (const [_, value] of urlObj.searchParams.entries()) {
         try {
           const decoded = decodeURIComponent(value);
           if ((decoded.includes('.m3u8') || decoded.includes('.mpd')) &&
               (decoded.includes('http') || decoded.startsWith('/') || decoded.includes('://'))) {
             try {
+              // For relative URLs, add origin
               const fullUrl = decoded.startsWith('/') ? (urlObj.origin + decoded) : decoded;
+              // Recursive call to normalize the extracted URL
               return normalizeUrl(fullUrl);
             } catch {}
           }
@@ -560,19 +659,31 @@ function normalizeUrl(url) {
       }
     }
     
-    // Remove common tracking parameters
-    ['_t', '_r', 'cache', '_', 'time', 'timestamp', 'random'].forEach(param => {
+    // Remove all common tracking parameters
+    const trackingParams = [
+      '_t', '_r', 'cache', '_', 'time', 'timestamp', 'random', 'nonce', 
+      'ref', 'referrer', 'utm_source', 'utm_medium', 'utm_campaign', 
+      'unique', 'cb', 'nocache', 't'
+    ];
+    
+    trackingParams.forEach(param => {
       urlObj.searchParams.delete(param);
     });
     
-    // Special handling for HLS/DASH
-    if (url.includes('.m3u8') || url.includes('.mpd') || url.includes('/hls/')) {
-      // Remove common HLS-specific parameters
-      ['seq', 'segment', 'cmsid', 'v', 'session'].forEach(param => {
+    // Special handling for streaming formats
+    if (url.includes('.m3u8') || url.includes('.mpd') || 
+        url.includes('/hls/') || url.includes('/dash/')) {
+      // Remove streaming-specific parameters
+      const streamingParams = [
+        'seq', 'segment', 'cmsid', 'v', 'session', 'bitrate', 'quality',
+        'ts', 'starttime', 'endtime', 'start', 'end', 'init'
+      ];
+      
+      streamingParams.forEach(param => {
         urlObj.searchParams.delete(param);
       });
       
-      // Canonical form for manifest URLs
+      // Create canonical forms for manifest URLs
       const pathname = urlObj.pathname.toLowerCase();
       if (pathname.includes('/manifest') || pathname.includes('/playlist') || 
           pathname.includes('/master.m3u8') || pathname.includes('/index.m3u8')) {
@@ -582,101 +693,99 @@ function normalizeUrl(url) {
     
     return urlObj.toString();
   } catch {
+    // If URL parsing fails, return original
     return url;
   }
 }
 
 /**
  * Universal function to process and send video URLs to background
- * Handles validation, normalization, deduplication, and sending in one place
+ * This is the central processor for all video detection methods
  * 
  * @param {string} url - The video URL
  * @param {string} type - Video type (hls, dash, blob, etc)
  * @param {Object} metadata - Additional information about the video
- * @returns {boolean} - Whether the video was new and sent
+ * @returns {boolean} - Whether the video was processed and sent
  */
 function processVideo(url, type, metadata = {}) {
-  // Skip invalid URLs
+  // Quick validation
   if (!url) return false;
   
-  // Get video type if not provided
-  const videoType = type || identifyVideoType(url);
+  // Create a normalized video info object
+  const videoInfo = {
+    url,
+    type,
+    ...metadata,
+    timestampDetected: metadata.timestampDetected || Date.now()
+  };
   
-  // Skip ignored types
-  if (videoType === 'ignored' || (typeof videoType === 'object' && videoType.type === 'ignored')) {
-    return false;
-  }
-
-  let finalUrl = url;
-  let finalType = typeof videoType === 'string' ? videoType : type;
-  let foundFromQueryParam = metadata.foundFromQueryParam || false;
-  let originalContainer = metadata.originalContainer;
+  // Validate, enrich, filter, normalize, and deduplicate in one step
+  const validatedVideo = validateVideo(videoInfo);
   
-  // Handle URL extraction from query params or type objects
-  if (typeof videoType === 'object') {
-    if (videoType.url && videoType.type) {
-      finalUrl = videoType.url;
-      finalType = videoType.type;
-      foundFromQueryParam = videoType.foundFromQueryParam || false;
-    } else if (videoType.type === 'direct' && videoType.container) {
-      finalType = videoType.type;
-      originalContainer = videoType.container;
-    }
-  }
-  
-  // Skip invalid URLs (unless it's a blob which is always valid)
-  if (!finalUrl.startsWith('blob:') && 
-      typeof videoType !== 'object' && 
-      videoType !== 'ignored' && 
-      !isValidVideoUrl(finalUrl)) {
+  // Skip if validation failed or video is a duplicate
+  if (!validatedVideo) {
     return false;
   }
   
-  // Normalize the URL for deduplication
-  const normalizedUrl = normalizeUrl(finalUrl);
+  // Mark this normalized URL as processed to avoid duplicates
+  state.detectedVideos.add(validatedVideo.normalizedUrl);
   
-  // Skip if already detected
-  if (state.detectedVideos.has(normalizedUrl)) {
-    return false;
-  }
-  
-  // Add to detected videos
-  state.detectedVideos.add(normalizedUrl);
-  
-  // Send to background
+  // Send to background with only the necessary fields
   chrome.runtime.sendMessage({
     action: 'addVideo',
-    url: finalUrl,
+    url: validatedVideo.url,
     source: 'content_script',
-    type: finalType,
-    foundFromQueryParam,
-    originalContainer,
-    originalUrl: finalUrl !== url ? url : undefined,
-    timestampDetected: Date.now(),
-    ...metadata
+    type: validatedVideo.type,
+    foundFromQueryParam: validatedVideo.foundFromQueryParam || false,
+    originalContainer: validatedVideo.originalContainer,
+    originalUrl: validatedVideo.originalUrl,
+    timestampDetected: validatedVideo.timestampDetected,
+    // Include additional metadata but filter out redundant fields
+    ...Object.fromEntries(
+      Object.entries(validatedVideo)
+        .filter(([key]) => ![
+          'normalizedUrl', 'url', 'type', 'foundFromQueryParam',
+          'originalContainer', 'originalUrl', 'timestampDetected'
+        ].includes(key))
+    )
   });
   
   return true;
 }
 
-// Send video to background script
+/**
+ * Send video to background script - Simply calls through to processVideo
+ * Maintained for backward compatibility with existing code
+ * 
+ * @param {string} url - The video URL
+ * @param {string} type - Video type
+ * @param {Object} additionalInfo - Additional metadata
+ * @returns {boolean} - Whether the video was processed
+ */
 function sendToBackground(url, type, additionalInfo = {}) {
-  // Use the universal processing function instead
+  // Simply use our centralized video processing function
   return processVideo(url, type, additionalInfo);
 }
 
-// Send multiple videos to background script
+/**
+ * Process multiple videos at once
+ * Uses the unified validation and processing pipeline
+ * 
+ * @param {Array} videos - Array of video objects to process
+ * @returns {boolean} - Whether any videos were processed
+ */
 function notifyBackground(videos) {
   if (!videos || !Array.isArray(videos)) return false;
   
-  // Filter and validate videos
+  // Apply centralized validation to filter videos
   const validVideos = Array.isArray(validateAndFilterVideos) 
     ? validateAndFilterVideos(videos) 
     : videos.filter(v => v && v.url);
   
-  // Process each video individually
+  // Process each valid video through our unified pipeline
   let processedCount = 0;
   validVideos.forEach(video => {
+    // Extract metadata and pass to processVideo
     if (processVideo(video.url, video.type, {
       poster: video.poster,
       title: video.title,
