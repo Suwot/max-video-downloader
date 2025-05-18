@@ -19,7 +19,6 @@
 const state = {
   detectedVideos: new Set(),  // Track normalized URLs that have been processed
   blobUrls: new Map(),        // Track blob URLs that have been processed
-  autoDetectionEnabled: true, // Whether automatic detection is enabled
   isInitialized: false,       // Whether the content script has been initialized
   observedVideoElements: new WeakSet(), // Track already observed video elements
   urlNormalizationCache: new Map() // Cache for URL normalization results
@@ -46,7 +45,6 @@ function initializeVideoDetection() {
   // 3. Process and report unique videos through processVideo
   setupNetworkInterception();  // Network request monitoring
   setupDOMObservers();         // DOM video element detection
-  setupMessageListeners();     // Background script communication
   setupNavigationHandling();   // Handle page navigation
 }
 
@@ -151,8 +149,6 @@ function setupDOMObservers() {
   
   // Monitor for new DOM additions and changes
   const documentObserver = new MutationObserver(mutations => {
-    if (!state.autoDetectionEnabled) return;
-    
     const potentialVideos = new Set();
     
     // Process added nodes
@@ -209,31 +205,6 @@ function setupDOMObservers() {
     
     bodyWatcher.observe(document.documentElement, { childList: true });
   }
-}
-
-// Set up message listeners for communication with background script
-function setupMessageListeners() {
-  chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-    console.log('Content script received message:', message.action);
-    
-    switch (message.action) {
-      case 'startBackgroundDetection':
-        // Enable automatic video detection
-        state.autoDetectionEnabled = true;
-        sendResponse({ status: 'ok' });
-        return true;
-        
-      case 'stopBackgroundDetection':
-        // Disable automatic video detection
-        state.autoDetectionEnabled = false;
-        sendResponse({ status: 'ok' });
-        return true;
-      
-      default:
-        sendResponse({ error: 'Unknown message type' });
-        return true;
-    }
-  });
 }
 
 /**
