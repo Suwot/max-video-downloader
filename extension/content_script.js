@@ -1,18 +1,21 @@
 /**
  * @ai-guide-component ContentScript
- * @ai-guide-description In-page video detector
+ * @ai-guide-description Optimized in-page video detector with unified detection pipeline
  * @ai-guide-responsibilities
- * - Scans DOM for video elements and sources
- * - Monitors network requests for video streams
- * - Detects HLS and DASH manifests in page resources
- * - Extracts metadata from video elements
- * - Intercepts media player initialization
- * - Reports detected videos to background service
- * - Maintains real-time monitoring of video content
- * - Extracts legitimate video URLs from query parameters
- * - Filters out tracking pixels while preserving embedded media URLs
- * - Normalizes URLs for efficient duplicate detection
- * - Propagates metadata about URL extraction origins
+ * - Scans DOM for video elements and sources using efficient WeakSet tracking
+ * - Monitors network requests via XHR and fetch API interception
+ * - Implements single-pass validation of video URLs to reduce redundant processing
+ * - Detects HLS and DASH manifests with optimized URL pattern matching
+ * - Extracts metadata from video elements including titles and poster images
+ * - Reports deduplicated videos to background service with source attribution
+ * - Normalizes URLs with parameter filtering and caching for performance
+ * - Extracts embedded video URLs from query parameters with proper source tracking
+ * - Handles blob URL special cases with proper lifecycle management
+ * - Manages state clearing during regular and SPA navigation events
+ * - Uses unified detection pipeline for consistent processing across sources
+ * - Preserves original sources (dom, xhr, fetch, mutation) for analytics purposes
+ * - Intelligently extracts video titles from surrounding DOM context
+ * - Efficiently handles dynamic page content through mutation observers
  */
 
 // State management for the content script
