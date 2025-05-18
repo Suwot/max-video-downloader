@@ -48,6 +48,132 @@ function initializeVideoDetection() {
   setupNetworkInterception();  // Network request monitoring
   setupDOMObservers();         // DOM video element detection
   setupNavigationHandling();   // Handle page navigation
+  
+  // Run initial scan when DOM is more completely loaded
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', scanAllVideos);
+    logDebug('Scheduled initial video scan for DOMContentLoaded');
+  } else {
+    // DOM is already loaded, scan immediately
+    scanAllVideos();
+  }
+  
+  // Also scan again after all resources load
+  window.addEventListener('load', scanAllVideos);
+  logDebug('Scheduled final video scan for window.load event');
+}
+
+/**
+ * Comprehensive scan for videos that may have been missed in initial setup
+ * Reuses existing functions for consistency
+ */
+function scanAllVideos() {
+  logDebug('Running comprehensive video scan at readyState:', document.readyState);
+  
+  // 1. Process all video elements
+  const videoElements = document.querySelectorAll('video');
+  if (videoElements.length > 0) {
+    logDebug(`Found ${videoElements.length} video elements during scan`);
+    videoElements.forEach(video => {
+      if (!state.observedVideoElements.has(video)) {
+        // Mark as observed to avoid reprocessing
+        state.observedVideoElements.add(video);
+        
+        // Set up observer for future attribute changes
+        if (window.videoObserver) {
+          window.videoObserver.observe(video, { attributes: true });
+        }
+        
+        const videoInfo = extractVideoInfo(video);
+        if (videoInfo) {
+          detectVideo(videoInfo.url, null, {
+            ...videoInfo,
+            source: 'initial_scan'
+          });
+        }
+      }
+    });
+  }
+  
+  // 2. Look for standalone source elements that may contain video URLs
+  document.querySelectorAll('source').forEach(source => {
+    // Skip sources inside already processed videos
+    if (source.parentElement?.nodeName === 'VIDEO' && 
+        state.observedVideoElements.has(source.parentElement)) {
+      return;
+    }
+    
+    const src = source.src || source.getAttribute('src');
+    if (src) {
+      const mimeType = source.getAttribute('type');
+      detectVideo(src, mimeType || null, {
+        source: 'initial_scan',
+        title: source.parentElement?.nodeName === 'VIDEO' ? 
+          getVideoTitle(source.parentElement) : (document.title || 'Video')
+      });
+    }
+  });
+  
+  // 3. Look for common player configurations
+  scanForPlayerConfigs();
+}
+
+/**
+ * Scans for common video player configurations
+ * Many sites use specific patterns for embedding videos
+ */
+function scanForPlayerConfigs() {
+  // Look for specific player elements
+  const playerSelectors = [
+    '.jwplayer', '.video-js', '.html5-video-container',
+    '[data-video-url]', '[data-video-src]', '[data-src*=".mp4"]',
+    '[data-setup*="sources"]', '[data-hls-url]', '[data-dash-url]'
+  ];
+  
+  document.querySelectorAll(playerSelectors.join(', ')).forEach(player => {
+    // Try to extract video URLs from data attributes
+    const dataAttrs = ['data-video-url', 'data-video-src', 'data-src', 
+                      'data-setup', 'data-hls-url', 'data-dash-url'];
+    
+    for (const attr of dataAttrs) {
+      const value = player.getAttribute(attr);
+      if (!value) continue;
+      
+      try {
+        // Check if it's a JSON string with video configuration
+        if (value.includes('{') && value.includes('}')) {
+          const config = JSON.parse(value);
+          const sources = config.sources || config.source || config.src || config.url;
+          
+          if (sources) {
+            const sourceArray = Array.isArray(sources) ? sources : [sources];
+            sourceArray.forEach(source => {
+              const url = typeof source === 'object' ? 
+                          (source.src || source.file || source.url) : source;
+              
+              if (typeof url === 'string') {
+                const type = typeof source === 'object' ? source.type : null;
+                detectVideo(url, type || null, { 
+                  source: 'initial_scan_player_config' 
+                });
+              }
+            });
+          }
+        } else if (value.includes('http') || value.startsWith('/')) {
+          // Direct URL
+          detectVideo(value, null, { source: 'initial_scan_player_attr' });
+        }
+      } catch {
+        // Simple attribute URL
+        if ((value.includes('.mp4') || value.includes('.m3u8') || value.includes('.mpd')) &&
+            (value.includes('http') || value.startsWith('/'))) {
+          const fullUrl = value.startsWith('/') ? 
+                         `${window.location.origin}${value}` : value;
+          detectVideo(fullUrl, null, { source: 'initial_scan_player_attr' });
+        }
+      }
+    }
+  });
 }
 
 // Network request monitoring
