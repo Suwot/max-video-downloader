@@ -15,7 +15,15 @@
  * - Propagates metadata about URL extraction origins
  */
 
-// content_script.js
+// State management for the content script
+const state = {
+  detectedVideos: new Set(),
+  blobUrls: new Map(),
+  autoDetectionEnabled: true,
+  isInitialized: false,
+  pendingQueue: new Map()
+};
+
 // Initialize utility functions that will be loaded dynamically
 let validateAndFilterVideos;
 let isValidVideo;
@@ -23,12 +31,11 @@ let isValidVideoUrl;
 
 console.log('Content script loading...');
 
-// Dynamically import the validation utility
-(async function loadModules() {
+// Load modules and initialize
+(async function() {
   try {
-    // Get the URL and log it for debugging
     const validatorUrl = chrome.runtime.getURL('js/utilities/video-validator.js');
-    console.log('Attempting to load validator from:', validatorUrl);
+    console.log('Loading validator from:', validatorUrl);
     
     // Add a small delay before import to ensure extension is fully initialized
     await new Promise(resolve => setTimeout(resolve, 100));
@@ -36,967 +43,742 @@ console.log('Content script loading...');
     const module = await import(validatorUrl);
     console.log('Module import successful:', module);
     
+    // Attach utilities to global scope for access
     validateAndFilterVideos = module.validateAndFilterVideos;
     isValidVideo = module.isValidVideo;
     isValidVideoUrl = module.isValidVideoUrl;
-    console.log('Video validator module loaded successfully');
-    init(); // Initialize once modules are loaded
+    console.log('Video validator loaded successfully');
   } catch (error) {
-    console.error('Failed to load validation utilities:', error);
-    // Fall back to local implementations
-    console.log('Using fallback validation functions');
-    // Implement basic validation functions locally as fallbacks
-    validateAndFilterVideos = videos => videos.filter(v => v && v.url);
-    isValidVideo = video => video && video.url;
+    console.error('Using fallback validation:', error);
+    
+    // Implement basic fallbacks
     isValidVideoUrl = url => {
       try {
-        // Skip blob URLs as they're handled separately
-        if (url.startsWith('blob:')) {
-            return true;
-        }
-        
+        if (url.startsWith('blob:')) return true;
         const urlObj = new URL(url);
         
-        // Early rejection: skip tracking images and known bad extensions
-        const badExtensions = /\.(gif|png|jpg|jpeg|webp|bmp|svg)(\?|$)/i;
-        if (badExtensions.test(urlObj.pathname)) {
-            return false;
-        }
+        // Skip tracking images and known bad extensions
+        if (/\.(gif|png|jpg|jpeg|webp|bmp|svg)(\?|$)/i.test(urlObj.pathname)) return false;
         
-        // Define patterns for tracking/analytics URLs
-        const ignoredPathPatterns = [
-            /\.gif$/i,                  // tracking pixels
-            /\/ping/i,                  // ping endpoints
-            /\/track/i, /\/pixel/i,
-            /\/stats/i, /\/metric/i,
-            /\/telemetry/i,
-            /\/analytics/i,
-            /jwpltx/, /\/tracking/
+        const ignoredPatterns = [
+          /\.gif$/i, /\/ping/i, /\/track/i, /\/pixel/i, 
+          /\/stats/i, /\/metric/i, /\/telemetry/i, 
+          /\/analytics/i, /jwpltx/, /\/tracking/
         ];
-
-        // Check if URL matches ignored patterns
-        if (ignoredPathPatterns.some(pattern => pattern.test(urlObj.pathname) || pattern.test(urlObj.hostname))) {
-            return false;
-        }
         
-        return true;
+        return !ignoredPatterns.some(p => p.test(urlObj.pathname) || p.test(urlObj.hostname));
       } catch (e) {
-          console.error('Error validating URL:', e);
-          return false;
+        console.error('Error validating URL:', e);
+        return false;
       }
     };
     
-    // Make sure we don't initialize twice
-    if (!isInitialized) {
-      init(); // Initialize with fallbacks
-    }
+    isValidVideo = video => video && video.url;
+    validateAndFilterVideos = videos => videos.filter(v => v && v.url);
   }
+  
+  // Initialize once modules are loaded
+  initializeVideoDetection();
 })();
 
-// Track detected videos to avoid duplicates
-const detectedVideos = new Set();
-const blobUrls = new Map();
-let autoDetectionEnabled = true;
-let isInitialized = false;
-let pendingMetadataQueue = new Map();
-
-// Track XMLHttpRequest and fetch requests for video content
-function setupNetworkListeners() {
-    // Override XMLHttpRequest to capture video URLs
-    const originalXhrOpen = XMLHttpRequest.prototype.open;
-    XMLHttpRequest.prototype.open = function(method, url, ...args) {
-        const xhr = this;
-        const originalOnReadyStateChange = xhr.onreadystatechange;
-        
-        this.addEventListener('readystatechange', function() {
-            if (xhr.readyState === 4 && xhr.status === 200) {
-                const contentType = xhr.getResponseHeader('Content-Type');
-                const url = xhr.responseURL;
-                
-                if (url && isVideoRelatedUrl(url, contentType)) {
-                    // Add to pending queue for parallel processing
-                    pendingMetadataQueue.set(url, {
-                        type: 'xhr',
-                        contentType,
-                        responseHeaders: Array.from(xhr.getAllResponseHeaders().trim().split(/[\r\n]+/))
-                            .reduce((headers, line) => {
-                                const parts = line.split(': ');
-                                headers[parts[0]] = parts[1];
-                                return headers;
-                            }, {})
-                    });
-                    processPendingMetadata();
-                }
-            }
-            
-            if (originalOnReadyStateChange) {
-                originalOnReadyStateChange.apply(this, arguments);
-            }
-        });
-        
-        return originalXhrOpen.apply(this, [method, url, ...args]);
-    };
-
-    // Override fetch to capture video URLs with parallel processing
-    const originalFetch = window.fetch;
-    window.fetch = function(resource, init) {
-        const url = resource instanceof Request ? resource.url : resource;
-        
-        return originalFetch.apply(this, arguments).then(response => {
-            const clonedResponse = response.clone();
-            
-            clonedResponse.headers.get('Content-Type').then(contentType => {
-                if (isVideoRelatedUrl(url, contentType)) {
-                    // Add to pending queue for parallel processing
-                    pendingMetadataQueue.set(url, {
-                        type: 'fetch',
-                        contentType,
-                        responseHeaders: Object.fromEntries(clonedResponse.headers.entries())
-                    });
-                    processPendingMetadata();
-                }
-            }).catch(() => {});
-            
-            return response;
-        });
-    };
+// Core video detection logic
+function initializeVideoDetection() {
+  if (state.isInitialized) return;
+  state.isInitialized = true;
+  
+  console.log('Initializing video detection...');
+  
+  // Set up all detection methods
+  setupNetworkInterception();
+  setupDOMObservers();
+  setupMessageListeners();
+  
+  // Initial scan
+  setTimeout(scanForVideos, 500);
 }
 
-// Process pending metadata in batches
-function processPendingMetadata(batchSize = 3) {
-    if (pendingMetadataQueue.size === 0) return;
+// Network request monitoring
+function setupNetworkInterception() {
+  // XHR interception
+  const originalXHR = XMLHttpRequest.prototype.open;
+  XMLHttpRequest.prototype.open = function(method, url, ...args) {
+    const xhr = this;
+    const originalOnReadyStateChange = xhr.onreadystatechange;
     
-    const entries = Array.from(pendingMetadataQueue.entries()).slice(0, batchSize);
-    const processPromises = entries.map(([url, info]) => {
-        return new Promise(async (resolve) => {
-            pendingMetadataQueue.delete(url);
-
-            // Determine video type using getVideoType
-            const typeInfo = getVideoType(url);
-
-            // Skip ignored types
-            if (typeInfo === 'ignored' || (typeof typeInfo === 'object' && typeInfo.type === 'ignored')) {
-                return resolve(); // Skip sending ignored URLs
-            }
-
-            let finalUrl = url;
-            let finalType = info.source || info.type; // Default to source or type from info
-            let foundFromQueryParam = false;
-
-            // If getVideoType returns an object with URL and type, use those
-            if (typeof typeInfo === 'object' && typeInfo.url && typeInfo.type) {
-                finalUrl = typeInfo.url;
-                finalType = typeInfo.type;
-                foundFromQueryParam = typeInfo.foundFromQueryParam || false;
-            } else if (typeInfo !== 'ignored' && typeInfo !== 'unknown') {
-                finalType = typeInfo; // Use the type detected by getVideoType
-            }
-
-            // Send to background with enhanced metadata
-            await sendVideoToBackground(finalUrl, finalType, {
-                contentType: info.contentType,
-                headers: info.responseHeaders,
-                foundFromQueryParam: foundFromQueryParam
-            });
-            resolve();
-        });
-    });
-
-    Promise.all(processPromises).then(() => {
-        if (pendingMetadataQueue.size > 0) {
-            setTimeout(() => processPendingMetadata(batchSize), 100);
+    xhr.addEventListener('readystatechange', function() {
+      if (xhr.readyState === 4 && xhr.status === 200) {
+        const contentType = xhr.getResponseHeader('Content-Type');
+        const responseUrl = xhr.responseURL;
+        
+        if (isVideoContent(responseUrl, contentType)) {
+          state.pendingQueue.set(responseUrl, {
+            type: 'xhr',
+            contentType,
+            responseHeaders: parseHeaders(xhr.getAllResponseHeaders())
+          });
+          processPendingQueue();
         }
-    });
-}
-
-// Track MediaSource and SourceBuffer for blob URLs
-function setupBlobListeners() {
-    // Monitor all video elements for blob URLs
-    const videoObserver = new MutationObserver(mutations => {
-        mutations.forEach(mutation => {
-            if (mutation.type === 'attributes' && mutation.attributeName === 'src') {
-                const video = mutation.target;
-                if (video.src && video.src.startsWith('blob:')) {
-                    captureBlob(video);
-                }
-            }
-        });
-        
-        // Also check for new video elements
-        document.querySelectorAll('video').forEach(video => {
-            if (video.src && video.src.startsWith('blob:')) {
-                captureBlob(video);
-            }
-        });
+      }
+      
+      if (originalOnReadyStateChange) {
+        originalOnReadyStateChange.apply(this, arguments);
+      }
     });
     
-    // Start observing all video elements
+    return originalXHR.apply(this, [method, url, ...args]);
+  };
+  
+  // Fetch interception
+  const originalFetch = window.fetch;
+  window.fetch = function(resource, init) {
+    const url = resource instanceof Request ? resource.url : resource;
+    
+    return originalFetch.apply(this, arguments).then(response => {
+      const clonedResponse = response.clone();
+      
+      clonedResponse.headers.get('Content-Type').then(contentType => {
+        if (isVideoContent(url, contentType)) {
+          state.pendingQueue.set(url, {
+            type: 'fetch',
+            contentType,
+            responseHeaders: Object.fromEntries(clonedResponse.headers.entries())
+          });
+          processPendingQueue();
+        }
+      }).catch(() => {});
+      
+      return response;
+    });
+  };
+}
+
+// Process pending video queue in batches
+function processPendingQueue(batchSize = 3) {
+  if (state.pendingQueue.size === 0) return;
+  
+  const entries = Array.from(state.pendingQueue.entries()).slice(0, batchSize);
+  const processPromises = entries.map(([url, info]) => {
+    return new Promise(async (resolve) => {
+      state.pendingQueue.delete(url);
+
+      const videoType = identifyVideoType(url);
+      
+      // Skip ignored types
+      if (videoType === 'ignored' || (typeof videoType === 'object' && videoType.type === 'ignored')) {
+        return resolve();
+      }
+
+      let finalUrl = url;
+      let finalType = info.type;
+      let foundFromQueryParam = false;
+
+      // Handle extracted URLs from query parameters
+      if (typeof videoType === 'object' && videoType.url && videoType.type) {
+        finalUrl = videoType.url;
+        finalType = videoType.type;
+        foundFromQueryParam = videoType.foundFromQueryParam || false;
+      } else if (videoType !== 'ignored' && videoType !== 'unknown') {
+        finalType = videoType;
+      }
+
+      // Send to background
+      await sendToBackground(finalUrl, finalType, {
+        contentType: info.contentType,
+        headers: info.responseHeaders,
+        foundFromQueryParam
+      });
+      resolve();
+    });
+  });
+
+  // Process next batch after this one completes
+  Promise.all(processPromises).then(() => {
+    if (state.pendingQueue.size > 0) {
+      setTimeout(() => processPendingQueue(batchSize), 100);
+    }
+  });
+}
+
+// DOM observation for videos
+function setupDOMObservers() {
+  // Track all video elements for blob URLs and src changes
+  const videoObserver = new MutationObserver(mutations => {
+    mutations.forEach(mutation => {
+      if (mutation.type === 'attributes' && 
+          mutation.attributeName === 'src' && 
+          mutation.target.src?.startsWith('blob:')) {
+        processBlobURL(mutation.target);
+      }
+    });
+    
+    // Also check for new video elements with blob sources
     document.querySelectorAll('video').forEach(video => {
-        videoObserver.observe(video, { attributes: true });
-        if (video.src && video.src.startsWith('blob:')) {
-            captureBlob(video);
+      if (video.src?.startsWith('blob:')) {
+        processBlobURL(video);
+      }
+    });
+  });
+  
+  // Start observing all video elements for attribute changes
+  document.querySelectorAll('video').forEach(video => {
+    videoObserver.observe(video, { attributes: true });
+    if (video.src?.startsWith('blob:')) {
+      processBlobURL(video);
+    }
+  });
+  
+  // Monitor for new DOM additions and changes
+  const documentObserver = new MutationObserver(mutations => {
+    if (!state.autoDetectionEnabled) return;
+    
+    const potentialVideos = new Set();
+    
+    // Process added nodes
+    mutations.forEach(mutation => {
+      // Check for newly added video elements
+      mutation.addedNodes.forEach(node => {
+        if (node.nodeName === 'VIDEO') {
+          videoObserver.observe(node, { attributes: true });
+          potentialVideos.add(node);
+        } else if (node.querySelectorAll) {
+          // Check for videos inside other elements
+          node.querySelectorAll('video').forEach(video => {
+            videoObserver.observe(video, { attributes: true });
+            potentialVideos.add(video);
+          });
         }
+      });
+      
+      // Check for attribute changes on video elements
+      if (mutation.type === 'attributes' && 
+          mutation.target.nodeName === 'VIDEO' && 
+          (mutation.attributeName === 'src' || mutation.attributeName === 'data-src')) {
+        potentialVideos.add(mutation.target);
+      }
     });
     
-    // Monitor for new videos being added to the DOM
-    const bodyObserver = new MutationObserver((mutations, observer) => {
-        mutations.forEach(mutation => {
-            mutation.addedNodes.forEach(node => {
-                if (node.nodeName === 'VIDEO') {
-                    videoObserver.observe(node, { attributes: true });
-                    if (node.src && node.src.startsWith('blob:')) {
-                        captureBlob(node);
-                    }
-                } else if (node.querySelectorAll) {
-                    node.querySelectorAll('video').forEach(video => {
-                        videoObserver.observe(video, { attributes: true });
-                        if (video.src && video.src.startsWith('blob:')) {
-                            captureBlob(video);
-                        }
-                    });
-                }
-            });
+    // Process potential videos after a small delay
+    if (potentialVideos.size > 0) {
+      setTimeout(() => {
+        const newVideos = [];
+        
+        potentialVideos.forEach(video => {
+          // Check for regular src attribute
+          if (video.src || video.querySelector('source')) {
+            const videoInfo = extractVideoInfo(video);
+            if (videoInfo && !state.detectedVideos.has(normalizeUrl(videoInfo.url))) {
+              newVideos.push(videoInfo);
+              state.detectedVideos.add(normalizeUrl(videoInfo.url));
+            }
+          }
+          
+          // Check for blob URLs
+          if (video.src?.startsWith('blob:')) {
+            processBlobURL(video);
+          }
         });
+        
+        // Send new videos to background script
+        if (newVideos.length > 0) {
+          notifyBackground(newVideos);
+        }
+      }, 500);
+    }
+  });
+  
+  // Start observing document
+  if (document.body) {
+    documentObserver.observe(document, { 
+      childList: true, 
+      subtree: true, 
+      attributes: true,
+      attributeFilter: ['src', 'data-src'] 
+    });
+  } else {
+    // If body isn't available yet, wait for it
+    const bodyWatcher = new MutationObserver(() => {
+      if (document.body) {
+        documentObserver.observe(document, { 
+          childList: true, 
+          subtree: true, 
+          attributes: true,
+          attributeFilter: ['src', 'data-src'] 
+        });
+        bodyWatcher.disconnect();
+      }
     });
     
-    // Safely start the body observer - handle cases where body isn't available yet
-    function startBodyObserver() {
-        if (document.body) {
-            // Body exists, start observing immediately
-            bodyObserver.observe(document.body, { childList: true, subtree: true });
-        } else {
-            // Wait for body to be created
-            const documentObserver = new MutationObserver(() => {
-                if (document.body) {
-                    bodyObserver.observe(document.body, { childList: true, subtree: true });
-                    documentObserver.disconnect(); // Stop observing document once body exists
-                }
-            });
-            
-            // Observe document for when body is added
-            documentObserver.observe(document.documentElement, { childList: true });
+    bodyWatcher.observe(document.documentElement, { childList: true });
+  }
+}
+
+// Message communication
+function setupMessageListeners() {
+  chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    console.log('Content script received message:', message.action);
+    
+    switch (message.action) {
+      case 'findVideos':
+        const videos = scanForVideos();
+        console.log('Found videos:', videos);
+        sendResponse(videos);
+        return true;
+        
+      case 'startBackgroundDetection':
+        state.autoDetectionEnabled = true;
+        sendResponse({ status: 'ok' });
+        return true;
+        
+      case 'stopBackgroundDetection':
+        state.autoDetectionEnabled = false;
+        sendResponse({ status: 'ok' });
+        return true;
+        
+      case 'popupOpened':
+        // Run an immediate video check when popup opens
+        const foundVideos = scanForVideos();
+        if (foundVideos && foundVideos.length > 0) {
+          notifyBackground(foundVideos);
         }
+        sendResponse({ status: 'ready' });
+        return true;
+        
+      case 'popupClosed':
+        sendResponse({ status: 'ok' });
+        return true;
+        
+      default:
+        sendResponse({ error: 'Unknown message type' });
+        return true;
     }
-    
-    // Start the observers
-    startBodyObserver();
+  });
 }
 
-// Try to snapshot info about a blob URL
-function captureBlob(videoElement) {
-    const blobUrl = videoElement.src;
-    if (!blobUrl || !blobUrl.startsWith('blob:') || blobUrls.has(blobUrl)) {
-        return false;
+// Active video search functions
+function scanForVideos() {
+  const videos = [];
+  
+  // Find direct video elements and sources
+  document.querySelectorAll('video').forEach(video => {
+    // Check direct src attribute
+    if (video.src) {
+      const videoInfo = extractVideoInfo(video);
+      if (videoInfo) {
+        videos.push(videoInfo);
+        state.detectedVideos.add(normalizeUrl(videoInfo.url));
+      }
     }
     
-    // Store basic info about the blob
-    const info = {
-        url: blobUrl,
-        type: 'blob',
-        time: Date.now(),
-        poster: videoElement.poster || null,
-        title: getVideoTitle(videoElement)
-    };
-    
-    blobUrls.set(blobUrl, info);
-    sendVideoToBackground(blobUrl, 'blob', info);
-    return true;
+    // Check source elements inside video
+    video.querySelectorAll('source').forEach(source => {
+      if (source.src) {
+        const videoInfo = {
+          url: source.src,
+          poster: video.poster || null,
+          title: getVideoTitle(video),
+          timestamp: Date.now()
+        };
+        
+        const validVideo = validateVideo(videoInfo);
+        if (validVideo) {
+          videos.push(validVideo);
+          state.detectedVideos.add(normalizeUrl(validVideo.url));
+        }
+      }
+    });
+  });
+  
+  // Add tracked blob URLs
+  state.blobUrls.forEach((info) => {
+    videos.push({
+      url: info.url,
+      type: 'blob',
+      poster: info.poster || null,
+      title: info.title || 'Blob Video',
+      timestamp: info.time || Date.now()
+    });
+  });
+  
+  return videos;
 }
 
-// Determine a good title for the video
+// Extract video information
+function extractVideoInfo(videoElement) {
+  // Get source from either src attribute or first source child
+  let src = videoElement.src;
+  if (!src) {
+    const source = videoElement.querySelector('source');
+    src = source?.src;
+  }
+  
+  if (!src) return null;
+  
+  // Create and validate video info
+  const videoInfo = {
+    url: src,
+    poster: videoElement.poster || null,
+    title: getVideoTitle(videoElement),
+    timestamp: Date.now()
+  };
+  
+  return validateVideo(videoInfo);
+}
+
+// Get best title for video
 function getVideoTitle(videoElement) {
-    // Try to get title from various sources
-    // 1. aria-label attribute
-    if (videoElement.hasAttribute('aria-label')) {
-        return videoElement.getAttribute('aria-label');
-    }
-    
-    // 2. title attribute
-    if (videoElement.hasAttribute('title')) {
-        return videoElement.getAttribute('title');
-    }
-    
-    // 3. Look for nearby heading elements
-    let parent = videoElement.parentElement;
-    for (let i = 0; i < 3 && parent; i++) {
-        const heading = parent.querySelector('h1, h2, h3');
-        if (heading && heading.textContent.trim()) {
-            return heading.textContent.trim();
-        }
-        parent = parent.parentElement;
-    }
-    
-    // 4. Page title fallback
-    return document.title || 'Video';
+  // Try to get title from various sources in priority order
+  return videoElement.getAttribute('aria-label') || 
+         videoElement.getAttribute('title') || 
+         findNearbyHeading(videoElement) ||
+         document.title || 
+         'Video';
 }
 
-// Check if a URL is likely to be video content
-function isVideoRelatedUrl(url, contentType) {
-    try {
-        // First, quickly check for obvious tracking pixels to avoid processing them further
-        const urlObj = new URL(url);
-        
-        // Early rejection for known tracking pixels
-        if (url.includes('ping.gif') || url.includes('jwpltx.com') || 
-            urlObj.pathname.includes('/pixel') || urlObj.pathname.includes('/track')) {
-            
-            // However, check first if it contains a video URL in query params
-            for (const [key, value] of urlObj.searchParams.entries()) {
-                try {
-                    const decoded = decodeURIComponent(value);
-                    if ((decoded.includes('.m3u8') || decoded.includes('.mpd')) &&
-                        (decoded.includes('http') || decoded.startsWith('/') || decoded.includes('://'))) {
-                        // If we find a video URL embedded, allow this to be processed further
-                        return true;
-                    }
-                } catch {}
-            }
-            
-            // No embedded video URL found, reject this tracking pixel
-            return false;
-        }
-    } catch {}
-    
-    // Known video extensions and manifest formats
-    const videoPatterns = [
-        /\.(mp4|webm|ogg|mov|avi|mkv|flv)(\?|$)/i,   // Direct video files
-        /\.(m3u8|m3u)(\?|$)/i,                       // HLS playlists
-        /\.(mpd)(\?|$)/i,                            // DASH manifests
-        /\/(playlist|manifest|master)\.json(\?|$)/i   // Some custom manifest formats
-    ];
-    
-    // Known video MIME types
-    const videoMimeTypes = [
-        'video/',
-        'application/x-mpegURL',
-        'application/dash+xml',
-        'application/vnd.apple.mpegURL'
-    ];
-    
-    // Check URL patterns
-    if (videoPatterns.some(pattern => pattern.test(url))) {
-        return true;
+// Find nearby heading for video title
+function findNearbyHeading(element) {
+  let parent = element.parentElement;
+  for (let i = 0; i < 3 && parent; i++) {
+    const heading = parent.querySelector('h1, h2, h3');
+    if (heading?.textContent.trim()) {
+      return heading.textContent.trim();
     }
-    
-    // Check content type if available
-    if (contentType && videoMimeTypes.some(type => contentType.includes(type))) {
-        return true;
-    }
-    
+    parent = parent.parentElement;
+  }
+  return null;
+}
+
+// Process blob URL from video element
+function processBlobURL(videoElement) {
+  const blobUrl = videoElement.src;
+  if (!blobUrl || !blobUrl.startsWith('blob:') || state.blobUrls.has(blobUrl)) {
     return false;
+  }
+  
+  // Store basic info about the blob
+  const info = {
+    url: blobUrl,
+    type: 'blob',
+    time: Date.now(),
+    poster: videoElement.poster || null,
+    title: getVideoTitle(videoElement)
+  };
+  
+  state.blobUrls.set(blobUrl, info);
+  sendToBackground(blobUrl, 'blob', info);
+  return true;
 }
 
-// Send a detected video to the background script
-function sendVideoToBackground(url, source, additionalInfo = {}) {
-    // Determine type from URL
-    const typeInfo = getVideoType(url);
-    let type = source;
-    let foundFromQueryParam = additionalInfo.foundFromQueryParam || false;
-    let originalContainer = null;
-    
-    // If getVideoType returns an object, use its values
-    if (typeof typeInfo === 'object') {
-        if (typeInfo.url && typeInfo.type) {
-            url = typeInfo.url;
-            type = typeInfo.type;
-            foundFromQueryParam = typeInfo.foundFromQueryParam || foundFromQueryParam;
-        } else if (typeInfo.type === 'direct' && typeInfo.container) {
-            type = typeInfo.type;
-            originalContainer = typeInfo.container;
-        }
-    } else if (typeInfo !== 'ignored' && typeInfo !== 'unknown') {
-        type = typeInfo; // Use the type detected by getVideoType
-    }
-
-    // Early skip if type is ignored
-    if (type === 'ignored') {
-        return;
-    }
-
-    // Normalize URL to avoid duplicates
-    const normalizedUrl = normalizeUrl(url);
-
-    // Skip if already detected
-    if (detectedVideos.has(normalizedUrl)) {
-        return;
-    }
-
-    // Add to detected videos
-    detectedVideos.add(normalizedUrl);
-
-    // Send to background
-    chrome.runtime.sendMessage({
-        action: 'addVideo',
-        url: url,
-        source: 'content_script', // Explicitly set source as content_script
-        type: type,
-        foundFromQueryParam: foundFromQueryParam,
-        originalContainer: originalContainer, // Add container information
-        timestampDetected: Date.now(), // Add precise detection timestamp
-        ...additionalInfo
-    });
+// Utility functions
+function validateVideo(videoInfo) {
+  if (!videoInfo?.url) return null;
+  
+  const videoType = identifyVideoType(videoInfo.url);
+  
+  // If type is ignored, skip this video
+  if (videoType === 'ignored' || (typeof videoType === 'object' && videoType.type === 'ignored')) {
+    return null;
+  }
+  
+  // Skip invalid URLs using the centralized validation function
+  if (typeof videoType !== 'object' && videoType !== 'ignored' && !isValidVideoUrl(videoInfo.url)) {
+    return null;
+  }
+  
+  // If type is an object with URL and type, update videoInfo with extracted URL
+  if (typeof videoType === 'object' && videoType.url && videoType.type) {
+    videoInfo.originalUrl = videoInfo.url;
+    videoInfo.url = videoType.url;
+    videoInfo.type = videoType.type;
+    videoInfo.foundFromQueryParam = videoType.foundFromQueryParam || false;
+  } else if (videoType !== 'unknown') {
+    videoInfo.type = videoType;
+  }
+  
+  return videoInfo;
 }
 
-// Get video type from URL
-function getVideoType(url) {
-    if (url.startsWith('blob:')) {
-        return 'blob';
-    }
+// Determine video type from URL
+function identifyVideoType(url) {
+  if (url.startsWith('blob:')) return 'blob';
+  
+  try {
+    const urlObj = new URL(url);
     
-    try {
-        const urlObj = new URL(url);
-                
-        // Early rejection: skip tracking images and known bad extensions
-        const badExtensions = /\.(gif|png|jpg|jpeg|webp|bmp|svg)(\?|$)/i;
-        if (badExtensions.test(urlObj.pathname)) {
-            // However, check if a real video URL is buried inside query params
-            for (const [key, value] of urlObj.searchParams.entries()) {
-                try {
-                    const decoded = decodeURIComponent(value);
-                    if (decoded.match(/\.m3u8(\?|$)/) || decoded.match(/\.mpd(\?|$)/)) {
-                        // Only consider it if it looks like an actual URL
-                        if (decoded.includes('http') || decoded.startsWith('/') || decoded.includes('://')) {
-                            // Return both the embedded URL and its type, plus a flag indicating it was found in a query param
-                            return {
-                                url: decoded,
-                                type: decoded.match(/\.m3u8(\?|$)/) ? 'hls' : 'dash',
-                                foundFromQueryParam: true
-                            };
-                        }
-                    }
-                } catch {}
-            }
-            // Otherwise, reject
-            return 'ignored';
-        }
-        
-        const baseUrl = url.split('?')[0].split('#')[0];
-        
-        // Define patterns for tracking/analytics URLs
-        const ignoredPathPatterns = [
-            /\.gif$/i,                  // tracking pixels
-            /\/ping/i,                  // ping endpoints
-            /\/track/i, /\/pixel/i,
-            /\/stats/i, /\/metric/i,
-            /\/telemetry/i,
-            /\/analytics/i,
-            /jwpltx/, /\/tracking/
-        ];
-
-        // Check if URL matches ignored patterns
-        if (ignoredPathPatterns.some(pattern => pattern.test(urlObj.pathname) || pattern.test(urlObj.hostname))) {
-            return 'ignored';
-        }
-
-        // Improved HLS detection - check for common indicators that confirm it's an actual HLS stream
-        // rather than just having .m3u8 in the URL
-        if (baseUrl.toLowerCase().endsWith('.m3u8')) {
-            // Check for additional HLS indicators to confirm it's really a manifest
-            const hasHLSIndicators = 
-                // These are common URL patterns for actual HLS streams
-                urlObj.pathname.includes('/playlist/') || 
-                urlObj.pathname.includes('/manifest/') || 
-                urlObj.pathname.includes('/media/') ||
-                urlObj.pathname.includes('/content/') ||
-                urlObj.pathname.includes('/stream/') ||
-                urlObj.pathname.includes('/video/') ||
-                urlObj.hostname.includes('cdn') ||
-                // Check for pattern of direct media URLs
-                /\/[^\/]+\/[^\/]+\.m3u8$/.test(urlObj.pathname);
-                
-            if (hasHLSIndicators) {
-                return 'hls';
-            }
-                
-            // If the path has many segments and ends with .m3u8, it's likely a real HLS URL
-            if (urlObj.pathname.split('/').length > 3) {
-                return 'hls';
-            }
-                
-            // Additional validation: if m3u8 is a structural part of the URL rather than just a parameter
-            if (!urlObj.search.includes('m3u8')) {
-                return 'hls';
-            }
-                
-            // Less confident, but still check for content in /hls/ paths
-            if (urlObj.pathname.includes('/hls/')) {
-                return 'hls';
-            }
-            
-            // Default to unknown for suspicious .m3u8 URLs that don't match expected patterns
-            return 'unknown';
-        } 
-        
-        // Special case for /hls/ paths - more strict validation
-        if (urlObj.pathname.includes('/hls/')) {
-            // Only consider it HLS if it has other typical media path components
-            const hasMediaPathComponents =
-                urlObj.pathname.includes('/stream/') ||
-                urlObj.pathname.includes('/video/') ||
-                urlObj.pathname.includes('/content/') ||
-                urlObj.pathname.includes('/media/');
-                
-            if (hasMediaPathComponents) {
-                return 'hls';
-            }
-        }
-        
-        // Check query parameters for embedded video URLs
-        for (const [key, value] of urlObj.searchParams.entries()) {
-            try {
-                const decoded = decodeURIComponent(value);
-                
-                // More precise check for HLS in query params
-                if (decoded.match(/\.m3u8(\?|$)/)) {
-                    // Only consider it HLS if:
-                    // 1. It looks like a valid URL rather than just a parameter containing "m3u8" text
-                    // 2. AND it's not just a simple token/identifier with "m3u8" in it
-                    if ((decoded.includes('http') || decoded.startsWith('/') || decoded.includes('://')) && 
-                        // Additional validation to prevent false positives:
-                        // It should look like an actual URL path, not just text containing "m3u8"
-                        (decoded.includes('/') || decoded.match(/^https?:\/\//))) {
-                        // Return both the embedded URL and its type, plus a flag indicating it was found in a query param
-                        return {
-                            url: decoded,
-                            type: 'hls',
-                            foundFromQueryParam: true
-                        };
-                    }
-                }
-                
-                if (decoded.match(/\.mpd(\?|$)/)) {
-                    // Similar validation for DASH manifests
-                    if ((decoded.includes('http') || decoded.startsWith('/') || decoded.includes('://')) &&
-                        (decoded.includes('/') || decoded.match(/^https?:\/\//))) {
-                        // Return both the embedded URL and its type, plus a flag indicating it was found in a query param
-                        return {
-                            url: decoded,
-                            type: 'dash',
-                            foundFromQueryParam: true
-                        };
-                    }
-                }
-            } catch {}
-        }
-        
-        if (baseUrl.toLowerCase().endsWith('.mpd')) {
-            return 'dash';
-        }
-        
-        // For direct video files, extract container and return both type and container
-        const directVideoMatch = baseUrl.match(/\.(mp4|webm|ogg|mov|avi|mkv|flv|3gp|m4v|wmv)$/i);
-        if (directVideoMatch) {
+    // Early rejection: skip tracking images and known bad extensions
+    const badExtensions = /\.(gif|png|jpg|jpeg|webp|bmp|svg)(\?|$)/i;
+    if (badExtensions.test(urlObj.pathname)) {
+      // Check for video URLs embedded in query parameters
+      for (const [_, value] of urlObj.searchParams.entries()) {
+        try {
+          const decoded = decodeURIComponent(value);
+          if ((decoded.match(/\.m3u8(\?|$)/) || decoded.match(/\.mpd(\?|$)/)) &&
+              (decoded.includes('http') || decoded.startsWith('/') || decoded.includes('://'))) {
             return {
-                type: 'direct',
-                container: directVideoMatch[1].toLowerCase()
+              url: decoded,
+              type: decoded.match(/\.m3u8(\?|$)/) ? 'hls' : 'dash',
+              foundFromQueryParam: true
             };
-        }
-    } catch (e) {
-        console.error('Error parsing URL:', e);
+          }
+        } catch {}
+      }
+      return 'ignored';
     }
     
-    return 'unknown';
+    // Check for tracking/analytics URLs
+    const ignoredPathPatterns = [
+      /\.gif$/i, /\/ping/i, /\/track/i, /\/pixel/i, 
+      /\/stats/i, /\/metric/i, /\/telemetry/i, 
+      /\/analytics/i, /jwpltx/, /\/tracking/
+    ];
+    
+    if (ignoredPathPatterns.some(p => p.test(urlObj.pathname) || p.test(urlObj.hostname))) {
+      return 'ignored';
+    }
+    
+    const baseUrl = url.split('?')[0].split('#')[0];
+    
+    // Check for HLS
+    if (baseUrl.toLowerCase().endsWith('.m3u8')) {
+      return 'hls';
+    }
+    
+    // Check for DASH
+    if (baseUrl.toLowerCase().endsWith('.mpd')) {
+      return 'dash';
+    }
+    
+    // Check for direct video files
+    const directVideoMatch = baseUrl.match(/\.(mp4|webm|ogg|mov|avi|mkv|flv|3gp|m4v|wmv)$/i);
+    if (directVideoMatch) {
+      return {
+        type: 'direct',
+        container: directVideoMatch[1].toLowerCase()
+      };
+    }
+    
+    // Check for HLS in paths
+    if (urlObj.pathname.includes('/hls/') && 
+        (urlObj.pathname.includes('/stream/') || 
+         urlObj.pathname.includes('/video/') || 
+         urlObj.pathname.includes('/content/') || 
+         urlObj.pathname.includes('/media/'))) {
+      return 'hls';
+    }
+    
+    // Check query parameters for embedded URLs
+    for (const [_, value] of urlObj.searchParams.entries()) {
+      try {
+        const decoded = decodeURIComponent(value);
+        
+        if (decoded.match(/\.m3u8(\?|$)/) && 
+            (decoded.includes('http') || decoded.startsWith('/') || decoded.includes('://')) &&
+            (decoded.includes('/') || decoded.match(/^https?:\/\//))) {
+          return {
+            url: decoded,
+            type: 'hls',
+            foundFromQueryParam: true
+          };
+        }
+        
+        if (decoded.match(/\.mpd(\?|$)/) && 
+            (decoded.includes('http') || decoded.startsWith('/') || decoded.includes('://')) &&
+            (decoded.includes('/') || decoded.match(/^https?:\/\//))) {
+          return {
+            url: decoded,
+            type: 'dash',
+            foundFromQueryParam: true
+          };
+        }
+      } catch {}
+    }
+    
+  } catch (e) {
+    console.error('Error parsing URL:', e);
+  }
+  
+  return 'unknown';
+}
+
+// Check if a URL or content type indicates video content
+function isVideoContent(url, contentType) {
+  try {
+    // Quick check for tracking pixels
+    const urlObj = new URL(url);
+    if (url.includes('ping.gif') || url.includes('jwpltx.com') || 
+        urlObj.pathname.includes('/pixel') || urlObj.pathname.includes('/track')) {
+      
+      // Check for embedded videos in tracking pixels
+      for (const [_, value] of urlObj.searchParams.entries()) {
+        try {
+          const decoded = decodeURIComponent(value);
+          if ((decoded.includes('.m3u8') || decoded.includes('.mpd')) &&
+              (decoded.includes('http') || decoded.startsWith('/') || decoded.includes('://'))) {
+            return true;
+          }
+        } catch {}
+      }
+      
+      return false;
+    }
+  } catch {}
+  
+  // Check URL patterns for video extensions
+  const videoPatterns = [
+    /\.(mp4|webm|ogg|mov|avi|mkv|flv)(\?|$)/i,
+    /\.(m3u8|m3u)(\?|$)/i,
+    /\.(mpd)(\?|$)/i,
+    /\/(playlist|manifest|master)\.json(\?|$)/i
+  ];
+  
+  if (videoPatterns.some(pattern => pattern.test(url))) {
+    return true;
+  }
+  
+  // Check content type for video MIME types
+  const videoMimeTypes = [
+    'video/',
+    'application/x-mpegURL',
+    'application/dash+xml',
+    'application/vnd.apple.mpegURL'
+  ];
+  
+  if (contentType && videoMimeTypes.some(type => contentType.includes(type))) {
+    return true;
+  }
+  
+  return false;
+}
+
+// Parse headers string into object
+function parseHeaders(headerStr) {
+  return headerStr.trim().split(/[\r\n]+/).reduce((headers, line) => {
+    const parts = line.split(': ');
+    headers[parts[0]] = parts[1];
+    return headers;
+  }, {});
 }
 
 // Normalize URL to avoid duplicates
 function normalizeUrl(url) {
-    // Keep blob URLs as is
-    if (url.startsWith('blob:')) {
-        return url;
-    }
+  if (url.startsWith('blob:')) return url;
+  
+  try {
+    const urlObj = new URL(url);
     
-    try {
-        const urlObj = new URL(url);
-        
-        // Special case for tracking pixels with embedded URLs:
-        // If this is a tracking pixel with video URLs in parameters,
-        // we want to avoid duplicate detection between the original and extracted URL
-        if (url.includes('ping.gif') || url.includes('jwpltx.com') || urlObj.pathname.includes('/pixel')) {
-            // Look for embedded video URLs in query parameters
-            for (const [key, value] of urlObj.searchParams.entries()) {
-                try {
-                    const decoded = decodeURIComponent(value);
-                    if ((decoded.includes('.m3u8') || decoded.includes('.mpd')) &&
-                        (decoded.includes('http') || decoded.startsWith('/') || decoded.includes('://'))) {
-                        // Use the embedded URL for normalization to prevent duplicate detection
-                        try {
-                            // Handle relative URLs
-                            const fullUrl = decoded.startsWith('/') ? 
-                                (urlObj.origin + decoded) : decoded;
-                            return normalizeUrl(fullUrl); // Recursively normalize the extracted URL
-                        } catch (e) {
-                            // If we can't parse the extracted URL, fall back to default normalization
-                        }
-                    }
-                } catch {}
-            }
-        }
-        
-        // Remove common tracking or cache-busting parameters
-        urlObj.searchParams.delete('_t');
-        urlObj.searchParams.delete('_r');
-        urlObj.searchParams.delete('cache');
-        urlObj.searchParams.delete('_');
-        urlObj.searchParams.delete('time');
-        urlObj.searchParams.delete('timestamp');
-        urlObj.searchParams.delete('random');
-        
-        // For HLS manifest URLs, canonicalize some common patterns
-        if (url.includes('.m3u8') || url.includes('/hls/')) {
-            // Remove common HLS-specific transient params
-            urlObj.searchParams.delete('seq');
-            urlObj.searchParams.delete('segment');
-            urlObj.searchParams.delete('cmsid');
-            urlObj.searchParams.delete('v');
-            urlObj.searchParams.delete('session');
-            
-            // Special case for manifests with media IDs - keep the core URL
-            const pathname = urlObj.pathname.toLowerCase();
-            if (pathname.includes('/manifest') || pathname.includes('/playlist') || 
-                pathname.includes('/master.m3u8') || pathname.includes('/index.m3u8')) {
-                // Try to create a canonical form for better duplicate detection
-                return urlObj.origin + urlObj.pathname;
-            }
-        }
-        
-        return urlObj.toString();
-    } catch {
-        return url;
-    }
-}
-
-// After the normalizeUrl function
-
-/**
- * Validate video info object and determine if it should be processed
- * @param {Object} videoInfo - Video information object
- * @return {Object|null} Valid video info or null if invalid
- */
-function validateVideoInfo(videoInfo) {
-    if (!videoInfo || !videoInfo.url) {
-        return null;
-    }
-    
-    // Get and validate type - this may also change the URL if it's extracted from a query param
-    const typeInfo = getVideoType(videoInfo.url);
-    
-    // If type is ignored, skip this video
-    if (typeInfo === 'ignored' || 
-        (typeof typeInfo === 'object' && typeInfo.type === 'ignored')) {
-        return null; 
-    }
-    
-    // If URL wasn't validated by getVideoType, use our centralized validation
-    if (typeof typeInfo !== 'object' && typeInfo !== 'ignored') {
-        // Skip invalid URLs using the centralized isValidVideoUrl function
-        if (!isValidVideoUrl(videoInfo.url)) {
-            return null;
-        }
-    }
-    
-    // If type is an object with URL and type, update videoInfo with extracted URL
-    if (typeof typeInfo === 'object' && typeInfo.url && typeInfo.type) {
-        // Original URL might be needed for debugging, so store it
-        videoInfo.originalUrl = videoInfo.url;
-        // Replace with the extracted URL
-        videoInfo.url = typeInfo.url;
-        videoInfo.type = typeInfo.type;
-        
-        // Propagate foundFromQueryParam flag if present
-        if (typeInfo.foundFromQueryParam) {
-            videoInfo.foundFromQueryParam = true;
-            console.log('Found URL in query parameter:', typeInfo.url, 'from', videoInfo.originalUrl);
-        }
-    } else if (typeInfo !== 'unknown') {
-        videoInfo.type = typeInfo;
-    }
-    
-    return videoInfo;
-}
-
-// Find all video elements and their sources
-function findVideos() {
-    const sources = [];
-    
-    // Find direct video elements
-    document.querySelectorAll('video').forEach(video => {
-        // Check direct src attribute
-        if (video.src) {
-            const videoInfo = extractVideoInfo(video);
-            if (videoInfo) {
-                sources.push(videoInfo);
-                detectedVideos.add(normalizeUrl(videoInfo.url));
-            }
-        }
-
-        // Check source elements inside the video
-        video.querySelectorAll('source').forEach(source => {
-            if (source.src) {
-                const videoInfo = {
-                    url: source.src,
-                    poster: video.poster || null,
-                    title: getVideoTitle(video),
-                    timestampDetected: Date.now()
-                };
-                
-                const validVideo = validateVideoInfo(videoInfo);
-                if (validVideo) {
-                    sources.push(validVideo);
-                    detectedVideos.add(normalizeUrl(validVideo.url));
-                }
-            }
-        });
-    });
-    
-    // Add blob URLs
-    blobUrls.forEach((info) => {
-        sources.push({
-            url: info.url,
-            type: 'blob',
-            poster: info.poster || null,
-            title: info.title || 'Blob Video',
-            timestampDetected: info.time || Date.now()
-        });
-    });
-    
-    return sources;
-}
-
-// Override init() function for proactive video scanning
-function init() {
-    if (isInitialized) return;
-    
-    console.log('Initializing video detection proactively...');
-    
-    // Setup listeners immediately
-    setupNetworkListeners();
-    setupBlobListeners();
-    setupEnhancedDetection();
-    
-    // Listen for messages from popup with retry mechanism
-    function setupMessageListener() {
+    // Handle tracking pixels with embedded URLs
+    if (url.includes('ping.gif') || url.includes('jwpltx.com') || urlObj.pathname.includes('/pixel')) {
+      for (const [_, value] of urlObj.searchParams.entries()) {
         try {
-            chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-                console.log('Content script received message:', message);
-                
-                if (message.action === 'findVideos') {
-                    const videos = findVideos();
-                    console.log('Found videos:', videos);
-                    sendResponse(videos);
-                    return true;
-                }
-                
-                if (message.action === 'startBackgroundDetection') {
-                    autoDetectionEnabled = true;
-                    sendResponse({ status: 'ok' });
-                    return true;
-                }
-                
-                if (message.action === 'stopBackgroundDetection') {
-                    autoDetectionEnabled = false;
-                    sendResponse({ status: 'ok' });
-                    return true;
-                }
-                
-                if (message.action === 'popupOpened') {
-                    // Run an immediate video check when popup opens
-                    const videos = findVideos();
-                    if (videos && videos.length > 0) {
-                        notifyBackground(videos);
-                    }
-                    sendResponse({ status: 'ready' });
-                    return true;
-                }
-                
-                if (message.action === 'popupClosed') {
-                    sendResponse({ status: 'ok' });
-                    return true;
-                }
-
-                // Default response for unknown messages
-                sendResponse({ error: 'Unknown message type' });
-                return true;
-            });
-            
-            // Successfully set up listener
-            isInitialized = true;
-            console.log('Content script initialized successfully');
-            
-            // Immediately perform an initial scan for videos - don't wait for popup to open
-            setTimeout(() => {
-                const videos = findVideos();
-                if (videos && videos.length > 0) {
-                    notifyBackground(videos);
-                    console.log('Initial video scan found videos:', videos.length);
-                }
-            }, 500);
-            
-        } catch (error) {
-            console.error('Failed to setup message listener:', error);
-            // Retry setup after a short delay if it fails
-            setTimeout(setupMessageListener, 500);
-        }
+          const decoded = decodeURIComponent(value);
+          if ((decoded.includes('.m3u8') || decoded.includes('.mpd')) &&
+              (decoded.includes('http') || decoded.startsWith('/') || decoded.includes('://'))) {
+            try {
+              const fullUrl = decoded.startsWith('/') ? (urlObj.origin + decoded) : decoded;
+              return normalizeUrl(fullUrl);
+            } catch {}
+          }
+        } catch {}
+      }
     }
     
-    setupMessageListener();
-}
-
-// Start initialization immediately when content script loads
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
-} else {
-    // Page already loaded (rare with document_start but possible)
-    init();
-}
-
-// Additional fallback - ensure initialization happens
-setTimeout(() => {
-    if (!isInitialized) {
-        console.log('Fallback initialization...');
-        init();
-    }
-}, 500);
-
-// Enhanced video detection with MutationObserver
-function setupEnhancedDetection() {
-    // Initial check for videos
-    setTimeout(() => {
-        const videos = findVideos();
-        if (videos && videos.length > 0) {
-            notifyBackground(videos);
-        }
-    }, 1000);
-    
-    // Setup MutationObserver to watch for DOM changes
-    const observer = new MutationObserver((mutations) => {
-        if (!autoDetectionEnabled) return;
-        
-        let newVideoFound = false;
-        let potentialVideoElements = new Set();
-        
-        // Check if any mutation might have added videos
-        for (const mutation of mutations) {
-            // Check added nodes
-            if (mutation.addedNodes.length) {
-                mutation.addedNodes.forEach(node => {
-                    // Video element directly added
-                    if (node.nodeName === 'VIDEO') {
-                        potentialVideoElements.add(node);
-                    } 
-                    // Container that might have videos
-                    else if (node.querySelectorAll) {
-                        node.querySelectorAll('video').forEach(video => {
-                            potentialVideoElements.add(video);
-                        });
-                    }
-                });
-            }
-            
-            // Check for attribute changes on video elements
-            if (mutation.type === 'attributes' && 
-                mutation.target.nodeName === 'VIDEO' && 
-                (mutation.attributeName === 'src' || mutation.attributeName === 'data-src')) {
-                potentialVideoElements.add(mutation.target);
-            }
-        }
-        
-        if (potentialVideoElements.size > 0) {
-            // Process after a small delay to let the video elements initialize
-            setTimeout(() => {
-                const newVideos = [];
-                
-                potentialVideoElements.forEach(video => {
-                    // Check if it's a valid video with a source
-                    if (video.src || video.querySelector('source')) {
-                        const videoInfo = extractVideoInfo(video);
-                        if (videoInfo && !detectedVideos.has(normalizeUrl(videoInfo.url))) {
-                            newVideos.push(videoInfo);
-                            detectedVideos.add(normalizeUrl(videoInfo.url));
-                            newVideoFound = true;
-                        }
-                    }
-                    
-                    // Check for blob URLs
-                    if (video.src && video.src.startsWith('blob:')) {
-                        if (captureBlob(video)) {
-                            newVideoFound = true;
-                        }
-                    }
-                });
-                
-                // Send new videos to background script if found
-                if (newVideoFound) {
-                    notifyBackground(newVideos);
-                }
-            }, 500);
-        }
+    // Remove common tracking parameters
+    ['_t', '_r', 'cache', '_', 'time', 'timestamp', 'random'].forEach(param => {
+      urlObj.searchParams.delete(param);
     });
     
-    // Start observing the entire document
-    observer.observe(document.documentElement, { 
-        childList: true, 
-        subtree: true, 
-        attributes: true,
-        attributeFilter: ['src', 'data-src'] 
-    });
-}
-
-// Extract video information from a video element
-function extractVideoInfo(videoElement) {
-    let src = videoElement.src || null;
-    
-    // If no src attribute, check for source elements
-    if (!src) {
-        const source = videoElement.querySelector('source');
-        if (source) {
-            src = source.src || null;
-        }
+    // Special handling for HLS/DASH
+    if (url.includes('.m3u8') || url.includes('.mpd') || url.includes('/hls/')) {
+      // Remove common HLS-specific parameters
+      ['seq', 'segment', 'cmsid', 'v', 'session'].forEach(param => {
+        urlObj.searchParams.delete(param);
+      });
+      
+      // Canonical form for manifest URLs
+      const pathname = urlObj.pathname.toLowerCase();
+      if (pathname.includes('/manifest') || pathname.includes('/playlist') || 
+          pathname.includes('/master.m3u8') || pathname.includes('/index.m3u8')) {
+        return urlObj.origin + urlObj.pathname;
+      }
     }
     
-    if (!src) return null;
-    
-    // Create basic video info
-    const videoInfo = {
-        url: src,
-        poster: videoElement.poster || null,
-        title: getVideoTitle(videoElement),
-        timestamp: Date.now()
-    };
-    
-    // Validate and return
-    return validateVideoInfo(videoInfo);
+    return urlObj.toString();
+  } catch {
+    return url;
+  }
+}
+
+// Send video to background script
+function sendToBackground(url, type, additionalInfo = {}) {
+  // Skip ignored types
+  if (type === 'ignored') return;
+  
+  // Normalize URL to avoid duplicates
+  const normalizedUrl = normalizeUrl(url);
+  
+  // Skip if already detected
+  if (state.detectedVideos.has(normalizedUrl)) {
+    return;
+  }
+  
+  // Add to detected videos
+  state.detectedVideos.add(normalizedUrl);
+  
+  // Send to background
+  chrome.runtime.sendMessage({
+    action: 'addVideo',
+    url: url,
+    source: 'content_script',
+    type: type,
+    foundFromQueryParam: additionalInfo.foundFromQueryParam || false,
+    originalContainer: additionalInfo.originalContainer,
+    timestampDetected: Date.now(),
+    ...additionalInfo
+  });
 }
 
 // Notify background script of new videos
 function notifyBackground(videos) {
-    if (!videos || videos.length === 0) return;
-
-    // Apply consistent validation to all videos
-    const validVideos = videos
-        .map(video => validateVideoInfo(video))
-        .filter(video => video !== null && video.type !== 'ignored');
-
-    if (validVideos.length === 0) return;
-
-    // First, send each valid video to background script for storage
-    validVideos.forEach(video => {
-        sendVideoToBackground(video.url, video.type, {
-            poster: video.poster,
-            title: video.title,
-            foundFromQueryParam: video.foundFromQueryParam || false
-        });
+  if (!videos || videos.length === 0) return;
+  
+  // Apply validation to all videos
+  const validVideos = videos
+    .map(video => validateVideo(video))
+    .filter(video => video !== null && video.type !== 'ignored');
+  
+  if (validVideos.length === 0) return;
+  
+  // Send each video individually for storage
+  validVideos.forEach(video => {
+    sendToBackground(video.url, video.type, {
+      poster: video.poster,
+      title: video.title,
+      foundFromQueryParam: video.foundFromQueryParam || false
     });
-
-    // Then, notify about new videos as a batch - this will immediately update
-    // any open popups AND the background script will also be notified
-    chrome.runtime.sendMessage({
-        action: 'newVideoDetected',
-        videos: validVideos.map(video => ({
-            ...video,
-            source: 'content_script'
-        }))
-    }).catch(err => {
-        // Suppress errors when popup is not open
-        // This is expected behavior
-    });
+  });
+  
+  // Notify about batch update
+  chrome.runtime.sendMessage({
+    action: 'newVideoDetected',
+    videos: validVideos.map(video => ({
+      ...video,
+      source: 'content_script'
+    }))
+  }).catch(() => {
+    // Suppress expected errors when popup is closed
+  });
 }
+
+// Initialize based on document state
+if (document.readyState !== 'loading') {
+  initializeVideoDetection();
+} else {
+  document.addEventListener('DOMContentLoaded', initializeVideoDetection);
+}
+
+// Fallback initialization
+setTimeout(() => {
+  if (!state.isInitialized) {
+    console.log('Fallback initialization...');
+    initializeVideoDetection();
+  }
+}, 500);
