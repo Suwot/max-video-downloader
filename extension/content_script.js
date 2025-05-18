@@ -20,7 +20,8 @@ const state = {
   detectedVideos: new Set(),
   blobUrls: new Map(),
   autoDetectionEnabled: true,
-  isInitialized: false
+  isInitialized: false,
+  observedVideoElements: new WeakSet() // Track already observed video elements
 };
 
 // Initialize utility functions that will be loaded dynamically
@@ -156,6 +157,31 @@ function setupNetworkInterception() {
 
 // DOM observation for videos
 function setupDOMObservers() {
+  // Process a new video element - avoids duplicate processing
+  function processNewVideoElement(video) {
+    // Skip if already processed
+    if (state.observedVideoElements.has(video)) return;
+    state.observedVideoElements.add(video);
+    
+    // Observe for attribute changes
+    videoObserver.observe(video, { attributes: true });
+    
+    // Process initial state
+    if (video.src?.startsWith('blob:')) {
+      processBlobURL(video);
+    }
+    
+    // Process regular video sources
+    const videoInfo = extractVideoInfo(video);
+    if (videoInfo) {
+      processVideo(videoInfo.url, videoInfo.type, {
+        poster: videoInfo.poster,
+        title: videoInfo.title,
+        timestampDetected: videoInfo.timestampDetected
+      });
+    }
+  }
+
   // Track all video elements for blob URLs and src changes
   const videoObserver = new MutationObserver(mutations => {
     mutations.forEach(mutation => {
@@ -165,22 +191,10 @@ function setupDOMObservers() {
         processBlobURL(mutation.target);
       }
     });
-    
-    // Also check for new video elements with blob sources
-    document.querySelectorAll('video').forEach(video => {
-      if (video.src?.startsWith('blob:')) {
-        processBlobURL(video);
-      }
-    });
   });
   
   // Start observing all video elements for attribute changes
-  document.querySelectorAll('video').forEach(video => {
-    videoObserver.observe(video, { attributes: true });
-    if (video.src?.startsWith('blob:')) {
-      processBlobURL(video);
-    }
-  });
+  document.querySelectorAll('video').forEach(processNewVideoElement);
   
   // Monitor for new DOM additions and changes
   const documentObserver = new MutationObserver(mutations => {
@@ -193,12 +207,10 @@ function setupDOMObservers() {
       // Check for newly added video elements
       mutation.addedNodes.forEach(node => {
         if (node.nodeName === 'VIDEO') {
-          videoObserver.observe(node, { attributes: true });
           potentialVideos.add(node);
         } else if (node.querySelectorAll) {
           // Check for videos inside other elements
           node.querySelectorAll('video').forEach(video => {
-            videoObserver.observe(video, { attributes: true });
             potentialVideos.add(video);
           });
         }
@@ -215,24 +227,7 @@ function setupDOMObservers() {
     // Process potential videos after a small delay
     if (potentialVideos.size > 0) {
       setTimeout(() => {
-        potentialVideos.forEach(video => {
-          // Check for regular src attribute
-          if (video.src || video.querySelector('source')) {
-            const videoInfo = extractVideoInfo(video);
-            if (videoInfo) {
-              processVideo(videoInfo.url, videoInfo.type, {
-                poster: videoInfo.poster,
-                title: videoInfo.title,
-                timestampDetected: videoInfo.timestampDetected
-              });
-            }
-          }
-          
-          // Check for blob URLs
-          if (video.src?.startsWith('blob:')) {
-            processBlobURL(video);
-          }
-        });
+        potentialVideos.forEach(processNewVideoElement);
       }, 500);
     }
   });
@@ -307,8 +302,11 @@ function setupMessageListeners() {
 function scanForVideos() {
   const videos = [];
   
-  // Find direct video elements and sources
-  document.querySelectorAll('video').forEach(video => {
+  // Reuse the same processing function from setupDOMObservers
+  function processVideoForScan(video) {
+    // Find the function dynamically (it's inside setupDOMObservers scope)
+    let processedForScan = false;
+    
     // Check direct src attribute
     if (video.src) {
       const videoInfo = extractVideoInfo(video);
@@ -319,6 +317,7 @@ function scanForVideos() {
           timestampDetected: videoInfo.timestampDetected
         });
         videos.push(videoInfo);
+        processedForScan = true;
       }
     }
     
@@ -340,10 +339,19 @@ function scanForVideos() {
             timestampDetected: validVideo.timestampDetected
           });
           videos.push(validVideo);
+          processedForScan = true;
         }
       }
     });
-  });
+    
+    // Add to observed elements if processed successfully
+    if (processedForScan) {
+      state.observedVideoElements.add(video);
+    }
+  }
+  
+  // Find direct video elements and sources
+  document.querySelectorAll('video').forEach(processVideoForScan);
   
   // Add tracked blob URLs
   state.blobUrls.forEach((info) => {
