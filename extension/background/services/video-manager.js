@@ -360,9 +360,6 @@ function addDetectedVideo(tabId, videoInfo) {
     
     logDebug(`Added new video to detection map: ${videoInfo.url} (type: ${videoInfo.type}, context: ${callerContext})`);
     
-    // Notify any open popup about the new video
-    notifyNewVideoDetected(tabId);
-    
     // Now process based on video type
     if (videoInfo.url.startsWith('blob:')) {
         // Handle blob URLs differently - they need special metadata

@@ -70,46 +70,32 @@ function initializeVideoDetection() {
 function scanAllVideos() {
   logDebug('Running comprehensive video scan at readyState:', document.readyState);
   
-  // 1. Process all video elements
+  // 1. Process all video elements using the existing processNewVideoElement function
   const videoElements = document.querySelectorAll('video');
   if (videoElements.length > 0) {
     logDebug(`Found ${videoElements.length} video elements during scan`);
+    // Let the existing processNewVideoElement function handle observer attachment
     videoElements.forEach(video => {
+      // processNewVideoElement handles WeakSet tracking, observer attachment, and detection
       if (!state.observedVideoElements.has(video)) {
-        // Mark as observed to avoid reprocessing
-        state.observedVideoElements.add(video);
-        
-        // Set up observer for future attribute changes
-        if (window.videoObserver) {
-          window.videoObserver.observe(video, { attributes: true });
-        }
-        
-        const videoInfo = extractVideoInfo(video);
-        if (videoInfo) {
-          detectVideo(videoInfo.url, null, {
-            ...videoInfo,
-            source: 'initial_scan'
-          });
-        }
+        const originalSource = video._source;
+        video._source = 'initial_scan'; // Temporarily mark source for tracking
+        processNewVideoElement(video);
+        video._source = originalSource; // Restore original source if any
       }
     });
   }
   
-  // 2. Look for standalone source elements that may contain video URLs
-  document.querySelectorAll('source').forEach(source => {
-    // Skip sources inside already processed videos
-    if (source.parentElement?.nodeName === 'VIDEO' && 
-        state.observedVideoElements.has(source.parentElement)) {
-      return;
-    }
-    
+  // 2. Look for standalone source elements that aren't children of video elements
+  document.querySelectorAll('source:not(video > source)').forEach(source => {
+    // Only process standalone source elements, skipping those within videos
+    // as they're handled by extractVideoInfo within processNewVideoElement
     const src = source.src || source.getAttribute('src');
     if (src) {
       const mimeType = source.getAttribute('type');
       detectVideo(src, mimeType || null, {
         source: 'initial_scan',
-        title: source.parentElement?.nodeName === 'VIDEO' ? 
-          getVideoTitle(source.parentElement) : (document.title || 'Video')
+        title: document.title || 'Video'
       });
     }
   });
@@ -123,6 +109,9 @@ function scanAllVideos() {
  * Many sites use specific patterns for embedding videos
  */
 function scanForPlayerConfigs() {
+  // Track raw URLs to avoid processing duplicates within a single scan
+  const foundUrls = new Set();
+  
   // Look for specific player elements
   const playerSelectors = [
     '.jwplayer', '.video-js', '.html5-video-container',
@@ -151,7 +140,8 @@ function scanForPlayerConfigs() {
               const url = typeof source === 'object' ? 
                           (source.src || source.file || source.url) : source;
               
-              if (typeof url === 'string') {
+              if (typeof url === 'string' && !foundUrls.has(url)) {
+                foundUrls.add(url);
                 const type = typeof source === 'object' ? source.type : null;
                 detectVideo(url, type || null, { 
                   source: 'initial_scan_player_config' 
@@ -159,8 +149,9 @@ function scanForPlayerConfigs() {
               }
             });
           }
-        } else if (value.includes('http') || value.startsWith('/')) {
+        } else if ((value.includes('http') || value.startsWith('/')) && !foundUrls.has(value)) {
           // Direct URL
+          foundUrls.add(value);
           detectVideo(value, null, { source: 'initial_scan_player_attr' });
         }
       } catch {
@@ -169,7 +160,11 @@ function scanForPlayerConfigs() {
             (value.includes('http') || value.startsWith('/'))) {
           const fullUrl = value.startsWith('/') ? 
                          `${window.location.origin}${value}` : value;
-          detectVideo(fullUrl, null, { source: 'initial_scan_player_attr' });
+          
+          if (!foundUrls.has(fullUrl)) {
+            foundUrls.add(fullUrl);
+            detectVideo(fullUrl, null, { source: 'initial_scan_player_attr' });
+          }
         }
       }
     }
@@ -229,37 +224,39 @@ function setupNetworkInterception() {
   };
 }
 
+/**
+ * Process a new video element while avoiding duplicate processing
+ * Track with WeakSet to ensure each element is only processed once
+ * 
+ * @param {HTMLVideoElement} video - The video element to process
+ */
+function processNewVideoElement(video) {
+  // Skip if this element was already processed
+  if (state.observedVideoElements.has(video)) return;
+  
+  // Mark as processed using WeakSet (memory-efficient tracking)
+  state.observedVideoElements.add(video);
+  
+  // Set up observer for future attribute changes
+  if (window.videoObserver) {
+    window.videoObserver.observe(video, { attributes: true });
+  }
+  
+  // Process video source through our unified pipeline
+  const videoInfo = extractVideoInfo(video);
+  if (videoInfo) {
+    // Use the unified detection pipeline for more efficient processing
+    detectVideo(videoInfo.url, null, {
+      ...videoInfo,
+      source: video._source || 'dom'
+    });
+  }
+}
+
 // DOM observation for videos
 function setupDOMObservers() {
-  /**
-   * Process a new video element while avoiding duplicate processing
-   * Track with WeakSet to ensure each element is only processed once
-   * 
-   * @param {HTMLVideoElement} video - The video element to process
-   */
-  function processNewVideoElement(video) {
-    // Skip if this element was already processed
-    if (state.observedVideoElements.has(video)) return;
-    
-    // Mark as processed using WeakSet (memory-efficient tracking)
-    state.observedVideoElements.add(video);
-    
-    // Set up observer for future attribute changes
-    videoObserver.observe(video, { attributes: true });
-    
-    // Process video source through our unified pipeline
-    const videoInfo = extractVideoInfo(video);
-    if (videoInfo) {
-      // Use the unified detection pipeline for more efficient processing
-      detectVideo(videoInfo.url, null, {
-        ...videoInfo,
-        source: 'dom'
-      });
-    }
-  }
-
-  // Track all video elements for blob URLs and src changes
-  const videoObserver = new MutationObserver(mutations => {
+  // Make videoObserver available globally so we can check if it exists
+  window.videoObserver = new MutationObserver(mutations => {
     mutations.forEach(mutation => {
       if (mutation.type === 'attributes' && 
           mutation.attributeName === 'src' && 
@@ -276,6 +273,8 @@ function setupDOMObservers() {
       }
     });
   });
+
+  // The videoObserver is now defined at the top of setupDOMObservers
   
   // Start observing all video elements for attribute changes
   document.querySelectorAll('video').forEach(processNewVideoElement);
