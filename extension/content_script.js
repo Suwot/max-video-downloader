@@ -98,6 +98,7 @@ function initializeVideoDetection() {
   setupNetworkInterception();  // Network request monitoring
   setupDOMObservers();         // DOM video element detection
   setupMessageListeners();     // Background script communication
+  setupNavigationHandling();   // Handle page navigation
 }
 
 // Network request monitoring
@@ -174,21 +175,11 @@ function setupDOMObservers() {
     // Set up observer for future attribute changes
     videoObserver.observe(video, { attributes: true });
     
-    // Special handling for blob URLs
-    if (video.src?.startsWith('blob:')) {
-      processBlobURL(video);
-    }
-    
-    // Process regular video sources through our unified pipeline
+    // Process video source through our unified pipeline
     const videoInfo = extractVideoInfo(video);
     if (videoInfo) {
-      // The extractVideoInfo function already calls validateVideo
-      // so the video is already normalized and validated
-      processVideo(videoInfo.url, videoInfo.type, {
-        poster: videoInfo.poster,
-        title: videoInfo.title,
-        timestampDetected: videoInfo.timestampDetected
-      });
+      // Process the video with the central processor
+      processVideo(videoInfo.url, videoInfo.url.startsWith('blob:') ? 'blob' : null, videoInfo);
     }
   }
 
@@ -197,8 +188,12 @@ function setupDOMObservers() {
     mutations.forEach(mutation => {
       if (mutation.type === 'attributes' && 
           mutation.attributeName === 'src' && 
-          mutation.target.src?.startsWith('blob:')) {
-        processBlobURL(mutation.target);
+          mutation.target.src) {
+        // Process any src change through the unified pipeline
+        const videoInfo = extractVideoInfo(mutation.target);
+        if (videoInfo) {
+          processVideo(videoInfo.url, videoInfo.url.startsWith('blob:') ? 'blob' : null, videoInfo);
+        }
       }
     });
   });
@@ -295,10 +290,10 @@ function setupMessageListeners() {
 
 /**
  * Extract video information from a video element
- * Gets source, metadata, and validates in a single function
+ * Gets source and metadata without validation or normalization
  * 
  * @param {HTMLVideoElement} videoElement - The video element to extract info from
- * @returns {Object|null} - Validated video info or null if invalid
+ * @returns {Object|null} - Raw video info or null if no source
  */
 function extractVideoInfo(videoElement) {
   // Get source from either src attribute or first source child
@@ -312,16 +307,12 @@ function extractVideoInfo(videoElement) {
   if (!src) return null;
   
   // Gather metadata from the video element
-  const videoInfo = {
+  return {
     url: src,
     poster: videoElement.poster || null,
     title: getVideoTitle(videoElement),
     timestampDetected: Date.now()
   };
-  
-  // Run through our unified validation pipeline
-  // This handles normalization, deduplication, and type identification
-  return validateVideo(videoInfo);
 }
 
 // Get best title for video
@@ -347,49 +338,7 @@ function findNearbyHeading(element) {
   return null;
 }
 
-/**
- * Process blob URL from video element
- * Special handling for blob URLs since they're ephemeral and need to be tracked separately
- * 
- * @param {HTMLVideoElement} videoElement - The video element with a blob URL
- * @returns {boolean} - Whether the blob URL was processed
- */
-function processBlobURL(videoElement) {
-  const blobUrl = videoElement.src;
-  
-  // Skip invalid blobs or already processed ones
-  if (!blobUrl || !blobUrl.startsWith('blob:') || state.blobUrls.has(blobUrl)) {
-    return false;
-  }
-  
-  // Extract metadata from the video element
-  const videoData = {
-    url: blobUrl,
-    type: 'blob',
-    timestampDetected: Date.now(),
-    poster: videoElement.poster || null,
-    title: getVideoTitle(videoElement)
-  };
-  
-  // Validate using the enhanced validation flow
-  const validatedVideo = validateVideo(videoData);
-  
-  if (!validatedVideo) {
-    return false;
-  }
-  
-  // Store blob URL data for reference and to avoid duplicates
-  state.blobUrls.set(blobUrl, {
-    url: blobUrl,
-    type: 'blob',
-    timestampDetected: validatedVideo.timestampDetected,
-    poster: validatedVideo.poster || null,
-    title: validatedVideo.title
-  });
-  
-  // Use central processing function to handle the video
-  return processVideo(validatedVideo.url, validatedVideo.type, validatedVideo);
-}
+// processBlobURL has been removed and merged into processVideo
 
 /**
  * Enhanced video validation function that handles normalization,
@@ -402,154 +351,157 @@ function validateVideo(videoInfo) {
   // Validate basic input
   if (!videoInfo?.url) return null;
   
-  // Early normalization to handle embedded URLs in query params
-  const normalizedUrl = normalizeUrl(videoInfo.url);
-  
-  // Early deduplication check to avoid unnecessary processing
-  if (state.detectedVideos.has(normalizedUrl)) {
-    return null;
+  // Handle type identification up-front if not provided
+  // This eliminates redundancy between validation and processing
+  if (!videoInfo.type) {
+    const detectedType = identifyVideoType(videoInfo.url);
+    
+    // If identifyVideoType returns an object, it has detailed info
+    if (typeof detectedType === 'object') {
+      // Handle embedded URLs in query parameters
+      if (detectedType.url && detectedType.type) {
+        videoInfo.originalUrl = videoInfo.url;
+        videoInfo.url = detectedType.url;
+        videoInfo.type = detectedType.type;
+        videoInfo.foundFromQueryParam = detectedType.foundFromQueryParam || false;
+      } 
+      // Handle direct video with container info
+      else if (detectedType.type === 'direct' && detectedType.container) {
+        videoInfo.type = detectedType.type;
+        videoInfo.originalContainer = detectedType.container;
+      }
+    } 
+    // Handle simple string type results
+    else if (detectedType !== 'unknown' && detectedType !== 'ignored') {
+      videoInfo.type = detectedType;
+    }
   }
-  
-  // Identify the video type once
-  const videoType = identifyVideoType(videoInfo.url);
   
   // Filter out ignored types immediately
-  if (videoType === 'ignored' || (typeof videoType === 'object' && videoType.type === 'ignored')) {
+  if (videoInfo.type === 'ignored' || !videoInfo.type) {
     return null;
   }
   
-  // Basic URL validation
-  if (typeof videoType !== 'object' && videoType !== 'ignored' && 
-      !videoInfo.url.startsWith('blob:') && !isValidVideoUrl(videoInfo.url)) {
+  // Early normalization for deduplication
+  videoInfo.normalizedUrl = normalizeUrl(videoInfo.url);
+  
+  // Early deduplication check to avoid unnecessary processing
+  if (state.detectedVideos.has(videoInfo.normalizedUrl)) {
     return null;
   }
   
-  // Set normalized URL for tracking and deduplication
-  videoInfo.normalizedUrl = normalizedUrl;
-  
-  // Process extracted URLs from query parameters
-  if (typeof videoType === 'object') {
-    if (videoType.url && videoType.type) {
-      // Store original URL before updating
-      videoInfo.originalUrl = videoInfo.url;
-      videoInfo.url = videoType.url;
+  // Skip URL validation for blob URLs (they're always valid)
+  if (!videoInfo.url.startsWith('blob:')) {
+    // Use external validator if available, or basic validation
+    const isValid = typeof isValidVideoUrl === 'function' 
+      ? isValidVideoUrl(videoInfo.url) 
+      : isVideoContent(videoInfo.url);
       
-      // Re-normalize the extracted URL and check again for duplicates
-      videoInfo.normalizedUrl = normalizeUrl(videoType.url);
-      if (state.detectedVideos.has(videoInfo.normalizedUrl)) {
-        return null;
-      }
-      
-      videoInfo.type = videoType.type;
-      videoInfo.foundFromQueryParam = videoType.foundFromQueryParam || false;
-    } else if (videoType.type === 'direct' && videoType.container) {
-      videoInfo.type = videoType.type;
-      videoInfo.originalContainer = videoType.container;
-    }
-  } else if (videoType !== 'unknown') {
-    videoInfo.type = videoType;
+    if (!isValid) return null;
   }
   
   return videoInfo;
 }
 
-// Determine video type from URL
+/**
+ * Identify the type of video from a URL
+ * Optimized to parse URL only once and make efficient decisions
+ * 
+ * @param {string} url - URL to identify type from
+ * @returns {string|Object} - Video type or object with detailed information
+ */
 function identifyVideoType(url) {
   if (url.startsWith('blob:')) return 'blob';
   
   try {
     const urlObj = new URL(url);
+    const path = urlObj.pathname.toLowerCase();
     
-    // Early rejection: skip tracking images and known bad extensions
-    const badExtensions = /\.(gif|png|jpg|jpeg|webp|bmp|svg)(\?|$)/i;
-    if (badExtensions.test(urlObj.pathname)) {
-      // Check for video URLs embedded in query parameters
-      for (const [_, value] of urlObj.searchParams.entries()) {
-        try {
-          const decoded = decodeURIComponent(value);
-          if ((decoded.match(/\.m3u8(\?|$)/) || decoded.match(/\.mpd(\?|$)/)) &&
-              (decoded.includes('http') || decoded.startsWith('/') || decoded.includes('://'))) {
-            return {
-              url: decoded,
-              type: decoded.match(/\.m3u8(\?|$)/) ? 'hls' : 'dash',
-              foundFromQueryParam: true
-            };
-          }
-        } catch {}
+    // Extract all query values at once to avoid multiple parsing
+    const queryValues = [];
+    for (const [_, value] of urlObj.searchParams.entries()) {
+      try {
+        queryValues.push(decodeURIComponent(value));
+      } catch {
+        // Ignore decode errors
+      }
+    }
+    
+    // Quick filtering of known non-video URLs
+    if (/\.(gif|png|jpg|jpeg|webp|bmp|svg)(\?|$)/i.test(path)) {
+      // Check for embedded videos in image URLs
+      const embedded = queryValues.find(val => 
+        /\.(m3u8|mpd)(\?|$)/i.test(val) && 
+        (val.includes('http') || val.startsWith('/') || val.includes('://'))
+      );
+      
+      if (embedded) {
+        return {
+          url: embedded,
+          type: /\.m3u8/i.test(embedded) ? 'hls' : 'dash',
+          foundFromQueryParam: true
+        };
       }
       return 'ignored';
     }
     
     // Check for tracking/analytics URLs
-    const ignoredPathPatterns = [
-      /\.gif$/i, /\/ping/i, /\/track/i, /\/pixel/i, 
-      /\/stats/i, /\/metric/i, /\/telemetry/i, 
-      /\/analytics/i, /jwpltx/, /\/tracking/
-    ];
-    
-    if (ignoredPathPatterns.some(p => p.test(urlObj.pathname) || p.test(urlObj.hostname))) {
+    if (/\/(ping|track|pixel|stats|metric|telemetry|analytics|tracking)/i.test(path) || 
+        url.includes('jwpltx')) {
+      // Check for embedded videos in tracking URLs
+      const embedded = queryValues.find(val => 
+        /\.(m3u8|mpd)(\?|$)/i.test(val) && 
+        (val.includes('http') || val.startsWith('/') || val.includes('://'))
+      );
+      
+      if (embedded) {
+        return {
+          url: embedded,
+          type: /\.m3u8/i.test(embedded) ? 'hls' : 'dash',
+          foundFromQueryParam: true
+        };
+      }
       return 'ignored';
     }
     
-    const baseUrl = url.split('?')[0].split('#')[0];
-    
-    // Check for HLS
-    if (baseUrl.toLowerCase().endsWith('.m3u8')) {
-      return 'hls';
-    }
-    
-    // Check for DASH
-    if (baseUrl.toLowerCase().endsWith('.mpd')) {
-      return 'dash';
-    }
+    // Check for direct formats by extension
+    if (/\.m3u8(\?|$)/i.test(path)) return 'hls';
+    if (/\.mpd(\?|$)/i.test(path)) return 'dash';
     
     // Check for direct video files
-    const directVideoMatch = baseUrl.match(/\.(mp4|webm|ogg|mov|avi|mkv|flv|3gp|m4v|wmv)$/i);
-    if (directVideoMatch) {
+    const directMatch = path.match(/\.(mp4|webm|ogg|mov|avi|mkv|flv|3gp|m4v|wmv)(\?|$)/i);
+    if (directMatch) {
       return {
         type: 'direct',
-        container: directVideoMatch[1].toLowerCase()
+        container: directMatch[1].toLowerCase()
       };
     }
     
-    // Check for HLS in paths
-    if (urlObj.pathname.includes('/hls/') && 
-        (urlObj.pathname.includes('/stream/') || 
-         urlObj.pathname.includes('/video/') || 
-         urlObj.pathname.includes('/content/') || 
-         urlObj.pathname.includes('/media/'))) {
+    // Check for streaming paths
+    if (/\/hls\/.*\/(index|master|playlist)/i.test(path) || path.includes('/master.m3u8')) {
       return 'hls';
     }
     
-    // Check query parameters for embedded URLs
-    for (const [_, value] of urlObj.searchParams.entries()) {
-      try {
-        const decoded = decodeURIComponent(value);
-        
-        if (decoded.match(/\.m3u8(\?|$)/) && 
-            (decoded.includes('http') || decoded.startsWith('/') || decoded.includes('://')) &&
-            (decoded.includes('/') || decoded.match(/^https?:\/\//))) {
-          return {
-            url: decoded,
-            type: 'hls',
-            foundFromQueryParam: true
-          };
-        }
-        
-        if (decoded.match(/\.mpd(\?|$)/) && 
-            (decoded.includes('http') || decoded.startsWith('/') || decoded.includes('://')) &&
-            (decoded.includes('/') || decoded.match(/^https?:\/\//))) {
-          return {
-            url: decoded,
-            type: 'dash',
-            foundFromQueryParam: true
-          };
-        }
-      } catch {}
+    if (/\/dash\/.*\/(manifest|playlist)/i.test(path)) {
+      return 'dash';
+    }
+    
+    // Check for embedded videos in any query parameter
+    const embedded = queryValues.find(val => 
+      (/\.(m3u8|mpd)(\?|$)/i.test(val) && 
+      (val.includes('http') || val.startsWith('/') || val.includes('://')))
+    );
+    
+    if (embedded) {
+      return {
+        url: embedded,
+        type: /\.m3u8/i.test(embedded) ? 'hls' : 'dash',
+        foundFromQueryParam: true
+      };
     }
     
   } catch (e) {
-    console.error('Error parsing URL:', e);
+    // Silent fail, just return unknown
   }
   
   return 'unknown';
@@ -557,72 +509,61 @@ function identifyVideoType(url) {
 
 /**
  * Check if a URL or content type indicates video content
- * Determines whether a URL should be processed as potential video
+ * Leverages identifyVideoType for consistent detection
  * 
  * @param {string} url - URL to check
  * @param {string} contentType - Content-Type HTTP header value (if available)
  * @returns {boolean} - Whether the content appears to be video
  */
 function isVideoContent(url, contentType) {
-  try {
-    // Quick check for tracking pixels and analytics
-    const urlObj = new URL(url);
-    if (url.includes('ping.gif') || url.includes('jwpltx.com') || 
-        urlObj.pathname.includes('/pixel') || urlObj.pathname.includes('/track')) {
-      
-      // Check for embedded videos in tracking pixel parameters
-      for (const [_, value] of urlObj.searchParams.entries()) {
-        try {
-          const decoded = decodeURIComponent(value);
-          // Look for streaming URLs in parameters
-          if ((decoded.includes('.m3u8') || decoded.includes('.mpd')) &&
-              (decoded.includes('http') || decoded.startsWith('/') || decoded.includes('://'))) {
-            return true;
-          }
-        } catch {}
-      }
-      
-      return false;
-    }
-  } catch {}
+  // First use our comprehensive identifyVideoType function
+  const videoType = identifyVideoType(url);
   
-  // Check URL patterns for common video extensions and paths
-  const videoPatterns = [
-    /\.(mp4|webm|ogg|mov|avi|mkv|flv)(\?|$)/i,
-    /\.(m3u8|m3u)(\?|$)/i,
-    /\.(mpd)(\?|$)/i,
-    /\/(playlist|manifest|master)\.json(\?|$)/i,
-    /\/hls\/.*\/(index|master|playlist)/i,
-    /\/dash\/.*\/manifest/i
-  ];
-  
-  if (videoPatterns.some(pattern => pattern.test(url))) {
+  // If identifyVideoType returned a valid type directly, use that result
+  if (videoType !== 'unknown' && videoType !== 'ignored') {
     return true;
   }
   
-  // Check content type for video MIME types
-  const videoMimeTypes = [
-    'video/',
-    'application/x-mpegURL',
-    'application/dash+xml',
-    'application/vnd.apple.mpegURL',
-    'application/octet-stream' // Sometimes used for video content
-  ];
-  
-  if (contentType && videoMimeTypes.some(type => contentType.includes(type))) {
+  // If it's an object with type info, use that
+  if (typeof videoType === 'object' && videoType.type && videoType.type !== 'ignored') {
     return true;
+  }
+  
+  // Fall back to content type checking if available
+  if (contentType) {
+    const videoMimeTypes = [
+      'video/',
+      'application/x-mpegURL',
+      'application/dash+xml',
+      'application/vnd.apple.mpegURL',
+      'application/octet-stream' // Sometimes used for video content
+    ];
+    
+    if (videoMimeTypes.some(type => contentType.includes(type))) {
+      return true;
+    }
   }
   
   return false;
 }
 
-// Parse headers string into object
+// Parse headers string into object more efficiently
 function parseHeaders(headerStr) {
-  return headerStr.trim().split(/[\r\n]+/).reduce((headers, line) => {
-    const parts = line.split(': ');
-    headers[parts[0]] = parts[1];
-    return headers;
-  }, {});
+  if (!headerStr) return {};
+  
+  const headers = {};
+  const headerLines = headerStr.trim().split(/[\r\n]+/);
+  
+  for (const line of headerLines) {
+    const index = line.indexOf(': ');
+    if (index > 0) {
+      const key = line.substring(0, index);
+      const value = line.substring(index + 2);
+      headers[key] = value;
+    }
+  }
+  
+  return headers;
 }
 
 /**
@@ -703,11 +644,11 @@ function normalizeUrl(url) {
  * This is the central processor for all video detection methods
  * 
  * @param {string} url - The video URL
- * @param {string} type - Video type (hls, dash, blob, etc)
+ * @param {string} type - Video type or null for auto-detection
  * @param {Object} metadata - Additional information about the video
  * @returns {boolean} - Whether the video was processed and sent
  */
-function processVideo(url, type, metadata = {}) {
+function processVideo(url, type = null, metadata = {}) {
   // Quick validation
   if (!url) return false;
   
@@ -718,6 +659,17 @@ function processVideo(url, type, metadata = {}) {
     ...metadata,
     timestampDetected: metadata.timestampDetected || Date.now()
   };
+  
+  // For blob URLs, track them to prevent duplication
+  if (url.startsWith('blob:') && !state.blobUrls.has(url)) {
+    state.blobUrls.set(url, {
+      url,
+      type: 'blob',
+      timestampDetected: videoInfo.timestampDetected,
+      poster: metadata.poster || null,
+      title: metadata.title || null
+    });
+  }
   
   // Validate, enrich, filter, normalize, and deduplicate in one step
   const validatedVideo = validateVideo(videoInfo);
@@ -777,23 +729,78 @@ function sendToBackground(url, type, additionalInfo = {}) {
 function notifyBackground(videos) {
   if (!videos || !Array.isArray(videos)) return false;
   
-  // Apply centralized validation to filter videos
-  const validVideos = Array.isArray(validateAndFilterVideos) 
-    ? validateAndFilterVideos(videos) 
-    : videos.filter(v => v && v.url);
-  
-  // Process each valid video through our unified pipeline
+  // No need for pre-filtering - let processVideo handle all validation
   let processedCount = 0;
-  validVideos.forEach(video => {
-    // Extract metadata and pass to processVideo
-    if (processVideo(video.url, video.type, {
-      poster: video.poster,
-      title: video.title,
-      timestampDetected: video.timestampDetected
-    })) {
-      processedCount++;
+  
+  // Process each video directly through our unified pipeline
+  videos.forEach(video => {
+    if (video && video.url) {
+      // Let processVideo handle all validation, type detection, etc.
+      if (processVideo(video.url, video.type || null, {
+        poster: video.poster,
+        title: video.title,
+        timestampDetected: video.timestampDetected
+      })) {
+        processedCount++;
+      }
     }
   });
   
   return processedCount > 0;
+}
+
+/**
+ * Set up navigation handling to clear state on page navigation
+ * Handles SPA navigation using History API and regular page navigation
+ */
+function setupNavigationHandling() {
+  // Listen for regular page navigations via beforeunload
+  window.addEventListener('beforeunload', () => {
+    // Clear state when navigating away from the page
+    state.detectedVideos.clear();
+    state.blobUrls.clear();
+    // No need to clear the WeakSet as it will be garbage collected
+  });
+
+  // Handle SPA (Single Page Application) navigation via History API
+  const originalPushState = history.pushState;
+  const originalReplaceState = history.replaceState;
+  
+  // Override pushState
+  history.pushState = function(...args) {
+    // Call original function first
+    const result = originalPushState.apply(this, args);
+    
+    // Then clear our state for the new page
+    state.detectedVideos.clear();
+    state.blobUrls.clear();
+    
+    // Notify via custom event so we can handle it elsewhere if needed
+    window.dispatchEvent(new CustomEvent('video-downloader-navigation'));
+    
+    return result;
+  };
+  
+  // Override replaceState
+  history.replaceState = function(...args) {
+    // Call original function first
+    const result = originalReplaceState.apply(this, args);
+    
+    // Then clear our state for the new page
+    state.detectedVideos.clear();
+    state.blobUrls.clear();
+    
+    // Notify via custom event so we can handle it elsewhere if needed
+    window.dispatchEvent(new CustomEvent('video-downloader-navigation'));
+    
+    return result;
+  };
+  
+  // Also listen for popstate events (browser back/forward)
+  window.addEventListener('popstate', () => {
+    state.detectedVideos.clear();
+    state.blobUrls.clear();
+    
+    window.dispatchEvent(new CustomEvent('video-downloader-navigation'));
+  });
 }

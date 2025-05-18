@@ -42,14 +42,59 @@ We've optimized the video detection pipeline in the content script to create a m
 - Added more robust handling of streaming formats
 - Improved extraction of videos from query parameters
 
+### 7. Navigation Handling
+
+- Added navigation state clearing to prevent stale data
+- Implemented History API monitoring to detect SPA navigation
+- Created proper cleanup for page transitions
+
+## Latest Changes (Phase 2)
+
+1. **Simplified `extractVideoInfo()`**
+
+   - Now only extracts raw data without validation
+   - Separation of concerns: extraction vs validation
+
+2. **Enhanced `processVideo()`**
+
+   - Now handles all video types in one place
+   - Merged blob URL processing into main function
+   - Auto-detects type when not provided
+
+3. **Removed `processBlobURL()`**
+
+   - Functionality merged into `processVideo()`
+   - Reduced code duplication and simplified flow
+
+4. **Simplified `isVideoContent()`**
+
+   - Now leverages `identifyVideoType()` logic
+   - Eliminated code duplication
+   - More consistent behavior across pipeline
+
+5. **Improved Error Handling**
+
+   - Added better error handling throughout pipeline
+   - More robust handling of edge cases
+
+6. **Added Navigation Handling**
+   - Clear state on page navigation
+   - Support for SPA (Single Page Applications)
+   - History API monitoring for state cleanup
+
 ## Architecture Flow
 
 The new optimized pipeline works as follows:
 
 1. **Detection**: Videos are discovered via DOM observation or network interception
-2. **Validation**: Each video is validated, normalized and deduplicated in `validateVideo()`
-3. **Processing**: Valid videos are sent to background through `processVideo()`
-4. **Tracking**: Processed videos are tracked in `state.detectedVideos` to prevent duplicates
-5. **Element Tracking**: Processed video elements are tracked in `state.observedVideoElements`
+2. **Extraction**: Raw video data is extracted without validation or processing
+3. **Processing**: Central `processVideo()` function handles all video types
+4. **Validation**: Each video is validated, normalized and deduplicated in `validateVideo()`
+5. **Background**: Valid videos are sent to background script
+6. **Tracking**: Processed videos are tracked in `state.detectedVideos` to prevent duplicates
+7. **Element Tracking**: Processed video elements are tracked in `state.observedVideoElements`
+8. **Navigation**: State is cleared on page navigation to prevent stale data
+
+This new architecture ensures that only valid, unique videos are processed and reported to the background script, improving performance and reducing unnecessary processing. 4. **Tracking**: Processed videos are tracked in `state.detectedVideos` to prevent duplicates 5. **Element Tracking**: Processed video elements are tracked in `state.observedVideoElements`
 
 This new architecture ensures that only valid, unique videos are processed and reported to the background script, improving performance and reducing unnecessary processing.
