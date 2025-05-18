@@ -26,14 +26,7 @@
     {
       "matches": ["<all_urls>"],
       "js": ["content_script.js"],
-      "run_at": "document_start",
-      "type": "module"
-    }
-  ],
-  "web_accessible_resources": [
-    {
-      "resources": ["js/utilities/video-validator.js"],
-      "matches": ["<all_urls>"]
+      "run_at": "document_start"
     }
   ],
   "action": {

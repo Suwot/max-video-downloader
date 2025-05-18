@@ -250,31 +250,6 @@ function cleanupForTab(tabId) {
     }
 }
 
-/**
- * Notify any open popup that new videos have been detected
- */
-function notifyNewVideoDetected(tabId) {
-    try {
-        // Check if a popup is open for this tab
-        const port = getActivePopupPortForTab(tabId);
-        
-        if (port) {
-            logDebug(`Notifying popup for tab ${tabId} about new video detection`);
-            
-            try {
-                port.postMessage({
-                    action: 'newVideoDetected',
-                    tabId: tabId
-                });
-            } catch (error) {
-                logDebug(`Error sending new video notification: ${error.message}`);
-            }
-        }
-    } catch (error) {
-        logDebug(`Error in notifyNewVideoDetected: ${error.message}`);
-    }
-}
-
 // Set up event listeners to clear videos when tabs are closed or navigated
 chrome.tabs.onRemoved.addListener((tabId) => {
     cleanupForTab(tabId);

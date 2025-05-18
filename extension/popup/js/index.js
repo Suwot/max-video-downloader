@@ -179,15 +179,7 @@ function handlePortMessage(message) {
         updateVideoDisplay(message.videos);
         return;
     }
-    
-    // Handle new video detection notification
-    if (message.action === 'newVideoDetected') {
-        console.log('Received new video detection notification');
-        // Force a refresh of the video list
-        requestVideos(true);
-        return;
-    }
-    
+
     // Handle metadata updates
     if (message.type === 'metadataUpdate' && message.url && message.mediaInfo) {
         console.log('Received metadata update for video:', message.url);

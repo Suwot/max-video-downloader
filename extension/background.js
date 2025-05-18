@@ -333,40 +333,14 @@ chrome.webRequest.onBeforeRequest.addListener(
 );
 
 // Listen for messages from content scripts and popup
-chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-    // Handle video detection from content script 
-    if (request.action === 'newVideoDetected' && request.videos && request.videos.length > 0) {
-        const tabId = sender?.tab?.id;
-        if (!tabId) return false;
-        
-        console.log(`Received ${request.videos.length} new videos from content script for tab ${tabId}`);
-        
-        // Process each video through the same pipeline
-        request.videos.forEach(video => {
-            addDetectedVideo(tabId, {
-                url: video.url,
-                type: video.type,
-                source: 'contentScript',
-                poster: video.poster,
-                title: video.title,
-                foundFromQueryParam: video.foundFromQueryParam || false,
-                originalUrl: video.originalUrl,
-                timestampDetected: Date.now(),
-                callerContext: 'contentScript_newVideoDetected'
-            });
-        });
-        
-        return false;
-    }
-    
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {    
     // Handle video detection from content script (legacy format)
     if (request.action === 'addVideo') {
         const tabId = sender.tab?.id;
         if (tabId && tabId > 0) {
             addDetectedVideo(tabId, {
                 ...request,
-                timestampDetected: Date.now(),
-                callerContext: 'contentScript_legacy'
+                callerContext: 'contentScript_addVideo'
             });
         }
         return false;

@@ -270,6 +270,8 @@ function findNearbyHeading(element) {
  * @returns {boolean} - Whether a valid video was detected and processed
  */
 function detectVideo(url, contentType = null, metadata = {}) {
+  console.log(`[Content Script] ${new Date().toISOString()} Attempting to detect video:`, url);
+
   if (!url) return false;
   
   // Skip if it's a blob URL we've already processed
@@ -597,6 +599,9 @@ function processVideo(url, type = null, metadata = {}) {
       title: metadata.title || null
     });
   }
+
+  // Send to background with only the necessary fields
+  console.log(`[Content Script] ${new Date().toISOString()} Sending video to background: ${videoInfo.url} (Type: ${videoInfo.type}, Source: ${videoInfo.source})`);
   
   // Send to background with only the necessary fields
   chrome.runtime.sendMessage({
