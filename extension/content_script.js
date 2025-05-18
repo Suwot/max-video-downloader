@@ -24,46 +24,26 @@ const state = {
   observedVideoElements: new WeakSet() // Track already observed video elements
 };
 
-// Initialize utility functions that will be loaded dynamically
+// Initialize utility functions directly
 let isValidVideo;
 let isValidVideoUrl;
 
 console.log('Content script loading...');
 
-// Load modules and initialize
-(async function() {
-  try {
-    const validatorUrl = chrome.runtime.getURL('js/utilities/video-validator.js');
-    console.log('Loading validator from:', validatorUrl);
-    
-    // Add a small delay before import to ensure extension is fully initialized
-    await new Promise(resolve => setTimeout(resolve, 100));
-    
-    const module = await import(validatorUrl);
-    console.log('Module import successful:', module);
-    
-    // Attach utilities to global scope for access
-    isValidVideo = module.isValidVideo;
-    isValidVideoUrl = module.isValidVideoUrl;
-    console.log('Video validator loaded successfully');
-  } catch (error) {
-    console.error('Using fallback validation:', error);
-    
-    // Use identifyVideoType for fallback validation
-    isValidVideoUrl = url => {
-      // Use our identifyVideoType function for consistent validation
-      const videoType = identifyVideoType(url);
-      
-      // Consider valid if it's not ignored and not a standard error case
-      return videoType !== 'ignored' && videoType !== 'unknown' && videoType !== 'error';
-    };
-    
-    isValidVideo = video => video && video.url && isValidVideoUrl(video.url);
-  }
+function isValidVideoUrl(url) {
+  if (!url) return false;
   
-  // Initialize once modules are loaded
-  initializeVideoDetection();
-})();
+  // Use our identifyVideoType function for consistent validation
+  const videoType = identifyVideoType(url);
+  return videoType !== 'ignored' && videoType !== 'unknown' && videoType !== 'error';
+}
+
+function isValidVideo(video) {
+  return video && video.url && isValidVideoUrl(video.url);
+}
+
+// Start the detection pipeline immediately
+initializeVideoDetection();
 
 /**
  * Initialize the video detection pipeline
@@ -385,6 +365,27 @@ function validateVideo(videoInfo) {
 }
 
 /**
+ * Extract embedded video URL from query parameters
+ * Used by both identifyVideoType and normalizeUrl
+ * 
+ * @param {URL} urlObj - URL object to extract from
+ * @returns {string|null} - Extracted video URL or null
+ */
+function extractEmbeddedVideoUrl(urlObj) {
+  for (const [_, value] of urlObj.searchParams.entries()) {
+    try {
+      const decoded = decodeURIComponent(value);
+      if ((decoded.includes('.m3u8') || decoded.includes('.mpd')) &&
+          (decoded.includes('http') || decoded.startsWith('/') || decoded.includes('://'))) {
+        // Handle relative URLs
+        return decoded.startsWith('/') ? (urlObj.origin + decoded) : decoded;
+      }
+    } catch {}
+  }
+  return null;
+}
+
+/**
  * Identify the type of video from a URL
  * Optimized to parse URL only once and make efficient decisions
  * 
@@ -398,23 +399,10 @@ function identifyVideoType(url) {
     const urlObj = new URL(url);
     const path = urlObj.pathname.toLowerCase();
     
-    // Extract all query values at once to avoid multiple parsing
-    const queryValues = [];
-    for (const [_, value] of urlObj.searchParams.entries()) {
-      try {
-        queryValues.push(decodeURIComponent(value));
-      } catch {
-        // Ignore decode errors
-      }
-    }
-    
     // Quick filtering of known non-video URLs
     if (/\.(gif|png|jpg|jpeg|webp|bmp|svg)(\?|$)/i.test(path)) {
       // Check for embedded videos in image URLs
-      const embedded = queryValues.find(val => 
-        /\.(m3u8|mpd)(\?|$)/i.test(val) && 
-        (val.includes('http') || val.startsWith('/') || val.includes('://'))
-      );
+      const embedded = extractEmbeddedVideoUrl(urlObj);
       
       if (embedded) {
         return {
@@ -430,10 +418,7 @@ function identifyVideoType(url) {
     if (/\/(ping|track|pixel|stats|metric|telemetry|analytics|tracking)/i.test(path) || 
         url.includes('jwpltx')) {
       // Check for embedded videos in tracking URLs
-      const embedded = queryValues.find(val => 
-        /\.(m3u8|mpd)(\?|$)/i.test(val) && 
-        (val.includes('http') || val.startsWith('/') || val.includes('://'))
-      );
+      const embedded = extractEmbeddedVideoUrl(urlObj);
       
       if (embedded) {
         return {
@@ -468,10 +453,7 @@ function identifyVideoType(url) {
     }
     
     // Check for embedded videos in any query parameter
-    const embedded = queryValues.find(val => 
-      (/\.(m3u8|mpd)(\?|$)/i.test(val) && 
-      (val.includes('http') || val.startsWith('/') || val.includes('://')))
-    );
+    const embedded = extractEmbeddedVideoUrl(urlObj);
     
     if (embedded) {
       return {
@@ -546,19 +528,10 @@ function normalizeUrl(url) {
     if (url.includes('ping.gif') || url.includes('jwpltx.com') || 
         urlObj.pathname.includes('/pixel') || urlObj.pathname.includes('/track')) {
       // Extract video URLs from query parameters
-      for (const [_, value] of urlObj.searchParams.entries()) {
-        try {
-          const decoded = decodeURIComponent(value);
-          if ((decoded.includes('.m3u8') || decoded.includes('.mpd')) &&
-              (decoded.includes('http') || decoded.startsWith('/') || decoded.includes('://'))) {
-            try {
-              // For relative URLs, add origin
-              const fullUrl = decoded.startsWith('/') ? (urlObj.origin + decoded) : decoded;
-              // Recursive call to normalize the extracted URL
-              return normalizeUrl(fullUrl);
-            } catch {}
-          }
-        } catch {}
+      const embedded = extractEmbeddedVideoUrl(urlObj);
+      if (embedded) {
+        // Recursive call to normalize the extracted URL
+        return normalizeUrl(embedded);
       }
     }
     
