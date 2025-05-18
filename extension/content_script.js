@@ -18,6 +18,78 @@
  * - Efficiently handles dynamic page content through mutation observers
  */
 
+// Debug logging helper
+function logDebug(...args) {
+    console.log('[Content Script]', new Date().toISOString(), ...args);
+}
+
+/**
+ * Performs an initial DOM scan for video elements
+ * Helps debug video detection issues by providing a baseline
+ */
+function performInitialVideoScan() {
+  // Wait for DOM to be fully loaded
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', executeInitialScan);
+  } else {
+    // DOM already loaded, run immediately
+    executeInitialScan();
+  }
+  
+  function executeInitialScan() {
+    logDebug('🔍 [init_scan] Starting initial video element scan...');
+    
+    // Find all video elements
+    const videoElements = document.querySelectorAll('video');
+    logDebug(`🔍 [init_scan] Found ${videoElements.length} video elements in initial scan`);
+    
+    // Log each video element with its properties
+    videoElements.forEach((video, index) => {
+      // Extract basic video info
+      const videoInfo = {
+        index,
+        src: video.src || '[No direct src]',
+        sourceElements: Array.from(video.querySelectorAll('source')).map(s => ({
+          src: s.src,
+          type: s.type
+        })),
+        poster: video.poster || null,
+        width: video.width,
+        height: video.height,
+        hidden: video.offsetParent === null,
+        duration: video.duration || 0
+      };
+      
+      logDebug(`🔍 [init_scan] Video #${index}:`, videoInfo);
+      
+      // Don't actually process the video for detection, just log it
+    });
+    
+    // Add additional debug for script tags that might contain video URLs
+    const scriptTags = Array.from(document.querySelectorAll('script'))
+      .filter(script => 
+        script.textContent.includes('.m3u8') || 
+        script.textContent.includes('.mpd') ||
+        script.textContent.includes('videoUrl') ||
+        script.textContent.includes('streamUrl')
+      );
+    
+    logDebug(`🔍 [init_scan] Found ${scriptTags.length} script tags that may contain video URLs`);
+    
+    // Log network request interception status
+    logDebug('🔍 [init_scan] XHR interception active:', 
+      XMLHttpRequest.prototype.open !== originalXHR);
+    logDebug('🔍 [init_scan] Fetch interception active:', 
+      window.fetch !== originalFetch);
+    
+    // Verify if any existing XHR requests have already happened
+    logDebug('🔍 [init_scan] Performance entries:', 
+      performance.getEntriesByType('resource')
+        .filter(r => r.initiatorType === 'xmlhttprequest')
+        .length);
+  }
+}
+
 // State management for the content script
 const state = {
   detectedVideos: new Set(),  // Track normalized URLs that have been processed
@@ -26,8 +98,6 @@ const state = {
   observedVideoElements: new WeakSet(), // Track already observed video elements
   urlNormalizationCache: new Map() // Cache for URL normalization results
 };
-
-console.log('Content script loading...');
 
 // Start the detection pipeline immediately
 initializeVideoDetection();
@@ -40,12 +110,8 @@ function initializeVideoDetection() {
   if (state.isInitialized) return;
   state.isInitialized = true;
   
-  console.log('Initializing optimized video detection pipeline...');
+  logDebug('Initializing optimized video detection pipeline...');
   
-  // Set up all detection methods - now with a unified processing flow:
-  // 1. Detect video through XHR/Fetch interception or DOM observation
-  // 2. Validate, normalize, and deduplicate using validateVideo
-  // 3. Process and report unique videos through processVideo
   setupNetworkInterception();  // Network request monitoring
   setupDOMObservers();         // DOM video element detection
   setupNavigationHandling();   // Handle page navigation
@@ -53,6 +119,7 @@ function initializeVideoDetection() {
 
 // Network request monitoring
 function setupNetworkInterception() {
+  
   // XHR interception
   const originalXHR = XMLHttpRequest.prototype.open;
   XMLHttpRequest.prototype.open = function(method, url, ...args) {
@@ -74,6 +141,8 @@ function setupNetworkInterception() {
         originalOnReadyStateChange.apply(this, arguments);
       }
     });
+
+    logDebug('Network interception is set up for XHR:', method, url);
     
     return originalXHR.apply(this, [method, url, ...args]);
   };
@@ -93,6 +162,8 @@ function setupNetworkInterception() {
       detectVideo(url, contentType, {
         source: 'fetch'
       });
+
+      logDebug('Network interception is set up for Fetch:', url);
       
       return response;
     });
@@ -192,6 +263,9 @@ function setupDOMObservers() {
       attributes: true,
       attributeFilter: ['src', 'data-src'] 
     });
+
+    logDebug(`Document observer is now watching the DOM...`);
+
   } else {
     // If body isn't available yet, wait for it
     const bodyWatcher = new MutationObserver(() => {
@@ -202,6 +276,9 @@ function setupDOMObservers() {
           attributes: true,
           attributeFilter: ['src', 'data-src'] 
         });
+
+        logDebug(`Observing DOM with bodywatcher init...`);
+
         bodyWatcher.disconnect();
       }
     });
@@ -222,11 +299,13 @@ function extractVideoInfo(videoElement) {
   let src = videoElement.src;
   if (!src) {
     const source = videoElement.querySelector('source');
-    src = source?.src;
+    src = source?.src || source?.getAttribute('src');
   }
   
   // Skip if no valid source found
   if (!src) return null;
+
+  logDebug('Extracted src:', src);
   
   // Gather metadata from the video element
   return {
@@ -270,7 +349,7 @@ function findNearbyHeading(element) {
  * @returns {boolean} - Whether a valid video was detected and processed
  */
 function detectVideo(url, contentType = null, metadata = {}) {
-  console.log(`[Content Script] ${new Date().toISOString()} Attempting to detect video:`, url);
+  logDebug(`Attempting to detect video:`, url);
 
   if (!url) return false;
   
@@ -601,7 +680,7 @@ function processVideo(url, type = null, metadata = {}) {
   }
 
   // Send to background with only the necessary fields
-  console.log(`[Content Script] ${new Date().toISOString()} Sending video to background: ${videoInfo.url} (Type: ${videoInfo.type}, Source: ${videoInfo.source})`);
+  logDebug(`Sending video to background: ${videoInfo.url} (Type: ${videoInfo.type}, Source: ${videoInfo.source})`);
   
   // Send to background with only the necessary fields
   chrome.runtime.sendMessage({
