@@ -262,13 +262,6 @@ function setupMessageListeners() {
     console.log('Content script received message:', message.action);
     
     switch (message.action) {
-      case 'findVideos':
-        // Return an appropriate response for backward compatibility
-        // The video-fetcher.js expects an array, so we'll send an empty one
-        // Videos are already being sent to background directly
-        sendResponse([]);
-        return true;
-        
       case 'startBackgroundDetection':
         state.autoDetectionEnabled = true;
         sendResponse({ status: 'ok' });
@@ -278,17 +271,7 @@ function setupMessageListeners() {
         state.autoDetectionEnabled = false;
         sendResponse({ status: 'ok' });
         return true;
-        
-      case 'popupOpened':
-        // Just acknowledge that content script is active
-        sendResponse({ status: 'ready' });
-        return true;
-        
-      case 'popupClosed':
-        // This handler has no real effect but is kept for API compatibility
-        sendResponse({ status: 'ok' });
-        return true;
-        
+
       default:
         sendResponse({ error: 'Unknown message type' });
         return true;

@@ -446,14 +446,6 @@ document.addEventListener('DOMContentLoaded', async () => {
             });
         });
         
-        // Notify content script that popup is open
-        try {
-            chrome.tabs.sendMessage(currentTabId, { action: 'popupOpened' })
-                .catch(err => console.log('Content script not ready yet:', err));
-        } catch (e) {
-            console.log('Error notifying content script:', e);
-        }
-        
         // Add Clear Cache button handler - simplified for in-memory approach
         document.getElementById('clear-cache-btn')?.addEventListener('click', async () => {
             console.log('Refresh button clicked');
@@ -505,16 +497,6 @@ window.addEventListener('unload', () => {
     if (container && currentTabId) {
         setScrollPosition(currentTabId, container.scrollTop);
     }
-    
-    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-        if (tabs[0]) {
-            try {
-                chrome.tabs.sendMessage(tabs[0].id, { action: 'popupClosed' });
-            } catch (e) {
-                // Suppress errors on unload
-            }
-        }
-    });
     
     // Disconnect port
     if (backgroundPort) {

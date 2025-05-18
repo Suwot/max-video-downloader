@@ -52,53 +52,6 @@ export async function updateVideoList(forceRefresh = false, tabId = null) {
     return await fetchVideos({ forceRefresh });
 }
 
-/**
- * Request scan for new videos in the current tab
- * @param {number} tabId - Tab ID
- */
-export async function requestNewVideoScan(tabId) {
-    if (!tabId) {
-        try {
-            const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-            tabId = tab.id;
-        } catch (e) {
-            logDebug('Error getting current tab:', e);
-            return false;
-        }
-    }
-    
-    logDebug('Requesting new video scan for tab:', tabId);
-    
-    try {
-        // Tell content script to look for videos
-        const response = await chrome.tabs.sendMessage(tabId, { action: 'findVideos' });
-        
-        if (response && response.length) {
-            logDebug('Found new videos in scan:', response.length);
-            
-            // Filter response with validation
-            const filteredVideos = validateAndFilterVideos(response);
-            
-            if (filteredVideos.length > 0) {
-                // Send new videos to background for processing
-                sendPortMessage({
-                    action: 'addNewVideos',
-                    videos: filteredVideos,
-                    tabId: tabId
-                });
-                
-                // Refresh our videos list
-                setTimeout(() => refreshVideos(), 500);
-                return true;
-            }
-        }
-    } catch (error) {
-        logDebug('Error in video scan:', error);
-    }
-    
-    return false;
-}
-
 // Track the background refresh interval
 let backgroundRefreshInterval = null;
 
@@ -130,11 +83,7 @@ export function startBackgroundRefreshLoop(intervalMs = 3000, tabId = null) {
             action: 'getVideos', 
             tabId: tabId
         });
-        
-        // Also scan for new videos occasionally
-        if (Math.random() < 0.3) { // ~30% chance
-            requestNewVideoScan(tabId);
-        }
+
     }, intervalMs);
     
     return backgroundRefreshInterval;
