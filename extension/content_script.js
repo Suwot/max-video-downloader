@@ -306,9 +306,11 @@ function detectVideo(url, contentType = null, metadata = {}) {
   // Handle simple string type results
   else if (detectedType !== 'unknown' && detectedType !== 'ignored') {
     videoType = detectedType;
-  } 
-  // If type detection failed but we have content type, try that
-  else if (!videoType && contentType) {
+  }
+  
+  // If type detection failed but we have content type, try that as fallback
+  // Moving this logic before the early rejection to catch more valid videos
+  if (!videoType && contentType) {
     const videoMimeTypes = [
       'video/',
       'application/x-mpegURL',
@@ -472,9 +474,13 @@ function identifyVideoType(url) {
  * Creates a canonical form of URLs for effective deduplication
  * 
  * @param {string} url - URL to normalize
+ * @param {number} depth - Recursion depth counter to prevent infinite loops
  * @returns {string} - Normalized URL
  */
-function normalizeUrl(url) {
+function normalizeUrl(url, depth = 0) {
+  // Prevent infinite recursion by limiting depth
+  if (depth > 3) return url; // avoid infinite recursion
+  
   // Blob URLs are unique by nature and can't be normalized
   if (url.startsWith('blob:')) return url;
   
@@ -495,8 +501,8 @@ function normalizeUrl(url) {
       // Extract video URLs from query parameters
       const embedded = extractEmbeddedVideoUrl(urlObj);
       if (embedded) {
-        // Recursive call to normalize the extracted URL
-        return normalizeUrl(embedded);
+        // Recursive call to normalize the extracted URL with depth counter
+        return normalizeUrl(embedded, depth + 1);
       }
     }
     
