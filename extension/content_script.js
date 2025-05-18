@@ -340,11 +340,15 @@ function detectVideo(url, contentType = null, metadata = {}) {
     return false;
   }
   
+  // Set timestamp once here and trust it in processVideo
+  const timestampDetected = Date.now();
+  
   // At this point, we have a valid, new video
   // Process it with all the information we've already gathered
   return processVideo(videoUrl, videoType, {
     contentType,
     normalizedUrl,
+    timestampDetected,
     ...additionalInfo,
     ...metadata
   });
@@ -565,15 +569,11 @@ function normalizeUrl(url, depth = 0) {
 function processVideo(url, type = null, metadata = {}) {
   // Quick validation
   if (!url) return false;
-
-  // Always set timestamp here for consistency
-  const timestamp = Date.now();
   
   // Create a video info object from pre-validated information
   const videoInfo = {
     url,
     type,
-    timestampDetected: timestamp,
     ...metadata
   };
   
@@ -592,7 +592,7 @@ function processVideo(url, type = null, metadata = {}) {
     state.blobUrls.set(url, {
       url,
       type: 'blob',
-      timestampDetected: timestamp,
+      timestampDetected: videoInfo.timestampDetected,
       poster: metadata.poster || null,
       title: metadata.title || null
     });
