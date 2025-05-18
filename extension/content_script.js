@@ -20,8 +20,7 @@ const state = {
   detectedVideos: new Set(),
   blobUrls: new Map(),
   autoDetectionEnabled: true,
-  isInitialized: false,
-  pendingQueue: new Map()
+  isInitialized: false
 };
 
 // Initialize utility functions that will be loaded dynamically
@@ -111,12 +110,12 @@ function setupNetworkInterception() {
         const responseUrl = xhr.responseURL;
         
         if (isVideoContent(responseUrl, contentType)) {
-          state.pendingQueue.set(responseUrl, {
-            type: 'xhr',
+          // Process video directly without queueing
+          processVideo(responseUrl, null, {
             contentType,
-            responseHeaders: parseHeaders(xhr.getAllResponseHeaders())
+            responseHeaders: parseHeaders(xhr.getAllResponseHeaders()),
+            source: 'xhr'
           });
-          processPendingQueue();
         }
       }
       
@@ -136,68 +135,24 @@ function setupNetworkInterception() {
     return originalFetch.apply(this, arguments).then(response => {
       const clonedResponse = response.clone();
       
-      clonedResponse.headers.get('Content-Type').then(contentType => {
-        if (isVideoContent(url, contentType)) {
-          state.pendingQueue.set(url, {
-            type: 'fetch',
-            contentType,
-            responseHeaders: Object.fromEntries(clonedResponse.headers.entries())
-          });
-          processPendingQueue();
-        }
-      }).catch(() => {});
+      // Headers.get() returns a string directly, not a promise
+      const contentType = clonedResponse.headers.get('Content-Type');
+      
+      if (isVideoContent(url, contentType)) {
+        // Process video directly without queueing
+        processVideo(url, null, {
+          contentType,
+          responseHeaders: Object.fromEntries(clonedResponse.headers.entries()),
+          source: 'fetch'
+        });
+      }
       
       return response;
     });
   };
 }
 
-// Process pending video queue in batches
-function processPendingQueue(batchSize = 3) {
-  if (state.pendingQueue.size === 0) return;
-  
-  const entries = Array.from(state.pendingQueue.entries()).slice(0, batchSize);
-  const processPromises = entries.map(([url, info]) => {
-    return new Promise(async (resolve) => {
-      state.pendingQueue.delete(url);
-
-      const videoType = identifyVideoType(url);
-      
-      // Skip ignored types
-      if (videoType === 'ignored' || (typeof videoType === 'object' && videoType.type === 'ignored')) {
-        return resolve();
-      }
-
-      let finalUrl = url;
-      let finalType = info.type;
-      let foundFromQueryParam = false;
-
-      // Handle extracted URLs from query parameters
-      if (typeof videoType === 'object' && videoType.url && videoType.type) {
-        finalUrl = videoType.url;
-        finalType = videoType.type;
-        foundFromQueryParam = videoType.foundFromQueryParam || false;
-      } else if (videoType !== 'ignored' && videoType !== 'unknown') {
-        finalType = videoType;
-      }
-
-      // Send to background
-      await sendToBackground(finalUrl, finalType, {
-        contentType: info.contentType,
-        headers: info.responseHeaders,
-        foundFromQueryParam
-      });
-      resolve();
-    });
-  });
-
-  // Process next batch after this one completes
-  Promise.all(processPromises).then(() => {
-    if (state.pendingQueue.size > 0) {
-      setTimeout(() => processPendingQueue(batchSize), 100);
-    }
-  });
-}
+// This function has been replaced by direct processing
 
 // DOM observation for videos
 function setupDOMObservers() {
@@ -260,15 +215,16 @@ function setupDOMObservers() {
     // Process potential videos after a small delay
     if (potentialVideos.size > 0) {
       setTimeout(() => {
-        const newVideos = [];
-        
         potentialVideos.forEach(video => {
           // Check for regular src attribute
           if (video.src || video.querySelector('source')) {
             const videoInfo = extractVideoInfo(video);
-            if (videoInfo && !state.detectedVideos.has(normalizeUrl(videoInfo.url))) {
-              newVideos.push(videoInfo);
-              state.detectedVideos.add(normalizeUrl(videoInfo.url));
+            if (videoInfo) {
+              processVideo(videoInfo.url, videoInfo.type, {
+                poster: videoInfo.poster,
+                title: videoInfo.title,
+                timestampDetected: videoInfo.timestampDetected
+              });
             }
           }
           
@@ -277,11 +233,6 @@ function setupDOMObservers() {
             processBlobURL(video);
           }
         });
-        
-        // Send new videos to background script
-        if (newVideos.length > 0) {
-          notifyBackground(newVideos);
-        }
       }, 500);
     }
   });
@@ -336,10 +287,8 @@ function setupMessageListeners() {
         
       case 'popupOpened':
         // Run an immediate video check when popup opens
+        // scanForVideos now processes videos directly
         const foundVideos = scanForVideos();
-        if (foundVideos && foundVideos.length > 0) {
-          notifyBackground(foundVideos);
-        }
         sendResponse({ status: 'ready' });
         return true;
         
@@ -364,8 +313,12 @@ function scanForVideos() {
     if (video.src) {
       const videoInfo = extractVideoInfo(video);
       if (videoInfo) {
+        processVideo(videoInfo.url, videoInfo.type, {
+          poster: videoInfo.poster,
+          title: videoInfo.title,
+          timestampDetected: videoInfo.timestampDetected
+        });
         videos.push(videoInfo);
-        state.detectedVideos.add(normalizeUrl(videoInfo.url));
       }
     }
     
@@ -376,13 +329,17 @@ function scanForVideos() {
           url: source.src,
           poster: video.poster || null,
           title: getVideoTitle(video),
-          timestamp: Date.now()
+          timestampDetected: Date.now()
         };
         
         const validVideo = validateVideo(videoInfo);
         if (validVideo) {
+          processVideo(validVideo.url, validVideo.type, {
+            poster: validVideo.poster,
+            title: validVideo.title,
+            timestampDetected: validVideo.timestampDetected
+          });
           videos.push(validVideo);
-          state.detectedVideos.add(normalizeUrl(validVideo.url));
         }
       }
     });
@@ -390,13 +347,14 @@ function scanForVideos() {
   
   // Add tracked blob URLs
   state.blobUrls.forEach((info) => {
-    videos.push({
+    const blobVideo = {
       url: info.url,
       type: 'blob',
       poster: info.poster || null,
       title: info.title || 'Blob Video',
-      timestamp: info.time || Date.now()
-    });
+      timestampDetected: info.time || Date.now()
+    };
+    videos.push(blobVideo);
   });
   
   return videos;
@@ -418,7 +376,7 @@ function extractVideoInfo(videoElement) {
     url: src,
     poster: videoElement.poster || null,
     title: getVideoTitle(videoElement),
-    timestamp: Date.now()
+    timestampDetected: Date.now()
   };
   
   return validateVideo(videoInfo);
@@ -707,17 +665,58 @@ function normalizeUrl(url) {
   }
 }
 
-// Send video to background script
-function sendToBackground(url, type, additionalInfo = {}) {
-  // Skip ignored types
-  if (type === 'ignored') return;
+/**
+ * Universal function to process and send video URLs to background
+ * Handles validation, normalization, deduplication, and sending in one place
+ * 
+ * @param {string} url - The video URL
+ * @param {string} type - Video type (hls, dash, blob, etc)
+ * @param {Object} metadata - Additional information about the video
+ * @returns {boolean} - Whether the video was new and sent
+ */
+function processVideo(url, type, metadata = {}) {
+  // Skip invalid URLs
+  if (!url) return false;
   
-  // Normalize URL to avoid duplicates
-  const normalizedUrl = normalizeUrl(url);
+  // Get video type if not provided
+  const videoType = type || identifyVideoType(url);
+  
+  // Skip ignored types
+  if (videoType === 'ignored' || (typeof videoType === 'object' && videoType.type === 'ignored')) {
+    return false;
+  }
+
+  let finalUrl = url;
+  let finalType = typeof videoType === 'string' ? videoType : type;
+  let foundFromQueryParam = metadata.foundFromQueryParam || false;
+  let originalContainer = metadata.originalContainer;
+  
+  // Handle URL extraction from query params or type objects
+  if (typeof videoType === 'object') {
+    if (videoType.url && videoType.type) {
+      finalUrl = videoType.url;
+      finalType = videoType.type;
+      foundFromQueryParam = videoType.foundFromQueryParam || false;
+    } else if (videoType.type === 'direct' && videoType.container) {
+      finalType = videoType.type;
+      originalContainer = videoType.container;
+    }
+  }
+  
+  // Skip invalid URLs (unless it's a blob which is always valid)
+  if (!finalUrl.startsWith('blob:') && 
+      typeof videoType !== 'object' && 
+      videoType !== 'ignored' && 
+      !isValidVideoUrl(finalUrl)) {
+    return false;
+  }
+  
+  // Normalize the URL for deduplication
+  const normalizedUrl = normalizeUrl(finalUrl);
   
   // Skip if already detected
   if (state.detectedVideos.has(normalizedUrl)) {
-    return;
+    return false;
   }
   
   // Add to detected videos
@@ -726,59 +725,45 @@ function sendToBackground(url, type, additionalInfo = {}) {
   // Send to background
   chrome.runtime.sendMessage({
     action: 'addVideo',
-    url: url,
+    url: finalUrl,
     source: 'content_script',
-    type: type,
-    foundFromQueryParam: additionalInfo.foundFromQueryParam || false,
-    originalContainer: additionalInfo.originalContainer,
+    type: finalType,
+    foundFromQueryParam,
+    originalContainer,
+    originalUrl: finalUrl !== url ? url : undefined,
     timestampDetected: Date.now(),
-    ...additionalInfo
+    ...metadata
   });
+  
+  return true;
 }
 
-// Notify background script of new videos
+// Send video to background script
+function sendToBackground(url, type, additionalInfo = {}) {
+  // Use the universal processing function instead
+  return processVideo(url, type, additionalInfo);
+}
+
+// Send multiple videos to background script
 function notifyBackground(videos) {
-  if (!videos || videos.length === 0) return;
+  if (!videos || !Array.isArray(videos)) return false;
   
-  // Apply validation to all videos
-  const validVideos = videos
-    .map(video => validateVideo(video))
-    .filter(video => video !== null && video.type !== 'ignored');
+  // Filter and validate videos
+  const validVideos = Array.isArray(validateAndFilterVideos) 
+    ? validateAndFilterVideos(videos) 
+    : videos.filter(v => v && v.url);
   
-  if (validVideos.length === 0) return;
-  
-  // Send each video individually for storage
+  // Process each video individually
+  let processedCount = 0;
   validVideos.forEach(video => {
-    sendToBackground(video.url, video.type, {
+    if (processVideo(video.url, video.type, {
       poster: video.poster,
       title: video.title,
-      foundFromQueryParam: video.foundFromQueryParam || false
-    });
+      timestampDetected: video.timestampDetected
+    })) {
+      processedCount++;
+    }
   });
   
-  // Notify about batch update
-  chrome.runtime.sendMessage({
-    action: 'newVideoDetected',
-    videos: validVideos.map(video => ({
-      ...video,
-      source: 'content_script'
-    }))
-  }).catch(() => {
-    // Suppress expected errors when popup is closed
-  });
+  return processedCount > 0;
 }
-
-// Initialize based on document state
-if (document.readyState !== 'loading') {
-  initializeVideoDetection();
-} else {
-  document.addEventListener('DOMContentLoaded', initializeVideoDetection);
-}
-
-// Fallback initialization
-setTimeout(() => {
-  if (!state.isInitialized) {
-    console.log('Fallback initialization...');
-    initializeVideoDetection();
-  }
-}, 500);
