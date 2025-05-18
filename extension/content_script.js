@@ -92,9 +92,7 @@ function initializeVideoDetection() {
   setupNetworkInterception();
   setupDOMObservers();
   setupMessageListeners();
-  
-  // Initial scan
-  setTimeout(scanForVideos, 500);
+
 }
 
 // Network request monitoring
@@ -265,9 +263,10 @@ function setupMessageListeners() {
     
     switch (message.action) {
       case 'findVideos':
-        const videos = scanForVideos();
-        console.log('Found videos:', videos);
-        sendResponse(videos);
+        // Return an appropriate response for backward compatibility
+        // The video-fetcher.js expects an array, so we'll send an empty one
+        // Videos are already being sent to background directly
+        sendResponse([]);
         return true;
         
       case 'startBackgroundDetection':
@@ -281,13 +280,12 @@ function setupMessageListeners() {
         return true;
         
       case 'popupOpened':
-        // Run an immediate video check when popup opens
-        // scanForVideos now processes videos directly
-        const foundVideos = scanForVideos();
+        // Just acknowledge that content script is active
         sendResponse({ status: 'ready' });
         return true;
         
       case 'popupClosed':
+        // This handler has no real effect but is kept for API compatibility
         sendResponse({ status: 'ok' });
         return true;
         
@@ -298,75 +296,7 @@ function setupMessageListeners() {
   });
 }
 
-// Active video search functions
-function scanForVideos() {
-  const videos = [];
-  
-  // Reuse the same processing function from setupDOMObservers
-  function processVideoForScan(video) {
-    // Find the function dynamically (it's inside setupDOMObservers scope)
-    let processedForScan = false;
-    
-    // Check direct src attribute
-    if (video.src) {
-      const videoInfo = extractVideoInfo(video);
-      if (videoInfo) {
-        processVideo(videoInfo.url, videoInfo.type, {
-          poster: videoInfo.poster,
-          title: videoInfo.title,
-          timestampDetected: videoInfo.timestampDetected
-        });
-        videos.push(videoInfo);
-        processedForScan = true;
-      }
-    }
-    
-    // Check source elements inside video
-    video.querySelectorAll('source').forEach(source => {
-      if (source.src) {
-        const videoInfo = {
-          url: source.src,
-          poster: video.poster || null,
-          title: getVideoTitle(video),
-          timestampDetected: Date.now()
-        };
-        
-        const validVideo = validateVideo(videoInfo);
-        if (validVideo) {
-          processVideo(validVideo.url, validVideo.type, {
-            poster: validVideo.poster,
-            title: validVideo.title,
-            timestampDetected: validVideo.timestampDetected
-          });
-          videos.push(validVideo);
-          processedForScan = true;
-        }
-      }
-    });
-    
-    // Add to observed elements if processed successfully
-    if (processedForScan) {
-      state.observedVideoElements.add(video);
-    }
-  }
-  
-  // Find direct video elements and sources
-  document.querySelectorAll('video').forEach(processVideoForScan);
-  
-  // Add tracked blob URLs
-  state.blobUrls.forEach((info) => {
-    const blobVideo = {
-      url: info.url,
-      type: 'blob',
-      poster: info.poster || null,
-      title: info.title || 'Blob Video',
-      timestampDetected: info.time || Date.now()
-    };
-    videos.push(blobVideo);
-  });
-  
-  return videos;
-}
+// Video detection is now handled entirely through DOM observation and network interception
 
 // Extract video information
 function extractVideoInfo(videoElement) {
