@@ -70,6 +70,9 @@ function initializeVideoDetection() {
 function scanAllVideos() {
   logDebug('Running comprehensive video scan at readyState:', document.readyState);
   
+  // Track URLs we've seen in this scan to avoid edge-case duplicates
+  const seenUrls = new Set();
+  
   // 1. Process all video elements using the existing processNewVideoElement function
   const videoElements = document.querySelectorAll('video');
   if (videoElements.length > 0) {
@@ -80,7 +83,10 @@ function scanAllVideos() {
       if (!state.observedVideoElements.has(video)) {
         const originalSource = video._source;
         video._source = 'initial_scan'; // Temporarily mark source for tracking
+        
+        // No URL yet, but still process it to set up observers for future changes
         processNewVideoElement(video);
+        
         video._source = originalSource; // Restore original source if any
       }
     });
@@ -91,7 +97,8 @@ function scanAllVideos() {
     // Only process standalone source elements, skipping those within videos
     // as they're handled by extractVideoInfo within processNewVideoElement
     const src = source.src || source.getAttribute('src');
-    if (src) {
+    if (src && !seenUrls.has(src)) {
+      seenUrls.add(src);
       const mimeType = source.getAttribute('type');
       detectVideo(src, mimeType || null, {
         source: 'initial_scan',
@@ -101,16 +108,16 @@ function scanAllVideos() {
   });
   
   // 3. Look for common player configurations
-  scanForPlayerConfigs();
+  scanForPlayerConfigs(seenUrls);
 }
 
 /**
  * Scans for common video player configurations
  * Many sites use specific patterns for embedding videos
  */
-function scanForPlayerConfigs() {
-  // Track raw URLs to avoid processing duplicates within a single scan
-  const foundUrls = new Set();
+function scanForPlayerConfigs(seenUrls) {
+  // Use the passed seenUrls if available, otherwise create a new Set
+  const foundUrls = seenUrls || new Set();
   
   // Look for specific player elements
   const playerSelectors = [
@@ -461,6 +468,11 @@ function detectVideo(url, contentType = null, metadata = {}) {
     if (videoMimeTypes.some(type => contentType.includes(type))) {
       videoType = contentType.includes('mpegURL') || contentType.includes('x-mpegURL') ? 
                   'hls' : 'direct';
+      
+      // Also update normalizedUrl since we've changed the video type
+      if (!normalizedUrl) {
+        normalizedUrl = normalizeUrl(videoUrl);
+      }
     }
   }
   
@@ -469,8 +481,12 @@ function detectVideo(url, contentType = null, metadata = {}) {
     return false;
   }
   
+  // Use normalized URL from detectedType if available to avoid redundant computation
+  if (!normalizedUrl && detectedType?.normalizedUrl) {
+    normalizedUrl = detectedType.normalizedUrl;
+  }
   // Create normalized URL for deduplication if it wasn't already done
-  if (!normalizedUrl) {
+  else if (!normalizedUrl) {
     normalizedUrl = normalizeUrl(videoUrl);
   }
   
@@ -716,11 +732,10 @@ function processVideo(url, type = null, metadata = {}) {
     ...metadata
   };
   
-  // normalizedUrl is required and must be prepared by detectVideo()
-  // If it's missing, this indicates a logic error
+  // normalizedUrl should always be prepared by detectVideo() by this point
+  // This was a defensive check that is no longer needed, but we keep it as a safeguard
   if (!videoInfo.normalizedUrl) {
-    console.error('No normalizedUrl provided to processVideo');
-    return false;
+    return false; // This should never happen with the current implementation
   }
   
   // Mark this normalized URL as processed to avoid duplicates
