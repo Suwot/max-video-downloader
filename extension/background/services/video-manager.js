@@ -22,6 +22,10 @@ import { buildRequestHeaders } from '../../js/utilities/headers-utils.js';
 // Map<tabId, Map<normalizedUrl, videoInfo>>
 const allDetectedVideos = new Map();
 
+// Track relationships between variants and their master playlists
+// Map<tabId, Map<normalizedVariantUrl, masterUrl>>
+const variantMasterMap = new Map();
+
 // Expose allDetectedVideos for debugging
 globalThis.allDetectedVideosInternal = allDetectedVideos;
 
@@ -100,6 +104,59 @@ const rateLimiter = {
 // Debug logging helper
 function logDebug(...args) {
     console.log('[Video Manager]', new Date().toISOString(), ...args);
+}
+
+/**
+ * Track variant-master relationships when variants are found in a master playlist
+ * @param {number} tabId - Tab ID
+ * @param {Array} variants - Array of variant objects
+ * @param {string} masterUrl - The normalized master URL
+ */
+function trackVariantMasterRelationship(tabId, variants, masterUrl) {
+    // Ensure the tab entry exists in the variant-master map
+    if (!variantMasterMap.has(tabId)) {
+        variantMasterMap.set(tabId, new Map());
+    }
+    
+    const tabVariantMap = variantMasterMap.get(tabId);
+    
+    // Record all variants from this master
+    for (const variant of variants) {
+        const normalizedVariantUrl = variant.normalizedUrl;
+        tabVariantMap.set(normalizedVariantUrl, masterUrl);
+        logDebug(`Tracked variant ${normalizedVariantUrl} as belonging to master ${masterUrl}`);
+        
+        // Update any existing standalone variant entries
+        updateExistingVariant(tabId, normalizedVariantUrl, masterUrl);
+    }
+}
+
+/**
+ * Update an existing standalone variant with master info
+ * @param {number} tabId - Tab ID
+ * @param {string} normalizedVariantUrl - Normalized variant URL
+ * @param {string} masterUrl - Normalized master URL
+ */
+function updateExistingVariant(tabId, normalizedVariantUrl, masterUrl) {
+    const tabVideos = allDetectedVideos.get(tabId);
+    if (!tabVideos || !tabVideos.has(normalizedVariantUrl)) {
+        return; // No standalone variant exists yet
+    }
+    
+    // Variant exists as standalone, update it with master info
+    const variant = tabVideos.get(normalizedVariantUrl);
+    
+    // Only update if it doesn't already have a known master
+    if (!variant.hasKnownMaster) {
+        const updatedVariant = {
+            ...variant,
+            hasKnownMaster: true,
+            masterUrl: masterUrl
+        };
+        
+        tabVideos.set(normalizedVariantUrl, updatedVariant);
+        logDebug(`Updated existing standalone variant ${normalizedVariantUrl} with master info`);
+    }
 }
 
 // Extract filename from URL
@@ -248,6 +305,11 @@ function cleanupForTab(tabId) {
     if (allDetectedVideos.has(tabId)) {
         allDetectedVideos.delete(tabId);
     }
+    
+    // Clean up variant-master relationships
+    if (variantMasterMap.has(tabId)) {
+        variantMasterMap.delete(tabId);
+    }
 }
 
 // Set up event listeners to clear videos when tabs are closed or navigated
@@ -272,6 +334,9 @@ function clearVideoCache() {
     
     // Clear central video collection
     allDetectedVideos.clear();
+    
+    // Clear variant-master relationships
+    variantMasterMap.clear();
     
     // Clear processing requests
     processingRequests.previews.clear();
@@ -415,7 +480,7 @@ async function runJSParser(tabId, normalizedUrl, type) {
         const lightParseResult = await lightParseContent(video.url, type, headers);
         
         // Update video with light parse results
-        const updatedVideoAfterLightParse = {
+        let updatedVideoAfterLightParse = {
             ...video,
             subtype: lightParseResult.subtype,
             isValid: lightParseResult.isValid,
@@ -424,6 +489,20 @@ async function runJSParser(tabId, normalizedUrl, type) {
             ...(lightParseResult.isMaster ? { isMaster: true } : {}),
             ...(lightParseResult.isVariant ? { isVariant: true, hasKnownMaster: false } : {})
         };
+        
+        // If this is a variant, check if it belongs to a known master
+        if (lightParseResult.isVariant) {
+            const tabVariantMap = variantMasterMap.get(tabId);
+            if (tabVariantMap && tabVariantMap.has(normalizedUrl)) {
+                // Update the video with master info
+                updatedVideoAfterLightParse = {
+                    ...updatedVideoAfterLightParse,
+                    hasKnownMaster: true,
+                    masterUrl: tabVariantMap.get(normalizedUrl)
+                };
+                logDebug(`Linked variant ${video.url} to master ${tabVariantMap.get(normalizedUrl)}`);
+            }
+        }
         
         tabMap.set(normalizedUrl, updatedVideoAfterLightParse);
         
@@ -450,6 +529,9 @@ async function runJSParser(tabId, normalizedUrl, type) {
                 };
                 
                 tabMap.set(normalizedUrl, updatedVideoAfterFullParse);
+                
+                // Track all variants from this master
+                trackVariantMasterRelationship(tabId, fullParseResult.variants, normalizedUrl);
                 
                 // For each variant, get FFprobe metadata
                 // Preview will be generated for the best quality variant in processVariantsWithFFprobe
