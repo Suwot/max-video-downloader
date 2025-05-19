@@ -141,6 +141,12 @@ export async function fullParseContent(url, subtype, headers = null) {
         
         // Use provided headers or build basic headers
         const requestHeaders = headers || await buildRequestHeaders(null, url);
+
+        // Remove any Range header to ensure we get the full content
+        if (requestHeaders['Range']) {
+            delete requestHeaders['Range'];
+            console.log(`[JS Parser] Removed Range header to fetch complete content`);
+        }
         
         const response = await fetch(url, {
             signal: controller.signal,
@@ -237,10 +243,17 @@ async function parseHlsVariant(variantUrl, headers = null) {
     try {
         // Set up request with timeout
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 5000);  // 5 second timeout
+        const timeoutId = setTimeout(() => controller.abort(), 10000);  // ✅ Increase timeout to 10 seconds
         
         // Use provided headers or build basic headers
         const requestHeaders = headers || await buildRequestHeaders(null, variantUrl);
+        
+        // ✅ Remove any Range header that might limit the response size
+        if (requestHeaders['Range']) {
+            delete requestHeaders['Range'];
+        }
+        
+        console.log(`[JS Parser] Fetching full HLS variant: ${variantUrl}`);
         
         const response = await fetch(variantUrl, {
             signal: controller.signal,
@@ -251,16 +264,16 @@ async function parseHlsVariant(variantUrl, headers = null) {
         
         if (!response.ok) {
             console.log(`[JS Parser] ❌ FAILED fetching variant ${variantUrl}: ${response.status}`);
-            // Return complete object with defaults
             return { 
                 duration: null, 
-                isLive: true,  // Assume live since we couldn't verify
-                isEncrypted: false,  // Can't determine, default to false
+                isLive: true,
+                isEncrypted: false,
                 encryptionType: null
             };
         }
         
         const content = await response.text();
+        console.log(`[JS Parser] Received variant playlist: ${content.length} bytes, ${content.split('\n').length} lines`);
         
         // Extract different types of metadata from variant playlist
         const durationInfo = calculateHlsVariantDuration(content);
@@ -280,8 +293,8 @@ async function parseHlsVariant(variantUrl, headers = null) {
         // Return complete object with defaults
         return { 
             duration: null, 
-            isLive: true,  // Assume live since we couldn't verify
-            isEncrypted: false,  // Can't determine, default to false
+            isLive: true,
+            isEncrypted: false,
             encryptionType: null
         };
     }

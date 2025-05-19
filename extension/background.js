@@ -1,27 +1,14 @@
 /**
  * @ai-guide-component BackgroundScript
- * @ai-guide-description Main extension service worker
- * @ai-guide-responsibilities
- * - Initializes the video detection system on extension startup
- * - Manages cross-tab communication via message passing
- * - Coordinates content script injection into web pages
- * - Maintains video detection state across browser sessions
- * - Handles native host communication via Native Host Service
- * - Implements browser action icon and badge functionality  
- * - Provides centralized video metadata storage for popup UI
- * - Filters tracking pixels while preserving legitimate video URLs
- * - Processes URLs extracted from query parameters with proper metadata
- * - Maintains the foundFromQueryParam flag throughout the video pipeline
- * - Deduplicates videos using smart URL normalization
+ * @ai-guide-description Main extension service worker that manages video detection
  */
 
-// background.js - Service worker for the extension
-
-// Import our modularized services
+// Import services
 import { addDetectedVideo, getAllDetectedVideos } from './background/services/video-manager.js';
 import { initTabTracking } from './background/services/tab-tracker.js';
 import { setupDownloadPort } from './background/services/download-manager.js';
 import { setupPopupPort } from './background/services/popup-ports.js';
+import { isValidVideoUrl } from './js/utilities/video-validator.js';
 
 // Helper function to extract container format from URL
 function getContainerFromUrl(url) {
@@ -47,7 +34,6 @@ function logDebug(...args) {
 }
 
 // Debug logger for allDetectedVideos - will log every 10 seconds
-// TO BE REMOVED AFTER DEBUGGING
 let debugInterval;
 function startDebugLogger() {
   if (debugInterval) {
@@ -69,7 +55,6 @@ function startDebugLogger() {
           if (urlMap instanceof Map) {
             console.log(`Tab ${tabId}: (${urlMap.size} videos)`);
             // Convert urlMap entries to a regular object for easier console viewing
-            // Make sure to check if urlMap has entries method before using it
             try {
               const urlMapObj = {};
               for (const [url, videoInfo] of urlMap.entries()) {
@@ -121,6 +106,105 @@ function startDebugLogger() {
   }, 10000); // Log every 10 seconds
 }
 
+/**
+ * Process and identify video type from URL
+ * @param {string} url - URL to process
+ * @returns {Object|null} Video type info or null if not video
+ */
+function identifyVideoType(url) {
+  // First check if it's a valid video URL using the validator
+  if (!isValidVideoUrl(url)) {
+    return null;
+  }
+  
+  try {
+    const urlObj = new URL(url);
+    const path = urlObj.pathname.toLowerCase();
+    
+    // Check for HLS streams (.m3u8)
+    if (url.includes('.m3u8')) {
+      const isActualM3U8 = 
+          path.includes('.m3u8') || 
+          path.includes('/master.m3u8') || 
+          path.includes('/index-f');
+      
+      if (isActualM3U8) {
+        return { 
+          type: 'hls'
+        };
+      }
+    }
+    
+    // Check for DASH manifests (.mpd)
+    if (url.includes('.mpd')) {
+      const isActualMPD = path.includes('.mpd');
+      
+      if (isActualMPD) {
+        return { 
+          type: 'dash'
+        };
+      }
+    }
+    
+    // Check for direct video files
+    if (/\.(mp4|webm|ogg|mov|avi|mkv|flv|3gp|m4v|wmv)(\?|$)/i.test(url)) {
+      return { 
+        type: 'direct', 
+        container: getContainerFromUrl(url)
+      };
+    }
+    
+    // Not a recognized video format
+    return null;
+    
+  } catch (err) {
+    // Simple fallback if URL parsing fails
+    if (url.includes('.m3u8')) {
+      return { type: 'hls' };
+    }
+    
+    if (url.includes('.mpd')) {
+      return { type: 'dash' };
+    }
+    
+    if (/\.(mp4|webm|ogg|mov|avi|mkv|flv|3gp|m4v|wmv)(\?|$)/i.test(url)) {
+      return { 
+        type: 'direct', 
+        container: getContainerFromUrl(url)
+      };
+    }
+    
+    return null;
+  }
+}
+
+/**
+ * Process a video URL from a web request
+ * @param {number} tabId - Tab ID where request originated
+ * @param {string} url - The URL to process
+ */
+function processVideoUrl(tabId, url) {
+  if (tabId < 0 || !url) return;
+  
+  // Identify the video type using our helper
+  const videoInfo = identifyVideoType(url);
+  
+  // Skip if not a recognized video type
+  if (!videoInfo) return;
+  
+  // For streaming formats, add directly
+  if (videoInfo.type === 'hls' || videoInfo.type === 'dash' || videoInfo.type === 'direct') {
+    addDetectedVideo(tabId, {
+      url,
+      type: videoInfo.type,
+      source: 'webRequest',
+      ...(videoInfo.container? {originalContainer: videoInfo.container} : {}),
+      timestampDetected: Date.now(),
+      callerContext: `webRequest_${videoInfo.type}`
+    });
+  }
+}
+
 // Start the debug logger
 startDebugLogger();
 
@@ -143,204 +227,19 @@ chrome.runtime.onConnect.addListener(port => {
 
 // Listen for web requests to catch video-related content
 chrome.webRequest.onBeforeRequest.addListener(
-    (details) => {
-        if (details.tabId < 0) return;
-
-        const url = details.url;
-        
-        // Skip known tracking/analytics domains
-        const trackingDomains = [
-            'jwpltx.com',
-            'analytics',
-            'telemetry',
-            'tracking',
-            'tracker',
-            'pixel',
-            'beacon',
-            'stats',
-            'metrics'
-        ];
-        
-        try {
-            // Parse the URL to examine its components
-            const urlObj = new URL(url);
-            
-            // Skip obvious tracking/analytics endpoints
-            if (urlObj.pathname.endsWith('.gif') || 
-                urlObj.pathname.endsWith('.pixel') || 
-                urlObj.pathname.includes('/ping') || 
-                urlObj.pathname.includes('/analytics') || 
-                urlObj.hostname.includes('tracker')) {
-                return;
-            }
-            
-            // Skip if domain contains any tracking keywords
-            const domainLower = urlObj.hostname.toLowerCase();
-            if (trackingDomains.some(term => domainLower.includes(term))) {
-                return;
-            }
-            
-            // Check for HLS, DASH, and direct video files with more precise path-based detection
-            let isVideoUrl = false;
-            let type = 'unknown';
-            
-            // Check for HLS streams (.m3u8)
-            if (url.includes('.m3u8')) {
-                // Verify it's in the path, not just a parameter
-                const isActualM3U8 = 
-                    urlObj.pathname.includes('.m3u8') || 
-                    urlObj.pathname.includes('/master.m3u8') || 
-                    urlObj.pathname.includes('/index-f');
-                
-                if (isActualM3U8) {
-                    isVideoUrl = true;
-                    type = 'hls';
-                }
-            } 
-            // Check for DASH manifests (.mpd)
-            else if (url.includes('.mpd')) {
-                // Verify it's in the path, not just a parameter
-                const isActualMPD = urlObj.pathname.includes('.mpd');
-                
-                if (isActualMPD) {
-                    isVideoUrl = true;
-                    type = 'dash';
-                }
-            } 
-            // Check for direct video files
-            else if (/\.(mp4|webm|ogg|mov|avi|mkv|flv)(\?|$)/i.test(url)) {
-                isVideoUrl = true;
-                type = 'direct';
-            }
-            
-            // Add video if it passed all the filtering
-            if (isVideoUrl) {
-                // For direct videos, check the file size first
-                if (type === 'direct') {
-                    // Get container format
-                    const originalContainer = getContainerFromUrl(url);
-                    
-                    // Perform a HEAD request to check content-length
-                    fetch(url, { method: 'HEAD' })
-                        .then(response => {
-                            const contentLength = response.headers.get('content-length');
-                            // Only add if size is at least 100KB (102400 bytes) or size is unknown
-                            if (!contentLength || parseInt(contentLength, 10) >= 102400) {
-                                const fileSizeBytes = contentLength ? parseInt(contentLength, 10) : null;
-                                addDetectedVideo(details.tabId, {
-                                    url: url,
-                                    type: type,
-                                    source: 'webRequest',
-                                    originalContainer: originalContainer,
-                                    fileSizeBytes: fileSizeBytes, // Store file size from HEAD request
-                                    timestampDetected: Date.now(),
-                                    callerContext: 'webRequest_directVideo_withSize_try'
-                                });
-                            } else {
-                                console.log(`Skipped small video file (${contentLength} bytes): ${url}`);
-                            }
-                        })
-                        .catch(() => {
-                            // If the HEAD request fails, add anyway as we can't determine size
-                            addDetectedVideo(details.tabId, {
-                                url: url,
-                                type: type,
-                                source: 'webRequest',
-                                originalContainer: originalContainer,
-                                timestampDetected: Date.now(),
-                                callerContext: 'webRequest_directVideo_noSize_try'
-                            });
-                        });
-                } else {
-                    // For HLS/DASH, add without size check as they're manifest files
-                    addDetectedVideo(details.tabId, {
-                        url: url,
-                        type: type,
-                        source: 'webRequest',
-                        timestampDetected: Date.now(),
-                        callerContext: 'webRequest_streaming_try'
-                    });
-                }
-            }
-        } catch (err) {
-            // If URL parsing fails, fall back to the original simpler checks
-            // This ensures we don't miss videos due to URL parsing errors
-            if (
-                (url.includes('.m3u8') && !url.includes('.gif') && !url.includes('ping')) || 
-                (url.includes('.mpd') && !url.includes('.gif') && !url.includes('ping')) || 
-                /\.(mp4|webm|ogg|mov|avi|mkv|flv)(\?|$)/i.test(url)
-            ) {
-                // Determine type
-                let type = 'unknown';
-                if (url.includes('.m3u8')) {
-                    type = 'hls';
-                } else if (url.includes('.mpd')) {
-                    type = 'dash';
-                } else if (/\.(mp4|webm|ogg|mov|avi|mkv|flv)(\?|$)/i.test(url)) {
-                    type = 'direct';
-                }
-                
-                // For direct videos, check size; for manifests, add directly
-                if (type === 'direct') {
-                    // Get container format
-                    const originalContainer = getContainerFromUrl(url);
-                    
-                    // Perform a HEAD request to check content-length
-                    fetch(url, { method: 'HEAD' })
-                        .then(response => {
-                            const contentLength = response.headers.get('content-length');
-                            // Only add if size is at least 100KB (102400 bytes) or size is unknown
-                            if (!contentLength || parseInt(contentLength, 10) >= 102400) {
-                                const fileSizeBytes = contentLength ? parseInt(contentLength, 10) : null;
-                                addDetectedVideo(details.tabId, {
-                                    url: url,
-                                    type: type,
-                                    source: 'webRequest',
-                                    originalContainer: originalContainer,
-                                    fileSizeBytes: fileSizeBytes, // Store file size from HEAD request
-                                    timestampDetected: Date.now(),
-                                    callerContext: 'webRequest_directVideo_withSize_catch'
-                                });
-                            } else {
-                                console.log(`Skipped small video file (${contentLength} bytes): ${url}`);
-                            }
-                        })
-                        .catch(() => {
-                            // If the HEAD request fails, add anyway as we can't determine size
-                            addDetectedVideo(details.tabId, {
-                                url: url,
-                                type: type,
-                                source: 'webRequest',
-                                originalContainer: originalContainer,
-                                timestampDetected: Date.now(),
-                                callerContext: 'webRequest_directVideo_noSize_catch'
-                            });
-                        });
-                } else {
-                    // For HLS/DASH, add without size check
-                    addDetectedVideo(details.tabId, {
-                        url: url,
-                        type: type,
-                        source: 'webRequest',
-                        timestampDetected: Date.now(),
-                        callerContext: 'webRequest_streaming_catch'
-                    });
-                }
-            }
-        }
-    },
+    (details) => processVideoUrl(details.tabId, details.url),
     { urls: ["<all_urls>"] }
 );
 
 // Listen for messages from content scripts and popup
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {    
-    // Handle video detection from content script (legacy format)
+    // Handle video detection from content script
     if (request.action === 'addVideo') {
         const tabId = sender.tab?.id;
         if (tabId && tabId > 0) {
             addDetectedVideo(tabId, {
                 ...request,
-                callerContext: 'contentScript_addVideo'
+                callerContext: request.callerContext || 'contentScript_addVideo'
             });
         }
         return false;
@@ -351,7 +250,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
 logDebug('Background script initialized');
 
-// Listen for when the service worker is about to be suspended
+// Sleep handler
 chrome.runtime.onSuspend.addListener(() => {
   console.log('Background going to sleep...');
 });
