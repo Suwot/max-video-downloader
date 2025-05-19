@@ -146,17 +146,18 @@ function updateExistingVariant(tabId, normalizedVariantUrl, masterUrl) {
     // Variant exists as standalone, update it with master info
     const variant = tabVideos.get(normalizedVariantUrl);
     
-    // Only update if it doesn't already have a known master
-    if (!variant.hasKnownMaster) {
-        const updatedVariant = {
-            ...variant,
-            hasKnownMaster: true,
-            masterUrl: masterUrl
-        };
-        
-        tabVideos.set(normalizedVariantUrl, updatedVariant);
-        logDebug(`Updated existing standalone variant ${normalizedVariantUrl} with master info`);
-    }
+    // Simpler approach: update any matching URL without checking if it's a variant
+    // Since we know the URL is in the master's variant list, it must be a variant
+    const updatedVariant = {
+        ...variant,
+        hasKnownMaster: true,
+        masterUrl: masterUrl,
+        // Pre-flag it as a variant since we know it's in a master's variant list
+        isVariant: true
+    };
+    
+    tabVideos.set(normalizedVariantUrl, updatedVariant);
+    logDebug(`Updated existing standalone variant ${normalizedVariantUrl} with master info`);
 }
 
 // Extract filename from URL
@@ -479,7 +480,7 @@ async function runJSParser(tabId, normalizedUrl, type) {
         logDebug(`Running light parsing for ${video.url}`);
         const lightParseResult = await lightParseContent(video.url, type, headers);
         
-        // Update video with light parse results
+        // Update video with light parse results - PRESERVE relationship fields from original object
         let updatedVideoAfterLightParse = {
             ...video,
             subtype: lightParseResult.subtype,
@@ -487,19 +488,17 @@ async function runJSParser(tabId, normalizedUrl, type) {
             isLightParsed: true,
             timestampLP: Date.now(),
             ...(lightParseResult.isMaster ? { isMaster: true } : {}),
-            ...(lightParseResult.isVariant ? { isVariant: true, hasKnownMaster: false } : {})
+            ...(lightParseResult.isVariant ? { isVariant: true } : {})
+            // Note: We're preserving hasKnownMaster and masterUrl from original video object
         };
         
-        // If this is a variant, check if it belongs to a known master
-        if (lightParseResult.isVariant) {
+        // Only check variantMasterMap if the original video doesn't already have a known master
+        if (lightParseResult.isVariant && !video.hasKnownMaster) {
             const tabVariantMap = variantMasterMap.get(tabId);
             if (tabVariantMap && tabVariantMap.has(normalizedUrl)) {
                 // Update the video with master info
-                updatedVideoAfterLightParse = {
-                    ...updatedVideoAfterLightParse,
-                    hasKnownMaster: true,
-                    masterUrl: tabVariantMap.get(normalizedUrl)
-                };
+                updatedVideoAfterLightParse.hasKnownMaster = true;
+                updatedVideoAfterLightParse.masterUrl = tabVariantMap.get(normalizedUrl);
                 logDebug(`Linked variant ${video.url} to master ${tabVariantMap.get(normalizedUrl)}`);
             }
         }
@@ -877,11 +876,16 @@ function getVideosArrayFromMap(tabId) {
     }
     
     const tabVideosMap = allDetectedVideos.get(tabId);
+    const tabVariantMap = variantMasterMap.get(tabId);
     const resultArray = [];
     
     // Convert map to array, filtering out variants with known masters
     for (const [normalizedUrl, videoObj] of tabVideosMap.entries()) {
-        if (!(videoObj.isVariant && videoObj.hasKnownMaster)) {
+        // Check both the hasKnownMaster flag AND the variantMasterMap
+        // This ensures we catch variants even if the flag hasn't been set yet
+        const isInVariantMap = tabVariantMap && tabVariantMap.has(normalizedUrl);
+        
+        if (!(videoObj.isVariant && (videoObj.hasKnownMaster || isInVariantMap))) {
             resultArray.push({
                 ...videoObj,
                 fromArrayMap: true // Mark as coming from map
