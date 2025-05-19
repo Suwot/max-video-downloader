@@ -107,6 +107,43 @@ function logDebug(...args) {
 }
 
 /**
+ * Log detailed information when the allDetectedVideos map is updated
+ * @param {string} functionName - The name of the function making the update
+ * @param {number} tabId - Tab ID
+ * @param {string} normalizedUrl - Normalized video URL
+ * @param {Object} videoObject - The video object being set in the map
+ */
+function logMapUpdate(functionName, tabId, normalizedUrl, videoObject) {
+    const timestamp = new Date().toISOString();
+    console.group(`[Video Map Update] ${timestamp} - ${functionName}`);
+    console.log(`TabID: ${tabId}, URL: ${normalizedUrl}`);
+    console.log(`HasKnownMaster: ${videoObject.hasKnownMaster}, IsVariant: ${videoObject.isVariant}`);
+    if (videoObject.masterUrl) {
+        console.log(`Master URL: ${videoObject.masterUrl}`);
+    }
+    console.log('Stack trace:', new Error().stack);
+    console.groupEnd();
+}
+
+/**
+ * Update a video in the allDetectedVideos map with detailed logging
+ * @param {string} functionName - The name of the function making the update
+ * @param {number} tabId - Tab ID
+ * @param {string} normalizedUrl - Normalized video URL
+ * @param {Object} videoObject - The video object to set in the map
+ */
+function updateVideoInMap(functionName, tabId, normalizedUrl, videoObject) {
+    const tabMap = allDetectedVideos.get(tabId);
+    if (!tabMap) return;
+    
+    // Log the update with caller information
+    logMapUpdate(functionName, tabId, normalizedUrl, videoObject);
+    
+    // Set the value in the map
+    tabMap.set(normalizedUrl, videoObject);
+}
+
+/**
  * Track variant-master relationships when variants are found in a master playlist
  * @param {number} tabId - Tab ID
  * @param {Array} variants - Array of variant objects
@@ -156,7 +193,7 @@ function updateExistingVariant(tabId, normalizedVariantUrl, masterUrl) {
         isVariant: true
     };
     
-    tabVideos.set(normalizedVariantUrl, updatedVariant);
+    updateVideoInMap('updateExistingVariant', tabId, normalizedVariantUrl, updatedVariant);
     logDebug(`Updated existing standalone variant ${normalizedVariantUrl} with master info`);
 }
 
@@ -422,7 +459,7 @@ function addDetectedVideo(tabId, videoInfo) {
         isBeingProcessed: false
     };
     
-    tabMap.set(normalizedUrl, newVideo);
+    updateVideoInMap('addDetectedVideo', tabId, normalizedUrl, newVideo);
 
     logDebug(`Added new video to detection map: ${videoInfo.url} (type: ${videoInfo.type}, source: ${sourceOfVideo})`);
 
@@ -503,7 +540,7 @@ async function runJSParser(tabId, normalizedUrl, type) {
             }
         }
         
-        tabMap.set(normalizedUrl, updatedVideoAfterLightParse);
+        updateVideoInMap('runJSParser-lightParse', tabId, normalizedUrl, updatedVideoAfterLightParse);
         
         // Stop here if not a valid video
         if (!lightParseResult.isValid) {
@@ -527,7 +564,7 @@ async function runJSParser(tabId, normalizedUrl, type) {
                     timestampFP: Date.now()
                 };
                 
-                tabMap.set(normalizedUrl, updatedVideoAfterFullParse);
+                updateVideoInMap('runJSParser-fullParse', tabId, normalizedUrl, updatedVideoAfterFullParse);
                 
                 // Track all variants from this master
                 trackVariantMasterRelationship(tabId, fullParseResult.variants, normalizedUrl);
@@ -634,7 +671,7 @@ async function processVariantsWithFFprobe(tabId, masterUrl, variants) {
                                 };
                                 
                                 // Update master with the new variants array
-                                tabMap.set(masterUrl, {
+                                updateVideoInMap('processVariantsWithFFprobe-preview', tabId, masterUrl, {
                                     ...masterVideo,
                                     variants: updatedVariants
                                 });
@@ -689,7 +726,7 @@ function updateVariantWithFFprobeData(tabId, masterUrl, variantIndex, ffprobeDat
     };
     
     // Update master with new variants array
-    tabMap.set(masterUrl, {
+    updateVideoInMap('updateVariantWithFFprobeData', tabId, masterUrl, {
         ...masterVideo,
         variants: updatedVariants
     });
@@ -755,7 +792,7 @@ async function runFFProbeParser(tabId, normalizedUrl) {
             };
             
             // Update in map
-            tabMap.set(normalizedUrl, updatedVideo);
+            updateVideoInMap('runFFProbeParser', tabId, normalizedUrl, updatedVideo);
             logDebug(`Updated map entry after FFprobe for URL ${video.url}: `, updatedVideo);
             
             // Update UI
@@ -818,7 +855,7 @@ async function generateVideoPreview(tabId, normalizedUrl) {
             };
             
             // Update in map
-            tabMap.set(normalizedUrl, updatedVideo);
+            updateVideoInMap('generateVideoPreview', tabId, normalizedUrl, updatedVideo);
             
             // Update UI
             notifyVideoUpdated(tabId, normalizedUrl, updatedVideo);
@@ -859,7 +896,7 @@ function handleBlobVideo(tabId, normalizedUrl) {
     };
     
     // Update in map
-    tabMap.set(normalizedUrl, updatedVideo);
+    updateVideoInMap('handleBlobVideo', tabId, normalizedUrl, updatedVideo);
     
     // Update UI
     notifyVideoUpdated(tabId, normalizedUrl, updatedVideo);
