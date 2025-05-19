@@ -336,14 +336,14 @@ function addDetectedVideo(tabId, videoInfo) {
     // Get the map for this specific tab
     const tabMap = allDetectedVideos.get(tabId);
     
-    // Log caller context for debugging
-    const callerContext = videoInfo.callerContext || 'unknown';
-    logDebug(`Video detection from context: ${callerContext} for URL: ${videoInfo.url} with timestamp: ${videoInfo.timestampDetected}`);
+    // Log source of video for debugging
+    const sourceOfVideo = videoInfo.source || 'unknown';
+    logDebug(`Video detection from source: ${sourceOfVideo} for URL: ${videoInfo.url} with timestamp: ${videoInfo.timestampDetected}`);
     
     // Skip if already in this tab's collection
     if (tabMap.has(normalizedUrl)) {
         const existingVideo = tabMap.get(normalizedUrl);
-        logDebug(`Duplicate video detection from ${callerContext}. URL: ${videoInfo.url}, Existing timestamp: ${existingVideo.timestampDetected}, New timestamp: ${videoInfo.timestampDetected}`);
+        logDebug(`Duplicate video detection from ${sourceOfVideo}. URL: ${videoInfo.url}, Existing timestamp: ${existingVideo.timestampDetected}, New timestamp: ${videoInfo.timestampDetected}`);
         return false;
     }
     
@@ -357,9 +357,9 @@ function addDetectedVideo(tabId, videoInfo) {
     };
     
     tabMap.set(normalizedUrl, newVideo);
-    
-    logDebug(`Added new video to detection map: ${videoInfo.url} (type: ${videoInfo.type}, context: ${callerContext})`);
-    
+
+    logDebug(`Added new video to detection map: ${videoInfo.url} (type: ${videoInfo.type}, source: ${sourceOfVideo})`);
+
     // Now process based on video type
     if (videoInfo.url.startsWith('blob:')) {
         // Handle blob URLs differently - they need special metadata

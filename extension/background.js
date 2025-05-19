@@ -197,10 +197,9 @@ function processVideoUrl(tabId, url) {
     addDetectedVideo(tabId, {
       url,
       type: videoInfo.type,
-      source: 'webRequest',
+      source: `BG_webRequest_${videoInfo.type}`,
       ...(videoInfo.container? {originalContainer: videoInfo.container} : {}),
-      timestampDetected: Date.now(),
-      callerContext: `webRequest_${videoInfo.type}`
+      timestampDetected: Date.now()
     });
   }
 }
@@ -237,10 +236,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === 'addVideo') {
         const tabId = sender.tab?.id;
         if (tabId && tabId > 0) {
-            addDetectedVideo(tabId, {
-                ...request,
-                callerContext: request.callerContext || 'contentScript_addVideo'
-            });
+            addDetectedVideo(tabId, request);
         }
         return false;
     }

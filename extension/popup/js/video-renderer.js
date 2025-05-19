@@ -293,10 +293,11 @@ export function createVideoElement(video) {
     typeBadge.textContent = video.type ? video.type.toUpperCase() : 'UNKNOWN';
     previewContainer.appendChild(typeBadge);
 
-    // Add source badge (content_script or background)
+    // Add source badge (CS or BG)
     const sourceBadge = document.createElement('div');
-    sourceBadge.className = `source-badge ${video.source || 'background'}`;
-    sourceBadge.textContent = video.source === 'content_script' ? 'CS' : 'BG';
+    const sourceOrigin = video.source.includes('BG');
+    sourceBadge.className = `source-badge ${sourceOrigin ? 'background' : 'content_script'}`;
+    sourceBadge.textContent = sourceOrigin ? 'BG' : 'CS';
     previewContainer.appendChild(sourceBadge);
     
     const loader = document.createElement('div');

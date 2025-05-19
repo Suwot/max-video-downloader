@@ -101,7 +101,7 @@ function scanAllVideos() {
       seenUrls.add(src);
       const mimeType = source.getAttribute('type');
       detectVideo(src, mimeType || null, {
-        source: 'initial_scan',
+        source: 'CS_initial_scan',
         title: document.title || 'Video'
       });
     }
@@ -151,7 +151,7 @@ function scanForPlayerConfigs(seenUrls) {
                 foundUrls.add(url);
                 const type = typeof source === 'object' ? source.type : null;
                 detectVideo(url, type || null, { 
-                  source: 'initial_scan_player_config' 
+                  source: 'CS_initial_scan_player_config' 
                 });
               }
             });
@@ -159,7 +159,7 @@ function scanForPlayerConfigs(seenUrls) {
         } else if ((value.includes('http') || value.startsWith('/')) && !foundUrls.has(value)) {
           // Direct URL
           foundUrls.add(value);
-          detectVideo(value, null, { source: 'initial_scan_player_attr' });
+          detectVideo(value, null, { source: 'CS_initial_scan_player_attr' });
         }
       } catch {
         // Simple attribute URL
@@ -170,7 +170,7 @@ function scanForPlayerConfigs(seenUrls) {
           
           if (!foundUrls.has(fullUrl)) {
             foundUrls.add(fullUrl);
-            detectVideo(fullUrl, null, { source: 'initial_scan_player_attr' });
+            detectVideo(fullUrl, null, { source: 'CS_initial_scan_player_attr' });
           }
         }
       }
@@ -194,7 +194,7 @@ function setupNetworkInterception() {
         
         // Use the unified detection pipeline instead of separate validation and processing
         detectVideo(responseUrl, contentType, {
-          source: 'xhr'
+          source: 'CS_xhr'
         });
       }
       
@@ -221,7 +221,7 @@ function setupNetworkInterception() {
       
       // Use the unified detection pipeline instead of separate validation and processing
       detectVideo(url, contentType, {
-        source: 'fetch'
+        source: 'CS_fetch'
       });
 
       logDebug('Network interception is set up for Fetch:', url);
@@ -255,7 +255,7 @@ function processNewVideoElement(video) {
     // Use the unified detection pipeline for more efficient processing
     detectVideo(videoInfo.url, null, {
       ...videoInfo,
-      source: video._source || 'dom'
+      source: video._source || 'CS_dom'
     });
   }
 }
@@ -274,7 +274,7 @@ function setupDOMObservers() {
           // Use the unified detection pipeline for more efficient processing
           detectVideo(videoInfo.url, null, {
             ...videoInfo, 
-            source: 'mutation'
+            source: 'CS_mutation'
           });
         }
       }
