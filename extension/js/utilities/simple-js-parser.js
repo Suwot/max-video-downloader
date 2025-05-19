@@ -165,9 +165,8 @@ export async function fullParseContent(url, subtype, headers = null) {
         
         // Process based on subtype, or detect if not provided
         let result;
-        const actualSubtype = subtype || detectPlaylistType(content, url);
         
-        if (actualSubtype === 'hls-master') {
+        if (subtype === 'hls-master') {
             result = parseHlsMaster(content, baseUrl, url);
             
             // Ensure result.variants is always an array
@@ -178,7 +177,7 @@ export async function fullParseContent(url, subtype, headers = null) {
                 console.log(`[JS Parser] Calculating duration for ${result.variants.length} variants`);
                 
                 // Process all variants sequentially using Promise.all for better parallel processing
-                const durationPromises = result.variants.map(async (variant, index) => {
+                const variantPromises = result.variants.map(async (variant, index) => {
                     try {
                         // Parse the variant to extract all metadata
                         const variantInfo = await parseHlsVariant(variant.url, headers);
@@ -209,7 +208,7 @@ export async function fullParseContent(url, subtype, headers = null) {
                 });
                 
                 // Wait for all variant duration calculations to complete
-                await Promise.all(durationPromises);
+                await Promise.all(variantPromises);
             }
         } else if (subtype === 'dash-master') {
             result = parseDashMaster(content, baseUrl, url);
