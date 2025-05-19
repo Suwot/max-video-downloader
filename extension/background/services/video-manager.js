@@ -144,6 +144,35 @@ function updateVideoInMap(functionName, tabId, normalizedUrl, videoObject) {
 }
 
 /**
+ * A more efficient helper function for updating videos that preserves all important flags
+ * @param {string} functionName - Function making the update
+ * @param {number} tabId - Tab ID
+ * @param {string} normalizedUrl - Video URL
+ * @param {Object} updates - Just the fields to update
+ * @returns {Object|null} - Updated video object or null if video not found
+ */
+function updateVideoFields(functionName, tabId, normalizedUrl, updates) {
+    const tabMap = allDetectedVideos.get(tabId);
+    if (!tabMap || !tabMap.has(normalizedUrl)) {
+        return null;
+    }
+    
+    // Get current video state
+    const currentVideo = tabMap.get(normalizedUrl);
+    
+    // Create updated video preserving all existing properties
+    const updatedVideo = {
+        ...currentVideo,
+        ...updates
+    };
+    
+    // Update in map
+    updateVideoInMap(functionName, tabId, normalizedUrl, updatedVideo);
+    
+    return updatedVideo;
+}
+
+/**
  * Track variant-master relationships when variants are found in a master playlist
  * @param {number} tabId - Tab ID
  * @param {Array} variants - Array of variant objects
@@ -517,30 +546,29 @@ async function runJSParser(tabId, normalizedUrl, type) {
         logDebug(`Running light parsing for ${video.url}`);
         const lightParseResult = await lightParseContent(video.url, type, headers);
         
-        // Update video with light parse results - PRESERVE relationship fields from original object
-        let updatedVideoAfterLightParse = {
-            ...video,
+        // Create light parse update fields
+        let lightParseUpdates = {
             subtype: lightParseResult.subtype,
             isValid: lightParseResult.isValid,
             isLightParsed: true,
             timestampLP: Date.now(),
             ...(lightParseResult.isMaster ? { isMaster: true } : {}),
             ...(lightParseResult.isVariant ? { isVariant: true } : {})
-            // Note: We're preserving hasKnownMaster and masterUrl from original video object
         };
         
         // Only check variantMasterMap if the original video doesn't already have a known master
         if (lightParseResult.isVariant && !video.hasKnownMaster) {
             const tabVariantMap = variantMasterMap.get(tabId);
             if (tabVariantMap && tabVariantMap.has(normalizedUrl)) {
-                // Update the video with master info
-                updatedVideoAfterLightParse.hasKnownMaster = true;
-                updatedVideoAfterLightParse.masterUrl = tabVariantMap.get(normalizedUrl);
+                // Add master info to updates
+                lightParseUpdates.hasKnownMaster = true;
+                lightParseUpdates.masterUrl = tabVariantMap.get(normalizedUrl);
                 logDebug(`Linked variant ${video.url} to master ${tabVariantMap.get(normalizedUrl)}`);
             }
         }
         
-        updateVideoInMap('runJSParser-lightParse', tabId, normalizedUrl, updatedVideoAfterLightParse);
+        // Update video with light parse results using our helper function
+        const updatedVideoAfterLightParse = updateVideoFields('runJSParser-lightParse', tabId, normalizedUrl, lightParseUpdates);
         
         // Stop here if not a valid video
         if (!lightParseResult.isValid) {
@@ -556,15 +584,12 @@ async function runJSParser(tabId, normalizedUrl, type) {
             const fullParseResult = await fullParseContent(video.url, lightParseResult.subtype, headers);
             
             if (fullParseResult.variants && fullParseResult.variants.length > 0) {
-                // Update master with variants
-                const updatedVideoAfterFullParse = {
-                    ...updatedVideoAfterLightParse,
+                // Update master with variants using our helper function
+                const updatedVideoAfterFullParse = updateVideoFields('runJSParser-fullParse', tabId, normalizedUrl, {
                     variants: fullParseResult.variants,
                     duration: (fullParseResult.variants[0]?.metaJS?.duration),
                     timestampFP: Date.now()
-                };
-                
-                updateVideoInMap('runJSParser-fullParse', tabId, normalizedUrl, updatedVideoAfterFullParse);
+                });
                 
                 // Track all variants from this master
                 trackVariantMasterRelationship(tabId, fullParseResult.variants, normalizedUrl);
@@ -670,20 +695,18 @@ async function processVariantsWithFFprobe(tabId, masterUrl, variants) {
                                     previewUrl: response.previewUrl
                                 };
                                 
-                                // Update master with the new variants array
-                                updateVideoInMap('processVariantsWithFFprobe-preview', tabId, masterUrl, {
-                                    ...masterVideo,
+                                // Update master with the new variants array using our helper function
+                                const updatedVideo = updateVideoFields('processVariantsWithFFprobe-preview', tabId, masterUrl, {
                                     variants: updatedVariants
                                 });
                                 
-                                logDebug(`Preview generated for best quality variant: ${response.previewUrl}`);
-                                
-                                // Update UI
-                                notifyVideoUpdated(tabId, masterUrl, {
-                                    ...masterVideo,
-                                    variants: updatedVariants
-                                });
-                                broadcastVideoUpdate(tabId);
+                                if (updatedVideo) {
+                                    logDebug(`Preview generated for best quality variant: ${response.previewUrl}`);
+                                    
+                                    // Update UI
+                                    notifyVideoUpdated(tabId, masterUrl, updatedVideo);
+                                    broadcastVideoUpdate(tabId);
+                                }
                             }
                         } finally {
                             processingRequests.previews.delete(variant.url);
@@ -725,14 +748,15 @@ function updateVariantWithFFprobeData(tabId, masterUrl, variantIndex, ffprobeDat
         timestampFFProbe: Date.now()
     };
     
-    // Update master with new variants array
-    updateVideoInMap('updateVariantWithFFprobeData', tabId, masterUrl, {
-        ...masterVideo,
+    // Update master with new variants array using our helper function
+    const updatedVideo = updateVideoFields('updateVariantWithFFprobeData', tabId, masterUrl, {
         variants: updatedVariants
     });
     
-    // Update UI
-    broadcastVideoUpdate(tabId);
+    if (updatedVideo) {
+        // Update UI
+        broadcastVideoUpdate(tabId);
+    }
 }
 
 /**
@@ -781,23 +805,22 @@ async function runFFProbeParser(tabId, normalizedUrl) {
         
         if (streamInfo) {
             
-            // Create updated video with metadata
-            const updatedVideo = {
-                ...video,
+            // Update video with metadata using our helper function
+            const updatedVideo = updateVideoFields('runFFProbeParser', tabId, normalizedUrl, {
                 metaFFprobe: streamInfo,  // Store FFprobe data separately
                 hasFFprobeMetadata: true,
                 isFullyParsed: true,
                 estimatedFileSizeBytes: streamInfo.estimatedFileSizeBytes || video.fileSize,
                 fileSize: streamInfo.sizeBytes || null
-            };
+            });
             
-            // Update in map
-            updateVideoInMap('runFFProbeParser', tabId, normalizedUrl, updatedVideo);
-            logDebug(`Updated map entry after FFprobe for URL ${video.url}: `, updatedVideo);
-            
-            // Update UI
-            notifyVideoUpdated(tabId, normalizedUrl, updatedVideo);
-            broadcastVideoUpdate(tabId);
+            if (updatedVideo) {
+                logDebug(`Updated map entry after FFprobe for URL ${video.url}: `, updatedVideo);
+                
+                // Update UI
+                notifyVideoUpdated(tabId, normalizedUrl, updatedVideo);
+                broadcastVideoUpdate(tabId);
+            }
         }
     } catch (error) {
         console.error(`Error in runFFProbeParser for ${normalizedUrl}:`, error);
@@ -848,18 +871,16 @@ async function generateVideoPreview(tabId, normalizedUrl) {
         });
         
         if (response && response.previewUrl) {
-            // Update video with preview URL
-            const updatedVideo = {
-                ...video,
+            // Update video with preview URL using our helper function
+            const updatedVideo = updateVideoFields('generateVideoPreview', tabId, normalizedUrl, {
                 previewUrl: response.previewUrl
-            };
+            });
             
-            // Update in map
-            updateVideoInMap('generateVideoPreview', tabId, normalizedUrl, updatedVideo);
-            
-            // Update UI
-            notifyVideoUpdated(tabId, normalizedUrl, updatedVideo);
-            broadcastVideoUpdate(tabId);
+            if (updatedVideo) {
+                // Update UI
+                notifyVideoUpdated(tabId, normalizedUrl, updatedVideo);
+                broadcastVideoUpdate(tabId);
+            }
         }
     } catch (error) {
         console.error(`Error in generateVideoPreview for ${normalizedUrl}:`, error);
@@ -881,9 +902,8 @@ function handleBlobVideo(tabId, normalizedUrl) {
     
     const video = tabMap.get(normalizedUrl);
     
-    // Set placeholder metadata for blob URLs
-    const updatedVideo = {
-        ...video,
+    // Set placeholder metadata for blob URLs using our helper function
+    const updatedVideo = updateVideoFields('handleBlobVideo', tabId, normalizedUrl, {
         mediaInfo: {
             isBlob: true,
             type: 'blob',
@@ -893,14 +913,13 @@ function handleBlobVideo(tabId, normalizedUrl) {
             hasAudio: null
         },
         isFullyParsed: true
-    };
+    });
     
-    // Update in map
-    updateVideoInMap('handleBlobVideo', tabId, normalizedUrl, updatedVideo);
-    
-    // Update UI
-    notifyVideoUpdated(tabId, normalizedUrl, updatedVideo);
-    broadcastVideoUpdate(tabId);
+    if (updatedVideo) {
+        // Update UI
+        notifyVideoUpdated(tabId, normalizedUrl, updatedVideo);
+        broadcastVideoUpdate(tabId);
+    }
 }
 
 
