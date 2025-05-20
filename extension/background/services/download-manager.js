@@ -6,16 +6,15 @@
 // Add static import at the top
 import nativeHostService from '../../js/native-host-service.js';
 import { buildRequestHeaders } from '../../js/utilities/headers-utils.js';
+import { createLogger } from '../../js/utilities/logger.js';
 
 // Track downloads by ID for better connection persistence
 const downloads = new Map(); // key = downloadId, value = { url, progress, status, startTime, etc. }
 const activeDownloads = new Map(); // key = url, value = { progress, tabId, notificationId, lastUpdated, filename, etc. }
 const downloadPorts = new Map(); // key = portId, value = port object
 
-// Debug logging helper
-function logDebug(...args) {
-    console.log('[Download Manager]', new Date().toISOString(), ...args);
-}
+// Create a logger instance for the Download Manager module
+const logger = createLogger('Download Manager');
 
 // Generate a unique download ID
 function generateDownloadId() {
@@ -73,7 +72,7 @@ function handleDownloadSuccess(response, notificationId) {
     } catch (e) {
       console.error('Error sending success to port:', e);
       downloadPorts.delete(portId);
-      logDebug('Removed dead port after success failure:', portId);
+      logger.debug('Removed dead port after success failure:', portId);
     }
   }
 }
@@ -90,7 +89,7 @@ function handleDownloadError(error, notificationId) {
     } catch (e) {
       console.error('Error sending error to port:', e);
       downloadPorts.delete(portId);
-      logDebug('Removed dead port after error failure:', portId);
+      logger.debug('Removed dead port after error failure:', portId);
     }
   }
 }
@@ -199,7 +198,7 @@ function startDownload(request, port) {
                 } catch (e) {
                     console.error('Error sending progress to port:', e);
                     downloadPorts.delete(portId);
-                    logDebug('Removed dead port after send failure:', portId);
+                    logger.debug('Removed dead port after send failure:', portId);
                 }
             }
         } else if (response && response.success && !hasError) {
@@ -219,7 +218,7 @@ function startDownload(request, port) {
             // Keep completed download info for a while
             setTimeout(() => {
                 downloads.delete(downloadId);
-                logDebug('Removed completed download info:', downloadId);
+                logger.debug('Removed completed download info:', downloadId);
             }, 30 * 60 * 1000); // 30 minutes
             
         } else if (response && response.error && !hasError) {
@@ -243,7 +242,7 @@ function startDownload(request, port) {
     
     // Fetch headers for the video first
     buildRequestHeaders(request.tabId || -1, request.url).then(headers => {
-        logDebug('Using headers for download request:', Object.keys(headers));
+        logger.debug('Using headers for download request:', Object.keys(headers));
         
         // Using imported nativeHostService with headers
         nativeHostService.sendMessage({
@@ -303,7 +302,7 @@ function startDownload(request, port) {
         console.error('❌ Error getting headers:', error);
         
         // Continue with download without headers as fallback
-        logDebug('Continuing download without custom headers');
+        logger.debug('Continuing download without custom headers');
         
         nativeHostService.sendMessage({
             type: 'download',
@@ -375,7 +374,7 @@ function setupDownloadPort(port, portId) {
             const downloadInfo = activeDownloads.get(message.downloadUrl);
 
             if (downloadInfo) {
-                logDebug('Sending immediate download state for URL:', message.downloadUrl);
+                logger.debug('Sending immediate download state for URL:', message.downloadUrl);
                 try {
                     port.postMessage({
                         type: 'progress',
@@ -401,7 +400,7 @@ function setupDownloadPort(port, portId) {
             const downloadInfo = downloads.get(message.downloadId);
             
             if (downloadInfo) {
-                logDebug('Reconnecting to download:', message.downloadId);
+                logger.debug('Reconnecting to download:', message.downloadId);
                 try {
                     port.postMessage({
                         type: 'progress',
@@ -439,7 +438,7 @@ function setupDownloadPort(port, portId) {
     // Handle port disconnection
     port.onDisconnect.addListener(() => {
         downloadPorts.delete(portId);
-        logDebug('Download port disconnected and removed:', portId);
+        logger.debug('Download port disconnected and removed:', portId);
     });
 }
 
@@ -489,7 +488,7 @@ function getDownloadDetails(downloadId) {
 function cleanupDownloadsForTab(tabId) {
     for (const [url, downloadInfo] of activeDownloads.entries()) {
         if (downloadInfo.tabId === tabId) {
-            logDebug('Cleaning up download for closed tab:', url);
+            logger.debug('Cleaning up download for closed tab:', url);
             activeDownloads.delete(url);
         }
     }

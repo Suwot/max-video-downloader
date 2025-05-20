@@ -17,6 +17,7 @@ import { validateAndFilterVideos } from '../../js/utilities/video-validator.js';
 import { getActivePopupPortForTab } from './popup-ports.js';
 import { lightParseContent, fullParseContent } from '../../js/utilities/simple-js-parser.js';
 import { buildRequestHeaders } from '../../js/utilities/headers-utils.js';
+import { createLogger } from '../../js/utilities/logger.js';
 
 // Central store for all detected videos, keyed by tab ID, then normalized URL
 // Map<tabId, Map<normalizedUrl, videoInfo>>
@@ -119,33 +120,8 @@ const rateLimiter = {
   }
 };
 
-/**
- * Unified logging function with support for different log levels
- * @param {string} level - Log level (debug, info, error, group)
- * @param {string} context - Function or context where log originated
- * @param {...any} args - Arguments to log
- */
-function logMessage(level = 'debug', context, ...args) {
-    const timestamp = new Date().toISOString();
-    const prefix = `[Video Manager]`;
-    
-    switch(level) {
-        case 'error':
-            console.error(prefix, timestamp, `[${context}]`, ...args);
-            break;
-        case 'group':
-            console.group(`${prefix} ${timestamp} - ${context}`);
-            args.forEach(arg => console.log(arg));
-            console.groupEnd();
-            break;
-        case 'info':
-            console.info(prefix, timestamp, `[${context}]`, ...args);
-            break;
-        case 'debug':
-        default:
-            console.log(prefix, timestamp, `[${context}]`, ...args);
-    }
-}
+// Create a logger instance for the Video Manager module
+const logger = createLogger('Video Manager');
 
 /**
  * Single entry point for all video updates with proper logging
@@ -174,11 +150,10 @@ function updateVideo(functionName, tabId, normalizedUrl, updates, replace = fals
     }
     
     // Log the update
-    logMessage('group', functionName, 
+    logger.group(functionName,
         `TabID: ${tabId}, URL: ${normalizedUrl}`,
         `HasKnownMaster: ${updatedVideo.hasKnownMaster}, IsVariant: ${updatedVideo.isVariant}`,
-        ...(updatedVideo.masterUrl ? [`Master URL: ${updatedVideo.masterUrl}`] : []),
-        `Stack trace: ${new Error().stack}`
+        ...(updatedVideo.masterUrl ? [`Master URL: ${updatedVideo.masterUrl}`] : [])
     );
     
     // Set the value in the map
@@ -209,7 +184,7 @@ function handleVariantMasterRelationships(tabId, variants, masterUrl) {
         
         // Update the variant-master relationship map
         tabVariantMap.set(variantUrl, masterUrl);
-        logMessage('debug', 'handleVariantMasterRelationships', `Tracked variant ${variantUrl} as belonging to master ${masterUrl}`);
+        logger.debug(`Tracked variant ${variantUrl} as belonging to master ${masterUrl}`);
         
         // If this variant exists as standalone, update it
         if (tabVideos.has(variantUrl)) {
@@ -218,7 +193,7 @@ function handleVariantMasterRelationships(tabId, variants, masterUrl) {
                 masterUrl: masterUrl,
                 isVariant: true
             });
-            logMessage('debug', 'handleVariantMasterRelationships', `Updated existing standalone variant ${variantUrl} with master info`);
+            logger.debug(`Updated existing standalone variant ${variantUrl} with master info`);
         }
     }
 }
@@ -247,7 +222,7 @@ function getFilenameFromUrl(url) {
 // Broadcast videos to popup
 function broadcastVideoUpdate(tabId) {
     const processedVideos = getVideosForDisplay(tabId);
-    logMessage('info', 'broadcastVideoUpdate', `Broadcasting ${processedVideos.length} videos for tab ${tabId}`);
+    logger.info(`Broadcasting ${processedVideos.length} videos for tab ${tabId}`);
 
     if (processedVideos.length === 0) {
         return [];
@@ -262,7 +237,7 @@ function broadcastVideoUpdate(tabId) {
         });
     } catch (e) {
         // Ignore errors for sendMessage, as the popup might not be open
-        logMessage('debug', 'broadcastVideoUpdate', 'Error sending video update message (popup may not be open):', e.message);
+        logger.debug('Error sending video update message (popup may not be open):', e.message);
     }
     
     return processedVideos;
@@ -280,7 +255,7 @@ function notifyVideoUpdated(tabId, url, updatedVideo) {
         const port = getActivePopupPortForTab(tabId);
         
         if (port) {
-            logMessage('debug', 'notifyVideoUpdated', `Notifying popup for tab ${tabId} about video update for ${url}`);
+            logger.debug(`Notifying popup for tab ${tabId} about video update for ${url}`);
             
             // Make a clean copy of the video object for transmission
             const videoForTransmission = {
@@ -300,21 +275,21 @@ function notifyVideoUpdated(tabId, url, updatedVideo) {
                     video: videoForTransmission
                 });
             } catch (error) {
-                logMessage('debug', 'notifyVideoUpdated', `Error sending video update: ${error.message}`);
+                logger.debug(`Error sending video update: ${error.message}`);
             }
         } else {
             // No popup is open for this tab, which is normal
-            logMessage('debug', 'notifyVideoUpdated', `No active popup for tab ${tabId}, update will be shown when popup opens`);
+            logger.debug(`No active popup for tab ${tabId}, update will be shown when popup opens`);
         }
     } catch (error) {
-        logMessage('error', 'notifyVideoUpdated', `Error: ${error.message}`);
+        logger.error(`Error: ${error.message}`);
     }
 }
 
 // Get stream qualities
 async function getStreamQualities(url, tabId) {
     try {
-        logMessage('info', 'getStreamQualities', '🎥 Requesting media info from native host for:', url);
+        logger.info('🎥 Requesting media info from native host for:', url);
         
         // Get headers, using basic headers as fallback if tabId is not provided
         let headers;
@@ -324,7 +299,7 @@ async function getStreamQualities(url, tabId) {
             headers = await buildRequestHeaders(null, url);
         }
         
-        logMessage('debug', 'getStreamQualities', `Using headers for stream qualities: ${JSON.stringify(headers)}`);
+        logger.debug(`Using headers for stream qualities: ${JSON.stringify(headers)}`);
         
         const response = await nativeHostService.sendMessage({
             type: 'getQualities',
@@ -334,14 +309,14 @@ async function getStreamQualities(url, tabId) {
         
         return response;
     } catch (error) {
-        logMessage('error', 'getStreamQualities', 'Error getting media info:', error);
+        logger.error('Error getting media info:', error);
         return { error: error.message };
     }
 }
 
 // Clean up for tab
 function cleanupForTab(tabId) {
-    logMessage('debug', 'cleanupForTab', `Tab removed: ${tabId}`);
+    logger.debug(`Tab removed: ${tabId}`);
     
     // Clear videos from allDetectedVideos
     if (allDetectedVideos.has(tabId)) {
@@ -372,7 +347,7 @@ chrome.webNavigation.onCommitted.addListener((details) => {
  * This is used by the UI to force a complete refresh
  */
 function clearVideoCache() {
-    logMessage('debug', 'clearVideoCache', 'Clearing all video caches');
+    logger.debug('Clearing all video caches');
     
     allDetectedVideos.clear(); // Clear central video collection
     variantMasterMap.clear(); // Clear variant-master relationships
@@ -421,12 +396,12 @@ function addDetectedVideo(tabId, videoInfo) {
     
     // Log source of video for debugging
     const sourceOfVideo = videoInfo.source || 'unknown';
-    logMessage('debug', 'addDetectedVideo', `Video detection from source: ${sourceOfVideo} for URL: ${videoInfo.url} with timestamp: ${videoInfo.timestampDetected}`);
+    logger.debug(`Video detection from source: ${sourceOfVideo} for URL: ${videoInfo.url} with timestamp: ${videoInfo.timestampDetected}`);
     
     // Skip if already in this tab's collection
     if (tabMap.has(normalizedUrl)) {
         const existingVideo = tabMap.get(normalizedUrl);
-        logMessage('debug', 'addDetectedVideo', `Duplicate video detection from ${sourceOfVideo}. URL: ${videoInfo.url}, Existing timestamp: ${existingVideo.timestampDetected}, New timestamp: ${videoInfo.timestampDetected}`);
+        logger.debug(`Duplicate video detection from ${sourceOfVideo}. URL: ${videoInfo.url}, Existing timestamp: ${existingVideo.timestampDetected}, New timestamp: ${videoInfo.timestampDetected}`);
         return false;
     }
     
@@ -439,7 +414,7 @@ function addDetectedVideo(tabId, videoInfo) {
     };
     
     updateVideo('addDetectedVideo', tabId, normalizedUrl, newVideo, true);
-    logMessage('debug', 'addDetectedVideo', `Added new video to detection map: ${videoInfo.url} (type: ${videoInfo.type}, source: ${sourceOfVideo})`);
+    logger.debug(`Added new video to detection map: ${videoInfo.url} (type: ${videoInfo.type}, source: ${sourceOfVideo})`);
 
     // Process the video based on its type
     processVideo(tabId, normalizedUrl, newVideo);
@@ -476,7 +451,7 @@ async function runJSParser(tabId, normalizedUrl, type) {
         const headers = await buildRequestHeaders(tabId, video.url);
         
         // First do light parsing to determine content type
-        logMessage('debug', 'runJSParser', `Running light parsing for ${video.url}`);
+        logger.debug(`Running light parsing for ${video.url}`);
         const lightParseResult = await lightParseContent(video.url, type, headers);
         
         // Create light parse update fields
@@ -496,7 +471,7 @@ async function runJSParser(tabId, normalizedUrl, type) {
                 // Add master info to updates
                 lightParseUpdates.hasKnownMaster = true;
                 lightParseUpdates.masterUrl = tabVariantMap.get(normalizedUrl);
-                logMessage('debug', 'runJSParser', `Linked variant ${video.url} to master ${tabVariantMap.get(normalizedUrl)}`);
+                logger.debug(`Linked variant ${video.url} to master ${tabVariantMap.get(normalizedUrl)}`);
             }
         }
         
@@ -505,13 +480,13 @@ async function runJSParser(tabId, normalizedUrl, type) {
         
         // Stop here if not a valid video
         if (!lightParseResult.isValid) {
-            logMessage('debug', 'runJSParser', `${video.url} is not a valid ${type} video`);
+            logger.debug(`${video.url} is not a valid ${type} video`);
             return;
         }
         
         // For master playlists, extract variants with full parsing
         if (lightParseResult.isMaster) {
-            logMessage('debug', 'runJSParser', `Processing master playlist: ${video.url}`);
+            logger.debug(`Processing master playlist: ${video.url}`);
             
             // Run full parsing to extract variants
             const fullParseResult = await fullParseContent(video.url, lightParseResult.subtype, headers);
@@ -535,11 +510,11 @@ async function runJSParser(tabId, normalizedUrl, type) {
             } else {
                 // No variants found in master playlist; do not generate preview for master,
                 // as master playlists are not media files and cannot have previews.
-                logMessage('debug', 'runJSParser', `No variants found in master playlist: ${video.url} (no preview generated)`);
+                logger.debug(`No variants found in master playlist: ${video.url} (no preview generated)`);
             }
         } else if (lightParseResult.isVariant) {
             // For standalone variants, generate preview
-            logMessage('debug', 'runJSParser', `Detected standalone variant: ${video.url}`);
+            logger.debug(`Detected standalone variant: ${video.url}`);
             generateVideoPreview(tabId, normalizedUrl);
         } else {
             // For other content types, generate preview
@@ -550,7 +525,7 @@ async function runJSParser(tabId, normalizedUrl, type) {
         broadcastVideoUpdate(tabId);
         
     } catch (error) {
-        logMessage('error', 'runJSParser', `Error processing ${normalizedUrl}:`, error);
+        logger.error(`Error processing ${normalizedUrl}:`, error);
     } finally {
         processingRequests.finishProcessing(normalizedUrl, 'lightParsing');
     }
@@ -563,17 +538,17 @@ async function runJSParser(tabId, normalizedUrl, type) {
  * @param {Array} variants - Array of variant objects
  */
 async function processVariantsWithFFprobe(tabId, masterUrl, variants) {
-    logMessage('debug', 'processVariantsWithFFprobe', `Processing ${variants.length} variants with FFprobe`);
+    logger.debug(`Processing ${variants.length} variants with FFprobe`);
     
     // Process each variant sequentially
     for (let i = 0; i < variants.length; i++) {
         const variant = variants[i];
-        logMessage('debug', 'processVariantsWithFFprobe', `FFPROBE Processing variant ${i+1}/${variants.length}: ${variant.url}`);
+        logger.debug(`FFPROBE Processing variant ${i+1}/${variants.length}: ${variant.url}`);
         
         try {
             // Get headers for the request
             const headers = await buildRequestHeaders(tabId, variant.url);
-            logMessage('debug', 'processVariantsWithFFprobe', `Using headers for FFPROBE request: ${JSON.stringify(headers)}`);
+            logger.debug(`Using headers for FFPROBE request: ${JSON.stringify(headers)}`);
             
             // Get FFprobe metadata
             const ffprobeData = await rateLimiter.enqueue(async () => {
@@ -587,13 +562,13 @@ async function processVariantsWithFFprobe(tabId, masterUrl, variants) {
             });
             
             if (ffprobeData) {
-                logMessage('debug', 'processVariantsWithFFprobe', `Success FFPROBE data for variant URL: ${variant.url}, ${i+1}:`, ffprobeData);
+                logger.debug(`Success FFPROBE data for variant URL: ${variant.url}, ${i+1}:`, ffprobeData);
                 // Update variant in master's variants array
                 updateVariantWithFFprobeData(tabId, masterUrl, i, ffprobeData);
                 
                 // Only generate preview for the best quality variant (index 0)
                 if (i === 0) {
-                    logMessage('debug', 'processVariantsWithFFprobe', `Generating preview for best quality variant: ${variant.url}`);
+                    logger.debug(`Generating preview for best quality variant: ${variant.url}`);
                     
                     // Skip if already being processed
                     if (!processingRequests.isProcessing(variant.url, 'previews')) {
@@ -634,7 +609,7 @@ async function processVariantsWithFFprobe(tabId, masterUrl, variants) {
                                 });
                                 
                                 if (updatedVideo) {
-                                    logMessage('debug', 'processVariantsWithFFprobe', `Preview generated for best quality variant: ${response.previewUrl}`);
+                                    logger.debug(`Preview generated for best quality variant: ${response.previewUrl}`);
                                     
                                     // Update UI
                                     notifyVideoUpdated(tabId, masterUrl, updatedVideo);
@@ -648,7 +623,7 @@ async function processVariantsWithFFprobe(tabId, masterUrl, variants) {
                 }
             }
         } catch (error) {
-            logMessage('error', 'processVariantsWithFFprobe', `Error getting FFPROBE data for variant ${variant.url}:`, error);
+            logger.error(`Error getting FFPROBE data for variant ${variant.url}:`, error);
         }
     }
 }
@@ -715,16 +690,16 @@ async function runFFProbeParser(tabId, normalizedUrl) {
         
         // Skip if already fully parsed
         if (video.isFullyParsed) {
-            logMessage('debug', 'runFFProbeParser', `Video ${video.url} is already fully parsed, skipping FFprobe`);
+            logger.debug(`Video ${video.url} is already fully parsed, skipping FFprobe`);
             return;
         }
         
         // Get metadata from FFprobe
-        logMessage('debug', 'runFFProbeParser', `Getting FFPROBE metadata for ${video.url}`);
+        logger.debug(`Getting FFPROBE metadata for ${video.url}`);
         
         // Get headers for the request
         const headers = await buildRequestHeaders(tabId, video.url);
-        logMessage('debug', 'runFFProbeParser', `Using headers for FFPROBE request: ${JSON.stringify(headers)}`);
+        logger.debug(`Using headers for FFPROBE request: ${JSON.stringify(headers)}`);
         
         const streamInfo = await rateLimiter.enqueue(async () => {
             const response = await nativeHostService.sendMessage({
@@ -748,7 +723,7 @@ async function runFFProbeParser(tabId, normalizedUrl) {
             });
             
             if (updatedVideo) {
-                logMessage('debug', 'runFFProbeParser', `Updated map entry after FFprobe for URL ${video.url}: `, updatedVideo);
+                logger.debug(`Updated map entry after FFprobe for URL ${video.url}: `, updatedVideo);
                 
                 // Update UI
                 notifyVideoUpdated(tabId, normalizedUrl, updatedVideo);
@@ -756,7 +731,7 @@ async function runFFProbeParser(tabId, normalizedUrl) {
             }
         }
     } catch (error) {
-        logMessage('error', 'runFFProbeParser', `Error processing ${normalizedUrl}:`, error);
+        logger.error(`Error processing ${normalizedUrl}:`, error);
     } finally {
         processingRequests.finishProcessing(normalizedUrl, 'metadata');
     }
@@ -789,11 +764,11 @@ async function generateVideoPreview(tabId, normalizedUrl) {
         }
         
         // Generate preview
-        logMessage('debug', 'generateVideoPreview', `Generating preview for ${video.url}`);
+        logger.debug(`Generating preview for ${video.url}`);
         
         // Get headers for the request
         const headers = await buildRequestHeaders(tabId, video.url);
-        logMessage('debug', 'generateVideoPreview', `Using headers for preview request: ${JSON.stringify(headers)}`);
+        logger.debug(`Using headers for preview request: ${JSON.stringify(headers)}`);
         
         const response = await rateLimiter.enqueue(async () => {
             return await nativeHostService.sendMessage({
@@ -816,7 +791,7 @@ async function generateVideoPreview(tabId, normalizedUrl) {
             }
         }
     } catch (error) {
-        logMessage('error', 'generateVideoPreview', `Error processing ${normalizedUrl}:`, error);
+        logger.error(`Error processing ${normalizedUrl}:`, error);
     } finally {
         processingRequests.finishProcessing(normalizedUrl, 'previews');
     }
@@ -829,7 +804,7 @@ async function generateVideoPreview(tabId, normalizedUrl) {
  * @param {Object} video - The video object
  */
 async function processVideo(tabId, normalizedUrl, video) {
-    logMessage('debug', 'processVideo', `Processing video by type: ${video.url} (type: ${video.type})`);
+    logger.debug(`Processing video by type: ${video.url} (type: ${video.type})`);
     
     if (video.url.startsWith('blob:')) {
         // Handle blob URLs
@@ -850,7 +825,7 @@ async function processVideo(tabId, normalizedUrl, video) {
             notifyVideoUpdated(tabId, normalizedUrl, updatedVideo);
         }
         
-        logMessage('debug', 'processVideo', `Processed blob URL: ${video.url}`);
+        logger.debug(`Processed blob URL: ${video.url}`);
     } else if (video.type === 'hls' || video.type === 'dash') {
         // For streaming content, run parser pipeline
         await runJSParser(tabId, normalizedUrl, video.type);

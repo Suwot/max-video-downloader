@@ -9,6 +9,10 @@ import { initTabTracking } from './background/services/tab-tracker.js';
 import { setupDownloadPort } from './background/services/download-manager.js';
 import { setupPopupPort } from './background/services/popup-ports.js';
 import { isValidVideoUrl } from './js/utilities/video-validator.js';
+import { createLogger } from './js/utilities/logger.js';
+
+// Create a logger instance for the background script
+const logger = createLogger('Background');
 
 // Helper function to extract container format from URL
 function getContainerFromUrl(url) {
@@ -26,11 +30,6 @@ function getContainerFromUrl(url) {
         }
     }
     return null;
-}
-
-// Debug logging helper
-function logDebug(...args) {
-    console.log('[Background]', new Date().toISOString(), ...args);
 }
 
 // Debug logger for allDetectedVideos - will log every 10 seconds
@@ -212,7 +211,7 @@ initTabTracking();
 
 // Handle port connections
 chrome.runtime.onConnect.addListener(port => {
-    console.log('Background woke up: port connected:', port.name);
+    logger.debug('Background woke up: port connected:', port.name);
     
     // Create unique port ID
     const portId = Date.now().toString();
@@ -244,9 +243,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     return false;
 });
 
-logDebug('Background script initialized');
+logger.debug('Background script initialized');
 
 // Sleep handler
 chrome.runtime.onSuspend.addListener(() => {
-  console.log('Background going to sleep...');
+  logger.debug('Background going to sleep...');
 });

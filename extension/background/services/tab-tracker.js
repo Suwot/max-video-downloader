@@ -6,11 +6,10 @@
 // Add static imports at the top
 import { cleanupForTab } from './video-manager.js';
 import { cleanupDownloadsForTab } from './download-manager.js';
+import { createLogger } from '../../js/utilities/logger.js';
 
-// Debug logging helper
-function logDebug(...args) {
-    console.log('[Tab Tracker]', new Date().toISOString(), ...args);
-}
+// Create a logger instance for the Tab Tracker module
+const logger = createLogger('Tab Tracker');
 
 /**
  * Clean up stored scroll position for a closed tab
@@ -20,7 +19,7 @@ function cleanupScrollPositionForTab(tabId) {
     chrome.storage.local.get(['scrollPositions'], (result) => {
         const scrollPositions = result.scrollPositions || {};
         if (scrollPositions[tabId]) {
-            logDebug('Cleaning up scroll position for tab:', tabId);
+            logger.debug('Cleaning up scroll position for tab:', tabId);
             delete scrollPositions[tabId];
             chrome.storage.local.set({ scrollPositions });
         }
@@ -32,7 +31,7 @@ function cleanupScrollPositionForTab(tabId) {
  * This checks if tabs still exist and removes positions for closed tabs
  */
 function cleanupOrphanedScrollPositions() {
-    logDebug('Running periodic cleanup of orphaned scroll positions');
+    logger.debug('Running periodic cleanup of orphaned scroll positions');
     
     chrome.storage.local.get(['scrollPositions'], (result) => {
         const scrollPositions = result.scrollPositions || {};
@@ -49,7 +48,7 @@ function cleanupOrphanedScrollPositions() {
             chrome.tabs.get(tabId, () => {
                 if (chrome.runtime.lastError) {
                     // Tab doesn't exist anymore
-                    logDebug('Cleaning up orphaned scroll position for tab:', tabId);
+                    logger.debug('Cleaning up orphaned scroll position for tab:', tabId);
                     delete scrollPositions[tabId];
                     hasChanges = true;
                 }
@@ -70,7 +69,7 @@ function cleanupOrphanedScrollPositions() {
 function initTabTracking() {
     // Listen for tab removal events
     chrome.tabs.onRemoved.addListener((tabId) => {
-        logDebug('Tab removed:', tabId);
+        logger.debug('Tab removed:', tabId);
         
         // Cleanup videos and playlists
         cleanupForTab(tabId);

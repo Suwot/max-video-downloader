@@ -6,19 +6,18 @@
 // Add static imports at the top
 import { getVideosForDisplay, getStreamQualities, clearVideoCache } from './video-manager.js';
 import { getActiveDownloads, getDownloadDetails, startDownload } from './download-manager.js';
+import { createLogger } from '../../js/utilities/logger.js';
 
 // Track all popup connections for universal communication
 const popupPorts = new Map(); // key = portId, value = {port, tabId, url}
 const urlToTabMap = new Map(); // key = normalizedUrl, value = tabId
 
-// Debug logging helper
-function logDebug(...args) {
-    console.log('[Popup Ports]', new Date().toISOString(), ...args);
-}
+// Create a logger instance for the Popup Ports module
+const logger = createLogger('Popup Ports');
 
 // Handle messages coming through port connection
 async function handlePortMessage(message, port, portId) {
-    logDebug('Received port message:', message);
+    logger.debug('Received port message:', message);
     
     // Handle popup registration with URL and tab ID
     if (message.action === 'register' && message.tabId) {
@@ -32,9 +31,9 @@ async function handlePortMessage(message, port, portId) {
         // Also map URL to tab ID for reverse lookup
         if (message.url) {
             urlToTabMap.set(message.url, message.tabId);
-            logDebug(`Registered popup for tab ${message.tabId} with URL: ${message.url}`);
+            logger.debug(`Registered popup for tab ${message.tabId} with URL: ${message.url}`);
         } else {
-            logDebug(`Registered popup for tab ${message.tabId} (no URL provided)`);
+            logger.debug(`Registered popup for tab ${message.tabId} (no URL provided)`);
         }
         
         return;
@@ -52,7 +51,7 @@ async function handlePortMessage(message, port, portId) {
     
     // Handle preview generation request - now handled through enrichWithPreview in video-manager.js
     else if (message.type === 'generatePreview') {
-        logDebug(`Preview request received for URL: ${message.url}`);
+        logger.debug(`Preview request received for URL: ${message.url}`);
         try {
             // Just get the videos and check if any have a matching URL
             const videos = getVideosForDisplay(message.tabId);
@@ -83,7 +82,7 @@ async function handlePortMessage(message, port, portId) {
                 }
             }
         } catch (error) {
-            logDebug(`Error handling preview request: ${error.message}`);
+            logger.debug(`Error handling preview request: ${error.message}`);
             port.postMessage({
                 type: 'previewResponse',
                 requestUrl: message.url,
@@ -135,7 +134,7 @@ async function handlePortMessage(message, port, portId) {
             success: true
         });
         
-        logDebug('Cleared video caches');
+        logger.debug('Cleared video caches');
     }
 
     // Handle active downloads list request
@@ -159,7 +158,7 @@ async function handlePortMessage(message, port, portId) {
 function setupPopupPort(port, portId) {
     // Store in general popup port collection
     popupPorts.set(portId, { port });
-    logDebug('Popup connected with port ID:', portId);
+    logger.debug('Popup connected with port ID:', portId);
     
     // Set up message listener for general popup communication
     port.onMessage.addListener((message) => {
@@ -169,7 +168,7 @@ function setupPopupPort(port, portId) {
     // Handle port disconnection
     port.onDisconnect.addListener(() => {
         popupPorts.delete(portId);
-        logDebug('Popup port disconnected and removed:', portId);
+        logger.debug('Popup port disconnected and removed:', portId);
     });
 }
 
@@ -205,7 +204,7 @@ function broadcastToPopups(message) {
     // Clean up any invalid ports identified during broadcast
     if (portsToRemove.length > 0) {
         portsToRemove.forEach(id => popupPorts.delete(id));
-        logDebug(`Removed ${portsToRemove.length} invalid port(s)`);
+        logger.debug(`Removed ${portsToRemove.length} invalid port(s)`);
     }
 }
 
@@ -225,7 +224,7 @@ function getActivePopupPortForTab(tabId) {
                 } else {
                     // Port is invalid, clean it up
                     popupPorts.delete(portId);
-                    logDebug(`Removed invalid port for tab ${tabId}`);
+                    logger.debug(`Removed invalid port for tab ${tabId}`);
                 }
             }
         } catch (e) {
