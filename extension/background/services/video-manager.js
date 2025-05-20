@@ -860,36 +860,28 @@ async function processVideo(tabId, normalizedUrl, video) {
     }
 }
 
-// Function replaced by getVideosForDisplay
-
 /**
  * Get videos for UI display with efficient filtering
  * @param {number} tabId - Tab ID
  * @returns {Array} Filtered and processed videos
  */
 function getVideosForDisplay(tabId) {
-    if (!allDetectedVideos.has(tabId)) return [];
-    
     const tabVideosMap = allDetectedVideos.get(tabId);
-    const tabVariantMap = variantMasterMap.get(tabId) || new Map();
+    if (!tabVideosMap) return [];
     
-    // One-pass filtering and mapping
-    const displayVideos = Array.from(tabVideosMap.entries())
-        .filter(([url, video]) => {
-            // Skip variants that belong to a master we already have
-            return !(video.isVariant && (video.hasKnownMaster || tabVariantMap.has(url)));
-        })
-        .map(([_, video]) => ({
+    const tabVariantMap = variantMasterMap.get(tabId) || new Map();
+    const now = Date.now();
+    
+    // Create array directly from values() instead of entries()
+    return Array.from(tabVideosMap.values())
+        .filter(video => !(video.isVariant && (video.hasKnownMaster || tabVariantMap.has(video.normalizedUrl))))
+        .map(video => ({
             ...video,
-            // Add additional metadata needed by UI
             title: video.title || getFilenameFromUrl(video.url),
-            timestampLastProcessed: Date.now(),
+            timestampLastProcessed: now,
             ...(video.poster ? { poster: video.poster } : {})
         }))
         .sort((a, b) => b.timestampDetected - a.timestampDetected);
-    
-    logDebug(`Prepared ${displayVideos.length} videos for display from tab ${tabId}`);
-    return displayVideos;
 }
 
 
