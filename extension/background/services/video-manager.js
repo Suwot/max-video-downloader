@@ -215,34 +215,12 @@ function getFilenameFromUrl(url) {
     return 'video';
 }
 
-// Process videos for sending to popup - fully prepare videos for instant display
-function processVideosForBroadcast(videos) {
-    
-    // Preparation for display
-    const processedVideos = videos.map(video => {
-        // Add additional information needed for immediate display
-        return {
-            ...video,
-            // Add additional metadata needed by UI
-            timestampLastProcessed: Date.now(),
-            // Ensure video has all necessary fields for display
-            title: video.title || getFilenameFromUrl(video.url),
-            ...(video.poster ? { poster: video.poster } : {}),
-            // Preserve the detection timestamp for debugging duplicates
-            timestampDetected: video.timestampDetected || null,
-            ...(video.variants ? { variants: video.variants } : {})
-        };
-    });
-    
-    // Sort by newest first
-    return processedVideos.sort((a, b) => b.timestampDetected - a.timestampDetected);
-}
+// Process videos for sending to popup functionality moved into getVideosForDisplay
 
 // Broadcast videos to popup
 function broadcastVideoUpdate(tabId) {
-    // Use new array-from-map function instead of videosPerTab
-    const processedVideos = getVideosArrayFromMap(tabId);
-    logDebug(`Broadcasting ${processedVideos.length} videos for tab ${tabId} with this content: `, processedVideos);
+    const processedVideos = getVideosForDisplay(tabId);
+    logDebug(`Broadcasting ${processedVideos.length} videos for tab ${tabId}`);
 
     if (processedVideos.length === 0) {
         return [];
@@ -882,34 +860,36 @@ async function processVideo(tabId, normalizedUrl, video) {
     }
 }
 
+// Function replaced by getVideosForDisplay
 
-// experimental function as alternative to getVideosForTab
-// This function returns an array of videos for a specific tab ID
-// It filters out variants with known masters and processes the videos for broadcast
-function getVideosArrayFromMap(tabId) {
-    if (!allDetectedVideos.has(tabId)) {
-        return [];
-    }
+/**
+ * Get videos for UI display with efficient filtering
+ * @param {number} tabId - Tab ID
+ * @returns {Array} Filtered and processed videos
+ */
+function getVideosForDisplay(tabId) {
+    if (!allDetectedVideos.has(tabId)) return [];
     
     const tabVideosMap = allDetectedVideos.get(tabId);
-    const tabVariantMap = variantMasterMap.get(tabId);
-    const resultArray = [];
+    const tabVariantMap = variantMasterMap.get(tabId) || new Map();
     
-    // Convert map to array, filtering out variants with known masters
-    for (const [normalizedUrl, videoObj] of tabVideosMap.entries()) {
-        // Check both the hasKnownMaster flag AND the variantMasterMap
-        // This ensures we catch variants even if the flag hasn't been set yet
-        const isInVariantMap = tabVariantMap && tabVariantMap.has(normalizedUrl);
-        
-        if (!(videoObj.isVariant && (videoObj.hasKnownMaster || isInVariantMap))) {
-            resultArray.push({
-                ...videoObj,
-                fromArrayMap: true // Mark as coming from map
-            });
-        }
-    }
+    // One-pass filtering and mapping
+    const displayVideos = Array.from(tabVideosMap.entries())
+        .filter(([url, video]) => {
+            // Skip variants that belong to a master we already have
+            return !(video.isVariant && (video.hasKnownMaster || tabVariantMap.has(url)));
+        })
+        .map(([_, video]) => ({
+            ...video,
+            // Add additional metadata needed by UI
+            title: video.title || getFilenameFromUrl(video.url),
+            timestampLastProcessed: Date.now(),
+            ...(video.poster ? { poster: video.poster } : {})
+        }))
+        .sort((a, b) => b.timestampDetected - a.timestampDetected);
     
-    return processVideosForBroadcast(resultArray);
+    logDebug(`Prepared ${displayVideos.length} videos for display from tab ${tabId}`);
+    return displayVideos;
 }
 
 
@@ -920,6 +900,6 @@ export {
     cleanupForTab,
     normalizeUrl,
     getAllDetectedVideos,
-    getVideosArrayFromMap,
+    getVideosForDisplay,
     clearVideoCache
 };

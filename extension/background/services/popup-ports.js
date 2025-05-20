@@ -4,7 +4,7 @@
  */
 
 // Add static imports at the top
-import { getVideosArrayFromMap, getStreamQualities, clearVideoCache } from './video-manager.js';
+import { getVideosForDisplay, getStreamQualities, clearVideoCache } from './video-manager.js';
 import { getActiveDownloads, getDownloadDetails, startDownload } from './download-manager.js';
 
 // Track all popup connections for universal communication
@@ -42,7 +42,7 @@ async function handlePortMessage(message, port, portId) {
     
     // Handle video list request
     if (message.action === 'getVideos') {
-        const videos = getVideosArrayFromMap(message.tabId);
+        const videos = getVideosForDisplay(message.tabId);
         
         port.postMessage({
             action: 'videoListResponse',
@@ -55,7 +55,7 @@ async function handlePortMessage(message, port, portId) {
         logDebug(`Preview request received for URL: ${message.url}`);
         try {
             // Just get the videos and check if any have a matching URL
-            const videos = getVideosArrayFromMap(message.tabId);
+            const videos = getVideosForDisplay(message.tabId);
             const matchingVideo = videos.find(v => v.url === message.url);
             
             // Return any existing preview or let the popup know we're working on it
