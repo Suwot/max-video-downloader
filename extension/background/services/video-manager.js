@@ -126,48 +126,36 @@ function logMapUpdate(functionName, tabId, normalizedUrl, videoObject) {
 }
 
 /**
- * Update a video in the allDetectedVideos map with detailed logging
- * @param {string} functionName - The name of the function making the update
- * @param {number} tabId - Tab ID
- * @param {string} normalizedUrl - Normalized video URL
- * @param {Object} videoObject - The video object to set in the map
- */
-function updateVideoInMap(functionName, tabId, normalizedUrl, videoObject) {
-    const tabMap = allDetectedVideos.get(tabId);
-    if (!tabMap) return;
-    
-    // Log the update with caller information
-    logMapUpdate(functionName, tabId, normalizedUrl, videoObject);
-    
-    // Set the value in the map
-    tabMap.set(normalizedUrl, videoObject);
-}
-
-/**
- * A more efficient helper function for updating videos that preserves all important flags
+ * Single entry point for all video updates with proper logging
  * @param {string} functionName - Function making the update
  * @param {number} tabId - Tab ID
  * @param {string} normalizedUrl - Video URL
- * @param {Object} updates - Just the fields to update
+ * @param {Object} updates - Fields to update (or complete object)
+ * @param {boolean} [replace=false] - If true, replace the entire object instead of merging
  * @returns {Object|null} - Updated video object or null if video not found
  */
-function updateVideoFields(functionName, tabId, normalizedUrl, updates) {
+function updateVideo(functionName, tabId, normalizedUrl, updates, replace = false) {
     const tabMap = allDetectedVideos.get(tabId);
-    if (!tabMap || !tabMap.has(normalizedUrl)) {
-        return null;
+    if (!tabMap) return null;
+    
+    // For replace mode, only check if tabMap exists
+    // For update mode, also check if the video exists
+    if (!replace && !tabMap.has(normalizedUrl)) return null;
+    
+    // Create updated video object
+    let updatedVideo;
+    if (replace) {
+        updatedVideo = { ...updates };
+    } else {
+        const currentVideo = tabMap.get(normalizedUrl);
+        updatedVideo = { ...currentVideo, ...updates };
     }
     
-    // Get current video state
-    const currentVideo = tabMap.get(normalizedUrl);
+    // Log the update
+    logMapUpdate(functionName, tabId, normalizedUrl, updatedVideo);
     
-    // Create updated video preserving all existing properties
-    const updatedVideo = {
-        ...currentVideo,
-        ...updates
-    };
-    
-    // Update in map
-    updateVideoInMap(functionName, tabId, normalizedUrl, updatedVideo);
+    // Set the value in the map
+    tabMap.set(normalizedUrl, updatedVideo);
     
     return updatedVideo;
 }
@@ -212,17 +200,13 @@ function updateExistingVariant(tabId, normalizedVariantUrl, masterUrl) {
     // Variant exists as standalone, update it with master info
     const variant = tabVideos.get(normalizedVariantUrl);
     
-    // Simpler approach: update any matching URL without checking if it's a variant
-    // Since we know the URL is in the master's variant list, it must be a variant
-    const updatedVariant = {
-        ...variant,
+    // Update with master info using our new unified function
+    updateVideo('updateExistingVariant', tabId, normalizedVariantUrl, {
         hasKnownMaster: true,
         masterUrl: masterUrl,
-        // Pre-flag it as a variant since we know it's in a master's variant list
         isVariant: true
-    };
+    });
     
-    updateVideoInMap('updateExistingVariant', tabId, normalizedVariantUrl, updatedVariant);
     logDebug(`Updated existing standalone variant ${normalizedVariantUrl} with master info`);
 }
 
@@ -488,7 +472,7 @@ function addDetectedVideo(tabId, videoInfo) {
         isBeingProcessed: false
     };
     
-    updateVideoInMap('addDetectedVideo', tabId, normalizedUrl, newVideo);
+    updateVideo('addDetectedVideo', tabId, normalizedUrl, newVideo, true);
 
     logDebug(`Added new video to detection map: ${videoInfo.url} (type: ${videoInfo.type}, source: ${sourceOfVideo})`);
 
@@ -567,8 +551,8 @@ async function runJSParser(tabId, normalizedUrl, type) {
             }
         }
         
-        // Update video with light parse results using our helper function
-        const updatedVideoAfterLightParse = updateVideoFields('runJSParser-lightParse', tabId, normalizedUrl, lightParseUpdates);
+        // Update video with light parse results using our unified function
+        const updatedVideoAfterLightParse = updateVideo('runJSParser-lightParse', tabId, normalizedUrl, lightParseUpdates);
         
         // Stop here if not a valid video
         if (!lightParseResult.isValid) {
@@ -584,8 +568,8 @@ async function runJSParser(tabId, normalizedUrl, type) {
             const fullParseResult = await fullParseContent(video.url, lightParseResult.subtype, headers);
             
             if (fullParseResult.variants && fullParseResult.variants.length > 0) {
-                // Update master with variants using our helper function
-                const updatedVideoAfterFullParse = updateVideoFields('runJSParser-fullParse', tabId, normalizedUrl, {
+                // Update master with variants using our unified function
+                const updatedVideoAfterFullParse = updateVideo('runJSParser-fullParse', tabId, normalizedUrl, {
                     variants: fullParseResult.variants,
                     duration: (fullParseResult.variants[0]?.metaJS?.duration),
                     timestampFP: Date.now()
@@ -695,8 +679,8 @@ async function processVariantsWithFFprobe(tabId, masterUrl, variants) {
                                     previewUrl: response.previewUrl
                                 };
                                 
-                                // Update master with the new variants array using our helper function
-                                const updatedVideo = updateVideoFields('processVariantsWithFFprobe-preview', tabId, masterUrl, {
+                                // Update master with the new variants array using our unified function
+                                const updatedVideo = updateVideo('processVariantsWithFFprobe-preview', tabId, masterUrl, {
                                     variants: updatedVariants
                                 });
                                 
@@ -748,8 +732,8 @@ function updateVariantWithFFprobeData(tabId, masterUrl, variantIndex, ffprobeDat
         timestampFFProbe: Date.now()
     };
     
-    // Update master with new variants array using our helper function
-    const updatedVideo = updateVideoFields('updateVariantWithFFprobeData', tabId, masterUrl, {
+    // Update master with new variants array using our unified function
+    const updatedVideo = updateVideo('updateVariantWithFFprobeData', tabId, masterUrl, {
         variants: updatedVariants
     });
     
@@ -805,8 +789,8 @@ async function runFFProbeParser(tabId, normalizedUrl) {
         
         if (streamInfo) {
             
-            // Update video with metadata using our helper function
-            const updatedVideo = updateVideoFields('runFFProbeParser', tabId, normalizedUrl, {
+            // Update video with metadata using our unified function
+            const updatedVideo = updateVideo('runFFProbeParser', tabId, normalizedUrl, {
                 metaFFprobe: streamInfo,  // Store FFprobe data separately
                 hasFFprobeMetadata: true,
                 isFullyParsed: true,
@@ -871,8 +855,8 @@ async function generateVideoPreview(tabId, normalizedUrl) {
         });
         
         if (response && response.previewUrl) {
-            // Update video with preview URL using our helper function
-            const updatedVideo = updateVideoFields('generateVideoPreview', tabId, normalizedUrl, {
+            // Update video with preview URL using our unified function
+            const updatedVideo = updateVideo('generateVideoPreview', tabId, normalizedUrl, {
                 previewUrl: response.previewUrl
             });
             
@@ -902,8 +886,8 @@ function handleBlobVideo(tabId, normalizedUrl) {
     
     const video = tabMap.get(normalizedUrl);
     
-    // Set placeholder metadata for blob URLs using our helper function
-    const updatedVideo = updateVideoFields('handleBlobVideo', tabId, normalizedUrl, {
+    // Set placeholder metadata for blob URLs using our unified function
+    const updatedVideo = updateVideo('handleBlobVideo', tabId, normalizedUrl, {
         mediaInfo: {
             isBlob: true,
             type: 'blob',
