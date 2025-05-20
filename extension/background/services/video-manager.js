@@ -454,32 +454,14 @@ function addDetectedVideo(tabId, videoInfo) {
         ...videoInfo,
         normalizedUrl,
         tabId,
-        // Important flags for tracking processing status
         isBeingProcessed: false
     };
     
     updateVideo('addDetectedVideo', tabId, normalizedUrl, newVideo, true);
-
     logDebug(`Added new video to detection map: ${videoInfo.url} (type: ${videoInfo.type}, source: ${sourceOfVideo})`);
 
-    // Now process based on video type
-    if (videoInfo.url.startsWith('blob:')) {
-        // Handle blob URLs differently - they need special metadata
-        handleBlobVideo(tabId, normalizedUrl);
-    } else if (videoInfo.type === 'hls' || videoInfo.type === 'dash') {
-        // For streaming content, first run JS parser
-        runJSParser(tabId, normalizedUrl, videoInfo.type);
-    } else if (videoInfo.type === 'direct') {
-        // For direct videos, get FFprobe metadata
-        runFFProbeParser(tabId, normalizedUrl);
-        // Also generate preview
-        generateVideoPreview(tabId, normalizedUrl);
-    } else {
-        // Unknown types - try FFprobe anyway as fallback
-        runFFProbeParser(tabId, normalizedUrl);
-        // Also generate preview
-        generateVideoPreview(tabId, normalizedUrl);
-    }
+    // Process the video based on its type
+    processVideo(tabId, normalizedUrl, newVideo);
     
     // Broadcast initial state to UI
     broadcastVideoUpdate(tabId);
@@ -860,35 +842,43 @@ async function generateVideoPreview(tabId, normalizedUrl) {
 }
 
 /**
- * Handle blob URLs (which need special treatment)
- * @param {number} tabId - Tab ID
+ * Process a detected video based on its type
+ * @param {number} tabId - Tab ID 
  * @param {string} normalizedUrl - Normalized video URL
+ * @param {Object} video - The video object
  */
-function handleBlobVideo(tabId, normalizedUrl) {
-    const tabMap = allDetectedVideos.get(tabId);
-    if (!tabMap || !tabMap.has(normalizedUrl)) {
-        return;
-    }
+async function processVideo(tabId, normalizedUrl, video) {
+    logDebug(`Processing video by type: ${video.url} (type: ${video.type})`);
     
-    const video = tabMap.get(normalizedUrl);
-    
-    // Set placeholder metadata for blob URLs using our unified function
-    const updatedVideo = updateVideo('handleBlobVideo', tabId, normalizedUrl, {
-        mediaInfo: {
-            isBlob: true,
-            type: 'blob',
-            format: 'blob',
-            container: 'blob',
-            hasVideo: null,
-            hasAudio: null
-        },
-        isFullyParsed: true
-    });
-    
-    if (updatedVideo) {
-        // Update UI
-        notifyVideoUpdated(tabId, normalizedUrl, updatedVideo);
-        broadcastVideoUpdate(tabId);
+    if (video.url.startsWith('blob:')) {
+        // Handle blob URLs
+        const updatedVideo = updateVideo('processVideo', tabId, normalizedUrl, {
+            mediaInfo: { 
+                isBlob: true, 
+                type: 'blob', 
+                format: 'blob', 
+                container: 'blob',
+                hasVideo: null,
+                hasAudio: null
+            },
+            isFullyParsed: true
+        });
+        
+        if (updatedVideo) {
+            // Update UI
+            notifyVideoUpdated(tabId, normalizedUrl, updatedVideo);
+        }
+        
+        logDebug(`Processed blob URL: ${video.url}`);
+    } else if (video.type === 'hls' || video.type === 'dash') {
+        // For streaming content, run parser pipeline
+        await runJSParser(tabId, normalizedUrl, video.type);
+    } else {
+        // For direct videos or fallback, run both operations in parallel
+        await Promise.all([
+            runFFProbeParser(tabId, normalizedUrl),
+            generateVideoPreview(tabId, normalizedUrl)
+        ]);
     }
 }
 
