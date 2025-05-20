@@ -82,7 +82,7 @@ function scanAllVideos() {
       // processNewVideoElement handles WeakSet tracking, observer attachment, and detection
       if (!state.observedVideoElements.has(video)) {
         const originalSource = video._source;
-        video._source = 'initial_scan'; // Temporarily mark source for tracking
+        video._source = 'CS_initial_scan'; // Temporarily mark source for tracking
         
         // No URL yet, but still process it to set up observers for future changes
         processNewVideoElement(video);
