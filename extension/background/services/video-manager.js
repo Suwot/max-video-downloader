@@ -31,28 +31,27 @@ globalThis.allDetectedVideosInternal = allDetectedVideos;
 
 // Temporary processing trackers (not for storage) - using a unified tracking mechanism
 const processingRequests = {
+    // Map to track operations by type and URL
+    operations: new Map(),
+    
     isProcessing(url, operation) {
-        if (!this[operation]) this[operation] = new Set();
-        return this[operation].has(url);
+        const key = `${operation}:${url}`;
+        return this.operations.has(key);
     },
     
     startProcessing(url, operation) {
-        if (!this[operation]) this[operation] = new Set();
-        this[operation].add(url);
+        const key = `${operation}:${url}`;
+        this.operations.set(key, Date.now());
         return true;
     },
     
     finishProcessing(url, operation) {
-        if (this[operation]) this[operation].delete(url);
+        const key = `${operation}:${url}`;
+        this.operations.delete(key);
     },
     
     clearAll() {
-        // Clean up all operation tracking
-        for (const key in this) {
-            if (this[key] instanceof Set) {
-                this[key].clear();
-            }
-        }
+        this.operations.clear();
     }
 };
 
