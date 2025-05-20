@@ -161,53 +161,39 @@ function updateVideo(functionName, tabId, normalizedUrl, updates, replace = fals
 }
 
 /**
- * Track variant-master relationships when variants are found in a master playlist
+ * Track and update variant-master relationships
  * @param {number} tabId - Tab ID
  * @param {Array} variants - Array of variant objects
  * @param {string} masterUrl - The normalized master URL
  */
-function trackVariantMasterRelationship(tabId, variants, masterUrl) {
-    // Ensure the tab entry exists in the variant-master map
+function handleVariantMasterRelationships(tabId, variants, masterUrl) {
     if (!variantMasterMap.has(tabId)) {
         variantMasterMap.set(tabId, new Map());
     }
     
     const tabVariantMap = variantMasterMap.get(tabId);
-    
-    // Record all variants from this master
-    for (const variant of variants) {
-        const normalizedVariantUrl = variant.normalizedUrl;
-        tabVariantMap.set(normalizedVariantUrl, masterUrl);
-        logDebug(`Tracked variant ${normalizedVariantUrl} as belonging to master ${masterUrl}`);
-        
-        // Update any existing standalone variant entries
-        updateExistingVariant(tabId, normalizedVariantUrl, masterUrl);
-    }
-}
-
-/**
- * Update an existing standalone variant with master info
- * @param {number} tabId - Tab ID
- * @param {string} normalizedVariantUrl - Normalized variant URL
- * @param {string} masterUrl - Normalized master URL
- */
-function updateExistingVariant(tabId, normalizedVariantUrl, masterUrl) {
     const tabVideos = allDetectedVideos.get(tabId);
-    if (!tabVideos || !tabVideos.has(normalizedVariantUrl)) {
-        return; // No standalone variant exists yet
+    
+    if (!tabVideos) return;
+    
+    // Process each variant
+    for (const variant of variants) {
+        const variantUrl = variant.normalizedUrl;
+        
+        // Update the variant-master relationship map
+        tabVariantMap.set(variantUrl, masterUrl);
+        logDebug(`Tracked variant ${variantUrl} as belonging to master ${masterUrl}`);
+        
+        // If this variant exists as standalone, update it
+        if (tabVideos.has(variantUrl)) {
+            updateVideo('handleVariantMasterRelationships', tabId, variantUrl, {
+                hasKnownMaster: true,
+                masterUrl: masterUrl,
+                isVariant: true
+            });
+            logDebug(`Updated existing standalone variant ${variantUrl} with master info`);
+        }
     }
-    
-    // Variant exists as standalone, update it with master info
-    const variant = tabVideos.get(normalizedVariantUrl);
-    
-    // Update with master info using our new unified function
-    updateVideo('updateExistingVariant', tabId, normalizedVariantUrl, {
-        hasKnownMaster: true,
-        masterUrl: masterUrl,
-        isVariant: true
-    });
-    
-    logDebug(`Updated existing standalone variant ${normalizedVariantUrl} with master info`);
 }
 
 // Extract filename from URL
@@ -575,8 +561,8 @@ async function runJSParser(tabId, normalizedUrl, type) {
                     timestampFP: Date.now()
                 });
                 
-                // Track all variants from this master
-                trackVariantMasterRelationship(tabId, fullParseResult.variants, normalizedUrl);
+                // Track all variants from this master using our streamlined function
+                handleVariantMasterRelationships(tabId, fullParseResult.variants, normalizedUrl);
                 
                 // For each variant, get FFprobe metadata
                 // Preview will be generated for the best quality variant in processVariantsWithFFprobe
