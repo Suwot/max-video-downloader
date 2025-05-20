@@ -29,12 +29,31 @@ const variantMasterMap = new Map();
 // Expose allDetectedVideos for debugging
 globalThis.allDetectedVideosInternal = allDetectedVideos;
 
-// Temporary processing trackers (not for storage)
+// Temporary processing trackers (not for storage) - using a unified tracking mechanism
 const processingRequests = {
-  previews: new Set(), // Track URLs currently being processed for previews
-  metadata: new Set(),  // Track URLs currently being processed for metadata
-  lightParsing: new Set(), // Track URLs currently being light parsed
-  playlist: new Set() // Track URLs currently being processed for playlist info
+    isProcessing(url, operation) {
+        if (!this[operation]) this[operation] = new Set();
+        return this[operation].has(url);
+    },
+    
+    startProcessing(url, operation) {
+        if (!this[operation]) this[operation] = new Set();
+        this[operation].add(url);
+        return true;
+    },
+    
+    finishProcessing(url, operation) {
+        if (this[operation]) this[operation].delete(url);
+    },
+    
+    clearAll() {
+        // Clean up all operation tracking
+        for (const key in this) {
+            if (this[key] instanceof Set) {
+                this[key].clear();
+            }
+        }
+    }
 };
 
 // Rate limiter for API requests
@@ -363,10 +382,7 @@ function clearVideoCache() {
     variantMasterMap.clear();
     
     // Clear processing requests
-    processingRequests.previews.clear();
-    processingRequests.metadata.clear();
-    processingRequests.lightParsing.clear();
-    processingRequests.playlist.clear();
+    processingRequests.clearAll();
 }
 
 /**
@@ -464,11 +480,11 @@ function addDetectedVideo(tabId, videoInfo) {
  */
 async function runJSParser(tabId, normalizedUrl, type) {
     // Skip if already being processed
-    if (processingRequests.lightParsing.has(normalizedUrl)) {
+    if (processingRequests.isProcessing(normalizedUrl, 'lightParsing')) {
         return;
     }
     
-    processingRequests.lightParsing.add(normalizedUrl);
+    processingRequests.startProcessing(normalizedUrl, 'lightParsing');
     
     try {
         const tabMap = allDetectedVideos.get(tabId);
@@ -558,7 +574,7 @@ async function runJSParser(tabId, normalizedUrl, type) {
     } catch (error) {
         logMessage('error', 'runJSParser', `Error processing ${normalizedUrl}:`, error);
     } finally {
-        processingRequests.lightParsing.delete(normalizedUrl);
+        processingRequests.finishProcessing(normalizedUrl, 'lightParsing');
     }
 }
 
@@ -602,8 +618,8 @@ async function processVariantsWithFFprobe(tabId, masterUrl, variants) {
                     logMessage('debug', 'processVariantsWithFFprobe', `Generating preview for best quality variant: ${variant.url}`);
                     
                     // Skip if already being processed
-                    if (!processingRequests.previews.has(variant.url)) {
-                        processingRequests.previews.add(variant.url);
+                    if (!processingRequests.isProcessing(variant.url, 'previews')) {
+                        processingRequests.startProcessing(variant.url, 'previews');
                         
                         try {
                             // Generate preview
@@ -648,7 +664,7 @@ async function processVariantsWithFFprobe(tabId, masterUrl, variants) {
                                 }
                             }
                         } finally {
-                            processingRequests.previews.delete(variant.url);
+                            processingRequests.finishProcessing(variant.url, 'previews');
                         }
                     }
                 }
@@ -705,11 +721,11 @@ function updateVariantWithFFprobeData(tabId, masterUrl, variantIndex, ffprobeDat
  */
 async function runFFProbeParser(tabId, normalizedUrl) {
     // Skip if already being processed
-    if (processingRequests.metadata.has(normalizedUrl)) {
+    if (processingRequests.isProcessing(normalizedUrl, 'metadata')) {
         return;
     }
     
-    processingRequests.metadata.add(normalizedUrl);
+    processingRequests.startProcessing(normalizedUrl, 'metadata');
     
     try {
         const tabMap = allDetectedVideos.get(tabId);
@@ -764,7 +780,7 @@ async function runFFProbeParser(tabId, normalizedUrl) {
     } catch (error) {
         logMessage('error', 'runFFProbeParser', `Error processing ${normalizedUrl}:`, error);
     } finally {
-        processingRequests.metadata.delete(normalizedUrl);
+        processingRequests.finishProcessing(normalizedUrl, 'metadata');
     }
 }
 
@@ -775,11 +791,11 @@ async function runFFProbeParser(tabId, normalizedUrl) {
  */
 async function generateVideoPreview(tabId, normalizedUrl) {
     // Skip if already being processed
-    if (processingRequests.previews.has(normalizedUrl)) {
+    if (processingRequests.isProcessing(normalizedUrl, 'previews')) {
         return;
     }
     
-    processingRequests.previews.add(normalizedUrl);
+    processingRequests.startProcessing(normalizedUrl, 'previews');
     
     try {
         const tabMap = allDetectedVideos.get(tabId);
@@ -824,7 +840,7 @@ async function generateVideoPreview(tabId, normalizedUrl) {
     } catch (error) {
         logMessage('error', 'generateVideoPreview', `Error processing ${normalizedUrl}:`, error);
     } finally {
-        processingRequests.previews.delete(normalizedUrl);
+        processingRequests.finishProcessing(normalizedUrl, 'previews');
     }
 }
 
