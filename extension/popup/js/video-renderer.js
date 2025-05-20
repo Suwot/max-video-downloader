@@ -490,7 +490,7 @@ function createVideoActions(video) {
                 }
             }
             
-            // Add codec info if available
+            // Add estimated size info if available
             let estimatedFileSizeBytes = variant.metaJS?.estimatedFileSizeBytes || null;
             if (estimatedFileSizeBytes) {
                 const mb = (estimatedFileSizeBytes / 1000000).toFixed(1);

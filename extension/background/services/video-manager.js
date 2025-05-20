@@ -375,29 +375,10 @@ chrome.webNavigation.onCommitted.addListener((details) => {
 function clearVideoCache() {
     logMessage('debug', 'clearVideoCache', 'Clearing all video caches');
     
-    // Clear central video collection
-    allDetectedVideos.clear();
-    
-    // Clear variant-master relationships
-    variantMasterMap.clear();
-    
-    // Clear processing requests
-    processingRequests.clearAll();
+    allDetectedVideos.clear(); // Clear central video collection
+    variantMasterMap.clear(); // Clear variant-master relationships
+    processingRequests.clearAll(); // Clear processing requests
 }
-
-/**
- * Estimate file size based on bitrate and duration
- * @param {number} bitrate - Bitrate in bits per second
- * @param {number} duration - Duration in seconds
- * @returns {number} Estimated file size in bytes
- */
-function estimateFileSize(bitrate, duration) {
-    if (!bitrate || !duration) return null;
-    
-    // Formula: (bitrate in bps * duration in seconds) / 8 = bytes
-    return Math.round((bitrate * duration) / 8);
-}
-
 
 /**
  * Get all detected videos, optionally filtered by tab
@@ -419,8 +400,6 @@ function getAllDetectedVideos(tabId) {
     // Return videos for specific tab or empty map if tab doesn't exist
     return allDetectedVideos.get(tabId) || new Map();
 }
-
-// addition of all new suggested logic
 
 /**
  * Add detected video to the central tracking map
