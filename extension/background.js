@@ -10,6 +10,7 @@ import { setupDownloadPort } from './background/services/download-manager.js';
 import { setupPopupPort } from './background/services/popup-ports.js';
 import { isValidVideoUrl } from './js/utilities/video-validator.js';
 import { createLogger } from './js/utilities/logger.js';
+import { clearCache, getCacheStats } from './js/utilities/preview-cache.js';
 
 // Create a logger instance for the background script
 const logger = createLogger('Background');
@@ -238,6 +239,23 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             addDetectedVideo(tabId, request);
         }
         return false;
+    }
+    
+    // Handle preview cache operations
+    if (request.action === 'clearPreviewCache') {
+        logger.debug('Clearing preview cache');
+        clearCache().then(success => {
+            sendResponse({ success });
+        });
+        return true; // Keep channel open for async response
+    }
+    
+    if (request.action === 'getPreviewCacheStats') {
+        logger.debug('Getting preview cache stats');
+        getCacheStats().then(stats => {
+            sendResponse(stats);
+        });
+        return true; // Keep channel open for async response
     }
     
     return false;
