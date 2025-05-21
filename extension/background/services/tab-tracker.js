@@ -65,28 +65,33 @@ function cleanupOrphanedScrollPositions() {
 
 /**
  * Initialize tab tracking
+ * @returns {Promise<boolean>} Success status
  */
 function initTabTracking() {
+    logger.info('Initializing tab tracking service');
+    
+    try {
     // Listen for tab removal events
-    chrome.tabs.onRemoved.addListener((tabId) => {
-        logger.debug('Tab removed:', tabId);
+        chrome.tabs.onRemoved.addListener((tabId) => {
+            logger.debug('Tab removed:', tabId);
+            
+            cleanupForTab(tabId); // Cleanup videos and playlists
+            cleanupDownloadsForTab(tabId); // Cleanup downloads
+            cleanupScrollPositionForTab(tabId); // Cleanup saved scroll positions
+        });
         
-        // Cleanup videos and playlists
-        cleanupForTab(tabId);
+        // Could add additional tab event listeners here
+        // e.g., tab updates, tab activation
         
-        // Cleanup downloads
-        cleanupDownloadsForTab(tabId);
-        
-        // Cleanup saved scroll positions
-        cleanupScrollPositionForTab(tabId);
-    });
-    
-    // Could add additional tab event listeners here
-    // e.g., tab updates, tab activation
-    
-    // Set up periodic cleanup of orphaned scroll positions
-    // Run once per hour (3600000ms)
-    setInterval(cleanupOrphanedScrollPositions, 3600000);
+        // Set up periodic cleanup of orphaned scroll positions once per hour
+        setInterval(cleanupOrphanedScrollPositions, 3600000);
+
+        return true;
+
+    } catch (error) {
+        logger.error('Failed to initialize tab tracking:', error);
+        return false;
+    }
 }
 
 export {

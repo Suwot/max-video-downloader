@@ -30,6 +30,6 @@ Avoid repeating yourself, show me insights and groud your suggestions in the con
   - ACTIONS: short exact description of what needs to be done
   - REASON: clear explanation of what it addresses and why I need to implement this change
   - Current code snippet as CURRENT (only if I need to change the existing code/snippet/function, for new instertions only show updated code snippet)
-  - Updated code snippet as UPDATE (provide a code snippet with short context around it, clearly stating where new code starts and ends with: `// PATCH-START` and `// PATCH-END`)
+  - Updated code snippet as UPDATE (add relevant comments & short context around the edited parts)
 
 - when applicable, outline implementation order in simple steps (bold titles, regular body) with bullet lists for each step about what needs to be done in order
