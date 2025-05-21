@@ -16,6 +16,32 @@ const downloadPorts = new Map(); // key = portId, value = port object
 // Create a logger instance for the Download Manager module
 const logger = createLogger('Download Manager');
 
+/**
+ * Initialize download manager service
+ * @returns {Promise<boolean>} Success status
+ */
+export async function initDownloadManager() {
+    logger.info('Initializing download manager service');
+    
+    try {
+        // Setup listener for port connections related to downloads
+        chrome.runtime.onConnect.addListener(port => {
+            if (port.name === 'download_progress') {
+                // Create unique port ID
+                const portId = Date.now().toString();
+                setupDownloadPort(port, portId);
+            }
+        });
+        
+        // Perform any other initialization tasks here
+        
+        return true;
+    } catch (error) {
+        logger.error('Failed to initialize download manager:', error);
+        return false;
+    }
+}
+
 // Generate a unique download ID
 function generateDownloadId() {
   return `download_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;

@@ -6,7 +6,7 @@
 // Import services
 import { addDetectedVideo, getAllDetectedVideos } from './services/video-manager.js';
 import { initTabTracking } from './services/tab-tracker.js';
-import { setupDownloadPort } from './services/download-manager.js';
+import { initDownloadManager } from './services/download-manager.js';
 import { initUICommunication } from './services/ui-communication.js';
 import { isValidVideoUrl } from '../js/utilities/video-validator.js';
 import { createLogger } from '../js/utilities/logger.js';
@@ -217,6 +217,9 @@ async function initializeServices() {
         // Initialize UI communication
         await initUICommunication();
         
+        // Initialize download manager
+        await initDownloadManager();
+        
         logger.info('All background services initialized');
     } catch (error) {
         logger.error('Failed to initialize background services:', error);
@@ -229,19 +232,8 @@ startDebugLogger();
 // Initialize all services
 initializeServices();
 
-// Handle port connections - only for download progress now
-// UI Communication handles its own popup port connections
-chrome.runtime.onConnect.addListener(port => {
-    logger.debug('Background woke up: port connected:', port.name);
-    
-    // Create unique port ID
-    const portId = Date.now().toString();
-    
-    if (port.name === 'download_progress') {
-        setupDownloadPort(port, portId);
-    }
-    // Popup ports are now handled in ui-communication.js
-});
+// No need for port connection listener here anymore
+// Each service now handles its own port connections
 
 // Listen for web requests to catch video-related content
 chrome.webRequest.onBeforeRequest.addListener(
