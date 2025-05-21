@@ -266,6 +266,15 @@ class VideoStateService {
         action: 'clearCaches'
       });
       
+      // Clear preview cache
+      try {
+        await chrome.runtime.sendMessage({
+          action: 'clearPreviewCache'
+        });
+      } catch (e) {
+        this.debug('Error clearing preview cache:', e);
+      }
+      
       // Reset last fetch time to force refresh next time
       this.lastFetchTime = 0;
       
@@ -276,6 +285,21 @@ class VideoStateService {
     } catch (error) {
       console.error('Failed to clear caches:', error);
       return false;
+    }
+  }
+  
+  /**
+   * Get preview cache statistics
+   * @returns {Promise<{count: number, size: number}>} Cache stats
+   */
+  async getPreviewCacheStats() {
+    try {
+      return await chrome.runtime.sendMessage({
+        action: 'getPreviewCacheStats'
+      });
+    } catch (error) {
+      this.debug('Error getting preview cache stats:', error);
+      return { count: 0, size: 0 };
     }
   }
 
@@ -360,3 +384,4 @@ export const updateVideos = (videos) => videoStateService.updateVideos(videos);
 export const refreshVideos = () => videoStateService.refreshVideos();
 export const on = (event, callback) => videoStateService.on(event, callback);
 export const clearCaches = () => videoStateService.clearCaches();
+export const getPreviewCacheStats = () => videoStateService.getPreviewCacheStats();

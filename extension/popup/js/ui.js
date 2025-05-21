@@ -12,7 +12,7 @@
 import { debounce, formatQualityLabel, formatQualityDetails } from './utilities.js';
 import { getTheme, setTheme, applyTheme as applyThemeChange } from './services/theme-service.js';
 import { getAllGroupStates } from './services/group-state-service.js';
-import { clearCaches } from './services/video-state-service.js';
+import { clearCaches, getPreviewCacheStats } from './services/video-state-service.js';
 import { updateVideoList } from './video-fetcher.js';
 
 // Reusable tooltip element
@@ -70,6 +70,9 @@ export function initializeUI() {
             const { updateVideoList } = await import('./video-fetcher.js');
             await updateVideoList(true);
             
+            // Update cache stats after clearing
+            updateCacheStats(document.querySelector('.cache-stats'));
+            
             // Show confirmation tooltip
             const tooltip = document.createElement('div');
             tooltip.className = 'tooltip';
@@ -93,6 +96,15 @@ export function initializeUI() {
     
     // Add button to left container
     leftButtonsContainer.append(clearCacheButton);
+    
+    // Add cache stats element
+    const cacheStatsElement = document.createElement('div');
+    cacheStatsElement.className = 'cache-stats';
+    cacheStatsElement.textContent = 'Loading cache stats...';
+    leftButtonsContainer.appendChild(cacheStatsElement);
+    
+    // Update cache stats
+    updateCacheStats(cacheStatsElement);
     
     // Create right container for theme toggle
     const rightButtonsContainer = document.createElement('div');
@@ -376,4 +388,28 @@ export function showToast(message, duration = 3000) {
             document.body.removeChild(toast);
         }, 300);
     }, duration);
+}
+
+/**
+ * Update cache statistics display
+ * @param {HTMLElement} statsElement - The element to update
+ */
+async function updateCacheStats(statsElement) {
+    if (!statsElement) return;
+    
+    try {
+        const stats = await getPreviewCacheStats();
+        if (!stats) {
+            statsElement.textContent = 'No cache stats available';
+            return;
+        }
+        
+        const count = stats.count || 0;
+        const sizeInKB = Math.round((stats.size || 0) / 1024);
+        
+        statsElement.textContent = `${count} previews (${sizeInKB} KB)`;
+    } catch (error) {
+        console.error('Error getting cache stats:', error);
+        statsElement.textContent = 'Cache stats unavailable';
+    }
 }
