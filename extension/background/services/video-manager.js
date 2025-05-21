@@ -14,7 +14,7 @@
 import { normalizeUrl, getBaseDirectory } from '../../js/utilities/normalize-url.js';
 import nativeHostService from '../../js/native-host-service.js';
 import { validateAndFilterVideos } from '../../js/utilities/video-validator.js';
-import { getActivePopupPortForTab } from './popup-ports.js';
+import { getActivePopupPortForTab } from './ui-communication.js';
 import { lightParseContent, fullParseContent } from '../../js/utilities/simple-js-parser.js';
 import { buildRequestHeaders } from '../../js/utilities/headers-utils.js';
 import { createLogger } from '../../js/utilities/logger.js';
