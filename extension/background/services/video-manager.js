@@ -330,18 +330,37 @@ function cleanupForTab(tabId) {
     }
 }
 
-// Set up event listeners to clear videos when tabs are closed or navigated
-chrome.tabs.onRemoved.addListener((tabId) => {
-    cleanupForTab(tabId);
-});
-
-// Listen for page navigation to clear videos
-chrome.webNavigation.onCommitted.addListener((details) => {
-    // Only clear for main frame navigation (not iframes)
-    if (details.frameId === 0) {
-        cleanupForTab(details.tabId);
+/**
+ * Initialize video manager service
+ * @returns {Promise<boolean>} Success status
+ */
+async function initVideoManager() {
+    logger.info('Initializing video manager service');
+    
+    try {
+        // Set up event listeners to clear videos when tabs are closed or navigated
+        chrome.tabs.onRemoved.addListener((tabId) => {
+            cleanupForTab(tabId);
+        });
+        
+        // Listen for page navigation to clear videos
+        chrome.webNavigation.onCommitted.addListener((details) => {
+            // Only clear for main frame navigation (not iframes)
+            if (details.frameId === 0) {
+                cleanupForTab(details.tabId);
+            }
+        });
+        
+        // Initialize maps for tracking videos
+        globalThis.allDetectedVideosInternal = allDetectedVideos;
+        
+        logger.info('Video manager service initialized');
+        return true;
+    } catch (error) {
+        logger.error('Failed to initialize video manager:', error);
+        return false;
     }
-});
+}
 
 /**
  * Clear all video caches for all tabs
@@ -938,5 +957,6 @@ export {
     normalizeUrl,
     getAllDetectedVideos,
     getVideosForDisplay,
-    clearVideoCache
+    clearVideoCache,
+    initVideoManager
 };

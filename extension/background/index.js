@@ -4,7 +4,7 @@
  */
 
 // Import services
-import { addDetectedVideo, getAllDetectedVideos } from './services/video-manager.js';
+import { addDetectedVideo, getAllDetectedVideos, initVideoManager } from './services/video-manager.js';
 import { initTabTracking } from './services/tab-tracker.js';
 import { initDownloadManager } from './services/download-manager.js';
 import { initUICommunication } from './services/ui-communication.js';
@@ -210,6 +210,9 @@ function processVideoUrl(tabId, url) {
 async function initializeServices() {
     try {
         logger.info('Initializing background services');
+        
+        // Initialize video manager (add this first since other services may depend on it)
+        await initVideoManager();
         
         // Initialize tab tracking
         await initTabTracking();
