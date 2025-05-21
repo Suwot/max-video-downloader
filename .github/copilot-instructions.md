@@ -20,3 +20,9 @@ The UI follows **modern UX/UI standards**: minimal, responsive, fast, and cleanâ
 - when you need to substitute a function, first perform a search in the codebase via terminal command to quickly find all instances and decide on the best approach to quickly and reliably update all of them
 
 Avoid repeating yourself, show me insights and groud your suggestions in the context of the project.
+
+## RESPONSES
+
+- when applicable, provide structural changes overview for proposed changes (which files are affected, where to create new files, etc.)
+- when applicable, outline implementation order in simple steps (bold titles, regular body) with bullet lists for each step about what needs to be done in order
+- when applicable, provide code snippets with comments

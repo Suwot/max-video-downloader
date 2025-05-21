@@ -18,6 +18,7 @@ import { getActivePopupPortForTab } from './popup-ports.js';
 import { lightParseContent, fullParseContent } from '../../js/utilities/simple-js-parser.js';
 import { buildRequestHeaders } from '../../js/utilities/headers-utils.js';
 import { createLogger } from '../../js/utilities/logger.js';
+import { getPreview, storePreview } from '../../js/utilities/preview-cache.js';
 
 // Central store for all detected videos, keyed by tab ID, then normalized URL
 // Map<tabId, Map<normalizedUrl, videoInfo>>
@@ -575,7 +576,48 @@ async function processVariantsWithFFprobe(tabId, masterUrl, variants) {
                         processingRequests.startProcessing(variant.url, 'previews');
                         
                         try {
-                            // Generate preview
+                            const variantNormalizedUrl = normalizeUrl(variant.url);
+                            
+                            // Check for cached preview first
+                            const cachedPreview = await getPreview(variantNormalizedUrl);
+                            if (cachedPreview) {
+                                logger.debug(`Using cached preview for variant: ${variant.url}`);
+                                
+                                // Get the master video
+                                const tabMap = allDetectedVideos.get(tabId);
+                                if (!tabMap || !tabMap.has(masterUrl)) {
+                                    return;
+                                }
+                                
+                                const masterVideo = tabMap.get(masterUrl);
+                                if (!masterVideo.variants || !masterVideo.variants[i]) {
+                                    return;
+                                }
+                                
+                                // Create updated variants array with the preview URL added to the first variant
+                                const updatedVariants = [...masterVideo.variants];
+                                updatedVariants[i] = {
+                                    ...updatedVariants[i],
+                                    previewUrl: cachedPreview,
+                                    fromCache: true
+                                };
+                                
+                                // Update master with the new variants array using our unified function
+                                const updatedVideo = updateVideo('processVariantsWithFFprobe-preview', tabId, masterUrl, {
+                                    variants: updatedVariants
+                                });
+                                
+                                if (updatedVideo) {
+                                    logger.debug(`Used cached preview for best quality variant`);
+                                    
+                                    // Update UI
+                                    notifyVideoUpdated(tabId, masterUrl, updatedVideo);
+                                    broadcastVideoUpdate(tabId);
+                                }
+                                return;
+                            }
+                            
+                            // Generate preview if not cached
                             const response = await rateLimiter.enqueue(async () => {
                                 return await nativeHostService.sendMessage({
                                     type: 'generatePreview',
@@ -585,6 +627,9 @@ async function processVariantsWithFFprobe(tabId, masterUrl, variants) {
                             });
                             
                             if (response && response.previewUrl) {
+                                // Cache the generated preview
+                                await storePreview(variantNormalizedUrl, response.previewUrl);
+                                
                                 // Get the master video
                                 const tabMap = allDetectedVideos.get(tabId);
                                 if (!tabMap || !tabMap.has(masterUrl)) {
@@ -763,7 +808,26 @@ async function generateVideoPreview(tabId, normalizedUrl) {
             return;
         }
         
-        // Generate preview
+        // Check for cached preview first
+        const cachedPreview = await getPreview(normalizedUrl);
+        if (cachedPreview) {
+            logger.debug(`Using cached preview for ${video.url}`);
+            
+            // Update video with cached preview URL
+            const updatedVideo = updateVideo('generateVideoPreview', tabId, normalizedUrl, {
+                previewUrl: cachedPreview,
+                fromCache: true
+            });
+            
+            if (updatedVideo) {
+                // Update UI
+                notifyVideoUpdated(tabId, normalizedUrl, updatedVideo);
+                broadcastVideoUpdate(tabId);
+            }
+            return;
+        }
+        
+        // Generate preview if not cached
         logger.debug(`Generating preview for ${video.url}`);
         
         // Get headers for the request
@@ -779,6 +843,9 @@ async function generateVideoPreview(tabId, normalizedUrl) {
         });
         
         if (response && response.previewUrl) {
+            // Cache the generated preview
+            await storePreview(normalizedUrl, response.previewUrl);
+            
             // Update video with preview URL using our unified function
             const updatedVideo = updateVideo('generateVideoPreview', tabId, normalizedUrl, {
                 previewUrl: response.previewUrl
