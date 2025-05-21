@@ -515,7 +515,7 @@ async function runJSParser(tabId, normalizedUrl, type) {
         } else if (lightParseResult.isVariant) {
             // For standalone variants, generate preview
             logger.debug(`Detected standalone variant: ${video.url}`);
-            generateVideoPreview(tabId, normalizedUrl);
+            // generateVideoPreview(tabId, normalizedUrl);
         } else {
             // For other content types, generate preview
             generateVideoPreview(tabId, normalizedUrl);

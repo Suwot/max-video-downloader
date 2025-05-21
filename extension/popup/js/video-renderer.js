@@ -277,7 +277,17 @@ export function createVideoElement(video) {
     previewImage.className = 'preview-image placeholder';
     previewImage.src = chrome.runtime.getURL('icons/video-placeholder.png');
     previewImage.alt = 'Video preview';
-    
+
+    // Unified preview selection logic
+    let previewUrl = null;
+    if (Array.isArray(video.variants) && video.variants.length > 0 && video.variants[0].previewUrl) {
+        previewUrl = video.variants[0].previewUrl;
+    } else if (video.previewUrl) {
+        previewUrl = video.previewUrl;
+    } else if (video.poster) {
+        previewUrl = video.poster;
+    }
+
     // Add duration display if available in video.variants.metaJS
     if (video.variants) {
         const duration = video.variants[0].metaJS?.duration;
@@ -286,7 +296,7 @@ export function createVideoElement(video) {
         durationElement.textContent = formatDuration(duration);
         previewContainer.appendChild(durationElement);
     }
-    
+
     // Add type badge to preview container
     const typeBadge = document.createElement('div');
     typeBadge.className = `type-badge ${video.type || 'unknown'}`;
@@ -299,87 +309,41 @@ export function createVideoElement(video) {
     sourceBadge.className = `source-badge ${sourceOrigin ? 'background' : 'content_script'}`;
     sourceBadge.textContent = sourceOrigin ? 'BG' : 'CS';
     previewContainer.appendChild(sourceBadge);
-    
+
     const loader = document.createElement('div');
     loader.className = 'loader';
     loader.style.display = 'block'; // Always show loader initially
-    
     previewContainer.append(previewImage, loader);
     previewColumn.appendChild(previewContainer);
-    
-    // Track if preview has been generated
-    let previewGenerated = false;
-    
-    // If we already have a preview URL, use it
-    if (video.previewUrl) {
+
+    if (previewUrl) {
         previewImage.onload = () => {
             previewImage.classList.remove('placeholder');
             previewImage.classList.add('loaded');
             loader.style.display = 'none';
         };
-        previewImage.src = video.previewUrl;
-        previewGenerated = true;
-        
+        previewImage.src = previewUrl;
+
         // Add hover functionality for preview if available
         previewContainer.addEventListener('mouseenter', (event) => {
-            if (video.previewUrl) {
-                showHoverPreview(video.previewUrl, event);
-            }
+            showHoverPreview(previewUrl, event);
         });
-        
         previewContainer.addEventListener('mousemove', (event) => {
-            if (video.previewUrl) {
-                showHoverPreview(video.previewUrl, event);
-            }
+            showHoverPreview(previewUrl, event);
         });
-        
-        previewContainer.addEventListener('mouseleave', () => {
-            hideHoverPreview();
-        });
-    } 
-
-    // If we have a poster, use it directly
-    else if (video.poster) {
-        previewImage.onload = () => {
-            previewImage.classList.remove('placeholder');
-            previewImage.classList.add('loaded');
-            loader.style.display = 'none';
-        };
-        previewImage.src = video.poster;
-        previewGenerated = true;
-        
-        // Add hover functionality for poster if available
-        previewContainer.addEventListener('mouseenter', (event) => {
-            if (video.poster) {
-                showHoverPreview(video.poster, event);
-            }
-        });
-        
-        previewContainer.addEventListener('mousemove', (event) => {
-            if (video.poster) {
-                showHoverPreview(video.poster, event);
-            }
-        });
-        
-        previewContainer.addEventListener('mouseleave', () => {
-            hideHoverPreview();
-        });
-    } 
-    // No preview available yet
-    else {
-        // Keep the loader spinning until a preview becomes available
+        previewContainer.addEventListener('mouseleave', hideHoverPreview);
+    } else {
+        // No preview available yet, keep loader or show placeholder
         if (video.type === 'blob' && !video.poster) {
-            // For blob URLs without a poster, still show the placeholder instead of trying to generate
             previewImage.classList.add('loaded');
             loader.style.display = 'none';
         }
     }
-    
-    // Add hover preview functionality
+
+    // Add hover preview fallback for image (in case previewUrl is set later)
     previewImage.addEventListener('mouseenter', (event) => {
-        showHoverPreview(video.previewUrl || video.poster, event);
+        showHoverPreview(previewUrl, event);
     });
-    
     previewImage.addEventListener('mouseleave', hideHoverPreview);
     
     // Create info column
