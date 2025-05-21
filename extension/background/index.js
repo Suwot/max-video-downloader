@@ -4,13 +4,13 @@
  */
 
 // Import services
-import { addDetectedVideo, getAllDetectedVideos } from './background/services/video-manager.js';
-import { initTabTracking } from './background/services/tab-tracker.js';
-import { setupDownloadPort } from './background/services/download-manager.js';
-import { setupPopupPort } from './background/services/ui-communication.js';
-import { isValidVideoUrl } from './js/utilities/video-validator.js';
-import { createLogger } from './js/utilities/logger.js';
-import { clearCache, getCacheStats } from './js/utilities/preview-cache.js';
+import { addDetectedVideo, getAllDetectedVideos } from './services/video-manager.js';
+import { initTabTracking } from './services/tab-tracker.js';
+import { setupDownloadPort } from './services/download-manager.js';
+import { setupPopupPort } from './services/ui-communication.js';
+import { isValidVideoUrl } from '../js/utilities/video-validator.js';
+import { createLogger } from '../js/utilities/logger.js';
+import { clearCache, getCacheStats } from '../js/utilities/preview-cache.js';
 
 // Create a logger instance for the background script
 const logger = createLogger('Background');

@@ -23,6 +23,13 @@ Avoid repeating yourself, show me insights and groud your suggestions in the con
 
 ## RESPONSES
 
-- when applicable, provide structural changes overview for proposed changes (which files are affected, where to create new files, etc.) – so I can provide you with relevant context for manipulations
+- when you outline a plan, structure your response this way:
+
+  - Title: number and short clear title in heading styling
+  - File: path to the file which needs to be updated/created (preferrably as a link to the actual file)
+  - Action: short exact description of what needs to be done
+  - Reason: clear explanation of what it addresses and why I need to implement this change
+  - Current code snippet (if applicable, provide a code snippet with comments)
+  - Updated code snippet (provide a code snippet with comments)
+
 - when applicable, outline implementation order in simple steps (bold titles, regular body) with bullet lists for each step about what needs to be done in order
-- when applicable, provide code snippets with comments
