@@ -4,6 +4,7 @@
  */
 
 // Import services
+import { initStateManager } from './services/state-manager.js';
 import { addDetectedVideo, getAllDetectedVideos, initVideoManager } from './services/video-manager.js';
 import { initTabTracking } from './services/tab-tracker.js';
 import { initDownloadManager } from './services/download-manager.js';
@@ -210,19 +211,13 @@ function processVideoUrl(tabId, url) {
 async function initializeServices() {
     try {
         logger.info('Initializing background services');
-        
-        // Initialize video manager (add this first since other services may depend on it)
-        await initVideoManager();
-        
-        // Initialize tab tracking
-        await initTabTracking();
-        
-        // Initialize UI communication
-        await initUICommunication();
-        
-        // Initialize download manager
-        await initDownloadManager();
-        
+
+        await initStateManager();        // Initialize state manager first since other services depend on it
+        await initVideoManager();        // Initialize video manager (add this first since other services may depend on it)
+        await initTabTracking();         // Initialize tab tracking
+        await initUICommunication();     // Initialize UI communication
+        await initDownloadManager();     // Initialize download manager
+
         logger.info('All background services initialized');
     } catch (error) {
         logger.error('Failed to initialize background services:', error);
