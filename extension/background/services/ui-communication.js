@@ -1,5 +1,5 @@
 /**
- * Popup Ports Service
+ * UI Communication Service
  * Manages communication with popup through persistent connections
  */
 
@@ -12,8 +12,8 @@ import { createLogger } from '../../js/utilities/logger.js';
 const popupPorts = new Map(); // key = portId, value = {port, tabId, url}
 const urlToTabMap = new Map(); // key = normalizedUrl, value = tabId
 
-// Create a logger instance for the Popup Ports module
-const logger = createLogger('Popup Ports');
+// Create a logger instance for the UI Communication module
+const logger = createLogger('UI Communication');
 
 // Handle messages coming through port connection
 async function handlePortMessage(message, port, portId) {
@@ -233,6 +233,28 @@ function getActivePopupPortForTab(tabId) {
         }
     }
     return null;
+}
+
+/**
+ * Initialize the UI communication service
+ * @returns {Promise<boolean>} Success status
+ */
+export async function initUICommunication() {
+    logger.info('Initializing UI communication service');
+    
+    // Set up listener for port connections
+    chrome.runtime.onConnect.addListener(port => {
+        logger.debug('Port connected:', port.name);
+        
+        // Create unique port ID
+        const portId = Date.now().toString();
+        
+        if (port.name === 'popup') {
+            setupPopupPort(port, portId);
+        }
+    });
+    
+    return true;
 }
 
 export { 

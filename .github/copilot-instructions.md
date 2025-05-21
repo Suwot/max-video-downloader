@@ -26,10 +26,10 @@ Avoid repeating yourself, show me insights and groud your suggestions in the con
 - when you outline a plan, structure your response this way:
 
   - Title: number and short clear title in heading styling
-  - File: path to the file which needs to be updated/created (preferrably as a link to the actual file)
-  - Action: short exact description of what needs to be done
-  - Reason: clear explanation of what it addresses and why I need to implement this change
-  - Current code snippet (if applicable, provide a code snippet with comments)
-  - Updated code snippet (provide a code snippet with comments)
+  - FILE: path to the file which needs to be updated/created (preferrably in format: [filename](path/to/file))
+  - ACTIONS: short exact description of what needs to be done
+  - REASON: clear explanation of what it addresses and why I need to implement this change
+  - Current code snippet as CURRENT (only if I need to change the existing code/snippet/function, for new instertions only show updated code snippet)
+  - Updated code snippet as UPDATE (provide a code snippet with short context around it, clearly stating where new code starts and ends with: `// PATCH-START` and `// PATCH-END`)
 
 - when applicable, outline implementation order in simple steps (bold titles, regular body) with bullet lists for each step about what needs to be done in order

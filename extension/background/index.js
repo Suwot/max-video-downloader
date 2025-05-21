@@ -7,7 +7,7 @@
 import { addDetectedVideo, getAllDetectedVideos } from './services/video-manager.js';
 import { initTabTracking } from './services/tab-tracker.js';
 import { setupDownloadPort } from './services/download-manager.js';
-import { setupPopupPort } from './services/ui-communication.js';
+import { initUICommunication } from './services/ui-communication.js';
 import { isValidVideoUrl } from '../js/utilities/video-validator.js';
 import { createLogger } from '../js/utilities/logger.js';
 import { clearCache, getCacheStats } from '../js/utilities/preview-cache.js';
@@ -204,13 +204,33 @@ function processVideoUrl(tabId, url) {
   }
 }
 
+/**
+ * Initialize all background services
+ */
+async function initializeServices() {
+    try {
+        logger.info('Initializing background services');
+        
+        // Initialize tab tracking
+        await initTabTracking();
+        
+        // Initialize UI communication
+        await initUICommunication();
+        
+        logger.info('All background services initialized');
+    } catch (error) {
+        logger.error('Failed to initialize background services:', error);
+    }
+}
+
 // Start the debug logger
 startDebugLogger();
 
-// Initialize tab tracking
-initTabTracking();
+// Initialize all services
+initializeServices();
 
-// Handle port connections
+// Handle port connections - only for download progress now
+// UI Communication handles its own popup port connections
 chrome.runtime.onConnect.addListener(port => {
     logger.debug('Background woke up: port connected:', port.name);
     
@@ -219,9 +239,8 @@ chrome.runtime.onConnect.addListener(port => {
     
     if (port.name === 'download_progress') {
         setupDownloadPort(port, portId);
-    } else if (port.name === 'popup') {
-        setupPopupPort(port, portId);
     }
+    // Popup ports are now handled in ui-communication.js
 });
 
 // Listen for web requests to catch video-related content
