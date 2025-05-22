@@ -62,35 +62,6 @@ export function parseFrameRate(frameRateStr) {
 }
 
 /**
- * Parse DASH duration string (ISO 8601 format)
- * Example: PT1H22M3.546S
- * 
- * @param {string} durationStr - The duration string
- * @returns {number} Duration in seconds
- */
-export function parseDashDuration(durationStr) {
-    if (!durationStr) return 0;
-    
-    // Handle full ISO 8601 duration format including years, months, days
-    // P[n]Y[n]M[n]DT[n]H[n]M[n]S
-    const regex = /P(?:(\d+)Y)?(?:(\d+)M)?(?:(\d+)D)?T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+(?:\.\d+)?)S)?/;
-    const matches = durationStr.match(regex);
-    
-    if (!matches) return 0;
-    
-    // Extract time components (we're simplifying by using approximate values for years/months)
-    const years = matches[1] ? parseInt(matches[1], 10) * 31536000 : 0;   // Approximate year as 365 days
-    const months = matches[2] ? parseInt(matches[2], 10) * 2592000 : 0;   // Approximate month as 30 days
-    const days = matches[3] ? parseInt(matches[3], 10) * 86400 : 0;
-    const hours = matches[4] ? parseInt(matches[4], 10) * 3600 : 0;
-    const minutes = matches[5] ? parseInt(matches[5], 10) * 60 : 0;
-    const seconds = matches[6] ? parseFloat(matches[6]) : 0;
-    
-    // Calculate the total and round to full seconds
-    return Math.round(years + months + days + hours + minutes + seconds);
-}
-
-/**
  * Resolve a URL relative to a base URL
  *
  * @param {string} baseUrl - The base URL
@@ -210,39 +181,6 @@ export async function fetchFullContent(url, headers = null, timeoutMs = 10000) {
         console.error(`[Parser Utils] ❌ Error fetching content: ${error.message}`);
         return { content: '', ok: false, status: 0, error: error.message };
     }
-}
-
-// Helper functions for DASH parsing
-/**
- * Helper function to extract AdaptationSet sections
- * 
- * @param {string} content - The MPD content
- * @returns {Array<string>} Array of AdaptationSet XML strings
- */
-export function extractAdaptationSets(content) {
-    const adaptationSets = [];
-    const regex = /<AdaptationSet[^>]*>[\s\S]*?<\/AdaptationSet>/g;
-    let match;
-    while ((match = regex.exec(content)) !== null) {
-        adaptationSets.push(match[0]);
-    }
-    return adaptationSets;
-}
-
-/**
- * Helper function to extract Representation sections
- * 
- * @param {string} adaptationSetContent - The AdaptationSet XML content
- * @returns {Array<string>} Array of Representation XML strings
- */
-export function extractRepresentations(adaptationSetContent) {
-    const representations = [];
-    const regex = /<Representation[^>]*>[\s\S]*?<\/Representation>|<Representation[^\/]*\/>/g;
-    let match;
-    while ((match = regex.exec(adaptationSetContent)) !== null) {
-        representations.push(match[0]);
-    }
-    return representations;
 }
 
 /**
