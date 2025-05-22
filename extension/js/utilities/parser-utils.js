@@ -185,6 +185,7 @@ export async function fetchFullContent(url, headers = null, timeoutMs = 10000) {
 
 /**
  * Check if a URL points to a streaming manifest (DASH or HLS) with optimized downloading
+ * Relies entirely on content inspection to determine manifest type, not content-type header
  * Returns enhanced result with validation and content data when possible
  * 
  * @param {string} url - URL to check
@@ -197,7 +198,6 @@ export async function validateManifestType(url, headers = null) {
         logger.debug(`Checking manifest type for ${url}`);
         
         const reqHeaders = headers || await buildRequestHeaders(null, url);
-        let contentType = null;
         let contentLength = null;
         let supportsRanges = false;
         let fullContent = null;
@@ -206,7 +206,6 @@ export async function validateManifestType(url, headers = null) {
             manifestType: 'unknown',
             timestampLP: Date.now(),
             status: 'unknown',
-            contentType: null,
             contentLength: null,
             supportsRanges: false,
             content: null
@@ -226,49 +225,13 @@ export async function validateManifestType(url, headers = null) {
             clearTimeout(timeoutId);
             
             if (headResponse.ok) {
-                contentType = headResponse.headers.get('content-type') || '';
                 contentLength = parseInt(headResponse.headers.get('content-length') || '0', 10);
                 supportsRanges = headResponse.headers.get('accept-ranges') === 'bytes';
                 
-                validationResult.contentType = contentType;
                 validationResult.contentLength = contentLength;
                 validationResult.supportsRanges = supportsRanges;
                 
-                // DASH content type validation
-                if (contentType.includes('application/dash+xml') || 
-                    contentType.includes('video/vnd.mpeg.dash.mpd')) {
-                    logger.debug(`Content-Type indicates DASH: ${contentType}`);
-                    validationResult.isValid = true;
-                    validationResult.manifestType = 'dash';
-                    validationResult.status = 'confirmed-by-header';
-                    validationResult.timestampLP = Date.now();
-                    return validationResult;
-                }
-                
-                // HLS content type validation
-                if (contentType.includes('application/vnd.apple.mpegurl') || 
-                    contentType.includes('application/x-mpegurl') ||
-                    contentType.includes('audio/mpegurl') ||
-                    contentType.includes('audio/x-mpegurl') ||
-                    contentType.includes('application/x-mpegURL') ||
-                    contentType.includes('vnd.apple.mpegURL')) {
-                    logger.debug(`Content-Type indicates HLS: ${contentType}`);
-                    validationResult.isValid = true;
-                    validationResult.manifestType = 'hls';
-                    validationResult.status = 'confirmed-by-header';
-                    validationResult.timestampLP = Date.now();
-                    return validationResult;
-                }
-                
-                // If content-type clearly indicates it's not an HLS/DASH manifest
-                if ((contentType.includes('video/mp4') || contentType.includes('video/webm')) &&
-                    !contentType.includes('mpegurl') && 
-                    !url.toLowerCase().includes(".m3u8")) {
-                    logger.debug(`Content-Type indicates non-manifest: ${contentType}`);
-                    validationResult.status = 'rejected-by-header';
-                    validationResult.timestampLP = Date.now();
-                    return validationResult;
-                }
+                logger.debug(`Retrieved metadata: content-length=${contentLength}, supports-ranges=${supportsRanges}`);
             }
         } catch (error) {
             // Ignore HEAD request failures, proceed to content inspection
