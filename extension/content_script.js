@@ -162,9 +162,8 @@ function scanForPlayerConfigs(seenUrls) {
           detectVideo(value, null, { source: 'CS_initial_scan_player_attr' });
         }
       } catch {
-        // Simple attribute URL
-        if ((value.includes('.mp4') || value.includes('.m3u8') || value.includes('.mpd')) &&
-            (value.includes('http') || value.startsWith('/'))) {
+        // Simple attribute URL - focus only on direct video formats and send others to background
+        if ((value.includes('http') || value.startsWith('/'))) {
           const fullUrl = value.startsWith('/') ? 
                          `${window.location.origin}${value}` : value;
           
@@ -178,57 +177,46 @@ function scanForPlayerConfigs(seenUrls) {
   });
 }
 
-// Network request monitoring
+// Network request monitoring - focused only on cases background can't handle
 function setupNetworkInterception() {
-  
-  // XHR interception
+  // Only intercept XHR for POST requests and blob/data URLs that background script can't see
   const originalXHR = XMLHttpRequest.prototype.open;
   XMLHttpRequest.prototype.open = function(method, url, ...args) {
     const xhr = this;
-    const originalOnReadyStateChange = xhr.onreadystatechange;
     
-    xhr.addEventListener('readystatechange', function() {
-      if (xhr.readyState === 4 && xhr.status === 200) {
-        const contentType = xhr.getResponseHeader('Content-Type');
-        const responseUrl = xhr.responseURL;
-        
-        // Use the unified detection pipeline instead of separate validation and processing
-        detectVideo(responseUrl, contentType, {
-          source: 'CS_xhr'
-        });
-      }
+    // Only monitor POST requests or special URL schemes that background might miss
+    if (method === 'POST' || 
+        url.startsWith('blob:') || 
+        url.startsWith('data:')) {
       
-      if (originalOnReadyStateChange) {
-        originalOnReadyStateChange.apply(this, arguments);
-      }
-    });
-
-    logDebug('Network interception is set up for XHR:', method, url);
+      const originalOnReadyStateChange = xhr.onreadystatechange;
+      
+      xhr.addEventListener('readystatechange', function() {
+        if (xhr.readyState === 4 && xhr.status === 200) {
+          const contentType = xhr.getResponseHeader('Content-Type');
+          const responseUrl = xhr.responseURL;
+          
+          // Only process if likely a video response
+          if (contentType && (
+              contentType.includes('video/') || 
+              contentType.includes('mpegURL') || 
+              contentType.includes('dash+xml'))) {
+            
+            detectVideo(responseUrl, contentType, {
+              source: 'CS_xhr_post'
+            });
+          }
+        }
+        
+        if (originalOnReadyStateChange) {
+          originalOnReadyStateChange.apply(this, arguments);
+        }
+      });
+    }
     
     return originalXHR.apply(this, [method, url, ...args]);
   };
   
-  // Fetch interception
-  const originalFetch = window.fetch;
-  window.fetch = function(resource, init) {
-    const url = resource instanceof Request ? resource.url : resource;
-    
-    return originalFetch.apply(this, arguments).then(response => {
-      const clonedResponse = response.clone();
-      
-      // Headers.get() returns a string directly, not a promise
-      const contentType = clonedResponse.headers.get('Content-Type');
-      
-      // Use the unified detection pipeline instead of separate validation and processing
-      detectVideo(url, contentType, {
-        source: 'CS_fetch'
-      });
-
-      logDebug('Network interception is set up for Fetch:', url);
-      
-      return response;
-    });
-  };
 }
 
 /**
@@ -459,15 +447,11 @@ function detectVideo(url, contentType = null, metadata = {}) {
   if (!videoType && contentType) {
     const videoMimeTypes = [
       'video/',
-      'application/x-mpegURL',
-      'application/dash+xml',
-      'application/vnd.apple.mpegURL',
       'application/octet-stream'
     ];
     
     if (videoMimeTypes.some(type => contentType.includes(type))) {
-      videoType = contentType.includes('mpegURL') || contentType.includes('x-mpegURL') ? 
-                  'hls' : 'direct';
+      videoType = 'direct';
       
       // Also update normalizedUrl since we've changed the video type
       if (!normalizedUrl) {
@@ -514,6 +498,7 @@ function detectVideo(url, contentType = null, metadata = {}) {
 /**
  * Extract embedded video URL from query parameters
  * Used by both identifyVideoType and normalizeUrl
+ * Supports more video formats by passing any potential URLs to background script
  * 
  * @param {URL} urlObj - URL object to extract from
  * @returns {string|null} - Extracted video URL or null
@@ -522,8 +507,10 @@ function extractEmbeddedVideoUrl(urlObj) {
   for (const [_, value] of urlObj.searchParams.entries()) {
     try {
       const decoded = decodeURIComponent(value);
-      if ((decoded.includes('.m3u8') || decoded.includes('.mpd')) &&
-          (decoded.includes('http') || decoded.startsWith('/') || decoded.includes('://'))) {
+      // Look for any potential video URLs - let background determine validity
+      if ((decoded.includes('http') || decoded.startsWith('/') || decoded.includes('://')) && 
+          // Ensure it's not an image or document
+          !/\.(jpg|jpeg|png|gif|webp|svg|pdf|doc|docx)(\?|$)/i.test(decoded)) {
         // Handle relative URLs
         return decoded.startsWith('/') ? (urlObj.origin + decoded) : decoded;
       }
@@ -533,8 +520,8 @@ function extractEmbeddedVideoUrl(urlObj) {
 }
 
 /**
- * Identify the type of video from a URL
- * Optimized to parse URL only once and make efficient decisions
+ * Simplified identifier that focuses on DOM-only content
+ * Removes redundant HLS/DASH detection handled by background script
  * 
  * @param {string} url - URL to identify type from
  * @returns {string|Object} - Video type or object with detailed information
@@ -552,12 +539,13 @@ function identifyVideoType(url) {
       const embedded = extractEmbeddedVideoUrl(urlObj);
       
       if (embedded) {
-        // Also include the normalized version of the embedded URL
+        // Include the embedded URL but don't try to determine type
+        // Let the background script handle type detection
         const normalizedEmbedded = normalizeUrl(embedded);
         return {
           url: embedded,
           normalizedUrl: normalizedEmbedded,
-          type: /\.m3u8/i.test(embedded) ? 'hls' : 'dash',
+          type: 'embedded',
           foundFromQueryParam: true
         };
       }
@@ -571,23 +559,19 @@ function identifyVideoType(url) {
       const embedded = extractEmbeddedVideoUrl(urlObj);
       
       if (embedded) {
-        // Also include the normalized version of the embedded URL
+        // Include the embedded URL but don't try to determine type
         const normalizedEmbedded = normalizeUrl(embedded);
         return {
           url: embedded,
           normalizedUrl: normalizedEmbedded,
-          type: /\.m3u8/i.test(embedded) ? 'hls' : 'dash',
+          type: 'embedded',
           foundFromQueryParam: true
         };
       }
       return 'ignored';
     }
     
-    // Check for direct formats by extension
-    if (/\.m3u8(\?|$)/i.test(path)) return 'hls';
-    if (/\.mpd(\?|$)/i.test(path)) return 'dash';
-    
-    // Check for direct video files
+    // Only check for direct video files, let background handle streaming formats
     const directMatch = path.match(/\.(mp4|webm|ogg|mov|avi|mkv|flv|3gp|m4v|wmv)(\?|$)/i);
     if (directMatch) {
       return {
@@ -596,25 +580,15 @@ function identifyVideoType(url) {
       };
     }
     
-    // Check for streaming paths
-    if (/\/hls\/.*\/(index|master|playlist)/i.test(path) || path.includes('/master.m3u8')) {
-      return 'hls';
-    }
-    
-    if (/\/dash\/.*\/(manifest|playlist)/i.test(path)) {
-      return 'dash';
-    }
-    
-    // Check for embedded videos in any query parameter
+    // Check for embedded videos in query parameters
     const embedded = extractEmbeddedVideoUrl(urlObj);
-    
     if (embedded) {
-      // Also include the normalized version of the embedded URL
+      // Let background script determine the type
       const normalizedEmbedded = normalizeUrl(embedded);
       return {
         url: embedded,
         normalizedUrl: normalizedEmbedded,
-        type: /\.m3u8/i.test(embedded) ? 'hls' : 'dash',
+        type: 'embedded',
         foundFromQueryParam: true
       };
     }

@@ -19,9 +19,9 @@ The UI follows **modern UX/UI standards**: minimal, responsive, fast, and cleanâ
 - critically evaluate all input and corrections from me, I might be mistaken, confused or even wrong and mislead you, stay focused on best practices and the project goals
 - when you need to substitute a function, first perform a search in the codebase via terminal command to quickly find all instances and decide on the best approach to quickly and reliably update all of them
 - when you reference any files (existing or new), use VSCode hyperlink format
+- when there are multiple ways to achieve the same goal, always give me relevant options to choose from and explain the pros and cons of each option
 
-Avoid repeating yourself, show me insights and groud your suggestions in the context of the project.
-
+<!--
 ## RESPONSES
 
 - when you outline a plan, structure your response this way:
@@ -32,4 +32,4 @@ Avoid repeating yourself, show me insights and groud your suggestions in the con
   - REASON: clear explanation of what it addresses and why I need to implement this change
   - Code snippets: only show before snippet if it requires rewriting existing logic, and show only after when you just add code instead of rewriting, + clearly indicate what's new in the code
 
-- when applicable, outline implementation order in simple steps (bold titles, regular body) with bullet lists for each step about what needs to be done in order
+- when applicable, outline implementation order in simple steps (bold titles, regular body) with bullet lists for each step about what needs to be done in order -->
