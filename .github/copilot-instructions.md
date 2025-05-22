@@ -20,6 +20,7 @@ The UI follows **modern UX/UI standards**: minimal, responsive, fast, and cleanâ
 - when you need to substitute a function, first perform a search in the codebase via terminal command to quickly find all instances and decide on the best approach to quickly and reliably update all of them
 - when you reference any files (existing or new), use VSCode hyperlink format
 - when there are multiple ways to achieve the same goal, always give me relevant options to choose from and explain the pros and cons of each option
+- in code snippets in the first line always show which file it should be in
 
 <!--
 ## RESPONSES

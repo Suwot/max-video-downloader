@@ -472,46 +472,23 @@ async function runJSParser(tabId, normalizedUrl, type) {
         
         // Special handling for DASH content
         if (type === 'dash') {
-            // Check if it's a DASH manifest
-            const isDash = await isDashManifest(video.url, headers);
-            
-            if (!isDash) {
-                logger.debug(`${video.url} is not a valid DASH manifest`);
-                const updatedVideo = updateVideo('runJSParser-dashCheck', tabId, normalizedUrl, {
-                    isValid: false,
-                    isLightParsed: true,
-                    timestampLP: Date.now()
-                });
-                
-                if (updatedVideo) {
-                    notifyVideoUpdated(tabId, normalizedUrl, updatedVideo);
-                    broadcastVideoUpdate(tabId);
-                }
-                return;
-            }
-            
-            // Mark as valid DASH content
-            const updatedVideo = updateVideo('runJSParser-dashValid', tabId, normalizedUrl, {
-                isValid: true,
-                subtype: 'dash',
-                type: 'dash',
-                isMaster: true, // All DASH manifests are considered "master" manifests
-                isDash: true,
-                isLightParsed: true,
-                timestampLP: Date.now()
+            // Mark as processing
+            const processingVideo = updateVideo('runJSParser-dashProcessing', tabId, normalizedUrl, {
+                isBeingProcessed: true
             });
             
-            if (updatedVideo) {
-                notifyVideoUpdated(tabId, normalizedUrl, updatedVideo);
-                broadcastVideoUpdate(tabId);
+            if (processingVideo) {
+                notifyVideoUpdated(tabId, normalizedUrl, processingVideo);
             }
             
-            // Run DASH parser
+            // Run combined validation and parsing
             const dashResult = await parseDashManifest(video.url, headers);
             
             if (dashResult.status === 'success') {
-                // Update video with DASH parsing results
+                // Update video with all DASH parsing results at once
                 const dashUpdates = {
+                    isValid: true,
+                    type: 'dash',
                     videoTracks: dashResult.videoTracks,
                     audioTracks: dashResult.audioTracks,
                     subtitleTracks: dashResult.subtitleTracks,
@@ -520,11 +497,14 @@ async function runJSParser(tabId, normalizedUrl, type) {
                     isLive: dashResult.isLive,
                     isEncrypted: dashResult.isEncrypted,
                     encryptionType: dashResult.encryptionType,
+                    isLightParsed: true,
                     isFullParsed: true,
-                    timestampFP: Date.now()
+                    timestampLP: dashResult.timestampLP,
+                    timestampFP: dashResult.timestampFP,
+                    isBeingProcessed: false
                 };
                 
-                const updatedVideoAfterFullParse = updateVideo('runJSParser-dashParse', tabId, normalizedUrl, dashUpdates);
+                const updatedVideoAfterParse = updateVideo('runJSParser-dashComplete', tabId, normalizedUrl, dashUpdates);
                 
                 // Track variant-master relationships for backward compatibility
                 if (dashResult.variants && dashResult.variants.length > 0) {
@@ -532,13 +512,7 @@ async function runJSParser(tabId, normalizedUrl, type) {
                 }
                 
                 // Generate preview for the best quality video track
-                if (dashResult.videoTracks.length > 0 && 
-                    dashResult.videoTracks[0].representations.length > 0) {
-                    
-                    // Use the first (best) representation from the first video track
-                    const bestVideoTrack = dashResult.videoTracks[0];
-                    const bestRepresentation = bestVideoTrack.representations[0];
-                    
+                if (dashResult.videoTracks.length > 0) {
                     // Skip if already being processed
                     if (!processingRequests.isProcessing(normalizedUrl, 'previews')) {
                         processingRequests.startProcessing(normalizedUrl, 'previews');
@@ -558,11 +532,11 @@ async function runJSParser(tabId, normalizedUrl, type) {
                                     broadcastVideoUpdate(tabId);
                                 }
                             } else {
-                                // Generate preview using best representation
+                                // Generate preview using the main MPD URL
                                 const previewResponse = await rateLimiter.enqueue(async () => {
                                     return await nativeHostService.sendMessage({
                                         type: 'generatePreview',
-                                        url: bestRepresentation.trackUrl,
+                                        url: video.url,
                                         headers: headers
                                     });
                                 });
@@ -590,14 +564,17 @@ async function runJSParser(tabId, normalizedUrl, type) {
                 }
                 
                 // Final UI update after all processing is complete
-                notifyVideoUpdated(tabId, normalizedUrl, updatedVideoAfterFullParse);
+                notifyVideoUpdated(tabId, normalizedUrl, updatedVideoAfterParse);
                 broadcastVideoUpdate(tabId);
             } else {
                 // Update with error information
                 const updatedErrorVideo = updateVideo('runJSParser-dashError', tabId, normalizedUrl, {
+                    isValid: false,
+                    isLightParsed: true,
+                    timestampLP: dashResult.timestampLP || Date.now(),
                     parsingStatus: dashResult.status,
-                    parsingError: dashResult.error || 'Unknown error parsing DASH manifest',
-                    isFullParsed: false
+                    parsingError: dashResult.error || 'Not a valid DASH manifest',
+                    isBeingProcessed: false
                 });
                 
                 if (updatedErrorVideo) {

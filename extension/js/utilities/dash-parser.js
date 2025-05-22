@@ -232,10 +232,11 @@ function extractSegmentList(xmlContent) {
 
 /**
  * Parse a DASH MPD document and organize content by media type
+ * First validates if it's really a DASH manifest using light parsing
  * 
  * @param {string} url - URL of the DASH manifest
  * @param {Object} [headers] - Optional request headers
- * @returns {Promise<Object>} Parsed DASH content structured by media type
+ * @returns {Promise<Object>} Validated and parsed DASH content structured by media type
  */
 export async function parseDashManifest(url, headers = null) {
     const normalizedUrl = normalizeUrl(url);
@@ -244,9 +245,11 @@ export async function parseDashManifest(url, headers = null) {
     if (processingRequests.full && processingRequests.full.has(normalizedUrl)) {
         return { 
             status: 'processing',
+            isValid: false,
             videoTracks: [],
             audioTracks: [],
-            subtitleTracks: []
+            subtitleTracks: [],
+            variants: []
         };
     }
     
@@ -256,18 +259,40 @@ export async function parseDashManifest(url, headers = null) {
     }
     
     try {
-        logger.debug(`Parsing manifest: ${url}`);
+        logger.debug(`Validating manifest: ${url}`);
         
-        // Fetch the full content of the manifest
+        // First perform light parsing to validate this is actually a DASH manifest
+        const isValidDash = await isDashManifest(url, headers);
+        
+        // Early return if not a valid DASH manifest
+        if (!isValidDash) {
+            logger.warn(`URL does not point to a valid DASH manifest: ${url}`);
+            return {
+                status: 'not-dash',
+                isValid: false,
+                timestampLP: Date.now(),
+                videoTracks: [],
+                audioTracks: [],
+                subtitleTracks: [],
+                variants: []
+            };
+        }
+        
+        logger.debug(`Confirmed valid DASH manifest, proceeding to full parse: ${url}`);
+        
+        // Fetch the full content of the manifest for full parsing
         const fetchResult = await fetchFullContent(url, headers);
         
         if (!fetchResult.ok) {
             logger.error(`Failed to fetch MPD: ${fetchResult.status}`);
             return { 
                 status: 'fetch-failed',
+                isValid: false,
+                timestampLP: Date.now(),
                 videoTracks: [],
                 audioTracks: [],
-                subtitleTracks: []
+                subtitleTracks: [],
+                variants: []
             };
         }
         
@@ -472,11 +497,14 @@ export async function parseDashManifest(url, headers = null) {
             variants.sort((a, b) => (b.metaJS.bandwidth || 0) - (a.metaJS.bandwidth || 0));
         }
         
-        // Construct the full result
+        // Construct the full result with isValid flag and timestamps
         const result = {
             url: url,
             normalizedUrl: normalizedUrl,
             type: 'dash',
+            isValid: true,
+            timestampLP: Date.now(),
+            timestampFP: Date.now(),
             duration: duration,
             isLive: isLive,
             isEncrypted: isEncrypted,
@@ -493,7 +521,9 @@ export async function parseDashManifest(url, headers = null) {
     } catch (error) {
         logger.error(`Error parsing MPD: ${error.message}`);
         return { 
-            status: 'parse-error', 
+            status: 'parse-error',
+            isValid: false,
+            timestampLP: Date.now(),
             error: error.message,
             videoTracks: [],
             audioTracks: [],
