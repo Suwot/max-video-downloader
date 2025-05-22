@@ -15,6 +15,7 @@ import { normalizeUrl, getBaseDirectory } from '../../js/utilities/normalize-url
 import nativeHostService from '../../js/native-host-service.js';
 import { getActivePopupPortForTab } from './ui-communication.js';
 import { lightParseContent, fullParseContent } from '../../js/utilities/simple-js-parser.js';
+import { isDashManifest, parseDashManifest } from '../../js/utilities/dash-parser.js';
 import { buildRequestHeaders } from '../../js/utilities/headers-utils.js';
 import { createLogger } from '../../js/utilities/logger.js';
 import { getPreview, storePreview } from '../../js/utilities/preview-cache.js';
@@ -469,7 +470,146 @@ async function runJSParser(tabId, normalizedUrl, type) {
         // Get headers for the request
         const headers = await buildRequestHeaders(tabId, video.url);
         
-        // First do light parsing to determine content type
+        // Special handling for DASH content
+        if (type === 'dash') {
+            // Check if it's a DASH manifest
+            const isDash = await isDashManifest(video.url, headers);
+            
+            if (!isDash) {
+                logger.debug(`${video.url} is not a valid DASH manifest`);
+                const updatedVideo = updateVideo('runJSParser-dashCheck', tabId, normalizedUrl, {
+                    isValid: false,
+                    isLightParsed: true,
+                    timestampLP: Date.now()
+                });
+                
+                if (updatedVideo) {
+                    notifyVideoUpdated(tabId, normalizedUrl, updatedVideo);
+                    broadcastVideoUpdate(tabId);
+                }
+                return;
+            }
+            
+            // Mark as valid DASH content
+            const updatedVideo = updateVideo('runJSParser-dashValid', tabId, normalizedUrl, {
+                isValid: true,
+                subtype: 'dash',
+                type: 'dash',
+                isMaster: true, // All DASH manifests are considered "master" manifests
+                isDash: true,
+                isLightParsed: true,
+                timestampLP: Date.now()
+            });
+            
+            if (updatedVideo) {
+                notifyVideoUpdated(tabId, normalizedUrl, updatedVideo);
+                broadcastVideoUpdate(tabId);
+            }
+            
+            // Run DASH parser
+            const dashResult = await parseDashManifest(video.url, headers);
+            
+            if (dashResult.status === 'success') {
+                // Update video with DASH parsing results
+                const dashUpdates = {
+                    videoTracks: dashResult.videoTracks,
+                    audioTracks: dashResult.audioTracks,
+                    subtitleTracks: dashResult.subtitleTracks,
+                    variants: dashResult.variants, // For backward compatibility
+                    duration: dashResult.duration,
+                    isLive: dashResult.isLive,
+                    isEncrypted: dashResult.isEncrypted,
+                    encryptionType: dashResult.encryptionType,
+                    isFullParsed: true,
+                    timestampFP: Date.now()
+                };
+                
+                const updatedVideoAfterFullParse = updateVideo('runJSParser-dashParse', tabId, normalizedUrl, dashUpdates);
+                
+                // Track variant-master relationships for backward compatibility
+                if (dashResult.variants && dashResult.variants.length > 0) {
+                    handleVariantMasterRelationships(tabId, dashResult.variants, normalizedUrl);
+                }
+                
+                // Generate preview for the best quality video track
+                if (dashResult.videoTracks.length > 0 && 
+                    dashResult.videoTracks[0].representations.length > 0) {
+                    
+                    // Use the first (best) representation from the first video track
+                    const bestVideoTrack = dashResult.videoTracks[0];
+                    const bestRepresentation = bestVideoTrack.representations[0];
+                    
+                    // Skip if already being processed
+                    if (!processingRequests.isProcessing(normalizedUrl, 'previews')) {
+                        processingRequests.startProcessing(normalizedUrl, 'previews');
+                        
+                        try {
+                            // Check for cached preview first
+                            const cachedPreview = await getPreview(normalizedUrl);
+                            if (cachedPreview) {
+                                // Use cached preview
+                                const updatedPreviewVideo = updateVideo('runJSParser-dashPreviewCache', tabId, normalizedUrl, {
+                                    previewUrl: cachedPreview,
+                                    fromCache: true
+                                });
+                                
+                                if (updatedPreviewVideo) {
+                                    notifyVideoUpdated(tabId, normalizedUrl, updatedPreviewVideo);
+                                    broadcastVideoUpdate(tabId);
+                                }
+                            } else {
+                                // Generate preview using best representation
+                                const previewResponse = await rateLimiter.enqueue(async () => {
+                                    return await nativeHostService.sendMessage({
+                                        type: 'generatePreview',
+                                        url: bestRepresentation.trackUrl,
+                                        headers: headers
+                                    });
+                                });
+                                
+                                if (previewResponse && previewResponse.previewUrl) {
+                                    // Cache the generated preview
+                                    await storePreview(normalizedUrl, previewResponse.previewUrl);
+                                    
+                                    const updatedPreviewVideo = updateVideo('runJSParser-dashPreview', tabId, normalizedUrl, {
+                                        previewUrl: previewResponse.previewUrl
+                                    });
+                                    
+                                    if (updatedPreviewVideo) {
+                                        notifyVideoUpdated(tabId, normalizedUrl, updatedPreviewVideo);
+                                        broadcastVideoUpdate(tabId);
+                                    }
+                                }
+                            }
+                        } catch (error) {
+                            logger.error(`Error generating preview for DASH: ${error.message}`);
+                        } finally {
+                            processingRequests.finishProcessing(normalizedUrl, 'previews');
+                        }
+                    }
+                }
+                
+                // Final UI update after all processing is complete
+                notifyVideoUpdated(tabId, normalizedUrl, updatedVideoAfterFullParse);
+                broadcastVideoUpdate(tabId);
+            } else {
+                // Update with error information
+                const updatedErrorVideo = updateVideo('runJSParser-dashError', tabId, normalizedUrl, {
+                    parsingStatus: dashResult.status,
+                    parsingError: dashResult.error || 'Unknown error parsing DASH manifest',
+                    isFullParsed: false
+                });
+                
+                if (updatedErrorVideo) {
+                    notifyVideoUpdated(tabId, normalizedUrl, updatedErrorVideo);
+                    broadcastVideoUpdate(tabId);
+                }
+            }
+            
+            return;
+        }
+        
+        // Continue with existing HLS handling for non-DASH content
         logger.debug(`Running light parsing for ${video.url}`);
         const lightParseResult = await lightParseContent(video.url, type, headers);
         
