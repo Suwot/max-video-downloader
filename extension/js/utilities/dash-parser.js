@@ -18,6 +18,10 @@ import {
     fetchContentRange,
     fetchFullContent
 } from './parser-utils.js';
+import { createLogger } from './logger.js';
+
+// Create a logger for the DASH parser
+const logger = createLogger('DASH Parser');
 
 /**
  * Check if a URL likely points to a DASH MPD manifest
@@ -29,7 +33,7 @@ import {
  */
 export async function isDashManifest(url, headers = null) {
     try {
-        console.log(`[DASH Parser] Checking if ${url} is a DASH manifest`);
+        logger.debug(`Checking if ${url} is a DASH manifest`);
         
         // First do a HEAD request to check content-type if possible
         try {
@@ -48,7 +52,7 @@ export async function isDashManifest(url, headers = null) {
                 const contentType = headResponse.headers.get('content-type') || '';
                 if (contentType.includes('application/dash+xml') || 
                     contentType.includes('video/vnd.mpeg.dash.mpd')) {
-                    console.log(`[DASH Parser] Content-Type indicates DASH: ${contentType}`);
+                    logger.debug(`Content-Type indicates DASH: ${contentType}`);
                     return true;
                 }
                 
@@ -61,14 +65,14 @@ export async function isDashManifest(url, headers = null) {
             }
         } catch (error) {
             // Ignore HEAD request failures, proceed to content inspection
-            console.log(`[DASH Parser] HEAD request failed, using content inspection: ${error.message}`);
+            logger.debug(`HEAD request failed, using content inspection: ${error.message}`);
         }
         
         // Fall back to checking content
         const result = await fetchContentRange(url, headers, 1024);
         
         if (!result.ok) {
-            console.log(`[DASH Parser] Failed to fetch content: ${result.status}`);
+            logger.warn(`Failed to fetch content: ${result.status}`);
             return false;
         }
         
@@ -77,10 +81,10 @@ export async function isDashManifest(url, headers = null) {
                       (result.content.includes('xmlns="urn:mpeg:dash:schema:mpd') || 
                        result.content.includes('</MPD>'));
         
-        console.log(`[DASH Parser] Content inspection ${isDash ? 'indicates' : 'does not indicate'} DASH manifest`);
+        logger.debug(`Content inspection ${isDash ? 'indicates' : 'does not indicate'} DASH manifest`);
         return isDash;
     } catch (error) {
-        console.error(`[DASH Parser] Error checking DASH manifest: ${error.message}`);
+        logger.error(`Error checking DASH manifest: ${error.message}`);
         return false;
     }
 }
@@ -252,13 +256,13 @@ export async function parseDashManifest(url, headers = null) {
     }
     
     try {
-        console.log(`[DASH Parser] Parsing manifest: ${url}`);
+        logger.debug(`Parsing manifest: ${url}`);
         
         // Fetch the full content of the manifest
         const fetchResult = await fetchFullContent(url, headers);
         
         if (!fetchResult.ok) {
-            console.error(`[DASH Parser] Failed to fetch MPD: ${fetchResult.status}`);
+            logger.error(`Failed to fetch MPD: ${fetchResult.status}`);
             return { 
                 status: 'fetch-failed',
                 videoTracks: [],
@@ -272,7 +276,7 @@ export async function parseDashManifest(url, headers = null) {
         
         // Extract basic MPD properties
         const durationMatch = content.match(/mediaPresentationDuration="([^"]+)"/);
-        const duration = durationMatch ? parseDashDuration(durationMatch[1]) : 0;
+        const duration = durationMatch ? parseDashDuration(durationMatch[1]) : null;
         
         // Check if this is a live stream
         const isLive = content.match(/type="dynamic"/i) !== null;
@@ -346,7 +350,8 @@ export async function parseDashManifest(url, headers = null) {
             // Process each representation
             for (const representation of representationElements) {
                 const repId = extractAttribute(representation, 'id') || `${adaptationSetId}-rep-${track.representations.length + 1}`;
-                const bandwidth = parseInt(extractAttribute(representation, 'bandwidth') || '0', 10);
+                const bandwidthAttr = extractAttribute(representation, 'bandwidth');
+                const bandwidth = bandwidthAttr ? parseInt(bandwidthAttr, 10) : null;
                 const repCodecs = extractAttribute(representation, 'codecs') || codecs;
                 
                 // Create representation object with properties specific to media type
@@ -376,8 +381,8 @@ export async function parseDashManifest(url, headers = null) {
                 
                 // Add media-specific properties
                 if (mediaType === 'video') {
-                    repObject.width = parseInt(extractAttribute(representation, 'width') || '0', 10);
-                    repObject.height = parseInt(extractAttribute(representation, 'height') || '0', 10);
+                    repObject.width = parseInt(extractAttribute(representation, 'width'), 10) || null;
+                    repObject.height = parseInt(extractAttribute(representation, 'height'), 10) || null;
                     repObject.frameRate = parseFrameRate(extractAttribute(representation, 'frameRate') || null);
                     repObject.sar = extractAttribute(representation, 'sar') || null;
                     repObject.scanType = extractAttribute(representation, 'scanType') || null;
@@ -388,7 +393,7 @@ export async function parseDashManifest(url, headers = null) {
                     }
                 } 
                 else if (mediaType === 'audio') {
-                    repObject.audioSamplingRate = parseInt(extractAttribute(representation, 'audioSamplingRate') || '0', 10);
+                    repObject.audioSamplingRate = parseInt(extractAttribute(representation, 'audioSamplingRate'), 10) || null;
                     repObject.channels = parseInt(extractAttribute(representation, 'audioChannels') || 
                                        extractAttribute(representation, 'channels') || '2', 10);
                 } 
@@ -490,10 +495,10 @@ export async function parseDashManifest(url, headers = null) {
             status: 'success'
         };
         
-        console.log(`[DASH Parser] Successfully parsed MPD: found ${videoTracks.length} video, ${audioTracks.length} audio, and ${subtitleTracks.length} subtitle tracks`);
+        logger.info(`Successfully parsed MPD: found ${videoTracks.length} video, ${audioTracks.length} audio, and ${subtitleTracks.length} subtitle tracks`);
         return result;
     } catch (error) {
-        console.error(`[DASH Parser] Error parsing MPD: ${error.message}`);
+        logger.error(`Error parsing MPD: ${error.message}`);
         return { 
             status: 'parse-error', 
             error: error.message,
