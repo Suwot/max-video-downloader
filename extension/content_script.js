@@ -114,29 +114,32 @@ function scanAllVideos() {
 /**
  * Scans for common video player configurations
  * Many sites use specific patterns for embedding videos
+ * Focus only on player configs that might not be detected through network requests
  */
 function scanForPlayerConfigs(seenUrls) {
   // Use the passed seenUrls if available, otherwise create a new Set
   const foundUrls = seenUrls || new Set();
   
-  // Look for specific player elements
+  // Look for specific player elements with focus on those that might contain JSON configs
   const playerSelectors = [
     '.jwplayer', '.video-js', '.html5-video-container',
-    '[data-video-url]', '[data-video-src]', '[data-src*=".mp4"]',
-    '[data-setup*="sources"]', '[data-hls-url]', '[data-dash-url]'
+    '[data-video-url]', '[data-video-src]',
+    '[data-setup*="sources"]', '[data-player-config]',
+    // Avoid specific format detection that background script handles better
   ];
   
   document.querySelectorAll(playerSelectors.join(', ')).forEach(player => {
     // Try to extract video URLs from data attributes
     const dataAttrs = ['data-video-url', 'data-video-src', 'data-src', 
-                      'data-setup', 'data-hls-url', 'data-dash-url'];
+                      'data-setup', 'data-player-config'];
     
     for (const attr of dataAttrs) {
       const value = player.getAttribute(attr);
       if (!value) continue;
       
       try {
-        // Check if it's a JSON string with video configuration
+        // Focus on extracting URLs from JSON configs - this is something
+        // the background script can't see through network requests
         if (value.includes('{') && value.includes('}')) {
           const config = JSON.parse(value);
           const sources = config.sources || config.source || config.src || config.url;
@@ -149,27 +152,34 @@ function scanForPlayerConfigs(seenUrls) {
               
               if (typeof url === 'string' && !foundUrls.has(url)) {
                 foundUrls.add(url);
-                const type = typeof source === 'object' ? source.type : null;
-                detectVideo(url, type || null, { 
-                  source: 'CS_initial_scan_player_config' 
+                // Just send to background without determining type
+                detectVideo(url, null, { 
+                  source: 'CS_player_config' 
                 });
               }
             });
           }
-        } else if ((value.includes('http') || value.startsWith('/')) && !foundUrls.has(value)) {
-          // Direct URL
-          foundUrls.add(value);
-          detectVideo(value, null, { source: 'CS_initial_scan_player_attr' });
-        }
-      } catch {
-        // Simple attribute URL - focus only on direct video formats and send others to background
-        if ((value.includes('http') || value.startsWith('/'))) {
+        } 
+        // Handle direct URLs without trying to determine their type
+        else if ((value.includes('http') || value.startsWith('/')) && !foundUrls.has(value)) {
           const fullUrl = value.startsWith('/') ? 
-                         `${window.location.origin}${value}` : value;
+                        `${window.location.origin}${value}` : value;
           
           if (!foundUrls.has(fullUrl)) {
             foundUrls.add(fullUrl);
-            detectVideo(fullUrl, null, { source: 'CS_initial_scan_player_attr' });
+            // Let background handle type detection
+            detectVideo(fullUrl, null, { source: 'CS_player_attr' });
+          }
+        }
+      } catch (e) {
+        // Simply forward non-JSON values that might be URLs
+        if ((value.includes('http') || value.startsWith('/')) && !foundUrls.has(value)) {
+          const fullUrl = value.startsWith('/') ? 
+                        `${window.location.origin}${value}` : value;
+          
+          if (!foundUrls.has(fullUrl)) {
+            foundUrls.add(fullUrl);
+            detectVideo(fullUrl, null, { source: 'CS_player_attr' });
           }
         }
       }
@@ -177,33 +187,26 @@ function scanForPlayerConfigs(seenUrls) {
   });
 }
 
-// Network request monitoring - focused only on cases background can't handle
+// Network request monitoring - focused ONLY on blob or data URLs that background can't see
 function setupNetworkInterception() {
-  // Only intercept XHR for POST requests and blob/data URLs that background script can't see
+  // Only intercept XHR for blob/data URLs that background script can't access
   const originalXHR = XMLHttpRequest.prototype.open;
   XMLHttpRequest.prototype.open = function(method, url, ...args) {
     const xhr = this;
     
-    // Only monitor POST requests or special URL schemes that background might miss
-    if (method === 'POST' || 
-        url.startsWith('blob:') || 
-        url.startsWith('data:')) {
-      
+    // Only monitor special URL schemes that background script can't access
+    // Skip monitoring POST requests - background can handle those
+    if (url.startsWith('blob:') || url.startsWith('data:')) {
       const originalOnReadyStateChange = xhr.onreadystatechange;
       
       xhr.addEventListener('readystatechange', function() {
         if (xhr.readyState === 4 && xhr.status === 200) {
           const contentType = xhr.getResponseHeader('Content-Type');
-          const responseUrl = xhr.responseURL;
           
-          // Only process if likely a video response
-          if (contentType && (
-              contentType.includes('video/') || 
-              contentType.includes('mpegURL') || 
-              contentType.includes('dash+xml'))) {
-            
-            detectVideo(responseUrl, contentType, {
-              source: 'CS_xhr_post'
+          // Only process if it has video content type
+          if (contentType && contentType.includes('video/')) {  
+            detectVideo(xhr.responseURL || url, contentType, {
+              source: 'CS_xhr_blob'
             });
           }
         }
@@ -216,7 +219,6 @@ function setupNetworkInterception() {
     
     return originalXHR.apply(this, [method, url, ...args]);
   };
-  
 }
 
 /**
@@ -392,18 +394,15 @@ function findNearbyHeading(element) {
 }
 
 /**
- * Unified entry point for video detection that eliminates redundant processing
- * Handles type identification, validation, and content-type checking in one place
- * This function now integrates all validation previously done in validateVideo
+ * Streamlined entry point for video detection
+ * Focuses on DOM-based detection and leaves type identification to background script
  * 
  * @param {string} url - The URL to detect video from
  * @param {string|null} contentType - Optional content type from headers
  * @param {Object} metadata - Additional video metadata
- * @returns {boolean} - Whether a valid video was detected and processed
+ * @returns {boolean} - Whether the video was detected and sent
  */
 function detectVideo(url, contentType = null, metadata = {}) {
-  logDebug(`Attempting to detect video:`, url);
-
   if (!url) return false;
   
   // Skip if it's a blob URL we've already processed
@@ -411,67 +410,49 @@ function detectVideo(url, contentType = null, metadata = {}) {
     return false;
   }
   
-  // One-time type identification
-  const detectedType = identifyVideoType(url);
-  
-  // Pre-determine URL type
+  // Use minimal local detection for deduplication only
   let videoType = null;
   let videoUrl = url;
   let normalizedUrl = null;
   let additionalInfo = {};
   
-  // Handle special cases from identifyVideoType
-  if (typeof detectedType === 'object') {
-    // Handle embedded URLs in query parameters
-    if (detectedType.url && detectedType.type) {
-      videoUrl = detectedType.url;
-      videoType = detectedType.type;
-      // If identifyVideoType already normalized the URL, use that
-      normalizedUrl = detectedType.normalizedUrl || null;
-      additionalInfo.originalUrl = url;
-      additionalInfo.foundFromQueryParam = detectedType.foundFromQueryParam || false;
-    } 
-    // Handle direct video with container info
-    else if (detectedType.type === 'direct' && detectedType.container) {
-      videoType = detectedType.type;
-      additionalInfo.originalContainer = detectedType.container;
-    }
+  // Special case for blob URLs
+  if (url.startsWith('blob:')) {
+    videoType = 'blob';
+    normalizedUrl = url; // Blob URLs are already unique
   } 
-  // Handle simple string type results
-  else if (detectedType !== 'unknown' && detectedType !== 'ignored') {
-    videoType = detectedType;
+  // For embedded URLs from query parameters
+  else if (url !== metadata.originalUrl && metadata.originalUrl) {
+    videoType = 'embedded'; // Let background determine specific type
+    videoUrl = url;
+    normalizedUrl = normalizeUrl(url);
+    additionalInfo.originalUrl = metadata.originalUrl;
+    additionalInfo.foundFromQueryParam = true;
   }
-  
-  // If type detection failed but we have content type, try that as fallback
-  // Moving this logic before the early rejection to catch more valid videos
-  if (!videoType && contentType) {
-    const videoMimeTypes = [
-      'video/',
-      'application/octet-stream'
-    ];
-    
-    if (videoMimeTypes.some(type => contentType.includes(type))) {
-      videoType = 'direct';
-      
-      // Also update normalizedUrl since we've changed the video type
-      if (!normalizedUrl) {
-        normalizedUrl = normalizeUrl(videoUrl);
+  // Direct videos with known container
+  else if (metadata.originalContainer) {
+    videoType = 'direct';
+    additionalInfo.originalContainer = metadata.originalContainer;
+    normalizedUrl = normalizeUrl(url);
+  }
+  // For all other URLs, only do minimal checking
+  else {
+    // Check for direct video extension for local deduplication
+    try {
+      const path = new URL(url).pathname.toLowerCase();
+      const directMatch = path.match(/\.(mp4|webm|ogg|mov|avi|mkv|flv|3gp|m4v|wmv)(\?|$)/i);
+      if (directMatch) {
+        videoType = 'direct';
+        additionalInfo.originalContainer = directMatch[1].toLowerCase();
+      } else {
+        // Let the background script identify all other types
+        videoType = 'unknown';
       }
+    } catch {
+      videoType = 'unknown'; // Let background handle type detection
     }
-  }
-  
-  // Early rejection for ignored or unknown types
-  if (!videoType || videoType === 'ignored') {
-    return false;
-  }
-  
-  // Use normalized URL from detectedType if available to avoid redundant computation
-  if (!normalizedUrl && detectedType?.normalizedUrl) {
-    normalizedUrl = detectedType.normalizedUrl;
-  }
-  // Create normalized URL for deduplication if it wasn't already done
-  else if (!normalizedUrl) {
-    normalizedUrl = normalizeUrl(videoUrl);
+    
+    normalizedUrl = normalizeUrl(url);
   }
   
   // Skip if we've already processed this URL
@@ -479,15 +460,11 @@ function detectVideo(url, contentType = null, metadata = {}) {
     return false;
   }
   
-  // Set timestamp once here and trust it in processVideo
-  const timestampDetected = Date.now();
-  
-  // At this point, we have a valid, new video
-  // Process it with all the information we've already gathered
+  // At this point, we have a new video URL to send to background
   return processVideo(videoUrl, videoType, {
     contentType,
     normalizedUrl,
-    timestampDetected,
+    timestampDetected: Date.now(),
     ...additionalInfo,
     ...metadata
   });
@@ -520,107 +497,55 @@ function extractEmbeddedVideoUrl(urlObj) {
 }
 
 /**
- * Simplified identifier that focuses on DOM-only content
- * Removes redundant HLS/DASH detection handled by background script
+ * Ultra-minimal video type identification
+ * Only handles blob URLs and embedded query parameters
+ * Leaves all other URL analysis to the background script
  * 
  * @param {string} url - URL to identify type from
- * @returns {string|Object} - Video type or object with detailed information
+ * @returns {string|null} - Video type or null
  */
 function identifyVideoType(url) {
+  // Only special case blob URLs that background can't access directly
   if (url.startsWith('blob:')) return 'blob';
   
   try {
+    // Quick check for query parameter embedded videos
     const urlObj = new URL(url);
-    const path = urlObj.pathname.toLowerCase();
-    
-    // Quick filtering of known non-video URLs
-    if (/\.(gif|png|jpg|jpeg|webp|bmp|svg)(\?|$)/i.test(path)) {
-      // Check for embedded videos in image URLs
-      const embedded = extractEmbeddedVideoUrl(urlObj);
-      
-      if (embedded) {
-        // Include the embedded URL but don't try to determine type
-        // Let the background script handle type detection
-        const normalizedEmbedded = normalizeUrl(embedded);
-        return {
-          url: embedded,
-          normalizedUrl: normalizedEmbedded,
-          type: 'embedded',
-          foundFromQueryParam: true
-        };
-      }
-      return 'ignored';
-    }
-    
-    // Check for tracking/analytics URLs
-    if (/\/(ping|track|pixel|stats|metric|telemetry|analytics|tracking)/i.test(path) || 
-        url.includes('jwpltx')) {
-      // Check for embedded videos in tracking URLs
-      const embedded = extractEmbeddedVideoUrl(urlObj);
-      
-      if (embedded) {
-        // Include the embedded URL but don't try to determine type
-        const normalizedEmbedded = normalizeUrl(embedded);
-        return {
-          url: embedded,
-          normalizedUrl: normalizedEmbedded,
-          type: 'embedded',
-          foundFromQueryParam: true
-        };
-      }
-      return 'ignored';
-    }
-    
-    // Only check for direct video files, let background handle streaming formats
-    const directMatch = path.match(/\.(mp4|webm|ogg|mov|avi|mkv|flv|3gp|m4v|wmv)(\?|$)/i);
-    if (directMatch) {
-      return {
-        type: 'direct',
-        container: directMatch[1].toLowerCase()
-      };
-    }
-    
-    // Check for embedded videos in query parameters
     const embedded = extractEmbeddedVideoUrl(urlObj);
     if (embedded) {
-      // Let background script determine the type
-      const normalizedEmbedded = normalizeUrl(embedded);
       return {
         url: embedded,
-        normalizedUrl: normalizedEmbedded,
+        normalizedUrl: normalizeUrl(embedded),
         type: 'embedded',
         foundFromQueryParam: true
       };
     }
     
+    // Return unknown for all other URLs - let background handle identification
   } catch (e) {
-    // Silent fail, just return unknown
+    // Silent fail
   }
   
-  return 'unknown';
+  return null;
 }
 
 // isVideoContent function has been removed as its functionality is now integrated into detectVideo
 
 /**
- * Normalize URL to avoid duplicates
- * Creates a canonical form of URLs for effective deduplication
+ * Simplified URL normalization focused only on basic deduplication
+ * Leaves advanced URL processing to the background script
  * 
  * @param {string} url - URL to normalize
- * @param {number} depth - Recursion depth counter to prevent infinite loops
  * @returns {string} - Normalized URL
  */
-function normalizeUrl(url, depth = 0) {
-  // Prevent infinite recursion by limiting depth
-  if (depth > 3) return url; // avoid infinite recursion
-  
+function normalizeUrl(url) {
   // Blob URLs are unique by nature and can't be normalized
   if (url.startsWith('blob:')) return url;
   
-  // Generate cache key for the URL (standardizing URL format)
+  // Generate cache key for the URL
   const cacheKey = url.replace(/[\?#].*$/, '');
   
-  // Check cache first
+  // Check cache first for performance
   if (state.urlNormalizationCache.has(cacheKey)) {
     return state.urlNormalizationCache.get(cacheKey);
   }
@@ -628,55 +553,17 @@ function normalizeUrl(url, depth = 0) {
   try {
     const urlObj = new URL(url);
     
-    // Handle tracking pixels with embedded video URLs
-    if (url.includes('ping.gif') || url.includes('jwpltx.com') || 
-        urlObj.pathname.includes('/pixel') || urlObj.pathname.includes('/track')) {
-      // Extract video URLs from query parameters
-      const embedded = extractEmbeddedVideoUrl(urlObj);
-      if (embedded) {
-        // Recursive call to normalize the extracted URL with depth counter
-        return normalizeUrl(embedded, depth + 1);
-      }
-    }
+    // Remove only the most common tracking parameters
+    // Let background do the rest of the normalization
+    const commonParams = ['_t', 'cache', 'timestamp', 'random'];
     
-    // Remove all common tracking parameters
-    const trackingParams = [
-      '_t', '_r', 'cache', '_', 'time', 'timestamp', 'random', 'nonce', 
-      'ref', 'referrer', 'utm_source', 'utm_medium', 'utm_campaign', 
-      'unique', 'cb', 'nocache', 't'
-    ];
-    
-    trackingParams.forEach(param => {
+    commonParams.forEach(param => {
       urlObj.searchParams.delete(param);
     });
     
-    // Special handling for streaming formats
-    if (url.includes('.m3u8') || url.includes('.mpd') || 
-        url.includes('/hls/') || url.includes('/dash/')) {
-      // Remove streaming-specific parameters
-      const streamingParams = [
-        'seq', 'segment', 'cmsid', 'v', 'session', 'bitrate', 'quality',
-        'ts', 'starttime', 'endtime', 'start', 'end', 'init'
-      ];
-      
-      streamingParams.forEach(param => {
-        urlObj.searchParams.delete(param);
-      });
-      
-      // Create canonical forms for manifest URLs
-      const pathname = urlObj.pathname.toLowerCase();
-      if (pathname.includes('/manifest') || pathname.includes('/playlist') || 
-          pathname.includes('/master.m3u8') || pathname.includes('/index.m3u8')) {
-        const manifesUrl = urlObj.origin + urlObj.pathname;
-        // Cache the result using our consistent cache key
-        state.urlNormalizationCache.set(cacheKey, manifesUrl);
-        return manifesUrl;
-      }
-    }
-    
     const normalized = urlObj.toString();
     
-    // Store in cache using our consistent cache key
+    // Store in cache
     state.urlNormalizationCache.set(cacheKey, normalized);
     
     return normalized;
