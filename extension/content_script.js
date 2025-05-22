@@ -442,7 +442,7 @@ function detectVideo(url, contentType = null, metadata = {}) {
     // Check for direct video extension for local deduplication
     try {
       const path = new URL(url).pathname.toLowerCase();
-      const directMatch = path.match(/\.(mp4|webm|ogg|mov|avi|mkv|flv|3gp|m4v|wmv)(\?|$)/i);
+      const directMatch = path.match(/\.(mp4|webm|ogg|mov|avi|mkv|flv|3gp|m4v|wmv)(\/|\?|$)/i);
       if (directMatch) {
         videoType = 'direct';
         additionalInfo.originalContainer = directMatch[1].toLowerCase();
