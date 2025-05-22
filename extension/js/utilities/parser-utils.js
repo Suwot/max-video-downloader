@@ -5,6 +5,7 @@
 
 import { normalizeUrl, getBaseDirectory } from './normalize-url.js';
 import { buildRequestHeaders } from './headers-utils.js';
+import { createLogger } from './logger.js';
 
 // Tracking URLs currently being processed
 export const processingRequests = {
@@ -242,6 +243,222 @@ export function extractRepresentations(adaptationSetContent) {
         representations.push(match[0]);
     }
     return representations;
+}
+
+/**
+ * Check if a URL points to a streaming manifest (DASH or HLS) with optimized downloading
+ * Returns enhanced result with validation and content data when possible
+ * 
+ * @param {string} url - URL to check
+ * @param {Object} [headers] - Optional request headers
+ * @returns {Promise<Object>} - Validation result with additional metadata
+ */
+export async function validateManifestType(url, headers = null) {
+    const logger = createLogger('Manifest Validator');
+    try {
+        logger.debug(`Checking manifest type for ${url}`);
+        
+        const reqHeaders = headers || await buildRequestHeaders(null, url);
+        let contentType = null;
+        let contentLength = null;
+        let supportsRanges = false;
+        let fullContent = null;
+        let validationResult = {
+            isValid: false,
+            manifestType: 'unknown',
+            timestampLP: Date.now(),
+            status: 'unknown',
+            contentType: null,
+            contentLength: null,
+            supportsRanges: false,
+            content: null
+        };
+        
+        // First do a HEAD request to check content metadata
+        try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 3000);
+            
+            const headResponse = await fetch(url, {
+                method: 'HEAD',
+                signal: controller.signal,
+                headers: reqHeaders
+            });
+            
+            clearTimeout(timeoutId);
+            
+            if (headResponse.ok) {
+                contentType = headResponse.headers.get('content-type') || '';
+                contentLength = parseInt(headResponse.headers.get('content-length') || '0', 10);
+                supportsRanges = headResponse.headers.get('accept-ranges') === 'bytes';
+                
+                validationResult.contentType = contentType;
+                validationResult.contentLength = contentLength;
+                validationResult.supportsRanges = supportsRanges;
+                
+                // DASH content type validation
+                if (contentType.includes('application/dash+xml') || 
+                    contentType.includes('video/vnd.mpeg.dash.mpd')) {
+                    logger.debug(`Content-Type indicates DASH: ${contentType}`);
+                    validationResult.isValid = true;
+                    validationResult.manifestType = 'dash';
+                    validationResult.status = 'confirmed-by-header';
+                    validationResult.timestampLP = Date.now();
+                    return validationResult;
+                }
+                
+                // HLS content type validation
+                if (contentType.includes('application/vnd.apple.mpegurl') || 
+                    contentType.includes('application/x-mpegurl') ||
+                    contentType.includes('audio/mpegurl') ||
+                    contentType.includes('audio/x-mpegurl') ||
+                    contentType.includes('application/x-mpegURL') ||
+                    contentType.includes('vnd.apple.mpegURL')) {
+                    logger.debug(`Content-Type indicates HLS: ${contentType}`);
+                    validationResult.isValid = true;
+                    validationResult.manifestType = 'hls';
+                    validationResult.status = 'confirmed-by-header';
+                    validationResult.timestampLP = Date.now();
+                    return validationResult;
+                }
+                
+                // If content-type clearly indicates it's not an HLS/DASH manifest
+                if (contentType.includes('video/mp4') || 
+                    contentType.includes('video/webm') || 
+                    contentType.includes('audio/')) {
+                    logger.debug(`Content-Type indicates non-manifest: ${contentType}`);
+                    validationResult.status = 'rejected-by-header';
+                    validationResult.timestampLP = Date.now();
+                    return validationResult;
+                }
+            }
+        } catch (error) {
+            // Ignore HEAD request failures, proceed to content inspection
+            logger.debug(`HEAD request failed, using content inspection: ${error.message}`);
+            validationResult.status = 'head-request-failed';
+        }
+        
+        // Download strategies for content inspection
+        // Download completely if small file, size unknown, or no range support
+        if (!contentLength || contentLength <= 40 * 1024 || !supportsRanges) {
+            const downloadType = !supportsRanges && contentLength > 40 * 1024 
+                ? "Large manifest without range support" 
+                : "Small manifest or size unknown";
+                
+            logger.debug(`${downloadType} - downloading fully`);
+            
+            try {
+                const fullFetchResult = await fetchFullContent(url, reqHeaders);
+                
+                if (!fullFetchResult.ok) {
+                    logger.warn(`Failed to fetch content: ${fullFetchResult.status}`);
+                    validationResult.status = 'fetch-failed';
+                    validationResult.timestampLP = Date.now();
+                    return validationResult;
+                }
+                
+                fullContent = fullFetchResult.content;
+                validationResult.content = fullContent;
+                
+                // Check for DASH signatures
+                const isDash = fullContent.includes('<MPD') && 
+                              (fullContent.includes('xmlns="urn:mpeg:dash:schema:mpd') || 
+                               fullContent.includes('</MPD>'));
+                               
+                // Check for HLS signatures
+                const isHls = fullContent.includes('#EXTM3U');
+                
+                if (isDash) {
+                    validationResult.isValid = true;
+                    validationResult.manifestType = 'dash';
+                    validationResult.status = 'confirmed-by-content';
+                    validationResult.timestampLP = Date.now();
+                    logger.debug(`Content inspection confirms DASH manifest`);
+                    return validationResult;
+                } else if (isHls) {
+                    // Additional HLS type detection
+                    const isMaster = fullContent.includes('#EXT-X-STREAM-INF');
+                    const isVariant = !isMaster && fullContent.includes('#EXTINF');
+                    
+                    validationResult.isValid = true;
+                    validationResult.manifestType = 'hls';
+                    validationResult.isMaster = isMaster;
+                    validationResult.isVariant = isVariant;
+                    validationResult.status = 'confirmed-by-content';
+                    validationResult.timestampLP = Date.now();
+                    logger.debug(`Content inspection confirms HLS ${isMaster ? 'master' : (isVariant ? 'variant' : '')} playlist`);
+                    return validationResult;
+                }
+                
+                validationResult.status = 'rejected-by-content';
+                validationResult.timestampLP = Date.now();
+                logger.debug('Content inspection rejects manifest - neither DASH nor HLS');
+                return validationResult;
+            } catch (error) {
+                logger.error(`Error fetching full content: ${error.message}`);
+                validationResult.status = 'fetch-error';
+                validationResult.timestampLP = Date.now();
+                return validationResult;
+            }
+        }
+        // Case 2: Larger file with range support - fetch partial content
+        else {
+            logger.debug(`Large manifest with range support - fetching partial content`);
+            
+            const result = await fetchContentRange(url, reqHeaders, 10 * 1024); // 10 KB for manifest header
+            
+            if (!result.ok) {
+                logger.warn(`Failed to fetch partial content: ${result.status}`);
+                validationResult.status = 'fetch-failed';
+                validationResult.timestampLP = Date.now();
+                return validationResult;
+            }
+            
+            // Check for DASH signatures in partial content
+            const isDash = result.content.includes('<MPD') && 
+                          (result.content.includes('xmlns="urn:mpeg:dash:schema:mpd') || 
+                           result.content.includes('</MPD>'));
+                           
+            // Check for HLS signatures in partial content
+            const isHls = result.content.includes('#EXTM3U');
+            
+            if (isDash) {
+                validationResult.isValid = true;
+                validationResult.manifestType = 'dash';
+                validationResult.status = 'confirmed-by-partial';
+                validationResult.timestampLP = Date.now();
+                logger.debug(`Partial content inspection confirms DASH manifest`);
+                return validationResult;
+            } else if (isHls) {
+                // Additional HLS type detection
+                const isMaster = result.content.includes('#EXT-X-STREAM-INF');
+                const isVariant = !isMaster && result.content.includes('#EXTINF');
+                
+                validationResult.isValid = true;
+                validationResult.manifestType = 'hls';
+                validationResult.isMaster = isMaster;
+                validationResult.isVariant = isVariant;
+                validationResult.status = 'confirmed-by-partial';
+                validationResult.timestampLP = Date.now();
+                logger.debug(`Partial content inspection confirms HLS ${isMaster ? 'master' : (isVariant ? 'variant' : '')} playlist`);
+                return validationResult;
+            }
+            
+            validationResult.status = 'rejected-by-partial';
+            validationResult.timestampLP = Date.now();
+            logger.debug('Partial content inspection rejects manifest - neither DASH nor HLS');
+            return validationResult;
+        }
+    } catch (error) {
+        logger.error(`Error checking manifest type: ${error.message}`);
+        return {
+            isValid: false,
+            manifestType: 'unknown',
+            status: 'validation-error',
+            error: error.message,
+            timestampLP: Date.now()
+        };
+    }
 }
 
 // Re-export utilities that we're using directly from other modules

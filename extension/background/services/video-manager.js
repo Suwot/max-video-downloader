@@ -15,7 +15,7 @@ import { normalizeUrl, getBaseDirectory } from '../../js/utilities/normalize-url
 import nativeHostService from '../../js/native-host-service.js';
 import { getActivePopupPortForTab } from './ui-communication.js';
 import { lightParseHls, fullParseHls } from '../../js/utilities/hls-parser.js';
-import { isDashManifest, parseDashManifest } from '../../js/utilities/dash-parser.js';
+import { parseDashManifest } from '../../js/utilities/dash-parser.js';
 import { buildRequestHeaders } from '../../js/utilities/headers-utils.js';
 import { createLogger } from '../../js/utilities/logger.js';
 import { getPreview, storePreview } from '../../js/utilities/preview-cache.js';

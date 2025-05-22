@@ -16,195 +16,13 @@ import {
     extractAdaptationSets,
     extractRepresentations,
     fetchContentRange,
-    fetchFullContent
+    fetchFullContent,
+    validateManifestType
 } from './parser-utils.js';
 import { createLogger } from './logger.js';
 
 // Create a logger for the DASH parser
 const logger = createLogger('DASH Parser');
-
-/**
- * Check if a URL likely points to a DASH MPD manifest with optimized downloading
- * Returns enhanced result with validation and content data when possible
- * 
- * @param {string} url - URL to check
- * @param {Object} [headers] - Optional request headers
- * @returns {Promise<Object>} - Validation result with additional metadata
- */
-export async function isDashManifest(url, headers = null) {
-    try {
-        logger.debug(`Checking if ${url} is a DASH manifest`);
-        
-        const reqHeaders = headers || await buildRequestHeaders(null, url);
-        let contentType = null;
-        let contentLength = null;
-        let supportsRanges = false;
-        let fullContent = null;
-        let validationResult = {
-            isValid: false,
-            timestampLP: Date.now(),
-            status: 'unknown',
-            contentType: null,
-            contentLength: null,
-            supportsRanges: false,
-            content: null
-        };
-        
-        // First do a HEAD request to check content metadata
-        try {
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 3000);
-            
-            const headResponse = await fetch(url, {
-                method: 'HEAD',
-                signal: controller.signal,
-                headers: reqHeaders
-            });
-            
-            clearTimeout(timeoutId);
-            
-            if (headResponse.ok) {
-                contentType = headResponse.headers.get('content-type') || '';
-                contentLength = parseInt(headResponse.headers.get('content-length') || '0', 10);
-                supportsRanges = headResponse.headers.get('accept-ranges') === 'bytes';
-                
-                validationResult.contentType = contentType;
-                validationResult.contentLength = contentLength;
-                validationResult.supportsRanges = supportsRanges;
-                
-                // If content-type definitely indicates DASH, we can return early positive validation
-                if (contentType.includes('application/dash+xml') || 
-                    contentType.includes('video/vnd.mpeg.dash.mpd')) {
-                    logger.debug(`Content-Type indicates DASH: ${contentType}`);
-                    validationResult.isValid = true;
-                    validationResult.status = 'confirmed-by-header';
-                    validationResult.timestampLP = Date.now();
-                    return validationResult;
-                }
-                
-                // If content-type clearly indicates it's not XML, return early negative validation
-                if (contentType.includes('video/mp4') || 
-                    contentType.includes('video/webm') || 
-                    contentType.includes('audio/')) {
-                    logger.debug(`Content-Type indicates non-DASH: ${contentType}`);
-                    validationResult.status = 'rejected-by-header';
-                    validationResult.timestampLP = Date.now();
-                    return validationResult;
-                }
-            }
-        } catch (error) {
-            // Ignore HEAD request failures, proceed to content inspection
-            logger.debug(`HEAD request failed, using content inspection: ${error.message}`);
-            validationResult.status = 'head-request-failed';
-        }
-        
-        // Decide download strategy based on content length and range support
-        
-        // Case 1: Small file or size unknown - download completely
-        if (!contentLength || contentLength <= 40 * 1024) {
-            logger.debug(`Small manifest (${contentLength} bytes) or size unknown - downloading fully`);
-            
-            try {
-                const fullFetchResult = await fetchFullContent(url, reqHeaders);
-                
-                if (!fullFetchResult.ok) {
-                    logger.warn(`Failed to fetch content: ${fullFetchResult.status}`);
-                    validationResult.status = 'fetch-failed';
-                    validationResult.timestampLP = Date.now();
-                    return validationResult;
-                }
-                
-                fullContent = fullFetchResult.content;
-                validationResult.content = fullContent;
-                
-                // Look for DASH MPD signatures
-                const isDash = fullContent.includes('<MPD') && 
-                              (fullContent.includes('xmlns="urn:mpeg:dash:schema:mpd') || 
-                               fullContent.includes('</MPD>'));
-                
-                validationResult.isValid = isDash;
-                validationResult.status = isDash ? 'confirmed-by-content' : 'rejected-by-content';
-                validationResult.timestampLP = Date.now();
-                
-                logger.debug(`Content inspection ${isDash ? 'confirms' : 'rejects'} DASH manifest`);
-                return validationResult;
-            } catch (error) {
-                logger.error(`Error fetching full content: ${error.message}`);
-                validationResult.status = 'fetch-error';
-                validationResult.timestampLP = Date.now();
-                return validationResult;
-            }
-        }
-        // Case 2: Larger file with range support - fetch partial content
-        else if (supportsRanges) {
-            logger.debug(`Large manifest with range support - fetching partial content`);
-            
-            const result = await fetchContentRange(url, reqHeaders, 10 * 1024); // 10 KB should be enough for DASH header
-            
-            if (!result.ok) {
-                logger.warn(`Failed to fetch partial content: ${result.status}`);
-                validationResult.status = 'fetch-failed';
-                validationResult.timestampLP = Date.now();
-                return validationResult;
-            }
-            
-            // Look for DASH MPD signatures in partial content
-            const isDash = result.content.includes('<MPD') && 
-                          (result.content.includes('xmlns="urn:mpeg:dash:schema:mpd') || 
-                           result.content.includes('</MPD>'));
-            
-            validationResult.isValid = isDash;
-            validationResult.status = isDash ? 'confirmed-by-partial' : 'rejected-by-partial';
-            validationResult.timestampLP = Date.now();
-            
-            logger.debug(`Partial content inspection ${isDash ? 'confirms' : 'rejects'} DASH manifest`);
-            return validationResult;
-        }
-        // Case 3: Larger file without range support - download fully
-        else {
-            logger.debug(`Large manifest without range support - downloading fully`);
-            
-            try {
-                const fullFetchResult = await fetchFullContent(url, reqHeaders);
-                
-                if (!fullFetchResult.ok) {
-                    logger.warn(`Failed to fetch content: ${fullFetchResult.status}`);
-                    validationResult.status = 'fetch-failed';
-                    validationResult.timestampLP = Date.now();
-                    return validationResult;
-                }
-                
-                fullContent = fullFetchResult.content;
-                validationResult.content = fullContent;
-                
-                // Look for DASH MPD signatures
-                const isDash = fullContent.includes('<MPD') && 
-                              (fullContent.includes('xmlns="urn:mpeg:dash:schema:mpd') || 
-                               fullContent.includes('</MPD>'));
-                
-                validationResult.isValid = isDash;
-                validationResult.status = isDash ? 'confirmed-by-content' : 'rejected-by-content';
-                validationResult.timestampLP = Date.now();
-                
-                logger.debug(`Content inspection ${isDash ? 'confirms' : 'rejects'} DASH manifest`);
-                return validationResult;
-            } catch (error) {
-                logger.error(`Error fetching full content: ${error.message}`);
-                validationResult.status = 'fetch-error';
-                validationResult.timestampLP = Date.now();
-                return validationResult;
-            }
-        }
-    } catch (error) {
-        logger.error(`Error checking DASH manifest: ${error.message}`);
-        return {
-            isValid: false,
-            status: 'validation-error',
-            error: error.message,
-            timestampLP: Date.now()
-        };
-    }
-}
 
 /**
  * Determine the media type of an adaptation set
@@ -379,13 +197,13 @@ export async function parseDashManifest(url, headers = null) {
         logger.debug(`Validating manifest: ${url}`);
         
         // First perform light parsing to validate this is actually a DASH manifest
-        const validation = await isDashManifest(url, headers);
+        const validation = await validateManifestType(url, headers);
         
         // Preserve the light parsing timestamp
         const timestampLP = validation.timestampLP || Date.now();
         
-        // Early return if not a valid DASH manifest
-        if (!validation.isValid) {
+        // Early return if not a valid manifest or if not DASH
+        if (!validation.isValid || validation.manifestType !== 'dash') {
             logger.warn(`URL does not point to a valid DASH manifest: ${url} (${validation.status})`);
             return {
                 status: validation.status || 'not-dash',
