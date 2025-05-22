@@ -261,9 +261,9 @@ export async function validateManifestType(url, headers = null) {
                 }
                 
                 // If content-type clearly indicates it's not an HLS/DASH manifest
-                if (contentType.includes('video/mp4') || 
-                    contentType.includes('video/webm') || 
-                    contentType.includes('audio/')) {
+                if ((contentType.includes('video/mp4') || contentType.includes('video/webm')) &&
+                    !contentType.includes('mpegurl') && 
+                    !url.toLowerCase().includes(".m3u8")) {
                     logger.debug(`Content-Type indicates non-manifest: ${contentType}`);
                     validationResult.status = 'rejected-by-header';
                     validationResult.timestampLP = Date.now();

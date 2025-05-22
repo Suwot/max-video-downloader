@@ -10,7 +10,9 @@ import {
     processingRequests,
     calculateEstimatedFileSizeBytes,
     resolveUrl,
-    getBaseDirectory
+    getBaseDirectory,
+    fetchFullContent,
+    validateManifestType
 } from './parser-utils.js';
 import { createLogger } from './logger.js';
 
@@ -207,6 +209,8 @@ export async function fullParseHls(url, headers = null) {
  */
 async function parseHlsVariant(variantUrl, headers = null) {
     try {
+        logger.debug(`Fetching variant: ${variantUrl}`);
+        
         // Set up request with timeout
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 10000);  
@@ -219,8 +223,6 @@ async function parseHlsVariant(variantUrl, headers = null) {
             delete requestHeaders['Range'];
         }
         
-        logger.debug(`Fetching full HLS variant: ${variantUrl}`);
-        
         const response = await fetch(variantUrl, {
             signal: controller.signal,
             headers: requestHeaders
@@ -229,7 +231,7 @@ async function parseHlsVariant(variantUrl, headers = null) {
         clearTimeout(timeoutId);
         
         if (!response.ok) {
-            logger.warn(`❌ FAILED fetching variant ${variantUrl}: ${response.status}`);
+            logger.warn(`❌ Failed fetching variant ${variantUrl}: ${response.status}`);
             return { 
                 duration: null, 
                 isLive: true,
@@ -239,11 +241,24 @@ async function parseHlsVariant(variantUrl, headers = null) {
         }
         
         const content = await response.text();
-        logger.debug(`Received variant playlist: ${content.length} bytes, ${content.split('\n').length} lines`);
+        logger.debug(`Received variant playlist (${content.length} bytes)`);
+        
+        if (content.length === 0) {
+            logger.warn(`Empty response for variant ${variantUrl}`);
+            return { 
+                duration: null, 
+                isLive: true,
+                isEncrypted: false,
+                encryptionType: null
+            };
+        }
         
         // Extract different types of metadata from variant playlist
         const durationInfo = calculateHlsVariantDuration(content);
+        logger.debug(`Variant duration info: ${JSON.stringify(durationInfo)}`);
+        
         const encryptionInfo = extractHlsEncryptionInfo(content);
+        logger.debug(`Variant encryption info: ${JSON.stringify(encryptionInfo)}`);
         
         // Build a complete result object
         const result = {
@@ -253,6 +268,7 @@ async function parseHlsVariant(variantUrl, headers = null) {
             encryptionType: encryptionInfo.isEncrypted ? encryptionInfo.encryptionType : null
         };
         
+        logger.debug(`Complete variant info: ${JSON.stringify(result)}`);
         return result;
     } catch (error) {
         logger.error(`❌ ERROR parsing variant ${variantUrl}: ${error.message}`);
@@ -341,23 +357,27 @@ function parseHlsMaster(content, baseUrl, masterUrl) {
     
     let currentStreamInf = null;
     
-    // No longer tracking TARGETDURATION as it's not accurate for file size calculation
-    // Accurate duration will be calculated per variant in fullParseContent
+    logger.debug(`Processing master playlist with ${lines.length} lines`);
+    logger.debug(`First few lines: ${lines.slice(0, 3).join('\n')}`);
     
     for (let i = 0; i < lines.length; i++) {
         const line = lines[i].trim();
         
         // Process EXT-X-STREAM-INF line (variant declaration)
         if (line.startsWith('#EXT-X-STREAM-INF:')) {
+            logger.debug(`Found STREAM-INF: ${line}`);
             currentStreamInf = parseStreamInf(line);
+            logger.debug(`Parsed stream info: ${JSON.stringify(currentStreamInf)}`);
         } 
         // Process URI line following STREAM-INF
         else if (currentStreamInf && line && !line.startsWith('#')) {
+            logger.debug(`Found variant URI: ${line}`);
+            
             // Resolve the variant URL
             const variantUrl = resolveUrl(baseUrl, line);
+            logger.debug(`Resolved variant URL: ${variantUrl}`);
             
             // Create a variant entry with all extracted information
-            // File size will be calculated later when we have accurate duration
             const variant = {
                 url: variantUrl,
                 normalizedUrl: normalizeUrl(variantUrl),
@@ -374,23 +394,29 @@ function parseHlsMaster(content, baseUrl, masterUrl) {
                     width: currentStreamInf.width,
                     height: currentStreamInf.height,
                     fps: currentStreamInf.fps
-                    // estimatedFileSizeBytes will be added later with accurate duration
                 },
                 source: 'parseHlsMaster()',
                 timestampDetected: Date.now()
             };
             
             variants.push(variant);
+            logger.debug(`Added variant: ${JSON.stringify(variant)}`);
             currentStreamInf = null;
         }
     }
     
+    logger.debug(`Total variants found in master: ${variants.length}`);
+    
     // Sort variants by bandwidth (highest first for best quality)
-    variants.sort((a, b) => {
-        const aBandwidth = a.metaJS.averageBandwidth || a.metaJS.bandwidth || 0;
-        const bBandwidth = b.metaJS.averageBandwidth || b.metaJS.bandwidth || 0;
-        return bBandwidth - aBandwidth;
-    });
+    if (variants.length > 0) {
+        variants.sort((a, b) => {
+            const aBandwidth = a.metaJS.averageBandwidth || a.metaJS.bandwidth || 0;
+            const bBandwidth = b.metaJS.averageBandwidth || b.metaJS.bandwidth || 0;
+            return bBandwidth - aBandwidth;
+        });
+        
+        logger.debug(`Variants sorted by bandwidth, highest: ${variants[0].metaJS.bandwidth}`);
+    }
     
     return { 
         variants,
@@ -452,4 +478,254 @@ function parseStreamInf(line) {
     }
     
     return result;
+}
+
+/**
+ * Parse an HLS playlist and organize content by type
+ * First validates if it's really an HLS manifest using universal validator
+ * 
+ * @param {string} url - URL of the HLS manifest
+ * @param {Object} [headers] - Optional request headers
+ * @returns {Promise<Object>} Validated and parsed HLS content with variants
+ */
+export async function parseHlsManifest(url, headers = null) {
+    const normalizedUrl = normalizeUrl(url);
+    
+    // Skip if already being processed
+    if (processingRequests.full && processingRequests.full.has(normalizedUrl)) {
+        return { 
+            status: 'processing',
+            isValid: false,
+            isMaster: false,
+            isVariant: false,
+            variants: []
+        };
+    }
+    
+    // Mark as being processed
+    if (processingRequests.full) {
+        processingRequests.full.add(normalizedUrl);
+    }
+    
+    try {
+        logger.debug(`Validating manifest: ${url}`);
+        
+        // First perform universal validation to confirm this is an HLS manifest
+        const validation = await validateManifestType(url, headers);
+        
+        // Preserve the light parsing timestamp
+        const timestampLP = validation.timestampLP || Date.now();
+        
+        // Early return if not a valid manifest or if not HLS
+        if (!validation.isValid || validation.manifestType !== 'hls') {
+            logger.warn(`URL does not point to a valid HLS manifest: ${url} (${validation.status})`);
+            return {
+                status: validation.status || 'not-hls',
+                isValid: false,
+                timestampLP,
+                isMaster: false,
+                isVariant: false,
+                variants: []
+            };
+        }
+        
+        // Use data from validation if available
+        let isMaster = validation.isMaster || false; 
+        let isVariant = validation.isVariant || false;
+        
+        logger.debug(`Confirmed valid HLS ${isMaster ? 'master' : (isVariant ? 'variant' : 'unknown')} manifest, proceeding to full parse: ${url}`);
+        
+        // Use content from light parsing if available, otherwise fetch full content
+        let content;
+        if (validation.content) {
+            logger.debug('Reusing content from light parsing for full parse');
+            content = validation.content;
+        } else {
+            logger.debug('Content not available from light parsing, fetching full content');
+            const fetchResult = await fetchFullContent(url, headers);
+            
+            if (!fetchResult.ok) {
+                logger.error(`Failed to fetch HLS playlist: ${fetchResult.status}`);
+                return { 
+                    status: 'fetch-failed',
+                    isValid: false,
+                    timestampLP,
+                    isMaster: false,
+                    isVariant: false, 
+                    variants: []
+                };
+            }
+            
+            content = fetchResult.content;
+        }
+        
+        // Double-check content type based on actual content
+        // This ensures we handle the manifest correctly regardless of Content-Type header
+        const hasStreamInf = content.includes('#EXT-X-STREAM-INF');
+        const hasExtInf = content.includes('#EXTINF');
+        
+        // Force correct type detection based on content inspection
+        isMaster = hasStreamInf;
+        isVariant = !isMaster && hasExtInf;
+        
+        logger.debug(`Content inspection confirms: isMaster=${isMaster}, isVariant=${isVariant}`);
+        
+        const baseUrl = getBaseDirectory(url);
+        
+        // For master playlists, parse variants
+        let variants = [];
+        let duration = null;
+        let isEncrypted = false;
+        let encryptionType = null;
+        
+        if (isMaster) {
+            // Parse the master playlist to extract variant URLs
+            logger.debug(`Parsing HLS master playlist content: ${content.substring(0, 100)}...`);
+            const masterParseResult = parseHlsMaster(content, baseUrl, url);
+            
+            logger.debug(`Master parse result: ${JSON.stringify(masterParseResult)}`);
+            
+            if (masterParseResult.variants && masterParseResult.variants.length > 0) {
+                const basicVariants = masterParseResult.variants;
+                logger.debug(`Found ${basicVariants.length} basic variants in master playlist`);
+                
+                // Process variants in parallel but ensure we catch errors per variant
+                const variantPromises = basicVariants.map(async (variant, index) => {
+                    try {
+                        logger.debug(`Processing variant ${index+1}/${basicVariants.length}: ${variant.url}`);
+                        const variantInfo = await parseHlsVariant(variant.url, headers);
+                        
+                        // Create a new variant object to avoid mutation issues
+                        const updatedVariant = {...variant};
+                        
+                        // Update variant with detailed information
+                        if (variantInfo.duration !== null && variantInfo.duration >= 0) {
+                            updatedVariant.metaJS.duration = variantInfo.duration;
+                            const effectiveBandwidth = updatedVariant.metaJS.averageBandwidth || updatedVariant.metaJS.bandwidth;
+                            updatedVariant.metaJS.estimatedFileSizeBytes = calculateEstimatedFileSizeBytes(
+                                effectiveBandwidth, 
+                                variantInfo.duration
+                            );
+                        }
+                        
+                        updatedVariant.metaJS.isLive = variantInfo.isLive || false;
+                        updatedVariant.metaJS.isEncrypted = variantInfo.isEncrypted || false;
+                        updatedVariant.metaJS.encryptionType = variantInfo.encryptionType;
+                        
+                        logger.debug(`Successfully processed variant ${index+1}`);
+                        return updatedVariant;
+                    } catch (error) {
+                        logger.error(`Error processing variant ${index+1}: ${error.message}`);
+                        return variant; // Return the basic variant on error
+                    }
+                });
+                
+                try {
+                    // Wait for all variant processing to complete
+                    variants = await Promise.all(variantPromises);
+                    logger.debug(`All ${variants.length} variants processed successfully`);
+                    
+                    // If we have any variants, use data from the first one (highest quality)
+                    if (variants.length > 0) {
+                        const bestVariant = variants[0];
+                        duration = bestVariant.metaJS.duration;
+                        isEncrypted = bestVariant.metaJS.isEncrypted || false;
+                        encryptionType = bestVariant.metaJS.encryptionType;
+                    }
+                    
+                    // Ensure variants are properly sorted by quality
+                    variants.sort((a, b) => {
+                        // First try to sort by resolution if available
+                        if (a.metaJS?.height && b.metaJS?.height) {
+                            if (a.metaJS.height !== b.metaJS.height) {
+                                return b.metaJS.height - a.metaJS.height;
+                            }
+                        }
+                        // Then by bandwidth
+                        const aBandwidth = a.metaJS?.averageBandwidth || a.metaJS?.bandwidth || 0;
+                        const bBandwidth = b.metaJS?.averageBandwidth || b.metaJS?.bandwidth || 0;
+                        return bBandwidth - aBandwidth;
+                    });
+                } catch (error) {
+                    logger.error(`Error during Promise.all for variants: ${error.message}`);
+                }
+            } else {
+                logger.debug(`No variants found in master playlist`);
+            }
+        }
+        else if (isVariant) {
+            // For variant playlists, extract duration and encryption info directly
+            logger.debug(`Parsing standalone variant playlist`);
+            const variantInfo = calculateHlsVariantDuration(content);
+            duration = variantInfo.duration;
+            const isLive = variantInfo.isLive;
+            
+            logger.debug(`Variant duration: ${duration}s, isLive: ${isLive}`);
+            
+            // Extract encryption info
+            const encryptionInfo = extractHlsEncryptionInfo(content);
+            isEncrypted = encryptionInfo.isEncrypted;
+            encryptionType = encryptionInfo.encryptionType;
+            
+            // Create a single-item variants array with this variant
+            variants = [{
+                url: url,
+                normalizedUrl: normalizedUrl,
+                masterUrl: null,
+                hasKnownMaster: false,
+                type: 'hls',
+                subtype: 'hls-variant',
+                isVariant: true,
+                metaJS: {
+                    duration: duration,
+                    isLive: isLive,
+                    isEncrypted: isEncrypted,
+                    encryptionType: encryptionType
+                },
+                source: 'parseHlsManifest()',
+                timestampDetected: Date.now()
+            }];
+            
+            logger.debug(`Created standalone variant entry: ${JSON.stringify(variants[0])}`);
+        }
+        
+        // Set the full parse timestamp
+        const timestampFP = Date.now();
+        
+        // Construct the full result
+        const result = {
+            url: url,
+            normalizedUrl: normalizedUrl,
+            type: 'hls',
+            isValid: true,
+            isMaster: isMaster,
+            isVariant: isVariant,
+            timestampLP: timestampLP,
+            timestampFP: timestampFP,
+            duration: duration,
+            isEncrypted: isEncrypted,
+            encryptionType: encryptionType,
+            variants: variants,
+            status: 'success'
+        };
+        
+        logger.info(`Successfully parsed HLS: found ${variants.length} variants`);
+        return result;
+    } catch (error) {
+        logger.error(`Error parsing HLS: ${error.message}`);
+        return { 
+            status: 'parse-error',
+            error: error.message,
+            isValid: false,
+            timestampLP: Date.now(),
+            isMaster: false,
+            isVariant: false,
+            variants: []
+        };
+    } finally {
+        // Clean up
+        if (processingRequests.full) {
+            processingRequests.full.delete(normalizedUrl);
+        }
+    }
 }

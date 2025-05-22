@@ -14,7 +14,7 @@
 import { normalizeUrl, getBaseDirectory } from '../../js/utilities/normalize-url.js';
 import nativeHostService from '../../js/native-host-service.js';
 import { getActivePopupPortForTab } from './ui-communication.js';
-import { lightParseHls, fullParseHls } from '../../js/utilities/hls-parser.js';
+import { parseHlsManifest } from '../../js/utilities/hls-parser.js';
 import { parseDashManifest } from '../../js/utilities/dash-parser.js';
 import { buildRequestHeaders } from '../../js/utilities/headers-utils.js';
 import { createLogger } from '../../js/utilities/logger.js';
@@ -586,76 +586,80 @@ async function runJSParser(tabId, normalizedUrl, type) {
             return;
         }
         
-        // Handle HLS content with updated function calls
-        logger.debug(`Running light parsing for ${video.url}`);
-        const lightParseResult = await lightParseHls(video.url, headers);
-        
-        // Create light parse update fields
-        let lightParseUpdates = {
-            subtype: lightParseResult.subtype,
-            isValid: lightParseResult.isValid,
-            isLightParsed: true,
-            timestampLP: Date.now(),
-            ...(lightParseResult.isMaster ? { isMaster: true } : {}),
-            ...(lightParseResult.isVariant ? { isVariant: true } : {})
-        };
-        
-        // Only check variantMasterMap if the original video doesn't already have a known master
-        if (lightParseResult.isVariant && !video.hasKnownMaster) {
-            const tabVariantMap = variantMasterMap.get(tabId);
-            if (tabVariantMap && tabVariantMap.has(normalizedUrl)) {
-                // Add master info to updates
-                lightParseUpdates.hasKnownMaster = true;
-                lightParseUpdates.masterUrl = tabVariantMap.get(normalizedUrl);
-                logger.debug(`Linked variant ${video.url} to master ${tabVariantMap.get(normalizedUrl)}`);
+        // Handle HLS content with streamlined approach, similar to DASH
+        if (type === 'hls') {
+            // Mark as processing
+            const processingVideo = updateVideo('runJSParser-hlsProcessing', tabId, normalizedUrl, {
+                isBeingProcessed: true
+            });
+            
+            if (processingVideo) {
+                notifyVideoUpdated(tabId, normalizedUrl, processingVideo);
             }
-        }
-        
-        // Update video with light parse results using our unified function
-        const updatedVideoAfterLightParse = updateVideo('runJSParser-lightParse', tabId, normalizedUrl, lightParseUpdates);
-        
-        // Stop here if not a valid video
-        if (!lightParseResult.isValid) {
-            logger.debug(`${video.url} is not a valid ${type} video`);
+            
+            // Run combined validation and parsing using the universal manifest validator
+            const hlsResult = await parseHlsManifest(video.url, headers);
+            
+            if (hlsResult.status === 'success') {
+                // Update video with all HLS parsing results at once
+                const hlsUpdates = {
+                    isValid: true,
+                    type: 'hls',
+                    isMaster: hlsResult.isMaster,
+                    isVariant: hlsResult.isVariant,
+                    subtype: hlsResult.isMaster ? 'hls-master' : 'hls-variant',
+                    variants: hlsResult.variants,
+                    duration: hlsResult.duration,
+                    isEncrypted: hlsResult.isEncrypted,
+                    encryptionType: hlsResult.encryptionType,
+                    isLightParsed: true,
+                    isFullParsed: true, // Now we fully parse in one step
+                    timestampLP: hlsResult.timestampLP,
+                    timestampFP: hlsResult.timestampFP,
+                    isBeingProcessed: false
+                };
+                
+                const updatedVideoAfterParse = updateVideo('runJSParser-hlsComplete', tabId, normalizedUrl, hlsUpdates);
+                
+                // Track variant-master relationships if this is a master playlist
+                if (hlsResult.isMaster && hlsResult.variants && hlsResult.variants.length > 0) {
+                    handleVariantMasterRelationships(tabId, hlsResult.variants, normalizedUrl);
+                    
+                    // Get FFprobe metadata for variants
+                    // Preview will be generated for the best quality variant in processVariantsWithFFprobe
+                    await processVariantsWithFFprobe(tabId, normalizedUrl, hlsResult.variants);
+                }
+                // // For standalone variants, generate preview directly
+                // else if (hlsResult.isVariant) {
+                //     await generateVideoPreview(tabId, normalizedUrl);
+                // }
+                
+                // Final UI update after all processing is complete
+                notifyVideoUpdated(tabId, normalizedUrl, updatedVideoAfterParse);
+                broadcastVideoUpdate(tabId);
+            } else {
+                // Update with error information
+                const updatedErrorVideo = updateVideo('runJSParser-hlsError', tabId, normalizedUrl, {
+                    isValid: false,
+                    isLightParsed: true,
+                    timestampLP: hlsResult.timestampLP || Date.now(),
+                    parsingStatus: hlsResult.status,
+                    parsingError: hlsResult.error || 'Not a valid HLS manifest',
+                    isBeingProcessed: false
+                });
+                
+                if (updatedErrorVideo) {
+                    notifyVideoUpdated(tabId, normalizedUrl, updatedErrorVideo);
+                    broadcastVideoUpdate(tabId);
+                }
+            }
+            
             return;
         }
         
-        // For master playlists, extract variants with full parsing
-        if (lightParseResult.isMaster) {
-            logger.debug(`Processing master playlist: ${video.url}`);
-            
-            // Run full parsing to extract variants
-            const fullParseResult = await fullParseHls(video.url, headers);
-            
-            if (fullParseResult.variants && fullParseResult.variants.length > 0) {
-                // Update master with variants using our unified function
-                const updatedVideoAfterFullParse = updateVideo('runJSParser-fullParse', tabId, normalizedUrl, {
-                    variants: fullParseResult.variants,
-                    duration: (fullParseResult.variants[0]?.metaJS?.duration),
-                    timestampFP: Date.now()
-                });
-                
-                // Track all variants from this master using our streamlined function
-                handleVariantMasterRelationships(tabId, fullParseResult.variants, normalizedUrl);
-                
-                // For each variant, get FFprobe metadata
-                // Preview will be generated for the best quality variant in processVariantsWithFFprobe
-                await processVariantsWithFFprobe(tabId, normalizedUrl, fullParseResult.variants);
-                
-                // No need to generate preview for master here - it's handled in processVariantsWithFFprobe
-            } else {
-                // No variants found in master playlist; do not generate preview for master,
-                // as master playlists are not media files and cannot have previews.
-                logger.debug(`No variants found in master playlist: ${video.url} (no preview generated)`);
-            }
-        } else if (lightParseResult.isVariant) {
-            // For standalone variants, generate preview
-            logger.debug(`Detected standalone variant: ${video.url}`);
-            // generateVideoPreview(tabId, normalizedUrl);
-        } else {
-            // For other content types, generate preview
-            generateVideoPreview(tabId, normalizedUrl);
-        }
+        // This part will be reached only for non-HLS, non-DASH content types
+        logger.debug(`Content type ${type} is not handled by specialized parser, generating preview directly`);
+        generateVideoPreview(tabId, normalizedUrl);
         
         // Update UI
         broadcastVideoUpdate(tabId);
