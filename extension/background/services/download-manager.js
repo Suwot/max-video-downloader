@@ -47,10 +47,29 @@ function generateDownloadId() {
   return `download_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 }
 
-// Get filename from URL
-function getFilenameFromUrl(url) {
+// Get filename from URL and video metadata
+function getFilenameFromUrl(url, request = {}) {
+    // Use the title property if available, sanitized for filename use
+    if (request.title) {
+        // Sanitize title for use as filename
+        let safeTitle = request.title
+            .replace(/[\\/:*?"<>|]/g, '_')  // Remove invalid filename characters
+            .replace(/\s+/g, ' ')           // Normalize whitespace
+            .trim();
+            
+        // Truncate if too long
+        if (safeTitle.length > 100) {
+            safeTitle = safeTitle.substring(0, 97) + '...';
+        }
+        
+        // Add container extension from originalContainer or fallback to mp4
+        const extension = request.originalContainer || 'mp4';
+        return `${safeTitle}.${extension}`;
+    }
+    
+    // If no title or blob URL, use URL-based approach
     if (url.startsWith('blob:')) {
-        return 'video_blob';
+        return 'video_blob.mp4';
     }
     
     try {
@@ -58,32 +77,56 @@ function getFilenameFromUrl(url) {
         const pathname = urlObj.pathname;
         let filename = pathname.split('/').pop();
         
-        // Clean up filename (remove query params)
-        filename = filename.replace(/[?#].*$/, '');
+        // If original URL has 'file' parameter with extension, use that
+        if (url.includes('file=')) {
+            const fileMatch = url.match(/file=(?:[^&]+\/)?([^&/]+\.[^&./]+)/i);
+            if (fileMatch && fileMatch[1]) {
+                return decodeURIComponent(fileMatch[1]).replace(/[\\/:*?"<>|]/g, '_');
+            }
+        }
         
-        // Make sure we preserve the original file extension if it exists
-        // This ensures container format compatibility (especially for WebM files)
-        const fileExtMatch = url.match(/\.([^./?#]+)($|\?|#)/i);
-        if (fileExtMatch) {
-            const ext = fileExtMatch[1].toLowerCase();
+        // Check if the filename appears to be a script or contains query params
+        if (filename.endsWith('.php') || filename.endsWith('.aspx') || 
+            !filename.includes('.')) {
             
-            // If URL has extension but filename doesn't, add it
-            if (!filename.includes('.')) {
-                filename += `.${ext}`;
-            } 
-            // If both have extensions but they're different, and URL extension is webm/mov, use URL extension
-            else if (['webm', 'mov'].includes(ext) && !filename.toLowerCase().endsWith(`.${ext}`)) {
-                const baseFilename = filename.replace(/\.[^.]+$/, '');
-                filename = `${baseFilename}.${ext}`;
+            // If we have originalContainer info, use it
+            if (request.originalContainer) {
+                return `video.${request.originalContainer}`;
+            }
+            
+            // Default to MP4 as fallback
+            filename = 'video.mp4';
+        } else {
+            // Clean up filename (remove query params)
+            filename = filename.replace(/[?#].*$/, '');
+            
+            // Make sure we preserve the original file extension if it exists
+            const fileExtMatch = url.match(/\.([^./?#]+)($|\?|#)/i);
+            if (fileExtMatch) {
+                const ext = fileExtMatch[1].toLowerCase();
+                
+                // If URL has extension but filename doesn't, add it
+                if (!filename.includes('.')) {
+                    filename += `.${ext}`;
+                } 
+                // If URL extension is a common video format, prioritize it
+                else if (['mp4', 'webm', 'mov', 'mkv'].includes(ext) && 
+                        !filename.toLowerCase().endsWith(`.${ext}`)) {
+                    const baseFilename = filename.replace(/\.[^.]+$/, '');
+                    filename = `${baseFilename}.${ext}`;
+                }
             }
         }
         
         if (filename && filename.length > 0) {
             return filename;
         }
-    } catch {}
+    } catch (e) {
+        logger.error('Error parsing filename:', e);
+    }
     
-    return 'video';
+    // Ultimate fallback with originalContainer or default mp4
+    return `video.${request.originalContainer || 'mp4'}`;
 }
 
 function handleDownloadSuccess(response, notificationId) {
@@ -126,13 +169,19 @@ function handleDownloadError(error, notificationId) {
 function startDownload(request, port) {
     const downloadId = generateDownloadId();
     
+    // Get filename with proper title and container info
+    const filename = request.filename || getFilenameFromUrl(request.url, {
+        title: request.title,
+        originalContainer: request.originalContainer
+    });
+    
     // Show initial notification
     const notificationId = `download-${Date.now()}`;
     chrome.notifications.create(notificationId, {
       type: 'basic',
       iconUrl: 'icons/48.png',
       title: 'Downloading Video',
-      message: 'Starting download...'
+      message: `Starting download: ${filename}`
     });
     
     // Store initial download information
@@ -141,11 +190,13 @@ function startDownload(request, port) {
         progress: 0,
         status: 'downloading',
         startTime: Date.now(),
-        filename: request.filename || getFilenameFromUrl(request.url),
+        filename: filename,
         tabId: request.tabId || -1,
         type: request.type === 'downloadHLS' ? 'hls' : 'direct',
         quality: request.quality || null,
-        originalUrl: request.originalUrl || request.url
+        originalContainer: request.originalContainer || null,
+        originalUrl: request.originalUrl || request.url,
+        title: request.title || null
     });
     
     // Send download ID back to popup
@@ -274,11 +325,11 @@ function startDownload(request, port) {
         nativeHostService.sendMessage({
             type: 'download',
             url: request.url,
-            filename: request.filename || getFilenameFromUrl(request.url),
+            filename: filename,
             savePath: request.savePath,
             quality: request.quality,
-            manifestUrl: request.manifestUrl || request.url, // Pass manifest URL for better progress tracking
-            headers: headers // Include headers for authentication/authorization
+            manifestUrl: request.manifestUrl || request.url,
+            headers: headers
         }, responseHandler).catch(error => {
             console.error('❌ Native host error:', error);
             
@@ -289,7 +340,7 @@ function startDownload(request, port) {
                 console.log('⚠️ Codec incompatibility detected. Retrying with WebM extension...');
                 
                 // Force WebM extension for this download
-                let updatedFilename = request.filename || getFilenameFromUrl(request.url);
+                let updatedFilename = filename;
                 if (!/\.webm$/i.test(updatedFilename)) {
                     updatedFilename = updatedFilename.replace(/\.[^.]+$/, '') + '.webm';
                 }
@@ -333,7 +384,7 @@ function startDownload(request, port) {
         nativeHostService.sendMessage({
             type: 'download',
             url: request.url,
-            filename: request.filename || getFilenameFromUrl(request.url),
+            filename: filename,
             savePath: request.savePath,
             quality: request.quality,
             manifestUrl: request.manifestUrl || request.url
@@ -347,7 +398,7 @@ function startDownload(request, port) {
                 console.log('⚠️ Codec incompatibility detected. Retrying with WebM extension...');
                 
                 // Force WebM extension for this download
-                let updatedFilename = request.filename || getFilenameFromUrl(request.url);
+                let updatedFilename = filename;
                 if (!/\.webm$/i.test(updatedFilename)) {
                     updatedFilename = updatedFilename.replace(/\.[^.]+$/, '') + '.webm';
                 }

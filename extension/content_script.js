@@ -515,11 +515,29 @@ function identifyVideoType(url) {
     const urlObj = new URL(url);
     const embedded = extractEmbeddedVideoUrl(urlObj);
     if (embedded) {
+      // Extract container format if available in file parameter or path
+      let originalContainer = null;
+      
+      // Try to extract container from 'file' parameter (common in PHP-based video servers)
+      const fileMatch = url.match(/file=(?:[^&]+\/)?[^&/]+\.([^&./]+)/i);
+      if (fileMatch && fileMatch[1]) {
+        originalContainer = fileMatch[1].toLowerCase();
+      }
+      
+      // If not found in original URL, try the embedded URL
+      if (!originalContainer) {
+        const embeddedMatch = embedded.match(/\.([^.?&#/]+)(?:$|\?|#)/i);
+        if (embeddedMatch) {
+          originalContainer = embeddedMatch[1].toLowerCase();
+        }
+      }
+      
       return {
         url: embedded,
         normalizedUrl: normalizeUrl(embedded),
         type: 'embedded',
-        foundFromQueryParam: true
+        foundFromQueryParam: true,
+        originalContainer: originalContainer
       };
     }
   } catch (e) {
@@ -624,12 +642,13 @@ function processVideo(url, type = null, metadata = {}) {
     originalContainer: videoInfo.originalContainer,
     originalUrl: videoInfo.originalUrl,
     timestampDetected: videoInfo.timestampDetected,
+    title: videoInfo.title, // Always include title for better file naming
     // Include additional metadata but filter out redundant fields
     ...Object.fromEntries(
       Object.entries(videoInfo)
         .filter(([key]) => ![
           'normalizedUrl', 'url', 'type', 'foundFromQueryParam',
-          'originalContainer', 'originalUrl', 'timestampDetected'
+          'originalContainer', 'originalUrl', 'timestampDetected', 'title'
         ].includes(key))
     )
   });
