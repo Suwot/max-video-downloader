@@ -478,6 +478,14 @@ function createVideoActions(video) {
     downloadBtn.addEventListener('click', async () => {
         const selectedUrl = actionsDiv.querySelector('.quality-selector')?.value || video.url;
         
+        // Create video metadata object with essential properties for download
+        const videoData = {
+            title: video.title,
+            originalContainer: video.originalContainer,
+            originalUrl: video.originalUrl,
+            foundFromQueryParam: video.foundFromQueryParam
+        };
+        
         if (video.type === 'hls' || video.type === 'dash') {
             // Only fetch stream qualities if we don't have variants
             if (!video.variants || video.variants.length === 0) {
@@ -485,13 +493,13 @@ function createVideoActions(video) {
                 if (qualities && qualities.length > 0) {
                     const selectedQuality = await showQualityDialog(qualities);
                     if (!selectedQuality) return; // User canceled
-                    handleDownload(downloadBtn, selectedQuality.url || selectedUrl, video.type);
+                    handleDownload(downloadBtn, selectedQuality.url || selectedUrl, video.type, videoData);
                     return;
                 }
             }
-            handleDownload(downloadBtn, selectedUrl, video.type);
+            handleDownload(downloadBtn, selectedUrl, video.type, videoData);
         } else {
-            handleDownload(downloadBtn, selectedUrl, video.type);
+            handleDownload(downloadBtn, selectedUrl, video.type, videoData);
         }
     });
     

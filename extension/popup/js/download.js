@@ -25,8 +25,9 @@ let downloadPort = null;
  * @param {HTMLElement} button - Download button
  * @param {string} url - Video URL
  * @param {string} type - Video type
+ * @param {Object} videoData - Additional video metadata
  */
-export async function handleDownload(button, url, type) {
+export async function handleDownload(button, url, type, videoData = {}) {
     const originalText = button.textContent;
     button.disabled = true;
     
@@ -119,7 +120,7 @@ export async function handleDownload(button, url, type) {
         });
         
         // Initiate a new download
-        registerNewDownload(url, type, button);
+        registerNewDownload(url, type, button, videoData);
         
     } catch (error) {
         console.error('Download failed:', error);
@@ -142,29 +143,31 @@ export async function handleDownload(button, url, type) {
 /**
  * Register a new download with the background script
  */
-async function registerNewDownload(url, type, button) {
+async function registerNewDownload(url, type, button, videoData = {}) {
     try {
         // Get the port connection to the background script
         const port = getBackgroundPort();
         
+        // Create message with all needed metadata
+        const message = {
+            type: type === 'hls' ? 'downloadHLS' : 'download',
+            url: url,
+            manifestUrl: url, // Pass the manifest URL for better segment tracking
+            tabId: await getCurrentTabId(), // Pass tabId for proper tracking
+            title: videoData.title || null, // Pass video title for better filenames
+            originalContainer: videoData.originalContainer || null, // Pass container format
+            originalUrl: videoData.originalUrl || null, // Pass original URL if embedded
+            foundFromQueryParam: videoData.foundFromQueryParam || false // Indicate if extracted
+        };
+        
         // If we have a port connection to background, use it
         if (port) {
             console.log('Initiating download via port connection');
-            port.postMessage({
-                type: type === 'hls' ? 'downloadHLS' : 'download',
-                url: url,
-                manifestUrl: url, // Pass the manifest URL for better segment tracking
-                tabId: await getCurrentTabId() // Pass tabId for proper tracking
-            });
+            port.postMessage(message);
         } else {
             // Fall back to one-time message
             console.log('Initiating download via one-time message');
-            chrome.runtime.sendMessage({
-                type: type === 'hls' ? 'downloadHLS' : 'download',
-                url: url,
-                manifestUrl: url, // Pass the manifest URL for better segment tracking
-                tabId: await getCurrentTabId() // Pass tabId for proper tracking
-            });
+            chrome.runtime.sendMessage(message);
         }
     } catch (error) {
         console.error('Failed to register new download:', error);
