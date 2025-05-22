@@ -14,7 +14,7 @@
 import { normalizeUrl, getBaseDirectory } from '../../js/utilities/normalize-url.js';
 import nativeHostService from '../../js/native-host-service.js';
 import { getActivePopupPortForTab } from './ui-communication.js';
-import { lightParseContent, fullParseContent } from '../../js/utilities/simple-js-parser.js';
+import { lightParseHls, fullParseHls } from '../../js/utilities/hls-parser.js';
 import { isDashManifest, parseDashManifest } from '../../js/utilities/dash-parser.js';
 import { buildRequestHeaders } from '../../js/utilities/headers-utils.js';
 import { createLogger } from '../../js/utilities/logger.js';
@@ -609,9 +609,9 @@ async function runJSParser(tabId, normalizedUrl, type) {
             return;
         }
         
-        // Continue with existing HLS handling for non-DASH content
+        // Handle HLS content with updated function calls
         logger.debug(`Running light parsing for ${video.url}`);
-        const lightParseResult = await lightParseContent(video.url, type, headers);
+        const lightParseResult = await lightParseHls(video.url, headers);
         
         // Create light parse update fields
         let lightParseUpdates = {
@@ -648,7 +648,7 @@ async function runJSParser(tabId, normalizedUrl, type) {
             logger.debug(`Processing master playlist: ${video.url}`);
             
             // Run full parsing to extract variants
-            const fullParseResult = await fullParseContent(video.url, lightParseResult.subtype, headers);
+            const fullParseResult = await fullParseHls(video.url, headers);
             
             if (fullParseResult.variants && fullParseResult.variants.length > 0) {
                 // Update master with variants using our unified function
