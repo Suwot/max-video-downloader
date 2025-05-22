@@ -331,151 +331,144 @@ export async function parseDashManifest(url, headers = null) {
             const segmentBase = extractSegmentBase(adaptationSet);
             const segmentList = extractSegmentList(adaptationSet);
             
+            // Extract audio channel configuration if present
+            let audioChannelConfig = null;
+            const audioChannelConfigMatch = adaptationSet.match(/<AudioChannelConfiguration[^>]*\/>/);
+            if (audioChannelConfigMatch) {
+                audioChannelConfig = {
+                    schemeIdUri: extractAttribute(audioChannelConfigMatch[0], 'schemeIdUri'),
+                    value: extractAttribute(audioChannelConfigMatch[0], 'value')
+                };
+            }
+            
             // Get all representations for this adaptation set
             const representationElements = extractRepresentations(adaptationSet);
             
-            // Create track object with representations
-            const track = {
-                id: adaptationSetId,
-                mimeType: mimeType,
-                codecs: codecs,
-                lang: lang,
-                label: label,
-                segmentTemplate: segmentTemplate,
-                segmentBase: segmentBase,
-                segmentList: segmentList,
-                representations: []
-            };
-            
-            // Process each representation
+            // Process each representation and add it directly to the appropriate tracks array
             for (const representation of representationElements) {
-                const repId = extractAttribute(representation, 'id') || `${adaptationSetId}-rep-${track.representations.length + 1}`;
+                const repId = extractAttribute(representation, 'id') || `${adaptationSetId}-rep-${Date.now()}`;
                 const bandwidthAttr = extractAttribute(representation, 'bandwidth');
                 const bandwidth = bandwidthAttr ? parseInt(bandwidthAttr, 10) : null;
                 const repCodecs = extractAttribute(representation, 'codecs') || codecs;
+                const repMimeType = extractAttribute(representation, 'mimeType') || mimeType;
                 
-                // Create representation object with properties specific to media type
-                const repObject = {
+                // Create flattened representation object with adaptation set properties
+                const flatRepresentation = {
                     id: repId,
+                    adaptationSetId: adaptationSetId,
                     bandwidth: bandwidth,
                     codecs: repCodecs,
-                    mimeType: extractAttribute(representation, 'mimeType') || mimeType,
+                    mimeType: repMimeType,
+                    lang: lang,
+                    label: label,
                     estimatedFileSizeBytes: calculateEstimatedFileSizeBytes(bandwidth, duration)
                 };
                 
-                // Check for representation-specific segment info
+                // Add segment information from adaptation set if not present at representation level
                 const repSegmentTemplate = extractSegmentTemplate(representation);
-                if (repSegmentTemplate) {
-                    repObject.segmentTemplate = repSegmentTemplate;
-                }
+                flatRepresentation.segmentTemplate = repSegmentTemplate || segmentTemplate;
                 
                 const repSegmentBase = extractSegmentBase(representation);
-                if (repSegmentBase) {
-                    repObject.segmentBase = repSegmentBase;
-                }
+                flatRepresentation.segmentBase = repSegmentBase || segmentBase;
                 
                 const repSegmentList = extractSegmentList(representation);
-                if (repSegmentList) {
-                    repObject.segmentList = repSegmentList;
-                }
+                flatRepresentation.segmentList = repSegmentList || segmentList;
                 
-                // Add media-specific properties
-                if (mediaType === 'video') {
-                    repObject.width = parseInt(extractAttribute(representation, 'width'), 10) || null;
-                    repObject.height = parseInt(extractAttribute(representation, 'height'), 10) || null;
-                    repObject.frameRate = parseFrameRate(extractAttribute(representation, 'frameRate') || null);
-                    repObject.sar = extractAttribute(representation, 'sar') || null;
-                    repObject.scanType = extractAttribute(representation, 'scanType') || null;
-                    
-                    // Calculate resolution string
-                    if (repObject.width && repObject.height) {
-                        repObject.resolution = `${repObject.width}x${repObject.height}`;
-                    }
-                } 
-                else if (mediaType === 'audio') {
-                    repObject.audioSamplingRate = parseInt(extractAttribute(representation, 'audioSamplingRate'), 10) || null;
-                    repObject.channels = parseInt(extractAttribute(representation, 'audioChannels') || 
-                                       extractAttribute(representation, 'channels') || '2', 10);
-                } 
-                else if (mediaType === 'subtitles') {
-                    // Any subtitle-specific properties
+                // Add audio channel configuration if available for audio
+                if (mediaType === 'audio' && audioChannelConfig) {
+                    flatRepresentation.audioChannelConfiguration = audioChannelConfig;
                 }
                 
                 // For rendering in the UI, create URL with fragment identifier
-                repObject.trackUrl = `${url}#adaptationSet=${adaptationSetId}&representation=${repId}`;
-                repObject.normalizedTrackUrl = normalizeUrl(repObject.trackUrl);
+                flatRepresentation.trackUrl = `${url}#adaptationSet=${adaptationSetId}&representation=${repId}`;
+                flatRepresentation.normalizedTrackUrl = normalizeUrl(flatRepresentation.trackUrl);
                 
-                track.representations.push(repObject);
-            }
-            
-            // Sort representations by bandwidth (highest first)
-            track.representations.sort((a, b) => b.bandwidth - a.bandwidth);
-            
-            // Add the track to the appropriate array
-            if (mediaType === 'video') {
-                videoTracks.push(track);
-            } else if (mediaType === 'audio') {
-                audioTracks.push(track);
-            } else if (mediaType === 'subtitles') {
-                subtitleTracks.push(track);
+                // Add media-specific properties
+                if (mediaType === 'video') {
+                    flatRepresentation.width = parseInt(extractAttribute(representation, 'width'), 10) || null;
+                    flatRepresentation.height = parseInt(extractAttribute(representation, 'height'), 10) || null;
+                    flatRepresentation.frameRate = parseFrameRate(extractAttribute(representation, 'frameRate') || null);
+                    flatRepresentation.sar = extractAttribute(representation, 'sar') || null;
+                    flatRepresentation.scanType = extractAttribute(representation, 'scanType') || null;
+                    
+                    // Calculate resolution string
+                    if (flatRepresentation.width && flatRepresentation.height) {
+                        flatRepresentation.resolution = `${flatRepresentation.width}x${flatRepresentation.height}`;
+                    }
+                    
+                    videoTracks.push(flatRepresentation);
+                } 
+                else if (mediaType === 'audio') {
+                    flatRepresentation.audioSamplingRate = parseInt(extractAttribute(representation, 'audioSamplingRate'), 10) || null;
+                    flatRepresentation.channels = parseInt(extractAttribute(representation, 'audioChannels') || 
+                                               extractAttribute(representation, 'channels') || '2', 10);
+                    
+                    audioTracks.push(flatRepresentation);
+                } 
+                else if (mediaType === 'subtitles') {
+                    // Any subtitle-specific properties can be added here
+                    subtitleTracks.push(flatRepresentation);
+                }
             }
         }
+        
+        // Sort track arrays by bandwidth (highest first)
+        videoTracks.sort((a, b) => (b.bandwidth || 0) - (a.bandwidth || 0));
+        audioTracks.sort((a, b) => (b.bandwidth || 0) - (a.bandwidth || 0));
         
         // For backward compatibility, also create a variants array from video tracks
         const variants = [];
         if (videoTracks.length > 0) {
+            // Find best audio track to pair with these videos (if available)
+            const bestAudioTrack = audioTracks.length > 0 ? audioTracks[0] : null;
+            const audioCodec = bestAudioTrack && bestAudioTrack.codecs ? bestAudioTrack.codecs : null;
+            
+            // Add each video track directly as a variant
             for (const videoTrack of videoTracks) {
-                // Find best audio track to pair with this video (if available)
-                const bestAudioTrack = audioTracks.length > 0 ? audioTracks[0] : null;
-                const audioCodec = bestAudioTrack && bestAudioTrack.codecs ? bestAudioTrack.codecs : null;
-                
-                // Add each video representation as a variant
-                for (const representation of videoTrack.representations) {
-                    // Combine video and audio codecs (if available)
-                    let combinedCodecs = null;
-                    if (representation.codecs && audioCodec) {
-                        combinedCodecs = `${representation.codecs},${audioCodec}`;
-                    } else if (representation.codecs) {
-                        combinedCodecs = representation.codecs;
-                    } else if (audioCodec) {
-                        combinedCodecs = audioCodec;
-                    }
-                    
-                    // Create backward-compatible variant structure
-                    const variant = {
-                        url: representation.trackUrl,
-                        normalizedUrl: representation.normalizedTrackUrl,
-                        id: representation.id,
-                        masterUrl: url,
-                        hasKnownMaster: true,
-                        type: 'dash',
-                        subtype: 'dash-variant',
-                        isVariant: true,
-                        isDASH: true,
-                        metaJS: {
-                            bandwidth: representation.bandwidth,
-                            codecs: combinedCodecs,
-                            videoCodec: representation.codecs,
-                            audioCodec: audioCodec,
-                            width: representation.width,
-                            height: representation.height,
-                            fps: representation.frameRate,
-                            resolution: representation.resolution,
-                            estimatedFileSizeBytes: representation.estimatedFileSizeBytes,
-                            isEncrypted: isEncrypted,
-                            encryptionType: encryptionType,
-                            isLive: isLive,
-                            duration: duration
-                        },
-                        source: 'parseDashManifest()',
-                        timestampDetected: Date.now()
-                    };
-                    
-                    variants.push(variant);
+                // Combine video and audio codecs (if available)
+                let combinedCodecs = null;
+                if (videoTrack.codecs && audioCodec) {
+                    combinedCodecs = `${videoTrack.codecs},${audioCodec}`;
+                } else if (videoTrack.codecs) {
+                    combinedCodecs = videoTrack.codecs;
+                } else if (audioCodec) {
+                    combinedCodecs = audioCodec;
                 }
+                
+                // Create backward-compatible variant structure
+                const variant = {
+                    url: videoTrack.trackUrl,
+                    normalizedUrl: videoTrack.normalizedTrackUrl,
+                    id: videoTrack.id,
+                    masterUrl: url,
+                    hasKnownMaster: true,
+                    type: 'dash',
+                    subtype: 'dash-variant',
+                    isVariant: true,
+                    isDASH: true,
+                    metaJS: {
+                        bandwidth: videoTrack.bandwidth,
+                        codecs: combinedCodecs,
+                        videoCodec: videoTrack.codecs,
+                        audioCodec: audioCodec,
+                        width: videoTrack.width,
+                        height: videoTrack.height,
+                        fps: videoTrack.frameRate,
+                        resolution: videoTrack.resolution,
+                        estimatedFileSizeBytes: videoTrack.estimatedFileSizeBytes,
+                        isEncrypted: isEncrypted,
+                        encryptionType: encryptionType,
+                        isLive: isLive,
+                        duration: duration
+                    },
+                    source: 'parseDashManifest()',
+                    timestampDetected: Date.now()
+                };
+                
+                variants.push(variant);
             }
             
-            // Sort variants by bandwidth (highest first)
+            // Sort variants by bandwidth (highest first) - should already be sorted but ensuring it here
             variants.sort((a, b) => (b.metaJS.bandwidth || 0) - (a.metaJS.bandwidth || 0));
         }
         

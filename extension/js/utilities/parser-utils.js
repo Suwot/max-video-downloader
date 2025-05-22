@@ -3,7 +3,7 @@
  * Common utilities for HLS and DASH parsing operations
  */
 
-import { normalizeUrl, getBaseDirectory as getBaseDirectoryFromUrl } from './normalize-url.js';
+import { normalizeUrl, getBaseDirectory } from './normalize-url.js';
 import { buildRequestHeaders } from './headers-utils.js';
 
 // Tracking URLs currently being processed
@@ -245,4 +245,4 @@ export function extractRepresentations(adaptationSetContent) {
 }
 
 // Re-export utilities that we're using directly from other modules
-export { normalizeUrl, buildRequestHeaders, getBaseDirectoryFromUrl as getBaseDirectory };
+export { normalizeUrl, buildRequestHeaders, getBaseDirectory };
