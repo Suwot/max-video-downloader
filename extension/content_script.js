@@ -72,32 +72,28 @@ function scanAllVideos() {
   
   // Track URLs we've seen in this scan to avoid edge-case duplicates
   const seenUrls = new Set();
+  let videoElementsFound = false;
   
-  // 1. Process all video elements using the existing processNewVideoElement function
+  // 1. Process all video elements
   const videoElements = document.querySelectorAll('video');
   if (videoElements.length > 0) {
+    videoElementsFound = true;
     logDebug(`Found ${videoElements.length} video elements during scan`);
-    // Let the existing processNewVideoElement function handle observer attachment
     videoElements.forEach(video => {
-      // processNewVideoElement handles WeakSet tracking, observer attachment, and detection
       if (!state.observedVideoElements.has(video)) {
         const originalSource = video._source;
         video._source = 'CS_initial_scan'; // Temporarily mark source for tracking
-        
-        // No URL yet, but still process it to set up observers for future changes
         processNewVideoElement(video);
-        
         video._source = originalSource; // Restore original source if any
       }
     });
   }
   
-  // 2. Look for standalone source elements that aren't children of video elements
+  // 2. Look for standalone source elements
   document.querySelectorAll('source:not(video > source)').forEach(source => {
-    // Only process standalone source elements, skipping those within videos
-    // as they're handled by extractVideoInfo within processNewVideoElement
     const src = source.src || source.getAttribute('src');
     if (src && !seenUrls.has(src)) {
+      videoElementsFound = true; // Count source elements as video elements too
       seenUrls.add(src);
       const mimeType = source.getAttribute('type');
       detectVideo(src, mimeType || null, {
@@ -107,8 +103,13 @@ function scanAllVideos() {
     }
   });
   
-  // 3. Look for common player configurations
-  scanForPlayerConfigs(seenUrls);
+  // 3. Only look for player configurations if no standard video elements were found
+  if (!videoElementsFound) {
+    logDebug('No standard video elements found, scanning for player configurations');
+    scanForPlayerConfigs(seenUrls);
+  } else {
+    logDebug('Standard video elements found, skipping player configuration scan');
+  }
 }
 
 /**
@@ -192,11 +193,9 @@ function setupNetworkInterception() {
   // Only intercept XHR for blob/data URLs that background script can't access
   const originalXHR = XMLHttpRequest.prototype.open;
   XMLHttpRequest.prototype.open = function(method, url, ...args) {
-    const xhr = this;
-    
     // Only monitor special URL schemes that background script can't access
-    // Skip monitoring POST requests - background can handle those
     if (url.startsWith('blob:') || url.startsWith('data:')) {
+      const xhr = this;
       const originalOnReadyStateChange = xhr.onreadystatechange;
       
       xhr.addEventListener('readystatechange', function() {
@@ -416,20 +415,23 @@ function detectVideo(url, contentType = null, metadata = {}) {
   let normalizedUrl = null;
   let additionalInfo = {};
   
-  // Special case for blob URLs
+  // Check if this is a special case the content script needs to handle specifically
+  const videoTypeInfo = identifyVideoType(url);
+  
+  // Handle blob URLs
   if (url.startsWith('blob:')) {
     videoType = 'blob';
     normalizedUrl = url; // Blob URLs are already unique
   } 
   // For embedded URLs from query parameters
-  else if (url !== metadata.originalUrl && metadata.originalUrl) {
-    videoType = 'embedded'; // Let background determine specific type
-    videoUrl = url;
-    normalizedUrl = normalizeUrl(url);
-    additionalInfo.originalUrl = metadata.originalUrl;
+  else if (typeof videoTypeInfo === 'object' && videoTypeInfo?.foundFromQueryParam) {
+    videoType = videoTypeInfo.type;
+    videoUrl = videoTypeInfo.url;
+    normalizedUrl = videoTypeInfo.normalizedUrl;
+    additionalInfo.originalUrl = url;
     additionalInfo.foundFromQueryParam = true;
   }
-  // Direct videos with known container
+  // Direct videos with known container from metadata
   else if (metadata.originalContainer) {
     videoType = 'direct';
     additionalInfo.originalContainer = metadata.originalContainer;
@@ -449,7 +451,7 @@ function detectVideo(url, contentType = null, metadata = {}) {
         videoType = 'unknown';
       }
     } catch {
-      videoType = 'unknown'; // Let background handle type detection
+    videoType = 'unknown'; // Let background handle type detection
     }
     
     normalizedUrl = normalizeUrl(url);
@@ -502,7 +504,7 @@ function extractEmbeddedVideoUrl(urlObj) {
  * Leaves all other URL analysis to the background script
  * 
  * @param {string} url - URL to identify type from
- * @returns {string|null} - Video type or null
+ * @returns {string|Object|null} - 'blob' string, embedded URL object, or null
  */
 function identifyVideoType(url) {
   // Only special case blob URLs that background can't access directly
@@ -520,8 +522,6 @@ function identifyVideoType(url) {
         foundFromQueryParam: true
       };
     }
-    
-    // Return unknown for all other URLs - let background handle identification
   } catch (e) {
     // Silent fail
   }
@@ -553,10 +553,9 @@ function normalizeUrl(url) {
   try {
     const urlObj = new URL(url);
     
-    // Remove only the most common tracking parameters
+    // Only remove the most obvious tracking parameters
     // Let background do the rest of the normalization
     const commonParams = ['_t', 'cache', 'timestamp', 'random'];
-    
     commonParams.forEach(param => {
       urlObj.searchParams.delete(param);
     });
@@ -565,7 +564,6 @@ function normalizeUrl(url) {
     
     // Store in cache
     state.urlNormalizationCache.set(cacheKey, normalized);
-    
     return normalized;
   } catch {
     // If URL parsing fails, return original
