@@ -4,7 +4,7 @@
  */
 
 import { normalizeUrl, getBaseDirectory } from './normalize-url.js';
-import { buildRequestHeaders } from './headers-utils.js';
+import { getSharedHeaders, buildRequestHeaders } from './headers-utils.js';
 import { createLogger } from './logger.js';
 
 const logger = createLogger('Parser Utils');
@@ -116,8 +116,8 @@ export async function fetchContentRange(url, headers = null, rangeBytes = 4096, 
         
         logger.debug(`Fetching first ${rangeBytes} bytes of ${url}`);
         
-        // Use provided headers or build basic headers
-        const requestHeaders = headers || await buildRequestHeaders(null, url);
+        // Use provided headers or get shared headers
+        const requestHeaders = headers || await getSharedHeaders(null, url);
         
         // Add Range header
         requestHeaders['Range'] = `bytes=0-${rangeBytes - 1}`;
@@ -157,8 +157,8 @@ export async function fetchFullContent(url, headers = null, timeoutMs = 10000) {
         
         logger.debug(`Fetching full content of ${url}`);
         
-        // Use provided headers or build basic headers
-        const requestHeaders = headers || await buildRequestHeaders(null, url);
+        // Use provided headers or get shared headers
+        const requestHeaders = headers || await getSharedHeaders(null, url);
         
         // Remove any Range header to ensure we get the full content
         if (requestHeaders['Range']) {
@@ -199,7 +199,7 @@ export async function validateManifestType(url, headers = null) {
     try {
         logger.debug(`Checking manifest type for ${url}`);
         
-        const reqHeaders = headers || await buildRequestHeaders(null, url);
+        const reqHeaders = headers || await getSharedHeaders(null, url);
         let contentLength = null;
         let supportsRanges = false;
         let fullContent = null;
@@ -365,4 +365,4 @@ export async function validateManifestType(url, headers = null) {
 }
 
 // Re-export utilities that we're using directly from other modules
-export { normalizeUrl, buildRequestHeaders, getBaseDirectory };
+export { normalizeUrl, getSharedHeaders, buildRequestHeaders, getBaseDirectory };
