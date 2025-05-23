@@ -4,7 +4,7 @@
  */
 
 import { normalizeUrl, getBaseDirectory } from './normalize-url.js';
-import { getSharedHeaders, buildRequestHeaders } from './headers-utils.js';
+import { getSharedHeaders } from './headers-utils.js';
 import { createLogger } from './logger.js';
 
 const logger = createLogger('Parser Utils');
@@ -365,4 +365,4 @@ export async function validateManifestType(url, headers = null) {
 }
 
 // Re-export utilities that we're using directly from other modules
-export { normalizeUrl, getSharedHeaders, buildRequestHeaders, getBaseDirectory };
+export { normalizeUrl, getSharedHeaders, getBaseDirectory };

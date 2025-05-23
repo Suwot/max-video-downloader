@@ -349,7 +349,12 @@ async function initVideoManager() {
         // Listen for page navigation to clear videos
         chrome.webNavigation.onCommitted.addListener((details) => {
             // Only clear for main frame navigation (not iframes)
-            if (details.frameId === 0) {
+            // And only for actual navigation events, not history state updates or other non-navigation events
+            if (details.frameId === 0 && 
+                details.transitionType !== 'auto_subframe' && 
+                details.transitionQualifiers.indexOf('from_address_bar') !== -1) {
+                
+                logger.debug(`Navigation with transitionType: ${details.transitionType}, clearing tab ${details.tabId}`);
                 cleanupForTab(details.tabId);
             }
         });
