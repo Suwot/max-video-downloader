@@ -307,11 +307,6 @@ class VideoProcessingPipeline {
       
       const updatedVideo = updateVideo('processDashVideo', tabId, normalizedUrl, dashUpdates);
       
-      // Track variant-master relationships for backward compatibility
-      if (dashResult.variants && dashResult.variants.length > 0) {
-        handleVariantMasterRelationships(tabId, dashResult.variants, normalizedUrl);
-      }
-      
       // Generate preview for the manifest
       await this.generatePreview(tabId, normalizedUrl, headers);
       
