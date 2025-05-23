@@ -31,31 +31,8 @@ const variantMasterMap = new Map();
 // Expose allDetectedVideos for debugging
 globalThis.allDetectedVideosInternal = allDetectedVideos;
 
-// Temporary processing trackers (not for storage) - using a unified tracking mechanism
-const processingRequests = {
-    // Map to track operations by type and URL
-    operations: new Map(),
-    
-    isProcessing(url, operation) {
-        const key = `${operation}:${url}`;
-        return this.operations.has(key);
-    },
-    
-    startProcessing(url, operation) {
-        const key = `${operation}:${url}`;
-        this.operations.set(key, Date.now());
-        return true;
-    },
-    
-    finishProcessing(url, operation) {
-        const key = `${operation}:${url}`;
-        this.operations.delete(key);
-    },
-    
-    clearAll() {
-        this.operations.clear();
-    }
-};
+// Create a logger instance for the Video Manager module
+const logger = createLogger('Video Manager');
 
 // Rate limiter for API requests
 const rateLimiter = {
@@ -121,8 +98,536 @@ const rateLimiter = {
   }
 };
 
-// Create a logger instance for the Video Manager module
-const logger = createLogger('Video Manager');
+/**
+ * Unified video processing pipeline
+ * Manages the flow of videos from detection through processing to UI display
+ */
+class VideoProcessingPipeline {
+  constructor() {
+    this.queue = [];
+    this.processing = new Map();
+    this.MAX_CONCURRENT = 3;
+  }
+  
+  /**
+   * Enqueue a video for processing
+   * @param {number} tabId - Tab ID
+   * @param {string} normalizedUrl - Normalized video URL
+   * @param {string} videoType - Type of video (hls, dash, direct, blob)
+   */
+  enqueue(tabId, normalizedUrl, videoType) {
+    // Don't add duplicates to the queue
+    if (this.queue.some(item => item.normalizedUrl === normalizedUrl)) {
+      return;
+    }
+    
+    this.queue.push({ tabId, normalizedUrl, videoType });
+    this.processNext();
+    
+    logger.debug(`Video queued for processing: ${normalizedUrl} (${videoType})`);
+  }
+  
+  /**
+   * Process next video in queue
+   */
+  async processNext() {
+    // Skip if nothing to process or already at capacity
+    if (this.queue.length === 0 || this.processing.size >= this.MAX_CONCURRENT) {
+      return;
+    }
+    
+    const { tabId, normalizedUrl, videoType } = this.queue.shift();
+    
+    // Skip if already processed or being processed
+    if (this.processing.has(normalizedUrl)) {
+      this.processNext(); // Try processing next item
+      return;
+    }
+    
+    // Mark as processing
+    this.processing.set(normalizedUrl, Date.now());
+    
+    try {
+      // Mark video as being processed in store
+      updateVideoStatus(tabId, normalizedUrl, 'processing');
+      
+      // Route to appropriate processor based on type
+      if (videoType === 'blob') {
+        await this.processBlobVideo(tabId, normalizedUrl);
+      } else if (videoType === 'hls') {
+        await this.processHlsVideo(tabId, normalizedUrl);
+      } else if (videoType === 'dash') {
+        await this.processDashVideo(tabId, normalizedUrl);
+      } else {
+        await this.processDirectVideo(tabId, normalizedUrl);
+      }
+      
+      // Mark as complete
+      updateVideoStatus(tabId, normalizedUrl, 'complete');
+    } catch (error) {
+      logger.error(`Error processing ${normalizedUrl}:`, error);
+      // Update video with error status
+      updateVideoStatus(tabId, normalizedUrl, 'error', error.message);
+    } finally {
+      this.processing.delete(normalizedUrl);
+      // Process next item in queue
+      this.processNext();
+    }
+  }
+  
+  /**
+   * Process a blob video (simple status update)
+   * @param {number} tabId - Tab ID
+   * @param {string} normalizedUrl - Normalized video URL
+   */
+  async processBlobVideo(tabId, normalizedUrl) {
+    logger.debug(`Processing blob video: ${normalizedUrl}`);
+    
+    const updatedVideo = updateVideo('processBlobVideo', tabId, normalizedUrl, {
+      mediaInfo: { 
+        isBlob: true, 
+        type: 'blob', 
+        format: 'blob', 
+        container: 'blob',
+        hasVideo: null,
+        hasAudio: null
+      },
+      isFullyParsed: true
+    });
+    
+    if (updatedVideo) {
+      notifyVideoUpdated(tabId, normalizedUrl, updatedVideo);
+      broadcastVideoUpdate(tabId);
+    }
+  }
+  
+  /**
+   * Process an HLS video
+   * @param {number} tabId - Tab ID
+   * @param {string} normalizedUrl - Normalized video URL
+   */
+  async processHlsVideo(tabId, normalizedUrl) {
+    logger.debug(`Processing HLS video: ${normalizedUrl}`);
+    
+    const video = getVideo(tabId, normalizedUrl);
+    if (!video) return;
+    
+    // Get headers for the request
+    const headers = await getSharedHeaders(tabId, video.url);
+    
+    // Run combined validation and parsing
+    const hlsResult = await parseHlsManifest(video.url, headers);
+    
+    if (hlsResult.status === 'success') {
+      // Update video with all HLS parsing results at once
+      const hlsUpdates = {
+        isValid: true,
+        type: 'hls',
+        isMaster: hlsResult.isMaster,
+        isVariant: hlsResult.isVariant,
+        subtype: hlsResult.isMaster ? 'hls-master' : 'hls-variant',
+        variants: hlsResult.variants,
+        duration: hlsResult.duration,
+        isEncrypted: hlsResult.isEncrypted,
+        encryptionType: hlsResult.encryptionType,
+        isLightParsed: true,
+        isFullParsed: true,
+        timestampLP: hlsResult.timestampLP,
+        timestampFP: hlsResult.timestampFP
+      };
+      
+      const updatedVideo = updateVideo('processHlsVideo', tabId, normalizedUrl, hlsUpdates);
+      
+      // Track variant-master relationships if this is a master playlist
+      if (hlsResult.isMaster && hlsResult.variants && hlsResult.variants.length > 0) {
+        handleVariantMasterRelationships(tabId, hlsResult.variants, normalizedUrl);
+        
+        // Process variants for detailed metadata and preview
+        await this.processHlsVariants(tabId, normalizedUrl, hlsResult.variants);
+      } 
+    //   else if (hlsResult.isVariant) {
+    //     // For standalone variants, generate preview directly
+    //     await this.generatePreview(tabId, normalizedUrl, headers);
+    //   }
+      
+      // Notify UI of complete update
+      notifyVideoUpdated(tabId, normalizedUrl, updatedVideo || {});
+      broadcastVideoUpdate(tabId);
+    } else {
+      // Update with error information
+      updateVideo('processHlsVideo-error', tabId, normalizedUrl, {
+        isValid: false,
+        isLightParsed: true,
+        timestampLP: hlsResult.timestampLP || Date.now(),
+        parsingStatus: hlsResult.status,
+        parsingError: hlsResult.error || 'Not a valid HLS manifest'
+      });
+      
+      broadcastVideoUpdate(tabId);
+    }
+  }
+  
+  /**
+   * Process DASH video
+   * @param {number} tabId - Tab ID
+   * @param {string} normalizedUrl - Normalized video URL
+   */
+  async processDashVideo(tabId, normalizedUrl) {
+    logger.debug(`Processing DASH video: ${normalizedUrl}`);
+    
+    const video = getVideo(tabId, normalizedUrl);
+    if (!video) return;
+    
+    // Get headers for the request
+    const headers = await getSharedHeaders(tabId, video.url);
+    
+    // Run combined validation and parsing
+    const dashResult = await parseDashManifest(video.url, headers);
+    
+    if (dashResult.status === 'success') {
+      // Update video with all DASH parsing results at once
+      const dashUpdates = {
+        isValid: true,
+        type: 'dash',
+        videoTracks: dashResult.videoTracks,
+        audioTracks: dashResult.audioTracks,
+        subtitleTracks: dashResult.subtitleTracks,
+        variants: dashResult.variants, // For backward compatibility
+        duration: dashResult.duration,
+        isLive: dashResult.isLive,
+        isEncrypted: dashResult.isEncrypted,
+        encryptionType: dashResult.encryptionType,
+        isLightParsed: true,
+        isFullParsed: true,
+        timestampLP: dashResult.timestampLP,
+        timestampFP: dashResult.timestampFP
+      };
+      
+      const updatedVideo = updateVideo('processDashVideo', tabId, normalizedUrl, dashUpdates);
+      
+      // Track variant-master relationships for backward compatibility
+      if (dashResult.variants && dashResult.variants.length > 0) {
+        handleVariantMasterRelationships(tabId, dashResult.variants, normalizedUrl);
+      }
+      
+      // Generate preview for the manifest
+      await this.generatePreview(tabId, normalizedUrl, headers);
+      
+      // Notify UI of complete update
+      notifyVideoUpdated(tabId, normalizedUrl, updatedVideo || {});
+      broadcastVideoUpdate(tabId);
+    } else {
+      // Update with error information
+      updateVideo('processDashVideo-error', tabId, normalizedUrl, {
+        isValid: false,
+        isLightParsed: true,
+        timestampLP: dashResult.timestampLP || Date.now(),
+        parsingStatus: dashResult.status,
+        parsingError: dashResult.error || 'Not a valid DASH manifest'
+      });
+      
+      broadcastVideoUpdate(tabId);
+    }
+  }
+  
+  /**
+   * Process direct video file
+   * @param {number} tabId - Tab ID
+   * @param {string} normalizedUrl - Normalized video URL
+   */
+  async processDirectVideo(tabId, normalizedUrl) {
+    logger.debug(`Processing direct video: ${normalizedUrl}`);
+    
+    const video = getVideo(tabId, normalizedUrl);
+    if (!video) return;
+    
+    // Get headers for the request
+    const headers = await getSharedHeaders(tabId, video.url);
+    
+    // Run both operations in parallel
+    await Promise.all([
+      this.getFFprobeMetadata(tabId, normalizedUrl, headers),
+      this.generatePreview(tabId, normalizedUrl, headers)
+    ]);
+    
+    broadcastVideoUpdate(tabId);
+  }
+  
+  /**
+   * Process HLS variants (get FFprobe metadata and generate preview for best quality)
+   * @param {number} tabId - Tab ID
+   * @param {string} masterUrl - Normalized master URL
+   * @param {Array} variants - Array of variant objects
+   */
+  async processHlsVariants(tabId, masterUrl, variants) {
+    logger.debug(`Processing ${variants.length} HLS variants`);
+    
+    if (variants.length === 0) return;
+    
+    // Process best quality variant first for preview
+    try {
+      const bestVariant = variants[0];
+      const headers = await getSharedHeaders(tabId, bestVariant.url);
+      
+      // Get FFprobe metadata and generate preview in parallel
+      await Promise.all([
+        this.getVariantFFprobeMetadata(tabId, masterUrl, bestVariant, 0, headers),
+        this.generateVariantPreview(tabId, masterUrl, bestVariant, 0, headers)
+      ]);
+      
+      // Process remaining variants for metadata only (skip preview)
+      for (let i = 1; i < variants.length; i++) {
+        const variant = variants[i];
+        const variantHeaders = await getSharedHeaders(tabId, variant.url);
+        await this.getVariantFFprobeMetadata(tabId, masterUrl, variant, i, variantHeaders);
+      }
+    } catch (error) {
+      logger.error(`Error processing HLS variants: ${error.message}`);
+    }
+  }
+  
+  /**
+   * Get FFprobe metadata for a variant
+   * @param {number} tabId - Tab ID
+   * @param {string} masterUrl - Normalized master URL
+   * @param {Object} variant - Variant object
+   * @param {number} index - Index of variant in master's variants array
+   * @param {Object} headers - Request headers
+   */
+  async getVariantFFprobeMetadata(tabId, masterUrl, variant, index, headers) {
+    try {
+      logger.debug(`Getting FFprobe metadata for variant[${index}]: ${variant.url}`);
+      
+      const ffprobeData = await rateLimiter.enqueue(async () => {
+        const response = await nativeHostService.sendMessage({
+          type: 'getQualities',
+          url: variant.url,
+          light: false,
+          headers: headers
+        });
+        return response?.streamInfo || null;
+      });
+      
+      if (ffprobeData) {
+        updateVariantWithFFprobeData(tabId, masterUrl, index, ffprobeData);
+      }
+    } catch (error) {
+      logger.error(`Error getting FFprobe data for variant: ${error.message}`);
+    }
+  }
+  
+  /**
+   * Generate preview for a variant
+   * @param {number} tabId - Tab ID
+   * @param {string} masterUrl - Normalized master URL
+   * @param {Object} variant - Variant object
+   * @param {number} index - Index of variant in master's variants array
+   * @param {Object} headers - Request headers
+   */
+  async generateVariantPreview(tabId, masterUrl, variant, index, headers) {
+    try {
+      const variantNormalizedUrl = normalizeUrl(variant.url);
+      
+      // Check for cached preview first
+      const cachedPreview = await getPreview(variantNormalizedUrl);
+      if (cachedPreview) {
+        this.updateVariantWithPreview(tabId, masterUrl, index, cachedPreview, true);
+        return;
+      }
+      
+      // Generate preview if not cached
+      const response = await rateLimiter.enqueue(async () => {
+        return await nativeHostService.sendMessage({
+          type: 'generatePreview',
+          url: variant.url,
+          headers: headers
+        });
+      });
+      
+      if (response && response.previewUrl) {
+        // Cache the generated preview
+        await storePreview(variantNormalizedUrl, response.previewUrl);
+        this.updateVariantWithPreview(tabId, masterUrl, index, response.previewUrl, false);
+      }
+    } catch (error) {
+      logger.error(`Error generating preview for variant: ${error.message}`);
+    }
+  }
+  
+  /**
+   * Update variant with preview URL
+   * @param {number} tabId - Tab ID
+   * @param {string} masterUrl - Normalized master URL
+   * @param {number} index - Index of variant in master's variants array
+   * @param {string} previewUrl - Preview URL
+   * @param {boolean} fromCache - Whether preview was from cache
+   */
+  updateVariantWithPreview(tabId, masterUrl, index, previewUrl, fromCache) {
+    const masterVideo = getVideo(tabId, masterUrl);
+    if (!masterVideo || !masterVideo.variants || index >= masterVideo.variants.length) {
+      return;
+    }
+    
+    // Create updated variants array with the preview URL
+    const updatedVariants = [...masterVideo.variants];
+    updatedVariants[index] = {
+      ...updatedVariants[index],
+      previewUrl: previewUrl,
+      fromCache: fromCache
+    };
+    
+    // Update master with the new variants array
+    const updatedVideo = updateVideo('updateVariantWithPreview', tabId, masterUrl, {
+      variants: updatedVariants
+    });
+    
+    if (updatedVideo) {
+      logger.debug(`Updated variant[${index}] with preview: ${previewUrl}`);
+      notifyVideoUpdated(tabId, masterUrl, updatedVideo);
+      broadcastVideoUpdate(tabId);
+    }
+  }
+  
+  /**
+   * Get FFprobe metadata for direct video
+   * @param {number} tabId - Tab ID
+   * @param {string} normalizedUrl - Normalized video URL
+   * @param {Object} headers - Request headers
+   */
+  async getFFprobeMetadata(tabId, normalizedUrl, headers) {
+    try {
+      const video = getVideo(tabId, normalizedUrl);
+      if (!video) return;
+      
+      // Skip if already has metadata
+      if (video.isFullyParsed) {
+        logger.debug(`Video ${video.url} is already fully parsed, skipping FFprobe`);
+        return;
+      }
+      
+      logger.debug(`Getting FFprobe metadata for ${video.url}`);
+      
+      const streamInfo = await rateLimiter.enqueue(async () => {
+        const response = await nativeHostService.sendMessage({
+          type: 'getQualities',
+          url: video.url,
+          light: false,
+          headers: headers
+        });
+        return response?.streamInfo || null;
+      });
+      
+      if (streamInfo) {
+        const updatedVideo = updateVideo('getFFprobeMetadata', tabId, normalizedUrl, {
+          metaFFprobe: streamInfo,
+          hasFFprobeMetadata: true,
+          isFullyParsed: true,
+          estimatedFileSizeBytes: streamInfo.estimatedFileSizeBytes || video.fileSize,
+          fileSize: streamInfo.sizeBytes || null
+        });
+        
+        if (updatedVideo) {
+          notifyVideoUpdated(tabId, normalizedUrl, updatedVideo);
+        }
+      }
+    } catch (error) {
+      logger.error(`Error getting FFprobe metadata: ${error.message}`);
+    }
+  }
+  
+  /**
+   * Generate preview for video
+   * @param {number} tabId - Tab ID
+   * @param {string} normalizedUrl - Normalized video URL
+   * @param {Object} headers - Request headers
+   */
+  async generatePreview(tabId, normalizedUrl, headers) {
+    try {
+      const video = getVideo(tabId, normalizedUrl);
+      if (!video) return;
+      
+      // Skip if already has preview or is a blob
+      if (video.previewUrl || video.poster || video.url.startsWith('blob:')) {
+        return;
+      }
+      
+      // Check for cached preview first
+      const cachedPreview = await getPreview(normalizedUrl);
+      if (cachedPreview) {
+        const updatedVideo = updateVideo('generatePreview-cache', tabId, normalizedUrl, {
+          previewUrl: cachedPreview,
+          fromCache: true
+        });
+        
+        if (updatedVideo) {
+          notifyVideoUpdated(tabId, normalizedUrl, updatedVideo);
+        }
+        return;
+      }
+      
+      // Generate preview if not cached
+      logger.debug(`Generating preview for ${video.url}`);
+      
+      const response = await rateLimiter.enqueue(async () => {
+        return await nativeHostService.sendMessage({
+          type: 'generatePreview',
+          url: video.url,
+          headers: headers
+        });
+      });
+      
+      if (response && response.previewUrl) {
+        // Cache the generated preview
+        await storePreview(normalizedUrl, response.previewUrl);
+        
+        const updatedVideo = updateVideo('generatePreview', tabId, normalizedUrl, {
+          previewUrl: response.previewUrl
+        });
+        
+        if (updatedVideo) {
+          notifyVideoUpdated(tabId, normalizedUrl, updatedVideo);
+        }
+      }
+    } catch (error) {
+      logger.error(`Error generating preview: ${error.message}`);
+    }
+  }
+}
+
+// Create the singleton instance
+const videoProcessingPipeline = new VideoProcessingPipeline();
+
+/**
+ * Helper function to update video processing status
+ * @param {number} tabId - Tab ID
+ * @param {string} normalizedUrl - Normalized video URL
+ * @param {string} status - Processing status ('processing', 'complete', 'error')
+ * @param {string} [errorMessage] - Optional error message
+ */
+function updateVideoStatus(tabId, normalizedUrl, status, errorMessage = null) {
+  const updates = { isBeingProcessed: status === 'processing' };
+  
+  if (status === 'error' && errorMessage) {
+    updates.error = errorMessage;
+  }
+  
+  const updatedVideo = updateVideo(`updateVideoStatus-${status}`, tabId, normalizedUrl, updates);
+  
+  if (updatedVideo) {
+    notifyVideoUpdated(tabId, normalizedUrl, updatedVideo);
+  }
+}
+
+/**
+ * Helper function to get a video from store
+ * @param {number} tabId - Tab ID
+ * @param {string} normalizedUrl - Normalized video URL
+ * @returns {Object|null} Video object or null if not found
+ */
+function getVideo(tabId, normalizedUrl) {
+  const tabMap = allDetectedVideos.get(tabId);
+  return tabMap ? tabMap.get(normalizedUrl) : null;
+}
 
 /**
  * Single entry point for all video updates with proper logging
@@ -199,6 +704,45 @@ function handleVariantMasterRelationships(tabId, variants, masterUrl) {
     }
 }
 
+/**
+ * Update variant with FFprobe data
+ * @param {number} tabId - Tab ID
+ * @param {string} masterUrl - Normalized master URL
+ * @param {number} variantIndex - Index of variant in master's variants array
+ * @param {Object} ffprobeData - FFprobe metadata
+ */
+function updateVariantWithFFprobeData(tabId, masterUrl, variantIndex, ffprobeData) {
+    const tabMap = allDetectedVideos.get(tabId);
+    if (!tabMap || !tabMap.has(masterUrl)) {
+        return;
+    }
+    
+    const masterVideo = tabMap.get(masterUrl);
+    if (!masterVideo.variants || variantIndex >= masterVideo.variants.length) {
+        return;
+    }
+    
+    // Create updated variants array
+    const updatedVariants = [...masterVideo.variants];
+    updatedVariants[variantIndex] = {
+        ...updatedVariants[variantIndex],
+        metaFFprobe: ffprobeData,
+        hasFFprobeMetadata: true,
+        isFullyParsed: true,
+        timestampFFProbe: Date.now()
+    };
+    
+    // Update master with new variants array using our unified function
+    const updatedVideo = updateVideo('updateVariantWithFFprobeData', tabId, masterUrl, {
+        variants: updatedVariants
+    });
+    
+    if (updatedVideo) {
+        // Update UI
+        broadcastVideoUpdate(tabId);
+    }
+}
+
 // Extract filename from URL
 function getFilenameFromUrl(url) {
     if (url.startsWith('blob:')) {
@@ -217,8 +761,6 @@ function getFilenameFromUrl(url) {
     
     return 'video';
 }
-
-// Process videos for sending to popup functionality moved into getVideosForDisplay
 
 // Broadcast videos to popup
 function broadcastVideoUpdate(tabId) {
@@ -377,10 +919,9 @@ async function initVideoManager() {
 function clearVideoCache() {
     logger.debug('Clearing all video caches');
     
-    allDetectedVideos.clear(); // Clear central video collection
-    variantMasterMap.clear(); // Clear variant-master relationships
-    processingRequests.clearAll(); // Clear processing requests
-    clearAllHeaderCaches(); // Clear all header caches
+    allDetectedVideos.clear();
+    variantMasterMap.clear();
+    clearAllHeaderCaches();
 }
 
 /**
@@ -445,612 +986,13 @@ function addDetectedVideo(tabId, videoInfo) {
     updateVideo('addDetectedVideo', tabId, normalizedUrl, newVideo, true);
     logger.debug(`Added new video to detection map: ${videoInfo.url} (type: ${videoInfo.type}, source: ${sourceOfVideo})`);
 
-    // Process the video based on its type
-    processVideo(tabId, normalizedUrl, newVideo);
+    // Directly enqueue for processing with our unified pipeline
+    videoProcessingPipeline.enqueue(tabId, normalizedUrl, newVideo.type);
     
     // Broadcast initial state to UI
     broadcastVideoUpdate(tabId);
     
     return true;
-}
-
-/**
- * Run JS parser for streaming content (both light and full parsing)
- * @param {number} tabId - Tab ID
- * @param {string} normalizedUrl - Normalized video URL
- * @param {string} type - Content type (hls/dash)
- */
-async function runJSParser(tabId, normalizedUrl, type) {
-    // Skip if already being processed
-    if (processingRequests.isProcessing(normalizedUrl, 'lightParsing')) {
-        return;
-    }
-    
-    processingRequests.startProcessing(normalizedUrl, 'lightParsing');
-    
-    try {
-        const tabMap = allDetectedVideos.get(tabId);
-        if (!tabMap || !tabMap.has(normalizedUrl)) {
-            return;
-        }
-        
-        const video = tabMap.get(normalizedUrl);
-        
-        // Get headers for the request
-        const headers = await getSharedHeaders(tabId, video.url);
-        
-        // Special handling for DASH content
-        if (type === 'dash') {
-            // Mark as processing
-            const processingVideo = updateVideo('runJSParser-dashProcessing', tabId, normalizedUrl, {
-                isBeingProcessed: true
-            });
-            
-            if (processingVideo) {
-                notifyVideoUpdated(tabId, normalizedUrl, processingVideo);
-            }
-            
-            // Run combined validation and parsing
-            const dashResult = await parseDashManifest(video.url, headers);
-            
-            if (dashResult.status === 'success') {
-                // Update video with all DASH parsing results at once
-                const dashUpdates = {
-                    isValid: true,
-                    type: 'dash',
-                    videoTracks: dashResult.videoTracks,
-                    audioTracks: dashResult.audioTracks,
-                    subtitleTracks: dashResult.subtitleTracks,
-                    variants: dashResult.variants, // For backward compatibility
-                    duration: dashResult.duration,
-                    isLive: dashResult.isLive,
-                    isEncrypted: dashResult.isEncrypted,
-                    encryptionType: dashResult.encryptionType,
-                    isLightParsed: true,
-                    isFullParsed: true,
-                    timestampLP: dashResult.timestampLP,
-                    timestampFP: dashResult.timestampFP,
-                    isBeingProcessed: false
-                };
-                
-                const updatedVideoAfterParse = updateVideo('runJSParser-dashComplete', tabId, normalizedUrl, dashUpdates);
-                
-                // Track variant-master relationships for backward compatibility
-                if (dashResult.variants && dashResult.variants.length > 0) {
-                    handleVariantMasterRelationships(tabId, dashResult.variants, normalizedUrl);
-                }
-                
-                // Generate preview for the best quality video track
-                if (dashResult.videoTracks.length > 0) {
-                    // Skip if already being processed
-                    if (!processingRequests.isProcessing(normalizedUrl, 'previews')) {
-                        processingRequests.startProcessing(normalizedUrl, 'previews');
-                        
-                        try {
-                            // Check for cached preview first
-                            const cachedPreview = await getPreview(normalizedUrl);
-                            if (cachedPreview) {
-                                // Use cached preview
-                                const updatedPreviewVideo = updateVideo('runJSParser-dashPreviewCache', tabId, normalizedUrl, {
-                                    previewUrl: cachedPreview,
-                                    fromCache: true
-                                });
-                                
-                                if (updatedPreviewVideo) {
-                                    notifyVideoUpdated(tabId, normalizedUrl, updatedPreviewVideo);
-                                    broadcastVideoUpdate(tabId);
-                                }
-                            } else {
-                                // Generate preview using the main MPD URL
-                                const previewResponse = await rateLimiter.enqueue(async () => {
-                                    return await nativeHostService.sendMessage({
-                                        type: 'generatePreview',
-                                        url: video.url,
-                                        headers: headers
-                                    });
-                                });
-                                
-                                if (previewResponse && previewResponse.previewUrl) {
-                                    // Cache the generated preview
-                                    await storePreview(normalizedUrl, previewResponse.previewUrl);
-                                    
-                                    const updatedPreviewVideo = updateVideo('runJSParser-dashPreview', tabId, normalizedUrl, {
-                                        previewUrl: previewResponse.previewUrl
-                                    });
-                                    
-                                    if (updatedPreviewVideo) {
-                                        notifyVideoUpdated(tabId, normalizedUrl, updatedPreviewVideo);
-                                        broadcastVideoUpdate(tabId);
-                                    }
-                                }
-                            }
-                        } catch (error) {
-                            logger.error(`Error generating preview for DASH: ${error.message}`);
-                        } finally {
-                            processingRequests.finishProcessing(normalizedUrl, 'previews');
-                        }
-                    }
-                }
-                
-                // Final UI update after all processing is complete
-                notifyVideoUpdated(tabId, normalizedUrl, updatedVideoAfterParse);
-                broadcastVideoUpdate(tabId);
-            } else {
-                // Update with error information
-                const updatedErrorVideo = updateVideo('runJSParser-dashError', tabId, normalizedUrl, {
-                    isValid: false,
-                    isLightParsed: true,
-                    timestampLP: dashResult.timestampLP || Date.now(),
-                    parsingStatus: dashResult.status,
-                    parsingError: dashResult.error || 'Not a valid DASH manifest',
-                    isBeingProcessed: false
-                });
-                
-                if (updatedErrorVideo) {
-                    notifyVideoUpdated(tabId, normalizedUrl, updatedErrorVideo);
-                    broadcastVideoUpdate(tabId);
-                }
-            }
-            
-            return;
-        }
-        
-        // Handle HLS content with streamlined approach, similar to DASH
-        if (type === 'hls') {
-            // Mark as processing
-            const processingVideo = updateVideo('runJSParser-hlsProcessing', tabId, normalizedUrl, {
-                isBeingProcessed: true
-            });
-            
-            if (processingVideo) {
-                notifyVideoUpdated(tabId, normalizedUrl, processingVideo);
-            }
-            
-            // Run combined validation and parsing using the universal manifest validator
-            const hlsResult = await parseHlsManifest(video.url, headers);
-            
-            if (hlsResult.status === 'success') {
-                // Update video with all HLS parsing results at once
-                const hlsUpdates = {
-                    isValid: true,
-                    type: 'hls',
-                    isMaster: hlsResult.isMaster,
-                    isVariant: hlsResult.isVariant,
-                    subtype: hlsResult.isMaster ? 'hls-master' : 'hls-variant',
-                    variants: hlsResult.variants,
-                    duration: hlsResult.duration,
-                    isEncrypted: hlsResult.isEncrypted,
-                    encryptionType: hlsResult.encryptionType,
-                    isLightParsed: true,
-                    isFullParsed: true, // Now we fully parse in one step
-                    timestampLP: hlsResult.timestampLP,
-                    timestampFP: hlsResult.timestampFP,
-                    isBeingProcessed: false
-                };
-                
-                const updatedVideoAfterParse = updateVideo('runJSParser-hlsComplete', tabId, normalizedUrl, hlsUpdates);
-                
-                // Track variant-master relationships if this is a master playlist
-                if (hlsResult.isMaster && hlsResult.variants && hlsResult.variants.length > 0) {
-                    handleVariantMasterRelationships(tabId, hlsResult.variants, normalizedUrl);
-                    
-                    // Get FFprobe metadata for variants
-                    // Preview will be generated for the best quality variant in processVariantsWithFFprobe
-                    await processVariantsWithFFprobe(tabId, normalizedUrl, hlsResult.variants);
-                }
-                // // For standalone variants, generate preview directly
-                // else if (hlsResult.isVariant) {
-                //     await generateVideoPreview(tabId, normalizedUrl);
-                // }
-                
-                // Final UI update after all processing is complete
-                notifyVideoUpdated(tabId, normalizedUrl, updatedVideoAfterParse);
-                broadcastVideoUpdate(tabId);
-            } else {
-                // Update with error information
-                const updatedErrorVideo = updateVideo('runJSParser-hlsError', tabId, normalizedUrl, {
-                    isValid: false,
-                    isLightParsed: true,
-                    timestampLP: hlsResult.timestampLP || Date.now(),
-                    parsingStatus: hlsResult.status,
-                    parsingError: hlsResult.error || 'Not a valid HLS manifest',
-                    isBeingProcessed: false
-                });
-                
-                if (updatedErrorVideo) {
-                    notifyVideoUpdated(tabId, normalizedUrl, updatedErrorVideo);
-                    broadcastVideoUpdate(tabId);
-                }
-            }
-            
-            return;
-        }
-        
-        // This part will be reached only for non-HLS, non-DASH content types
-        logger.debug(`Content type ${type} is not handled by specialized parser, generating preview directly`);
-        generateVideoPreview(tabId, normalizedUrl);
-        
-        // Update UI
-        broadcastVideoUpdate(tabId);
-        
-    } catch (error) {
-        logger.error(`Error processing ${normalizedUrl}:`, error);
-    } finally {
-        processingRequests.finishProcessing(normalizedUrl, 'lightParsing');
-    }
-}
-
-/**
- * Process variants with FFprobe
- * @param {number} tabId - Tab ID
- * @param {string} masterUrl - Normalized master URL
- * @param {Array} variants - Array of variant objects
- */
-async function processVariantsWithFFprobe(tabId, masterUrl, variants) {
-    logger.debug(`Processing ${variants.length} variants with FFprobe`);
-    
-    // Process each variant sequentially
-    for (let i = 0; i < variants.length; i++) {
-        const variant = variants[i];
-        logger.debug(`FFPROBE Processing variant ${i+1}/${variants.length}: ${variant.url}`);
-        
-        try {
-            // Get headers for the request
-            const headers = await getSharedHeaders(tabId, variant.url);
-            logger.debug(`Using headers for FFPROBE request: ${JSON.stringify(headers)}`);
-            
-            // Get FFprobe metadata
-            const ffprobeData = await rateLimiter.enqueue(async () => {
-                const response = await nativeHostService.sendMessage({
-                    type: 'getQualities',
-                    url: variant.url,
-                    light: false,
-                    headers: headers
-                });
-                return response?.streamInfo || null;
-            });
-            
-            if (ffprobeData) {
-                logger.debug(`Success FFPROBE data for variant URL: ${variant.url}, ${i+1}:`, ffprobeData);
-                // Update variant in master's variants array
-                updateVariantWithFFprobeData(tabId, masterUrl, i, ffprobeData);
-                
-                // Only generate preview for the best quality variant (index 0)
-                if (i === 0) {
-                    logger.debug(`Generating preview for best quality variant: ${variant.url}`);
-                    
-                    // Skip if already being processed
-                    if (!processingRequests.isProcessing(variant.url, 'previews')) {
-                        processingRequests.startProcessing(variant.url, 'previews');
-                        
-                        try {
-                            const variantNormalizedUrl = normalizeUrl(variant.url);
-                            
-                            // Check for cached preview first
-                            const cachedPreview = await getPreview(variantNormalizedUrl);
-                            if (cachedPreview) {
-                                logger.debug(`Using cached preview for variant: ${variant.url}`);
-                                
-                                // Get the master video
-                                const tabMap = allDetectedVideos.get(tabId);
-                                if (!tabMap || !tabMap.has(masterUrl)) {
-                                    return;
-                                }
-                                
-                                const masterVideo = tabMap.get(masterUrl);
-                                if (!masterVideo.variants || !masterVideo.variants[i]) {
-                                    return;
-                                }
-                                
-                                // Create updated variants array with the preview URL added to the first variant
-                                const updatedVariants = [...masterVideo.variants];
-                                updatedVariants[i] = {
-                                    ...updatedVariants[i],
-                                    previewUrl: cachedPreview,
-                                    fromCache: true
-                                };
-                                
-                                // Update master with the new variants array using our unified function
-                                const updatedVideo = updateVideo('processVariantsWithFFprobe-preview', tabId, masterUrl, {
-                                    variants: updatedVariants
-                                });
-                                
-                                if (updatedVideo) {
-                                    logger.debug(`Used cached preview for best quality variant`);
-                                    
-                                    // Update UI
-                                    notifyVideoUpdated(tabId, masterUrl, updatedVideo);
-                                    broadcastVideoUpdate(tabId);
-                                }
-                                return;
-                            }
-                            
-                            // Generate preview if not cached
-                            const response = await rateLimiter.enqueue(async () => {
-                                return await nativeHostService.sendMessage({
-                                    type: 'generatePreview',
-                                    url: variant.url,
-                                    headers: headers
-                                });
-                            });
-                            
-                            if (response && response.previewUrl) {
-                                // Cache the generated preview
-                                await storePreview(variantNormalizedUrl, response.previewUrl);
-                                
-                                // Get the master video
-                                const tabMap = allDetectedVideos.get(tabId);
-                                if (!tabMap || !tabMap.has(masterUrl)) {
-                                    return;
-                                }
-                                
-                                const masterVideo = tabMap.get(masterUrl);
-                                if (!masterVideo.variants || !masterVideo.variants[i]) {
-                                    return;
-                                }
-                                
-                                // Create updated variants array with the preview URL added to the first variant
-                                const updatedVariants = [...masterVideo.variants];
-                                updatedVariants[i] = {
-                                    ...updatedVariants[i],
-                                    previewUrl: response.previewUrl
-                                };
-                                
-                                // Update master with the new variants array using our unified function
-                                const updatedVideo = updateVideo('processVariantsWithFFprobe-preview', tabId, masterUrl, {
-                                    variants: updatedVariants
-                                });
-                                
-                                if (updatedVideo) {
-                                    logger.debug(`Preview generated for best quality variant: ${response.previewUrl}`);
-                                    
-                                    // Update UI
-                                    notifyVideoUpdated(tabId, masterUrl, updatedVideo);
-                                    broadcastVideoUpdate(tabId);
-                                }
-                            }
-                        } finally {
-                            processingRequests.finishProcessing(variant.url, 'previews');
-                        }
-                    }
-                }
-            }
-        } catch (error) {
-            logger.error(`Error getting FFPROBE data for variant ${variant.url}:`, error);
-        }
-    }
-}
-
-/**
- * Update variant with FFprobe data
- * @param {number} tabId - Tab ID
- * @param {string} masterUrl - Normalized master URL
- * @param {number} variantIndex - Index of variant in master's variants array
- * @param {Object} ffprobeData - FFprobe metadata
- */
-function updateVariantWithFFprobeData(tabId, masterUrl, variantIndex, ffprobeData) {
-    const tabMap = allDetectedVideos.get(tabId);
-    if (!tabMap || !tabMap.has(masterUrl)) {
-        return;
-    }
-    
-    const masterVideo = tabMap.get(masterUrl);
-    if (!masterVideo.variants || variantIndex >= masterVideo.variants.length) {
-        return;
-    }
-    
-    // Create updated variants array
-    const updatedVariants = [...masterVideo.variants];
-    updatedVariants[variantIndex] = {
-        ...updatedVariants[variantIndex],
-        metaFFprobe: ffprobeData,
-        hasFFprobeMetadata: true,
-        isFullyParsed: true,
-        timestampFFProbe: Date.now()
-    };
-    
-    // Update master with new variants array using our unified function
-    const updatedVideo = updateVideo('updateVariantWithFFprobeData', tabId, masterUrl, {
-        variants: updatedVariants
-    });
-    
-    if (updatedVideo) {
-        // Update UI
-        broadcastVideoUpdate(tabId);
-    }
-}
-
-/**
- * Run FFprobe parser for direct videos
- * @param {number} tabId - Tab ID
- * @param {string} normalizedUrl - Normalized video URL
- */
-async function runFFProbeParser(tabId, normalizedUrl) {
-    // Skip if already being processed
-    if (processingRequests.isProcessing(normalizedUrl, 'metadata')) {
-        return;
-    }
-    
-    processingRequests.startProcessing(normalizedUrl, 'metadata');
-    
-    try {
-        const tabMap = allDetectedVideos.get(tabId);
-        if (!tabMap || !tabMap.has(normalizedUrl)) {
-            return;
-        }
-        
-        const video = tabMap.get(normalizedUrl);
-        
-        // Skip if already fully parsed
-        if (video.isFullyParsed) {
-            logger.debug(`Video ${video.url} is already fully parsed, skipping FFprobe`);
-            return;
-        }
-        
-        // Get metadata from FFprobe
-        logger.debug(`Getting FFPROBE metadata for ${video.url}`);
-        
-        // Get headers for the request
-        const headers = await getSharedHeaders(tabId, video.url);
-        logger.debug(`Using headers for FFPROBE request: ${JSON.stringify(headers)}`);
-        
-        const streamInfo = await rateLimiter.enqueue(async () => {
-            const response = await nativeHostService.sendMessage({
-                type: 'getQualities',
-                url: video.url,
-                light: false,
-                headers: headers
-            });
-            return response?.streamInfo || null;
-        });
-        
-        if (streamInfo) {
-            
-            // Update video with metadata using our unified function
-            const updatedVideo = updateVideo('runFFProbeParser', tabId, normalizedUrl, {
-                metaFFprobe: streamInfo,  // Store FFprobe data separately
-                hasFFprobeMetadata: true,
-                isFullyParsed: true,
-                estimatedFileSizeBytes: streamInfo.estimatedFileSizeBytes || video.fileSize,
-                fileSize: streamInfo.sizeBytes || null
-            });
-            
-            if (updatedVideo) {
-                logger.debug(`Updated map entry after FFprobe for URL ${video.url}: `, updatedVideo);
-                
-                // Update UI
-                notifyVideoUpdated(tabId, normalizedUrl, updatedVideo);
-                broadcastVideoUpdate(tabId);
-            }
-        }
-    } catch (error) {
-        logger.error(`Error processing ${normalizedUrl}:`, error);
-    } finally {
-        processingRequests.finishProcessing(normalizedUrl, 'metadata');
-    }
-}
-
-/**
- * Generate preview for a video
- * @param {number} tabId - Tab ID
- * @param {string} normalizedUrl - Normalized video URL
- */
-async function generateVideoPreview(tabId, normalizedUrl) {
-    // Skip if already being processed
-    if (processingRequests.isProcessing(normalizedUrl, 'previews')) {
-        return;
-    }
-    
-    processingRequests.startProcessing(normalizedUrl, 'previews');
-    
-    try {
-        const tabMap = allDetectedVideos.get(tabId);
-        if (!tabMap || !tabMap.has(normalizedUrl)) {
-            return;
-        }
-        
-        const video = tabMap.get(normalizedUrl);
-        
-        // Skip if already has preview or is a blob
-        if (video.previewUrl || video.poster || video.url.startsWith('blob:')) {
-            return;
-        }
-        
-        // Check for cached preview first
-        const cachedPreview = await getPreview(normalizedUrl);
-        if (cachedPreview) {
-            logger.debug(`Using cached preview for ${video.url}`);
-            
-            // Update video with cached preview URL
-            const updatedVideo = updateVideo('generateVideoPreview', tabId, normalizedUrl, {
-                previewUrl: cachedPreview,
-                fromCache: true
-            });
-            
-            if (updatedVideo) {
-                // Update UI
-                notifyVideoUpdated(tabId, normalizedUrl, updatedVideo);
-                broadcastVideoUpdate(tabId);
-            }
-            return;
-        }
-        
-        // Generate preview if not cached
-        logger.debug(`Generating preview for ${video.url}`);
-        
-        // Get headers for the request
-        const headers = await getSharedHeaders(tabId, video.url);
-        logger.debug(`Using headers for preview request: ${JSON.stringify(headers)}`);
-        
-        const response = await rateLimiter.enqueue(async () => {
-            return await nativeHostService.sendMessage({
-                type: 'generatePreview',
-                url: video.url,
-                headers: headers
-            });
-        });
-        
-        if (response && response.previewUrl) {
-            // Cache the generated preview
-            await storePreview(normalizedUrl, response.previewUrl);
-            
-            // Update video with preview URL using our unified function
-            const updatedVideo = updateVideo('generateVideoPreview', tabId, normalizedUrl, {
-                previewUrl: response.previewUrl
-            });
-            
-            if (updatedVideo) {
-                // Update UI
-                notifyVideoUpdated(tabId, normalizedUrl, updatedVideo);
-                broadcastVideoUpdate(tabId);
-            }
-        }
-    } catch (error) {
-        logger.error(`Error processing ${normalizedUrl}:`, error);
-    } finally {
-        processingRequests.finishProcessing(normalizedUrl, 'previews');
-    }
-}
-
-/**
- * Process a detected video based on its type
- * @param {number} tabId - Tab ID 
- * @param {string} normalizedUrl - Normalized video URL
- * @param {Object} video - The video object
- */
-async function processVideo(tabId, normalizedUrl, video) {
-    logger.debug(`Processing video by type: ${video.url} (type: ${video.type})`);
-    
-    if (video.url.startsWith('blob:')) {
-        // Handle blob URLs
-        const updatedVideo = updateVideo('processVideo', tabId, normalizedUrl, {
-            mediaInfo: { 
-                isBlob: true, 
-                type: 'blob', 
-                format: 'blob', 
-                container: 'blob',
-                hasVideo: null,
-                hasAudio: null
-            },
-            isFullyParsed: true
-        });
-        
-        if (updatedVideo) {
-            // Update UI
-            notifyVideoUpdated(tabId, normalizedUrl, updatedVideo);
-        }
-        
-        logger.debug(`Processed blob URL: ${video.url}`);
-    } else if (video.type === 'hls' || video.type === 'dash') {
-        // For streaming content, run parser pipeline
-        await runJSParser(tabId, normalizedUrl, video.type);
-    } else {
-        // For direct videos or fallback, run both operations in parallel
-        await Promise.all([
-            runFFProbeParser(tabId, normalizedUrl),
-            generateVideoPreview(tabId, normalizedUrl)
-        ]);
-    }
 }
 
 /**
