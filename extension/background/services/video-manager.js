@@ -1012,12 +1012,11 @@ function getVideosForDisplay(tabId) {
     const tabVideosMap = allDetectedVideos.get(tabId);
     if (!tabVideosMap) return [];
     
-    const tabVariantMap = variantMasterMap.get(tabId) || new Map();
     const now = Date.now();
     
     // Create array directly from values() instead of entries()
     return Array.from(tabVideosMap.values())
-        .filter(video => !(video.isVariant && (video.hasKnownMaster || tabVariantMap.has(video.normalizedUrl))))
+        .filter(video => !(video.isVariant && video.hasKnownMaster))
         .map(video => ({
             ...video,
             title: video.title || getFilenameFromUrl(video.url),
