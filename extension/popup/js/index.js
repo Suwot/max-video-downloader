@@ -19,10 +19,10 @@ import { themeService, applyTheme } from './services/theme-service.js';
 import { videoStateService } from './services/video-state-service.js';
 import { initializeUI, setScrollPosition, getScrollPosition, showLoadingState, hideLoadingState, showNoVideosMessage } from './ui.js';
 import { renderVideos } from './video-renderer.js';
-import { createlogger } from '../js/utilities/logger.js';
+import { createLogger } from '../../js/utilities/logger.js';
 
 
-const logger = createlogger('Popup');
+const logger = createLogger('Popup');
 
 // Global port connection for communicating with the background script
 let backgroundPort = null;

@@ -17,7 +17,7 @@ import { debounce } from './utilities.js';
 import { showQualityDialog } from './ui.js';
 import { videoStateService } from './services/video-state-service.js';
 import { getBackgroundPort } from './index.js';
-import { createlogger } from './utilities/logger.js';
+import { createLogger } from '../../js/utilities/logger.js';
 
 const logger = createLogger('Download');
 
