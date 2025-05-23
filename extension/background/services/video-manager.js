@@ -106,7 +106,7 @@ class VideoProcessingPipeline {
   constructor() {
     this.queue = [];
     this.processing = new Map();
-    this.MAX_CONCURRENT = 3;
+    this.MAX_CONCURRENT = 15;
   }
   
   /**
@@ -117,9 +117,11 @@ class VideoProcessingPipeline {
    */
   enqueue(tabId, normalizedUrl, videoType) {
     // Don't add duplicates to the queue
-    if (this.queue.some(item => item.normalizedUrl === normalizedUrl)) {
-      return;
-    }
+    if (this.queue.some(item => item.normalizedUrl === normalizedUrl) || 
+      this.processing.has(normalizedUrl)) {
+    logger.debug(`Skipping duplicate: ${normalizedUrl} (in queue or processing)`);
+    return;
+  }
     
     this.queue.push({ tabId, normalizedUrl, videoType });
     this.processNext();
@@ -860,6 +862,17 @@ async function getStreamQualities(url, tabId) {
 // Clean up for tab
 function cleanupForTab(tabId) {
     logger.debug(`Tab removed: ${tabId}`);
+
+    if (videoProcessingPipeline.queue.length > 0) {
+        const originalCount = videoProcessingPipeline.queue.length;
+        videoProcessingPipeline.queue = videoProcessingPipeline.queue.filter(
+        item => item.tabId !== tabId
+        );
+        const removedCount = originalCount - videoProcessingPipeline.queue.length;
+        if (removedCount > 0) {
+        logger.debug(`Removed ${removedCount} queued items for closed tab ${tabId}`);
+        }
+    }
     
     // Clear videos from allDetectedVideos
     if (allDetectedVideos.has(tabId)) {
