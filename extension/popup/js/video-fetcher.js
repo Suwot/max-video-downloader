@@ -8,20 +8,13 @@
  */
 
 // Import from videoStateService
-import { 
-    fetchVideos,
-    refreshVideos,
-    on
-} from './services/video-state-service.js';
-
+import { fetchVideos,on } from './services/video-state-service.js';
 import { renderVideos } from './video-renderer.js';
 import { sendPortMessage } from './index.js';
 import { validateAndFilterVideos } from '../../js/utilities/video-validator.js';
+import { createLogger } from '../../js/utilities/logger.js';
 
-// Debug logging helper
-function logDebug(...args) {
-    console.log('[Video Fetcher]', new Date().toISOString(), ...args);
-}
+const logger = createLogger('Video Fetcher');
 
 /**
  * Update the video list from background
@@ -30,7 +23,7 @@ function logDebug(...args) {
  * @returns {Promise<Array>} The current videos list
  */
 export async function updateVideoList(forceRefresh = false, tabId = null) {
-    logDebug('Updating video list, force refresh:', forceRefresh);
+    logger.debug('Updating video list, force refresh:', forceRefresh);
     
     // Show loader
     const container = document.getElementById('videos');
@@ -44,7 +37,7 @@ export async function updateVideoList(forceRefresh = false, tabId = null) {
             const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
             tabId = tab.id;
         } catch (e) {
-            logDebug('Error getting current tab:', e);
+            logger.error('Error getting current tab:', e);
         }
     }
     
@@ -74,7 +67,7 @@ export function startBackgroundRefreshLoop(intervalMs = 3000, tabId = null) {
         return null;
     }
     
-    logDebug(`Starting background refresh loop for tab ${tabId}, interval: ${intervalMs}ms`);
+    logger.debug(`Starting background refresh loop for tab ${tabId}, interval: ${intervalMs}ms`);
     
     // Set up a new interval
     backgroundRefreshInterval = setInterval(() => {
@@ -96,7 +89,7 @@ export function stopBackgroundRefreshLoop() {
     if (backgroundRefreshInterval) {
         clearInterval(backgroundRefreshInterval);
         backgroundRefreshInterval = null;
-        logDebug('Background refresh loop stopped');
+        logger.debug('Background refresh loop stopped');
     }
 }
 
@@ -105,11 +98,11 @@ export function stopBackgroundRefreshLoop() {
  * Sets up event listeners and initial refresh
  */
 export function initVideoFetcher() {
-    logDebug('Initializing video fetcher');
+    logger.debug('Initializing video fetcher');
     
     // Listen for video updates from state service
     on('videosUpdated', (videos) => {
-        logDebug(`Received ${videos.length} videos from state service`);
+        logger.debug(`Received ${videos.length} videos from state service`);
         renderVideos(videos);
     });
     

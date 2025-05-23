@@ -17,6 +17,9 @@ import { debounce } from './utilities.js';
 import { showQualityDialog } from './ui.js';
 import { videoStateService } from './services/video-state-service.js';
 import { getBackgroundPort } from './index.js';
+import { createlogger } from './utilities/logger.js';
+
+const logger = createLogger('Download');
 
 let downloadPort = null;
 
@@ -54,7 +57,7 @@ export async function handleDownload(button, url, type, videoData = {}) {
         
         // Set up message listener
         downloadPort.onMessage.addListener((response) => {
-            console.log('Download message:', response); // Debug log
+            logger.debug('Download message:', response); // Debug log
             
             // Handle progress updates
             if (response?.type === 'progress') {
@@ -114,7 +117,7 @@ export async function handleDownload(button, url, type, videoData = {}) {
         });
         
         downloadPort.onDisconnect.addListener(() => {
-            console.log('Port disconnected'); // Debug log
+            logger.debug('Port disconnected'); // Debug log
             downloadPort = null;
             resetDownloadState();
         });
@@ -123,7 +126,7 @@ export async function handleDownload(button, url, type, videoData = {}) {
         registerNewDownload(url, type, button, videoData);
         
     } catch (error) {
-        console.error('Download failed:', error);
+        logger.error('Download failed:', error);
         showError('Failed to start download');
         resetDownloadState();
     }
@@ -162,15 +165,15 @@ async function registerNewDownload(url, type, button, videoData = {}) {
         
         // If we have a port connection to background, use it
         if (port) {
-            console.log('Initiating download via port connection');
+            logger.debug('Initiating download via port connection');
             port.postMessage(message);
         } else {
             // Fall back to one-time message
-            console.log('Initiating download via one-time message');
+            logger.debug('Initiating download via one-time message');
             chrome.runtime.sendMessage(message);
         }
     } catch (error) {
-        console.error('Failed to register new download:', error);
+        logger.error('Failed to register new download:', error);
         showError('Failed to start download');
         throw error;
     }
@@ -182,7 +185,7 @@ async function getCurrentTabId() {
         const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
         return tabs[0]?.id || -1;
     } catch (e) {
-        console.error('Error getting current tab ID:', e);
+        logger.error('Error getting current tab ID:', e);
         return -1;
     }
 }
@@ -266,7 +269,7 @@ async function handleBlobDownload(url) {
         });
         
     } catch (error) {
-        console.error('Blob download failed:', error);
+        logger.error('Blob download failed:', error);
         showError('Blob download failed - try using the copy URL button');
         throw error; // Re-throw for the caller to reset button state
     }
@@ -365,7 +368,7 @@ export async function startDownload(video) {
  * Requests active downloads list from background script
  */
 export async function checkForActiveDownloads() {
-    console.log('Checking for active downloads...');
+    logger.debug('Checking for active downloads...');
     
     // Get the port connection to the background script
     const port = getBackgroundPort();
@@ -379,7 +382,7 @@ export async function checkForActiveDownloads() {
         // Background will respond with activeDownloadsList message
         // This is handled in the port message listener in index.js
     } else {
-        console.error('Failed to get background port for active downloads check');
+        logger.error('Failed to get background port for active downloads check');
     }
     
     return true;

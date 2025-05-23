@@ -9,10 +9,9 @@
  * - Identifies and filters redundant quality variants
  */
 
-// Debug logging helper - can be replaced with a shared logger
-function logDebug(...args) {
-    console.log('[Video Validator]', new Date().toISOString(), ...args);
-}
+import { createLogger } from './logger.js';
+
+const logger = createLogger('Video Validator');
 
 /**
  * Validates and filters a list of videos, removing tracking pixels and non-video content
@@ -28,7 +27,7 @@ export function validateAndFilterVideos(videos) {
         
         // Filter out variants that have a known master - they should only appear nested in their master playlists
         if (video.isVariant && video.hasKnownMaster) {
-            logDebug(`Filtering out variant with known master: ${video.url}`);
+            logger.debug(`Filtering out variant with known master: ${video.url}`);
             return false;
         }
         
@@ -44,7 +43,7 @@ export function validateAndFilterVideos(videos) {
             if (video.subtype) {
                 // Filter out URLs that were identified as non-videos
                 if (video.subtype === 'not-a-video' || video.subtype === 'fetch-failed') {
-                    logDebug(`Filtering out light-parsed non-video: ${video.url} (${video.subtype})`);
+                    logger.debug(`Filtering out light-parsed non-video: ${video.url} (${video.subtype})`);
                     return false;
                 }
                 return true;
@@ -58,13 +57,13 @@ export function validateAndFilterVideos(videos) {
             
             // Filter out known tracking pixel and analytics URLs
             if (video.url.includes('ping.gif') || video.url.includes('jwpltx.com')) {
-                logDebug('Filtering out tracking URL:', video.url);
+                logger.debug('Filtering out tracking URL:', video.url);
                 return false;
             }
             
             // Check for image extensions that shouldn't be treated as videos
             if (/\.(gif|png|jpg|jpeg|webp|bmp|svg)(\?|$)/i.test(urlObj.pathname)) {
-                logDebug('Filtering out image URL:', video.url);
+                logger.debug('Filtering out image URL:', video.url);
                 return false;
             }
             
@@ -80,14 +79,14 @@ export function validateAndFilterVideos(videos) {
             ];
             
             if (trackingPatterns.some(pattern => pattern.test(urlObj.pathname))) {
-                logDebug('Filtering out analytics endpoint:', video.url);
+                logger.debug('Filtering out analytics endpoint:', video.url);
                 return false;
             }
             
             // If we got here, it's probably a valid video
             return true;
         } catch (e) {
-            logDebug('Error validating URL:', e, video.url);
+            logger.error('Error validating URL:', e, video.url);
             return false;
         }
     });

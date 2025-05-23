@@ -17,9 +17,12 @@
 import { initializeServices, getActiveTab } from './services/service-initializer.js';
 import { themeService, applyTheme } from './services/theme-service.js';
 import { videoStateService } from './services/video-state-service.js';
-
 import { initializeUI, setScrollPosition, getScrollPosition, showLoadingState, hideLoadingState, showNoVideosMessage } from './ui.js';
 import { renderVideos } from './video-renderer.js';
+import { createlogger } from '../js/utilities/logger.js';
+
+
+const logger = createlogger('Popup');
 
 // Global port connection for communicating with the background script
 let backgroundPort = null;
@@ -53,7 +56,7 @@ const metadataUpdateBatch = {
     process() {
         if (this.updates.size === 0) return;
         
-        console.log(`Processing batch of ${this.updates.size} metadata updates`);
+        logger.debug(`Processing batch of ${this.updates.size} metadata updates`);
         
         // Get the module for DOM updates
         import('./video-renderer.js').then(module => {
@@ -119,11 +122,11 @@ export function getBackgroundPort() {
     if (!backgroundPort) {
         try {
             backgroundPort = chrome.runtime.connect({ name: 'popup' });
-            console.log('Connected to background script via port');
+            logger.debug('Connected to background script via port');
             
             // Set up disconnect handler
             backgroundPort.onDisconnect.addListener(() => {
-                console.log('Port disconnected from background script');
+                logger.debug('Port disconnected from background script');
                 backgroundPort = null;
             });
             
@@ -145,7 +148,7 @@ export function getBackgroundPort() {
                 }
             });
         } catch (e) {
-            console.error('Failed to connect to background script:', e);
+            logger.error('Failed to connect to background script:', e);
             return null;
         }
     }
@@ -171,25 +174,25 @@ function normalizeUrl(url) {
  * @param {Object} message - Message received from background script
  */
 function handlePortMessage(message) {
-    console.log('Received port message:', message);
+    logger.debug('Received port message:', message);
     
     // Handle video updates with a unified approach
     if ((message.action === 'videoListResponse' || message.action === 'videoStateUpdated') && message.videos) {
-        console.log(`Received ${message.videos.length} videos via port`);
+        logger.debug(`Received ${message.videos.length} videos via port`);
         updateVideoDisplay(message.videos);
         return;
     }
 
     // Handle metadata updates
     if (message.type === 'metadataUpdate' && message.url && message.mediaInfo) {
-        console.log('Received metadata update for video:', message.url);
+        logger.debug('Received metadata update for video:', message.url);
         metadataUpdateBatch.add(message.url, message.mediaInfo);
         return;
     }
     
     // Handle active downloads list
     if (message.action === 'activeDownloadsList' && message.downloads) {
-        console.log('Received active downloads list:', message.downloads);
+        logger.debug('Received active downloads list:', message.downloads);
         
         // Import download module to process active downloads
         import('./download.js').then(downloadModule => {
@@ -208,7 +211,7 @@ function handlePortMessage(message) {
     
     // Handle manifest responses
     if (message.type === 'manifestContent') {
-        console.log('Received manifest content via port');
+        logger.debug('Received manifest content via port');
         document.dispatchEvent(new CustomEvent('manifest-content', { 
             detail: message 
         }));
@@ -217,7 +220,7 @@ function handlePortMessage(message) {
     
     // Handle preview responses
     if (message.type === 'previewResponse') {
-        console.log('Received preview data via port');
+        logger.debug('Received preview data via port');
         document.dispatchEvent(new CustomEvent('preview-generated', { 
             detail: message 
         }));
@@ -226,7 +229,7 @@ function handlePortMessage(message) {
     
     // Handle live preview updates for proactively generated previews
     if (message.type === 'previewReady') {
-        console.log('Received preview update:', message.videoUrl);
+        logger.debug('Received preview update:', message.videoUrl);
         
         // Dispatch an event that VideoStateService listens for
         document.dispatchEvent(new CustomEvent('preview-ready', { 
@@ -284,7 +287,7 @@ function handlePortMessage(message) {
     
     // Handle quality responses
     if (message.type === 'qualitiesResponse') {
-        console.log('Received qualities data via port');
+        logger.debug('Received qualities data via port');
         document.dispatchEvent(new CustomEvent('qualities-response', { 
             detail: message 
         }));
@@ -293,7 +296,7 @@ function handlePortMessage(message) {
 
     // Handle unified video updates - new handler for single video updates
     if (message.type === 'videoUpdated') {
-        console.log('Received unified video update:', message.url);
+        logger.debug('Received unified video update:', message.url);
         
         // Dispatch an event that VideoStateService will handle
         document.dispatchEvent(new CustomEvent('video-updated', { 
@@ -312,13 +315,13 @@ function handlePortMessage(message) {
  * @param {Array} videos - The videos to display
  */
 function updateVideoDisplay(videos) {
-    console.log('Updating video display with', videos.length, 'videos');
+    logger.debug('Updating video display with', videos.length, 'videos');
     
     // Update VideoStateService with the new videos
     import('./services/video-state-service.js').then(module => {
         module.updateVideos(videos);
     }).catch(err => {
-        console.error('Error importing video-state-service:', err);
+        logger.error('Error importing video-state-service:', err);
     });
     
     // Update UI state immediately without waiting for import
@@ -327,13 +330,13 @@ function updateVideoDisplay(videos) {
         // Render videos directly
         renderVideos(videos);
         hideLoadingState();
-        console.log('Updated UI with', videos.length, 'videos');
+        logger.debug('Updated UI with', videos.length, 'videos');
     } else if (!isEmptyState) {
         // Only update if we're not already showing empty state
         renderVideos(videos);
         hideLoadingState();
         isEmptyState = true;
-        console.log('No videos to display, showing empty state');
+        logger.debug('No videos to display, showing empty state');
     }
 }
 
@@ -349,12 +352,12 @@ export function sendPortMessage(message) {
             port.postMessage(message);
             return true;
         } catch (e) {
-            console.error('Error sending message via port:', e);
+            logger.error('Error sending message via port:', e);
             backgroundPort = null;
             return false;
         }
     }
-    console.warn('No port connection available', message);
+    logger.warn('No port connection available', message);
     return false;
 }
 
@@ -385,7 +388,7 @@ function setupPeriodicRefresh() {
     // Create a new interval - refresh every 2.5 seconds if we're in empty state
     refreshInterval = setInterval(() => {
         if (isEmptyState) {
-            console.log("Performing periodic check for new videos...");
+            logger.debug("Performing periodic check for new videos...");
             requestVideos(true);
         }
     }, 2500);
@@ -404,7 +407,7 @@ function cleanupPeriodicRefresh() {
 // Initialize when DOM is ready
 document.addEventListener('DOMContentLoaded', async () => {
     try {
-        console.log('Popup initializing...');
+        logger.debug('Popup initializing...');
         
         // Initialize all services in the proper order
         const serviceState = await initializeServices();
@@ -434,13 +437,13 @@ document.addEventListener('DOMContentLoaded', async () => {
         // Check for active downloads from previous popup sessions
         import('./download.js').then(downloadModule => {
             downloadModule.checkForActiveDownloads().catch(err => {
-                console.error('Error checking for active downloads:', err);
+                logger.error('Error checking for active downloads:', err);
             });
         });
         
         // Add Clear Cache button handler - simplified for in-memory approach
         document.getElementById('clear-cache-btn')?.addEventListener('click', async () => {
-            console.log('Refresh button clicked');
+            logger.debug('Clear cache button clicked');
             requestVideos(true);
         });
         
@@ -467,7 +470,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
         
     } catch (error) {
-        console.error('Initialization error:', error);
+        logger.error('Initialization error:', error);
         const container = document.getElementById('videos');
         if (container) {
             container.innerHTML = `

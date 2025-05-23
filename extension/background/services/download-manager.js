@@ -139,7 +139,7 @@ function handleDownloadSuccess(response, notificationId) {
     try {
       port.postMessage(response);
     } catch (e) {
-      console.error('Error sending success to port:', e);
+      logger.error('Error sending success to port:', e);
       downloadPorts.delete(portId);
       logger.debug('Removed dead port after success failure:', portId);
     }
@@ -156,7 +156,7 @@ function handleDownloadError(error, notificationId) {
     try {
       port.postMessage({ success: false, error: error });
     } catch (e) {
-      console.error('Error sending error to port:', e);
+      logger.error('Error sending error to port:', e);
       downloadPorts.delete(portId);
       logger.debug('Removed dead port after error failure:', portId);
     }
@@ -273,7 +273,7 @@ function startDownload(request, port) {
                 try {
                     port.postMessage(enhancedResponse);
                 } catch (e) {
-                    console.error('Error sending progress to port:', e);
+                    logger.error('Error sending progress to port:', e);
                     downloadPorts.delete(portId);
                     logger.debug('Removed dead port after send failure:', portId);
                 }
@@ -315,7 +315,7 @@ function startDownload(request, port) {
     };
     
     // Send to native host using our service with enhanced parameters
-    console.log('🔄 Forwarding download request to native host:', request.url);
+    logger.debug('🔄 Forwarding download request to native host:', request.url);
     
     // Fetch headers for the video first
     getSharedHeaders(request.tabId || -1, request.url).then(headers => {
@@ -331,13 +331,13 @@ function startDownload(request, port) {
             manifestUrl: request.manifestUrl || request.url,
             headers: headers
         }, responseHandler).catch(error => {
-            console.error('❌ Native host error:', error);
+            logger.error('❌ Native host error:', error);
             
             // If error contains "codec not currently supported in container", attempt to retry with webm extension
             if (error.message && error.message.includes("codec not currently supported in container") && 
                 request.url.toLowerCase().includes(".webm")) {
                 
-                console.log('⚠️ Codec incompatibility detected. Retrying with WebM extension...');
+                logger.debug('⚠️ Codec incompatibility detected. Retrying with WebM extension...');
                 
                 // Force WebM extension for this download
                 let updatedFilename = filename;
@@ -376,7 +376,7 @@ function startDownload(request, port) {
             handleDownloadError(error.message, notificationId);
         });
     }).catch(error => {
-        console.error('❌ Error getting headers:', error);
+        logger.error('❌ Error getting headers:', error);
         
         // Continue with download without headers as fallback
         logger.debug('Continuing download without custom headers');
@@ -389,13 +389,13 @@ function startDownload(request, port) {
             quality: request.quality,
             manifestUrl: request.manifestUrl || request.url
         }, responseHandler).catch(error => {
-            console.error('❌ Native host error:', error);
+            logger.error('❌ Native host error:', error);
             
             // If error contains "codec not currently supported in container", attempt to retry with webm extension
             if (error.message && error.message.includes("codec not currently supported in container") && 
                 request.url.toLowerCase().includes(".webm")) {
                 
-                console.log('⚠️ Codec incompatibility detected. Retrying with WebM extension...');
+                logger.debug('⚠️ Codec incompatibility detected. Retrying with WebM extension...');
                 
                 // Force WebM extension for this download
                 let updatedFilename = filename;
@@ -467,7 +467,7 @@ function setupDownloadPort(port, portId) {
                         size: downloadInfo.size
                     });
                 } catch (e) {
-                    console.error('Error sending immediate progress to port:', e);
+                    logger.error('Error sending immediate progress to port:', e);
                     downloadPorts.delete(portId);
                 }
             }
@@ -493,7 +493,7 @@ function setupDownloadPort(port, portId) {
                         size: downloadInfo.size
                     });
                 } catch (e) {
-                    console.error('Error sending reconnection data to port:', e);
+                    logger.error('Error sending reconnection data to port:', e);
                     downloadPorts.delete(portId);
                 }
             } else {
