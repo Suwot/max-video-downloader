@@ -16,7 +16,7 @@ import nativeHostService from '../../js/native-host-service.js';
 import { getActivePopupPortForTab } from './ui-communication.js';
 import { parseHlsManifest } from '../../js/utilities/hls-parser.js';
 import { parseDashManifest } from '../../js/utilities/dash-parser.js';
-import { buildRequestHeaders } from '../../js/utilities/headers-utils.js';
+import { getSharedHeaders, clearHeaderCache, clearAllHeaderCaches } from '../../js/utilities/headers-utils.js';
 import { createLogger } from '../../js/utilities/logger.js';
 import { getPreview, storePreview } from '../../js/utilities/preview-cache.js';
 
@@ -295,9 +295,9 @@ async function getStreamQualities(url, tabId) {
         // Get headers, using basic headers as fallback if tabId is not provided
         let headers;
         if (tabId) {
-            headers = await buildRequestHeaders(tabId, url);
+            headers = await getSharedHeaders(tabId, url);
         } else {
-            headers = await buildRequestHeaders(null, url);
+            headers = await getSharedHeaders(null, url);
         }
         
         logger.debug(`Using headers for stream qualities: ${JSON.stringify(headers)}`);
@@ -328,6 +328,9 @@ function cleanupForTab(tabId) {
     if (variantMasterMap.has(tabId)) {
         variantMasterMap.delete(tabId);
     }
+    
+    // Clear header cache for this tab
+    clearHeaderCache(tabId);
 }
 
 /**
@@ -372,6 +375,7 @@ function clearVideoCache() {
     allDetectedVideos.clear(); // Clear central video collection
     variantMasterMap.clear(); // Clear variant-master relationships
     processingRequests.clearAll(); // Clear processing requests
+    clearAllHeaderCaches(); // Clear all header caches
 }
 
 /**
@@ -468,7 +472,7 @@ async function runJSParser(tabId, normalizedUrl, type) {
         const video = tabMap.get(normalizedUrl);
         
         // Get headers for the request
-        const headers = await buildRequestHeaders(tabId, video.url);
+        const headers = await getSharedHeaders(tabId, video.url);
         
         // Special handling for DASH content
         if (type === 'dash') {
@@ -687,7 +691,7 @@ async function processVariantsWithFFprobe(tabId, masterUrl, variants) {
         
         try {
             // Get headers for the request
-            const headers = await buildRequestHeaders(tabId, variant.url);
+            const headers = await getSharedHeaders(tabId, variant.url);
             logger.debug(`Using headers for FFPROBE request: ${JSON.stringify(headers)}`);
             
             // Get FFprobe metadata
@@ -882,7 +886,7 @@ async function runFFProbeParser(tabId, normalizedUrl) {
         logger.debug(`Getting FFPROBE metadata for ${video.url}`);
         
         // Get headers for the request
-        const headers = await buildRequestHeaders(tabId, video.url);
+        const headers = await getSharedHeaders(tabId, video.url);
         logger.debug(`Using headers for FFPROBE request: ${JSON.stringify(headers)}`);
         
         const streamInfo = await rateLimiter.enqueue(async () => {
@@ -970,7 +974,7 @@ async function generateVideoPreview(tabId, normalizedUrl) {
         logger.debug(`Generating preview for ${video.url}`);
         
         // Get headers for the request
-        const headers = await buildRequestHeaders(tabId, video.url);
+        const headers = await getSharedHeaders(tabId, video.url);
         logger.debug(`Using headers for preview request: ${JSON.stringify(headers)}`);
         
         const response = await rateLimiter.enqueue(async () => {

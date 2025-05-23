@@ -4,13 +4,66 @@
  * for video/media content requests to prevent 403 errors
  */
 
+import { createLogger } from './logger.js';
+
+// Cache headers promises by tab ID
+const tabHeadersCache = new Map();
+
+// Create a logger instance for the headers utilities
+const logger = createLogger('Headers Utils');
+
+/**
+ * Get shared headers for a specific tab, with Promise memoization
+ * @param {number} tabId - Tab ID where the video is located (optional)
+ * @param {string} videoUrl - The URL of the video being requested
+ * @returns {Promise<Object>} Headers object mimicking a real browser request
+ */
+async function getSharedHeaders(tabId, videoUrl) {
+    // For non-tab requests, always build fresh headers
+    if (!tabId || tabId <= 0) {
+        return buildRequestHeaders(null, videoUrl);
+    }
+    
+    // If we don't have a promise for this tab yet, create one
+    if (!tabHeadersCache.has(tabId)) {
+        const promise = buildRequestHeaders(tabId, videoUrl).catch(error => {
+            // Only clear if this exact promise is still cached
+            if (tabHeadersCache.get(tabId) === promise) {
+                tabHeadersCache.delete(tabId); // Allow retry on next request
+            }
+            throw error; // Re-throw to propagate the error
+        });
+        
+        tabHeadersCache.set(tabId, promise);
+    }
+    
+    return tabHeadersCache.get(tabId);
+}
+
+/**
+ * Clear the header promise cache for a specific tab
+ * @param {number} tabId - Tab ID to clear cache for
+ */
+function clearHeaderCache(tabId) {
+    if (tabHeadersCache.has(tabId)) {
+        tabHeadersCache.delete(tabId);
+    }
+}
+
+/**
+ * Clear all header caches (useful when browser session changes)
+ */
+function clearAllHeaderCaches() {
+    tabHeadersCache.clear();
+}
+
 /**
  * Build realistic browser-like request headers for video requests
  * @param {number} tabId - Tab ID where the video is located (optional)
  * @param {string} videoUrl - The URL of the video being requested
  * @returns {Object} Headers object mimicking a real browser request
  */
-export async function buildRequestHeaders(tabId, videoUrl) {
+async function buildRequestHeaders(tabId, videoUrl) {
     const headers = {
         // Standard headers
         'User-Agent': navigator.userAgent || 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko)',
@@ -39,6 +92,9 @@ export async function buildRequestHeaders(tabId, videoUrl) {
             // better to omit than to send fake ones that trigger protections
         }
     }
-    
+    logger.debug(`Generated headers for ${tabId}:`, headers);
+
     return headers;
 }
+
+export { getSharedHeaders, buildRequestHeaders, clearHeaderCache, clearAllHeaderCaches };

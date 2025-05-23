@@ -6,7 +6,6 @@
 
 import { 
     normalizeUrl,
-    buildRequestHeaders,
     processingRequests,
     calculateEstimatedFileSizeBytes,
     resolveUrl,
@@ -15,6 +14,7 @@ import {
     validateManifestType
 } from './parser-utils.js';
 import { createLogger } from './logger.js';
+import { getSharedHeaders } from './headers-utils.js';
 
 // Create a logger for the HLS parser
 const logger = createLogger('HLS Parser');
@@ -45,7 +45,7 @@ export async function lightParseHls(url, headers = null) {
         logger.debug(`Light parsing ${url} to determine subtype`);
         
         // Use provided headers or build basic headers
-        const requestHeaders = headers || await buildRequestHeaders(null, url);
+        const requestHeaders = headers || await getSharedHeaders(null, url);
         
         // Add Range header directly for light parsing
         requestHeaders['Range'] = 'bytes=0-4095'; // Request just the first 4KB
@@ -121,7 +121,7 @@ export async function fullParseHls(url, headers = null) {
         const timeoutId = setTimeout(() => controller.abort(), 10000);  // 10 second timeout
         
         // Use provided headers or build basic headers
-        const requestHeaders = headers || await buildRequestHeaders(null, url);
+        const requestHeaders = headers || await getSharedHeaders(null, url);
 
         // Remove any Range header to ensure we get the full content
         if (requestHeaders['Range']) {
@@ -216,7 +216,7 @@ async function parseHlsVariant(variantUrl, headers = null) {
         const timeoutId = setTimeout(() => controller.abort(), 10000);  
         
         // Use provided headers or build basic headers
-        const requestHeaders = headers || await buildRequestHeaders(null, variantUrl);
+        const requestHeaders = headers || await getSharedHeaders(null, variantUrl);
         
         // Remove any Range header that might limit the response size
         if (requestHeaders['Range']) {

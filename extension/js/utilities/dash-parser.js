@@ -5,7 +5,6 @@
 
 import { 
     normalizeUrl,
-    buildRequestHeaders,
     processingRequests,
     calculateEstimatedFileSizeBytes,
     parseFrameRate,
@@ -17,6 +16,7 @@ import {
     validateManifestType
 } from './parser-utils.js';
 import { createLogger } from './logger.js';
+import { getSharedHeaders } from './headers-utils.js';
 
 // Create a logger for the DASH parser
 const logger = createLogger('DASH Parser');

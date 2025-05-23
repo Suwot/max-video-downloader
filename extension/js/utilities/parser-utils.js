@@ -7,6 +7,8 @@ import { normalizeUrl, getBaseDirectory } from './normalize-url.js';
 import { buildRequestHeaders } from './headers-utils.js';
 import { createLogger } from './logger.js';
 
+const logger = createLogger('Parser Utils');
+
 // Tracking URLs currently being processed
 export const processingRequests = {
     light: new Set(),
@@ -112,7 +114,7 @@ export async function fetchContentRange(url, headers = null, rangeBytes = 4096, 
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
         
-        console.log(`[Parser Utils] Fetching first ${rangeBytes} bytes of ${url}`);
+        logger.debug(`Fetching first ${rangeBytes} bytes of ${url}`);
         
         // Use provided headers or build basic headers
         const requestHeaders = headers || await buildRequestHeaders(null, url);
@@ -128,14 +130,14 @@ export async function fetchContentRange(url, headers = null, rangeBytes = 4096, 
         clearTimeout(timeoutId);
         
         if (!response.ok) {
-            console.log(`[Parser Utils] ❌ Failed to fetch content: ${response.status}`);
+            logger.debug(`❌ Failed to fetch content: ${response.status}`);
             return { content: '', ok: false, status: response.status };
         }
         
         const content = await response.text();
         return { content, ok: true, status: response.status };
     } catch (error) {
-        console.error(`[Parser Utils] ❌ Error fetching content: ${error.message}`);
+        logger.error(`❌ Error fetching content: ${error.message}`);
         return { content: '', ok: false, status: 0, error: error.message };
     }
 }
@@ -153,7 +155,7 @@ export async function fetchFullContent(url, headers = null, timeoutMs = 10000) {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
         
-        console.log(`[Parser Utils] Fetching full content of ${url}`);
+        logger.debug(`Fetching full content of ${url}`);
         
         // Use provided headers or build basic headers
         const requestHeaders = headers || await buildRequestHeaders(null, url);
@@ -171,14 +173,14 @@ export async function fetchFullContent(url, headers = null, timeoutMs = 10000) {
         clearTimeout(timeoutId);
         
         if (!response.ok) {
-            console.log(`[Parser Utils] ❌ Failed to fetch content: ${response.status}`);
+            logger.debug(`❌ Failed to fetch content: ${response.status}`);
             return { content: '', ok: false, status: response.status };
         }
         
         const content = await response.text();
         return { content, ok: true, status: response.status };
     } catch (error) {
-        console.error(`[Parser Utils] ❌ Error fetching content: ${error.message}`);
+        logger.error(`❌ Error fetching content: ${error.message}`);
         return { content: '', ok: false, status: 0, error: error.message };
     }
 }
