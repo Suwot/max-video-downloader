@@ -5,7 +5,7 @@
 
 // Add static import at the top
 import nativeHostService from '../../js/native-host-service.js';
-import { buildRequestHeaders } from '../../js/utilities/headers-utils.js';
+import { getSharedHeaders, buildRequestHeaders } from '../../js/utilities/headers-utils.js';
 import { createLogger } from '../../js/utilities/logger.js';
 
 // Track downloads by ID for better connection persistence
@@ -318,7 +318,7 @@ function startDownload(request, port) {
     console.log('🔄 Forwarding download request to native host:', request.url);
     
     // Fetch headers for the video first
-    buildRequestHeaders(request.tabId || -1, request.url).then(headers => {
+    getSharedHeaders(request.tabId || -1, request.url).then(headers => {
         logger.debug('Using headers for download request:', Object.keys(headers));
         
         // Using imported nativeHostService with headers
