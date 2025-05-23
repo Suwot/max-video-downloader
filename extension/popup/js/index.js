@@ -306,6 +306,11 @@ function handlePortMessage(message) {
             }
         }));
         
+        // Also update the UI element directly for faster response
+        import('./video-renderer.js').then(module => {
+            module.updateVideoElement(message.url, message.video);
+        });
+        
         return;
     }
 }

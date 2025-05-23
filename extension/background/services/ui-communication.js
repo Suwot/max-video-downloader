@@ -4,7 +4,7 @@
  */
 
 // Add static imports at the top
-import { getVideosForDisplay, getStreamQualities, clearVideoCache } from './video-manager.js';
+import { getVideosForDisplay, getStreamQualities, clearVideoCache, sendVideoUpdateToUI } from './video-manager.js';
 import { getActiveDownloads, getDownloadDetails, startDownload } from './download-manager.js';
 import { createLogger } from '../../js/utilities/logger.js';
 
@@ -41,12 +41,9 @@ async function handlePortMessage(message, port, portId) {
     
     // Handle video list request
     if (message.action === 'getVideos') {
-        const videos = getVideosForDisplay(message.tabId);
-        
-        port.postMessage({
-            action: 'videoListResponse',
-            videos: videos
-        });
+        // Use the unified approach from video-manager to send videos
+        // This ensures consistency in how videos are sent to the UI
+        sendVideoUpdateToUI(message.tabId, null, { _sendFullList: true });
     }
     
     // Handle preview generation request - now handled through enrichWithPreview in video-manager.js

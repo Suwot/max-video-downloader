@@ -198,8 +198,8 @@ class VideoProcessingPipeline {
     });
     
     if (updatedVideo) {
-      notifyVideoUpdated(tabId, normalizedUrl, updatedVideo);
-      broadcastVideoUpdate(tabId);
+      // Use the unified communication function instead of calling both
+      sendVideoUpdateToUI(tabId, normalizedUrl, { ...updatedVideo, _sendFullList: true });
     }
   }
   
@@ -252,12 +252,11 @@ class VideoProcessingPipeline {
     //     await this.generatePreview(tabId, normalizedUrl, headers);
     //   }
       
-      // Notify UI of complete update
-      notifyVideoUpdated(tabId, normalizedUrl, updatedVideo || {});
-      broadcastVideoUpdate(tabId);
+      // Notify UI of complete update using unified approach
+      sendVideoUpdateToUI(tabId, normalizedUrl, { ...(updatedVideo || {}), _sendFullList: true });
     } else {
       // Update with error information
-      updateVideo('processHlsVideo-error', tabId, normalizedUrl, {
+      const errorVideo = updateVideo('processHlsVideo-error', tabId, normalizedUrl, {
         isValid: false,
         isLightParsed: true,
         timestampLP: hlsResult.timestampLP || Date.now(),
@@ -265,7 +264,8 @@ class VideoProcessingPipeline {
         parsingError: hlsResult.error || 'Not a valid HLS manifest'
       });
       
-      broadcastVideoUpdate(tabId);
+      // Send update with the unified approach
+      sendVideoUpdateToUI(tabId, normalizedUrl, { ...(errorVideo || {}), _sendFullList: true });
     }
   }
   
@@ -310,12 +310,11 @@ class VideoProcessingPipeline {
       // Generate preview for the manifest
       await this.generatePreview(tabId, normalizedUrl, headers);
       
-      // Notify UI of complete update
-      notifyVideoUpdated(tabId, normalizedUrl, updatedVideo || {});
-      broadcastVideoUpdate(tabId);
+      // Notify UI of complete update using unified approach
+      sendVideoUpdateToUI(tabId, normalizedUrl, { ...(updatedVideo || {}), _sendFullList: true });
     } else {
       // Update with error information
-      updateVideo('processDashVideo-error', tabId, normalizedUrl, {
+      const errorVideo = updateVideo('processDashVideo-error', tabId, normalizedUrl, {
         isValid: false,
         isLightParsed: true,
         timestampLP: dashResult.timestampLP || Date.now(),
@@ -323,7 +322,8 @@ class VideoProcessingPipeline {
         parsingError: dashResult.error || 'Not a valid DASH manifest'
       });
       
-      broadcastVideoUpdate(tabId);
+      // Send update with the unified approach
+      sendVideoUpdateToUI(tabId, normalizedUrl, { ...(errorVideo || {}), _sendFullList: true });
     }
   }
   
@@ -347,7 +347,8 @@ class VideoProcessingPipeline {
       this.generatePreview(tabId, normalizedUrl, headers)
     ]);
     
-    broadcastVideoUpdate(tabId);
+    // Send update with unified approach
+    sendVideoUpdateToUI(tabId, normalizedUrl, { _sendFullList: true });
   }
   
   /**
@@ -480,8 +481,8 @@ class VideoProcessingPipeline {
     
     if (updatedVideo) {
       logger.debug(`Updated variant[${index}] with preview: ${previewUrl}`);
-      notifyVideoUpdated(tabId, masterUrl, updatedVideo);
-      broadcastVideoUpdate(tabId);
+      // Use unified update approach
+      sendVideoUpdateToUI(tabId, masterUrl, { ...updatedVideo, _sendFullList: true });
     }
   }
   
@@ -524,7 +525,8 @@ class VideoProcessingPipeline {
         });
         
         if (updatedVideo) {
-          notifyVideoUpdated(tabId, normalizedUrl, updatedVideo);
+          // Use unified update approach
+          sendVideoUpdateToUI(tabId, normalizedUrl, updatedVideo);
         }
       }
     } catch (error) {
@@ -557,7 +559,8 @@ class VideoProcessingPipeline {
         });
         
         if (updatedVideo) {
-          notifyVideoUpdated(tabId, normalizedUrl, updatedVideo);
+          // Use unified update approach
+          sendVideoUpdateToUI(tabId, normalizedUrl, updatedVideo);
         }
         return;
       }
@@ -582,7 +585,8 @@ class VideoProcessingPipeline {
         });
         
         if (updatedVideo) {
-          notifyVideoUpdated(tabId, normalizedUrl, updatedVideo);
+          // Use unified update approach
+          sendVideoUpdateToUI(tabId, normalizedUrl, updatedVideo);
         }
       }
     } catch (error) {
@@ -611,7 +615,8 @@ function updateVideoStatus(tabId, normalizedUrl, status, errorMessage = null) {
   const updatedVideo = updateVideo(`updateVideoStatus-${status}`, tabId, normalizedUrl, updates);
   
   if (updatedVideo) {
-    notifyVideoUpdated(tabId, normalizedUrl, updatedVideo);
+    // Use the unified approach for updates
+    sendVideoUpdateToUI(tabId, normalizedUrl, updatedVideo);
   }
 }
 
@@ -735,8 +740,8 @@ function updateVariantWithFFprobeData(tabId, masterUrl, variantIndex, ffprobeDat
     });
     
     if (updatedVideo) {
-        // Update UI
-        broadcastVideoUpdate(tabId);
+        // Update UI with unified approach
+        sendVideoUpdateToUI(tabId, masterUrl, updatedVideo);
     }
 }
 
@@ -759,28 +764,111 @@ function getFilenameFromUrl(url) {
     return 'video';
 }
 
-// Broadcast videos to popup
-function broadcastVideoUpdate(tabId) {
-    const processedVideos = getVideosForDisplay(tabId);
-    logger.info(`Broadcasting ${processedVideos.length} videos for tab ${tabId}`);
+/**
+ * Prepare video object for transmission
+ * Creates a clean deep copy to ensure all properties are transmitted
+ * @param {Object} video - The video object
+ * @returns {Object} - Cleaned video object ready for transmission
+ */
+function prepareVideoForTransmission(video) {
+    return {
+        ...video,
+        // Force a deep clone of complex objects to ensure all properties are transmitted
+        metaFFprobe: video.metaFFprobe ? JSON.parse(JSON.stringify(video.metaFFprobe)) : null,
+        metaJS: video.metaJS ? JSON.parse(JSON.stringify(video.metaJS)) : null,
+        ...(video.variants ? { variants: JSON.parse(JSON.stringify(video.variants)) } : {}),
+        // Add a marker so we can track which videos have been processed
+        _processedByVideoManager: true
+    };
+}
 
-    if (processedVideos.length === 0) {
-        return [];
+/**
+ * Unified function to send video updates to UI
+ * Will automatically use the best available method
+ * @param {number} tabId - Tab ID
+ * @param {string} [singleVideoUrl] - Optional URL of a specific video to update
+ * @param {Object} [singleVideoObj] - Optional video object to update (if provided with URL)
+ */
+function sendVideoUpdateToUI(tabId, singleVideoUrl = null, singleVideoObj = null) {
+    // Get the port first to see if popup is open
+    const port = getActivePopupPortForTab(tabId);
+    
+    // If we have a specific video URL but no object, try to get it
+    if (singleVideoUrl && !singleVideoObj) {
+        const video = getVideo(tabId, singleVideoUrl);
+        if (video) {
+            singleVideoObj = video;
+        }
     }
     
-    // Send with chrome.runtime.sendMessage for compatibility
-    try {
-        chrome.runtime.sendMessage({
-            action: 'videoStateUpdated',
-            tabId: tabId,
-            videos: processedVideos
-        });
-    } catch (e) {
-        // Ignore errors for sendMessage, as the popup might not be open
-        logger.debug('Error sending video update message (popup may not be open):', e.message);
+    // If popup is open, use direct port communication for efficient updates
+    if (port) {
+        try {
+            // If we have a specific video object, send just that update
+            if (singleVideoUrl && singleVideoObj) {
+                logger.debug(`Sending single video update via port for: ${singleVideoUrl}`);
+                port.postMessage({
+                    type: 'videoUpdated',
+                    url: singleVideoUrl,
+                    video: prepareVideoForTransmission(singleVideoObj)
+                });
+            }
+            
+            // Only for specific lifecycle events (like initializing) or when requested,
+            // we send the full list to ensure the popup is synchronized
+            if (!singleVideoUrl || singleVideoObj?._sendFullList) {
+                const processedVideos = getVideosForDisplay(tabId);
+                logger.info(`Sending full video list (${processedVideos.length} videos) via port for tab ${tabId}`);
+                
+                if (processedVideos.length > 0) {
+                    port.postMessage({
+                        action: 'videoStateUpdated',
+                        tabId: tabId,
+                        videos: processedVideos
+                    });
+                }
+            }
+            
+            // Return success if we sent via port
+            return true;
+        } catch (e) {
+            logger.debug(`Error sending update via port: ${e.message}, falling back to runtime message`);
+            // Fall through to broadcast method
+        }
+    } else {
+        // No port means popup isn't open, so we only update the maps for when popup opens later
+        logger.debug(`No active popup for tab ${tabId}, updates will be shown when popup opens`);
+        return false;
     }
     
-    return processedVideos;
+    // As fallback only for full list updates, not individual video updates
+    // This ensures any future opened popup gets the latest state
+    if (!singleVideoUrl || singleVideoObj?._sendFullList) {
+        try {
+            const processedVideos = getVideosForDisplay(tabId);
+            logger.debug(`Sending full list via runtime message for tab ${tabId} (fallback)`);
+            
+            chrome.runtime.sendMessage({
+                action: 'videoStateUpdated',
+                tabId: tabId,
+                videos: processedVideos
+            });
+            
+            return true;
+        } catch (e) {
+            // Ignore errors for sendMessage, as the popup might not be open
+            logger.debug('Error sending video update message (popup may not be open):', e.message);
+            return false;
+        }
+    }
+    
+    return false;
+}
+
+// Backward compatible versions that use the unified function
+function broadcastVideoUpdate(tabId) {
+    sendVideoUpdateToUI(tabId);
+    return getVideosForDisplay(tabId);
 }
 
 /**
@@ -790,40 +878,7 @@ function broadcastVideoUpdate(tabId) {
  * @param {Object} updatedVideo - The complete updated video object
  */
 function notifyVideoUpdated(tabId, url, updatedVideo) {
-    try {
-        // Check if a popup is open for this tab
-        const port = getActivePopupPortForTab(tabId);
-        
-        if (port) {
-            logger.debug(`Notifying popup for tab ${tabId} about video update for ${url}`);
-            
-            // Make a clean copy of the video object for transmission
-            const videoForTransmission = {
-                ...updatedVideo,
-                // Force a deep clone of metaFFprobe to ensure all properties are transmitted
-                metaFFprobe: updatedVideo.metaFFprobe ? JSON.parse(JSON.stringify(updatedVideo.metaFFprobe)) : null,
-                metaJS: updatedVideo.metaJS ? JSON.parse(JSON.stringify(updatedVideo.metaJS)) : null,
-                ...(updatedVideo.variants ? { variants: JSON.parse(JSON.stringify(updatedVideo.variants)) } : {}),
-                // Add a marker so we can track which videos have been processed
-                _processedByVideoManager: true
-            };
-            
-            try {
-                port.postMessage({
-                    type: 'videoUpdated',
-                    url: url,
-                    video: videoForTransmission
-                });
-            } catch (error) {
-                logger.debug(`Error sending video update: ${error.message}`);
-            }
-        } else {
-            // No popup is open for this tab, which is normal
-            logger.debug(`No active popup for tab ${tabId}, update will be shown when popup opens`);
-        }
-    } catch (error) {
-        logger.error(`Error: ${error.message}`);
-    }
+    sendVideoUpdateToUI(tabId, url, updatedVideo);
 }
 
 // Get stream qualities
@@ -997,8 +1052,8 @@ function addDetectedVideo(tabId, videoInfo) {
     // Directly enqueue for processing with our unified pipeline
     videoProcessingPipeline.enqueue(tabId, normalizedUrl, newVideo.type);
     
-    // Broadcast initial state to UI
-    broadcastVideoUpdate(tabId);
+    // Broadcast initial state to UI with unified approach
+    sendVideoUpdateToUI(tabId);
     
     return true;
 }
@@ -1030,6 +1085,7 @@ function getVideosForDisplay(tabId) {
 export {
     addDetectedVideo,
     broadcastVideoUpdate,
+    sendVideoUpdateToUI,
     getStreamQualities,
     cleanupForTab,
     normalizeUrl,
