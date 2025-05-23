@@ -865,22 +865,6 @@ function sendVideoUpdateToUI(tabId, singleVideoUrl = null, singleVideoObj = null
     return false;
 }
 
-// Backward compatible versions that use the unified function
-function broadcastVideoUpdate(tabId) {
-    sendVideoUpdateToUI(tabId);
-    return getVideosForDisplay(tabId);
-}
-
-/**
- * Notify any open popup about a video update (for any property)
- * @param {number} tabId - Tab ID
- * @param {string} url - Video URL
- * @param {Object} updatedVideo - The complete updated video object
- */
-function notifyVideoUpdated(tabId, url, updatedVideo) {
-    sendVideoUpdateToUI(tabId, url, updatedVideo);
-}
-
 // Get stream qualities
 async function getStreamQualities(url, tabId) {
     try {
@@ -1084,7 +1068,6 @@ function getVideosForDisplay(tabId) {
 
 export {
     addDetectedVideo,
-    broadcastVideoUpdate,
     sendVideoUpdateToUI,
     getStreamQualities,
     cleanupForTab,
