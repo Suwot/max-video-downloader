@@ -227,7 +227,6 @@ class VideoProcessingPipeline {
         type: 'hls',
         isMaster: hlsResult.isMaster,
         isVariant: hlsResult.isVariant,
-        subtype: hlsResult.isMaster ? 'hls-master' : 'hls-variant',
         variants: hlsResult.variants,
         duration: hlsResult.duration,
         isEncrypted: hlsResult.isEncrypted,

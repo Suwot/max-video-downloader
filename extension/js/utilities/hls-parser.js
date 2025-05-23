@@ -202,7 +202,6 @@ function parseHlsMaster(content, baseUrl, masterUrl) {
                 masterUrl: masterUrl,
                 hasKnownMaster: true,
                 type: 'hls',
-                subtype: 'hls-variant',
                 isVariant: true,
                 metaJS: {
                     bandwidth: currentStreamInf.bandwidth,
@@ -492,7 +491,6 @@ export async function parseHlsManifest(url, headers = null) {
                 masterUrl: null,
                 hasKnownMaster: false,
                 type: 'hls',
-                subtype: 'hls-variant',
                 isVariant: true,
                 metaJS: {
                     duration: duration,

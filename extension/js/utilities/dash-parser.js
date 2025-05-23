@@ -436,7 +436,7 @@ export async function parseDashManifest(url, headers = null) {
                 else if (mediaType === 'audio') {
                     flatRepresentation.audioSamplingRate = parseInt(extractAttribute(representation, 'audioSamplingRate'), 10) || null;
                     flatRepresentation.channels = parseInt(extractAttribute(representation, 'audioChannels') || 
-                                               extractAttribute(representation, 'channels') || '2', 10);
+                                               extractAttribute(representation, 'channels'), 10) || null;
                     
                     // Assign FFmpeg stream index before pushing to array
                     flatRepresentation.ffmpegStreamIndex = `0:a:${audioIndex++}`;
@@ -482,7 +482,6 @@ export async function parseDashManifest(url, headers = null) {
                     masterUrl: url,
                     hasKnownMaster: true,
                     type: 'dash',
-                    subtype: 'dash-variant',
                     isVariant: true,
                     isDASH: true,
                     metaJS: {
