@@ -339,6 +339,11 @@ export async function parseDashManifest(url, headers = null) {
         const audioTracks = [];
         const subtitleTracks = [];
         
+        // Initialize counters for FFmpeg stream indices
+        let videoIndex = 0;
+        let audioIndex = 0;
+        let subtitleIndex = 0;
+        
         // Process each adaptation set
         for (const adaptationSet of adaptationSets) {
             const mediaType = getAdaptationSetType(adaptationSet);
@@ -424,6 +429,8 @@ export async function parseDashManifest(url, headers = null) {
                         flatRepresentation.resolution = `${flatRepresentation.width}x${flatRepresentation.height}`;
                     }
                     
+                    // Assign FFmpeg stream index before pushing to array
+                    flatRepresentation.ffmpegStreamIndex = `0:v:${videoIndex++}`;
                     videoTracks.push(flatRepresentation);
                 } 
                 else if (mediaType === 'audio') {
@@ -431,10 +438,14 @@ export async function parseDashManifest(url, headers = null) {
                     flatRepresentation.channels = parseInt(extractAttribute(representation, 'audioChannels') || 
                                                extractAttribute(representation, 'channels') || '2', 10);
                     
+                    // Assign FFmpeg stream index before pushing to array
+                    flatRepresentation.ffmpegStreamIndex = `0:a:${audioIndex++}`;
                     audioTracks.push(flatRepresentation);
                 } 
                 else if (mediaType === 'subtitles') {
                     // Any subtitle-specific properties can be added here
+                    // Assign FFmpeg stream index before pushing to array
+                    flatRepresentation.ffmpegStreamIndex = `0:s:${subtitleIndex++}`;
                     subtitleTracks.push(flatRepresentation);
                 }
             }
@@ -484,6 +495,7 @@ export async function parseDashManifest(url, headers = null) {
                         fps: videoTrack.frameRate,
                         resolution: videoTrack.resolution,
                         estimatedFileSizeBytes: videoTrack.estimatedFileSizeBytes,
+                        ffmpegStreamIndex: videoTrack.ffmpegStreamIndex, // Add FFmpeg stream index to variants
                         isEncrypted: isEncrypted,
                         encryptionType: encryptionType,
                         isLive: isLive,
