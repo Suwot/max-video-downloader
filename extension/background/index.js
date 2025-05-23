@@ -1,8 +1,3 @@
-/**
- * @ai-guide-component BackgroundScript
- * @ai-guide-description Main extension service worker that manages video detection
- */
-
 // Import services
 import { initStateManager } from './services/state-manager.js';
 import { addDetectedVideo, getAllDetectedVideos, initVideoManager } from './services/video-manager.js';
@@ -183,11 +178,47 @@ function identifyVideoType(url) {
  * Process a video URL from a web request
  * @param {number} tabId - Tab ID where request originated
  * @param {string} url - The URL to process
+ * @param {string} mimeType - Optional MIME type from headers
  */
-function processVideoUrl(tabId, url) {
+function processVideoUrl(tabId, url, mimeType = null) {
   if (tabId < 0 || !url) return;
   
-  // Identify the video type using our helper
+  // If we have a MIME type, check it first - this is now our primary detection for DASH/HLS
+  if (mimeType) {
+    if (mimeType.includes('dash+xml')) {
+      addDetectedVideo(tabId, {
+        url,
+        type: 'dash',
+        source: 'BG_webRequest_mime_dash',
+        timestampDetected: Date.now()
+      });
+      return;
+    }
+    
+    if (mimeType.includes('vnd.apple.mpegurl') || mimeType.includes('x-mpegurl')) {
+      addDetectedVideo(tabId, {
+        url,
+        type: 'hls',
+        source: 'BG_webRequest_mime_hls',
+        timestampDetected: Date.now()
+      });
+      return;
+    }
+    
+    // If it has video/mp4 or similar MIME types, it's a direct video, not a manifest
+    if (mimeType.startsWith('video/')) {
+      addDetectedVideo(tabId, {
+        url,
+        type: 'direct',
+        source: 'BG_webRequest_mime_direct',
+        originalContainer: mimeType.split('/')[1],
+        timestampDetected: Date.now()
+      });
+      return;
+    }
+  }
+  
+  // For URLs without MIME type information, fall back to URL-based detection
   const videoInfo = identifyVideoType(url);
   
   // Skip if not a recognized video type
@@ -237,6 +268,23 @@ initializeServices();
 chrome.webRequest.onBeforeRequest.addListener(
     (details) => processVideoUrl(details.tabId, details.url),
     { urls: ["<all_urls>"] }
+);
+
+// Add header monitoring to detect DASH streams by MIME type
+chrome.webRequest.onHeadersReceived.addListener(
+  function (details) {
+    // Look for content-type header
+    const contentType = details.responseHeaders.find(h =>
+      h.name.toLowerCase() === 'content-type'
+    )?.value;
+
+    // Process if we found a relevant content type
+    if (contentType) {
+      processVideoUrl(details.tabId, details.url, contentType);
+    }
+  },
+  { urls: ["<all_urls>"], types: ["xmlhttprequest", "other", "media"] },
+  ["responseHeaders"]
 );
 
 // Listen for messages from content scripts and popup
