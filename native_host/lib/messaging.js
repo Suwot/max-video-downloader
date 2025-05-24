@@ -24,6 +24,7 @@ class MessagingService {
         this.MIN_RESPONSE_INTERVAL = 250; // Minimum 250ms between progress messages
         this.lastHeartbeatTime = Date.now();
         this.HEARTBEAT_INTERVAL = 15000; // 15 seconds
+        this.pipeClosed = false; // Track if pipe is closed
     }
 
     /**
@@ -35,6 +36,17 @@ class MessagingService {
         
         // Set up stdin data handler
         process.stdin.on('data', (data) => this.handleIncomingData(data));
+        
+        // Handle potential SIGPIPE errors
+        process.stdout.on('error', (err) => {
+            if (err.code === 'EPIPE') {
+                this.pipeClosed = true;
+                logDebug('SIGPIPE: stdout closed unexpectedly');
+                
+                // Exit gracefully after a short delay
+                setTimeout(() => process.exit(0), 250);
+            }
+        });
         
         // Set up heartbeat monitoring
         this.startHeartbeatMonitor();
@@ -112,6 +124,11 @@ class MessagingService {
      * @param {string} requestId Optional ID to include in response for request tracking
      */
     sendResponse(message, requestId = null) {
+        // Prevent writes if pipe is already closed
+        if (this.pipeClosed) {
+            return;
+        }
+        
         try {
             // Add ID to response if this is a reply to a specific request
             const responseWithId = requestId ? { ...message, id: requestId } : message;
@@ -153,6 +170,14 @@ class MessagingService {
                 const combined = Buffer.concat([header, Buffer.from(messageStr)]);
                 process.stdout.write(combined);
             } catch (writeErr) {
+                if (writeErr.code === 'EPIPE') {
+                    this.pipeClosed = true;
+                    logDebug('Pipe closed by Chrome extension. Halting writes.');
+                    
+                    // Exit gracefully after a short delay
+                    setTimeout(() => process.exit(0), 250);
+                    return;
+                }
                 logDebug('Error writing to stdout:', writeErr);
             }
         } catch (err) {
