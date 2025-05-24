@@ -3,7 +3,6 @@
  * @ai-guide-description General utility functions used across the extension
  * @ai-guide-responsibilities
  * - Provides formatting helpers for video metadata
- * - Handles URL parsing and normalization
  * - Manages filename generation and sanitization
  * - Implements time and duration formatting
  * - Provides browser compatibility functions
@@ -125,20 +124,6 @@ export function getBaseUrl(url) {
         urlObj.searchParams.delete('res');
         urlObj.searchParams.delete('resolution');
         return urlObj.toString();
-    } catch {
-        return url;
-    }
-}
-
-/**
- * Normalize URL to compare without query parameters
- * @param {string} url - URL to normalize
- * @returns {string} Normalized URL
- */
-export function normalizeUrl(url) {
-    try {
-        const urlObj = new URL(url);
-        return urlObj.origin + urlObj.pathname;
     } catch {
         return url;
     }

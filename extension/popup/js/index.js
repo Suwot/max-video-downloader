@@ -20,6 +20,7 @@ import { videoStateService } from './services/video-state-service.js';
 import { initializeUI, setScrollPosition, getScrollPosition, showLoadingState, hideLoadingState, showNoVideosMessage } from './ui.js';
 import { renderVideos } from './video-renderer.js';
 import { createLogger } from '../../js/utilities/logger.js';
+import { normalizeUrl } from '../../js/utilities/normalize-url.js';
 
 
 const logger = createLogger('Popup');
@@ -153,20 +154,6 @@ export function getBackgroundPort() {
         }
     }
     return backgroundPort;
-}
-
-/**
- * Normalize URL by removing query params and fragments
- * @param {string} url - The URL to normalize
- * @return {string} - Normalized URL
- */
-function normalizeUrl(url) {
-    try {
-        const urlObj = new URL(url);
-        return `${urlObj.origin}${urlObj.pathname}`;
-    } catch (e) {
-        return url;
-    }
 }
 
 /**
