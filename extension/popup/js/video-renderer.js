@@ -17,7 +17,7 @@
 
 // popup/js/video-renderer.js
 
-import { getFilenameFromUrl, formatDuration, normalizeUrl } from './utilities.js';
+import { getFilenameFromUrl, formatDuration } from './utilities.js';
 import { getAllGroupStates, setGroupState } from './services/group-state-service.js';
 import { videoStateService } from './services/video-state-service.js';
 import { handleDownload } from './download.js';
