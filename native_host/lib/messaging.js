@@ -37,10 +37,12 @@ class MessagingService {
         // Set up stdin data handler
         process.stdin.on('data', (data) => this.handleIncomingData(data));
         
-        // Handle potential SIGPIPE errors
+        // Enhanced error handling for stdout
         process.stdout.on('error', (err) => {
+            this.pipeClosed = true;
+            logDebug(`STDOUT ERROR: ${err.code} - ${err.message}`);
+            
             if (err.code === 'EPIPE') {
-                this.pipeClosed = true;
                 logDebug('SIGPIPE: stdout closed unexpectedly');
                 
                 // Exit gracefully after a short delay
@@ -161,13 +163,14 @@ class MessagingService {
             this.lastResponseTime = now;
             
             const messageStr = JSON.stringify(responseWithId);
+            const messageBuffer = Buffer.from(messageStr, 'utf8'); // Explicitly use UTF-8 encoding
             const header = Buffer.alloc(4);
-            header.writeUInt32LE(messageStr.length, 0);
+            header.writeUInt32LE(messageBuffer.length, 0);
             
             // Wrap in try-catch to handle potential write errors
             try {
                 // Write as a single operation to avoid interleaved writes
-                const combined = Buffer.concat([header, Buffer.from(messageStr)]);
+                const combined = Buffer.concat([header, messageBuffer]);
                 process.stdout.write(combined);
             } catch (writeErr) {
                 if (writeErr.code === 'EPIPE') {

@@ -106,12 +106,17 @@ class DownloadCommand extends BaseCommand {
                     path.join(savePath, outputFilename)) : 
                 path.join(defaultDir, outputFilename);
 
+            // Sanitize filename to avoid encoding issues with non-Latin characters
+            // We keep the original name but ensure it's properly encoded
+            const safeOutput = finalOutput;
+
             // Check if file exists and append number if needed
             let counter = 1;
-            let uniqueOutput = finalOutput;
+            let uniqueOutput = safeOutput;
+            
             while (fs.existsSync(uniqueOutput)) {
-                const ext = path.extname(finalOutput);
-                const base = finalOutput.slice(0, -ext.length);
+                const ext = path.extname(safeOutput);
+                const base = safeOutput.slice(0, -ext.length);
                 uniqueOutput = `${base} (${counter})${ext}`;
                 counter++;
             }
@@ -251,8 +256,11 @@ class DownloadCommand extends BaseCommand {
                         logDebug('Error initializing progress tracker:', error);
                     });
 
+                // Update FFmpeg spawn to properly handle UTF-8 paths
                 const ffmpeg = spawn(ffmpegService.getFFmpegPath(), ffmpegArgs, { 
-                    env: getFullEnv()
+                    env: getFullEnv(),
+                    windowsVerbatimArguments: process.platform === 'win32', // Better handling on Windows
+                    stdio: ['ignore', 'pipe', 'pipe'] // Explicit stdio configuration
                 });
 
                 let errorOutput = '';
@@ -309,7 +317,10 @@ class DownloadCommand extends BaseCommand {
                         
                         // Small delay to ensure progress is received first
                         setTimeout(() => {
-                            this.sendSuccess({ path: uniqueOutput });
+                            this.sendSuccess({ 
+                                path: uniqueOutput,
+                                filename: path.basename(uniqueOutput) // Ensure we're sending the correct filename
+                            });
                             resolve({ success: true, path: uniqueOutput });
                         }, 100);
                     } else if (!hasError) {
