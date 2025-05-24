@@ -187,9 +187,22 @@ function processVideoUrl(tabId, url, metadata = null) {
   
   // If we have a content type from metadata, check it first - this is our primary detection for DASH/HLS
   if (metadata && metadata.contentType) {
-    const contentType = metadata.contentType;
+    const contentType = metadata.contentType.toLowerCase(); // Normalize for consistent matching
     
-    if (contentType.includes('dash+xml')) {
+    // Define MIME type matchers
+    const dashMimePatterns = ['dash+xml', 'vnd.mpeg.dash.mpd'];
+    const hlsMimePatterns = ['mpegurl', 'm3u8', 'm3u'];
+    const possibleDashMimePatterns = ['application/xml', 'text/xml', 'octet-stream'];
+    
+    // Check for DASH manifests (MPD files)
+    const isDash = dashMimePatterns.some(pattern => contentType.includes(pattern));
+    
+    // More restrictive check for misconfigured DASH
+    const isPossibleDash = 
+      possibleDashMimePatterns.some(pattern => contentType.includes(pattern)) &&
+      url.toLowerCase().includes('.mpd');
+    
+    if (isDash || isPossibleDash) {
       addDetectedVideo(tabId, {
         url,
         type: 'dash',
@@ -200,7 +213,14 @@ function processVideoUrl(tabId, url, metadata = null) {
       return;
     }
     
-    if (contentType.includes('vnd.apple.mpegurl') || contentType.includes('x-mpegurl')) {
+    // Check for HLS manifests (M3U8 files)
+    const isHls = hlsMimePatterns.some(pattern => contentType.includes(pattern));
+    
+    // More restrictive check for misconfigured HLS
+    const isPossibleHls = contentType.includes('text/plain') && 
+                          url.toLowerCase().includes('.m3u8');
+    
+    if (isHls || isPossibleHls) {
       addDetectedVideo(tabId, {
         url,
         type: 'hls',
@@ -212,15 +232,21 @@ function processVideoUrl(tabId, url, metadata = null) {
     }
     
     // For direct video/audio files, check MIME type AND apply filters
-    if ((contentType.startsWith('video/') || contentType.startsWith('audio/')) && metadata.contentLength > 102400) {  // 100kb+
+    if (contentType.startsWith('video/') || contentType.startsWith('audio/')) {
+      // First check file size before anything else
+      if (metadata.contentLength < 102400) {  // Skip files smaller than 100kb
+        logger.debug(`Skipping small media file (${metadata.contentLength} bytes): ${url}`);
+        return;
+      }  
+      
       // Skip TS segments typically used in HLS
       if (url.endsWith('.ts') || contentType === 'video/mp2t') {
         return;
       }
       
-      
-      // Skip files with suspicious patterns indicating stream chunks
-      if (url.match(/segment-\d+|chunk-\d+|frag-\d+|seq-\d+|part-\d+/i)) {
+      // Skip suspicious streaming segments
+      const segmentPatterns = [/segment-\d+/, /chunk-\d+/, /frag-\d+/, /seq-\d+/, /part-\d+/];
+      if (segmentPatterns.some(pattern => pattern.test(url))) {
         return;
       }
       
@@ -249,7 +275,9 @@ function processVideoUrl(tabId, url, metadata = null) {
       type: videoInfo.type,
       source: `BG_webRequest_${videoInfo.type}`,
       ...(videoInfo.container ? {originalContainer: videoInfo.container} : {}),
+      ...(metadata ? {metadata: metadata} : {}), // Still pass metadata even in URL-based detection
       timestampDetected: Date.now()
+
     });
   }
 }
