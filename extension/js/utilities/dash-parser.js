@@ -16,6 +16,7 @@ import {
     validateManifestType
 } from './parser-utils.js';
 import { createLogger } from './logger.js';
+import { getVideoByUrl } from '../../background/services/video-manager.js';
 
 // Create a logger for the DASH parser
 const logger = createLogger('DASH Parser');
@@ -253,8 +254,12 @@ export async function parseDashManifest(url, headers = null) {
     try {
         logger.debug(`Validating manifest: ${url}`);
         
+        // Get video metadata from storage if available
+        const videoInfo = await getVideoByUrl(url);
+        const existingMetadata = videoInfo?.metadata;
+        
         // First perform light parsing to validate this is actually a DASH manifest
-        const validation = await validateManifestType(url, headers);
+        const validation = await validateManifestType(url, headers, existingMetadata);
         
         // Preserve the light parsing timestamp
         const timestampLP = validation.timestampLP || Date.now();

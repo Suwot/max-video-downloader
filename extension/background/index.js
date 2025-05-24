@@ -178,41 +178,59 @@ function identifyVideoType(url) {
  * Process a video URL from a web request
  * @param {number} tabId - Tab ID where request originated
  * @param {string} url - The URL to process
- * @param {string} mimeType - Optional MIME type from headers
+ * @param {Object} metadata - Optional metadata from response headers
  */
-function processVideoUrl(tabId, url, mimeType = null) {
+function processVideoUrl(tabId, url, metadata = null) {
   if (tabId < 0 || !url) return;
+
+  logger.debug(`Processing video URL: ${url} with metadata:`, metadata);
   
-  // If we have a MIME type, check it first - this is now our primary detection for DASH/HLS
-  if (mimeType) {
-    if (mimeType.includes('dash+xml')) {
+  // If we have a content type from metadata, check it first - this is our primary detection for DASH/HLS
+  if (metadata && metadata.contentType) {
+    const contentType = metadata.contentType;
+    
+    if (contentType.includes('dash+xml')) {
       addDetectedVideo(tabId, {
         url,
         type: 'dash',
         source: 'BG_webRequest_mime_dash',
-        timestampDetected: Date.now()
+        timestampDetected: metadata.timestampDetected || Date.now(),
+        metadata: metadata
       });
       return;
     }
     
-    if (mimeType.includes('vnd.apple.mpegurl') || mimeType.includes('x-mpegurl')) {
+    if (contentType.includes('vnd.apple.mpegurl') || contentType.includes('x-mpegurl')) {
       addDetectedVideo(tabId, {
         url,
         type: 'hls',
         source: 'BG_webRequest_mime_hls',
-        timestampDetected: Date.now()
+        timestampDetected: metadata.timestampDetected || Date.now(),
+        metadata: metadata
       });
       return;
     }
     
-    // If it has video/mp4 or similar MIME types, it's a direct video, not a manifest
-    if (mimeType.startsWith('video/')) {
+    // For direct video/audio files, check MIME type AND apply filters
+    if ((contentType.startsWith('video/') || contentType.startsWith('audio/')) && metadata.contentLength > 102400) {  // 100kb+
+      // Skip TS segments typically used in HLS
+      if (url.endsWith('.ts') || contentType === 'video/mp2t') {
+        return;
+      }
+      
+      
+      // Skip files with suspicious patterns indicating stream chunks
+      if (url.match(/segment-\d+|chunk-\d+|frag-\d+|seq-\d+|part-\d+/i)) {
+        return;
+      }
+      
       addDetectedVideo(tabId, {
         url,
         type: 'direct',
         source: 'BG_webRequest_mime_direct',
-        originalContainer: mimeType.split('/')[1],
-        timestampDetected: Date.now()
+        originalContainer: contentType.split('/')[1],
+        timestampDetected: metadata.timestampDetected || Date.now(),
+        metadata: metadata
       });
       return;
     }
@@ -230,7 +248,7 @@ function processVideoUrl(tabId, url, mimeType = null) {
       url,
       type: videoInfo.type,
       source: `BG_webRequest_${videoInfo.type}`,
-      ...(videoInfo.container? {originalContainer: videoInfo.container} : {}),
+      ...(videoInfo.container ? {originalContainer: videoInfo.container} : {}),
       timestampDetected: Date.now()
     });
   }
@@ -261,27 +279,92 @@ startDebugLogger();
 // Initialize all services
 initializeServices();
 
-// No need for port connection listener here anymore
-// Each service now handles its own port connections
-
-// Listen for web requests to catch video-related content
-chrome.webRequest.onBeforeRequest.addListener(
-    (details) => processVideoUrl(details.tabId, details.url),
-    { urls: ["<all_urls>"] }
-);
-
-// Add header monitoring to detect DASH streams by MIME type
+// Add header monitoring to detect all types of relevant requests
 chrome.webRequest.onHeadersReceived.addListener(
   function (details) {
-    // Look for content-type header
-    const contentType = details.responseHeaders.find(h =>
-      h.name.toLowerCase() === 'content-type'
-    )?.value;
-
-    // Process if we found a relevant content type
-    if (contentType) {
-      processVideoUrl(details.tabId, details.url, contentType);
+    // Extract all relevant headers into a metadata object
+    const metadata = {
+      contentType: null,
+      contentLength: null,
+      contentEncoding: null,
+      lastModified: null,
+      etag: null,
+      contentDisposition: null,
+      filename: null,
+      supportsRanges: false,
+      timestampDetected: Date.now()
+    };
+    
+    // Process important headers
+    for (const header of details.responseHeaders) {
+      const headerName = header.name.toLowerCase();
+      
+      switch(headerName) {
+        case 'content-type':
+          metadata.contentType = header.value;
+          break;
+        case 'content-length':
+          metadata.contentLength = parseInt(header.value, 10);
+          break;
+        case 'content-encoding':
+          metadata.contentEncoding = header.value;
+          break;
+        case 'last-modified':
+          metadata.lastModified = header.value;
+          break;
+        case 'etag':
+          metadata.etag = header.value;
+          break;
+        case 'content-disposition':
+          metadata.contentDisposition = header.value;
+          // Extract filename from Content-Disposition if present
+          const filenameMatch = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/.exec(header.value);
+          if (filenameMatch && filenameMatch[1]) {
+            let filename = filenameMatch[1].replace(/['"]/g, '').trim();
+            // Decode URL encoded characters
+            try {
+              filename = decodeURIComponent(filename);
+            } catch (e) {
+              // If decoding fails, use the original value
+            }
+            metadata.filename = filename;
+          }
+          break;
+        case 'accept-ranges':
+          metadata.supportsRanges = header.value === 'bytes';
+          break;
+        case 'access-control-allow-origin':
+          metadata.cors = header.value;
+          break;
+        case 'x-content-type-options':
+          metadata.xContentTypeOptions = header.value;
+          break;
+      }
     }
+
+    // If no filename was found in Content-Disposition, try to extract from URL
+    if (!metadata.filename) {
+      try {
+        const urlObj = new URL(details.url);
+        const pathParts = urlObj.pathname.split('/');
+        const lastPart = pathParts[pathParts.length - 1];
+        
+        // Only use the URL part if it looks like a filename with extension
+        if (lastPart && /\.\w{2,5}$/i.test(lastPart)) {
+          // Decode URL encoded characters
+          try {
+            metadata.filename = decodeURIComponent(lastPart);
+          } catch (e) {
+            metadata.filename = lastPart;
+          }
+        }
+      } catch (e) {
+        // URL parsing failed, no filename will be set
+      }
+    }
+
+    // Call the unified processVideoUrl function with the metadata
+    processVideoUrl(details.tabId, details.url, metadata);
   },
   { urls: ["<all_urls>"], types: ["xmlhttprequest", "other", "media"] },
   ["responseHeaders"]

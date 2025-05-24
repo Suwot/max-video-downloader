@@ -194,7 +194,7 @@ export async function fetchFullContent(url, headers = null, timeoutMs = 10000) {
  * @param {Object} [headers] - Optional request headers
  * @returns {Promise<Object>} - Validation result with additional metadata
  */
-export async function validateManifestType(url, headers = null) {
+export async function validateManifestType(url, headers = null, existingMetadata = null) {
     const logger = createLogger('Manifest Validator');
     try {
         logger.debug(`Checking manifest type for ${url}`);
@@ -203,44 +203,54 @@ export async function validateManifestType(url, headers = null) {
         let contentLength = null;
         let supportsRanges = false;
         let fullContent = null;
+        
+        // Use existing metadata if provided to avoid redundant HEAD request
+        if (existingMetadata) {
+            contentLength = existingMetadata.contentLength || null;
+            supportsRanges = existingMetadata.supportsRanges || false;
+            logger.debug(`Using existing metadata for manifest validation: content-length=${contentLength}, supports-ranges=${supportsRanges}`);
+        }
+        
         let validationResult = {
             isValid: false,
             manifestType: 'unknown',
             timestampLP: Date.now(),
             status: 'unknown',
-            contentLength: null,
-            supportsRanges: false,
+            contentLength: contentLength,
+            supportsRanges: supportsRanges,
             content: null
         };
         
-        // First do a HEAD request to check content metadata
-        try {
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 3000);
-            
-            const headResponse = await fetch(url, {
-                method: 'HEAD',
-                signal: controller.signal,
-                headers: reqHeaders
-            });
-            
-            clearTimeout(timeoutId);
-            
-            if (headResponse.ok) {
-                contentLength = parseInt(headResponse.headers.get('content-length') || '0', 10);
-                supportsRanges = headResponse.headers.get('accept-ranges') === 'bytes';
+        // Only do HEAD request if we don't have metadata
+        if (!existingMetadata) {
+            try {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 3000);
                 
-                validationResult.contentLength = contentLength;
-                validationResult.supportsRanges = supportsRanges;
+                const headResponse = await fetch(url, {
+                    method: 'HEAD',
+                    signal: controller.signal,
+                    headers: reqHeaders
+                });
                 
-                logger.debug(`Retrieved metadata: content-length=${contentLength}, supports-ranges=${supportsRanges}`);
+                clearTimeout(timeoutId);
+                
+                if (headResponse.ok) {
+                    contentLength = parseInt(headResponse.headers.get('content-length') || '0', 10);
+                    supportsRanges = headResponse.headers.get('accept-ranges') === 'bytes';
+                    
+                    validationResult.contentLength = contentLength;
+                    validationResult.supportsRanges = supportsRanges;
+                    
+                    logger.debug(`Retrieved metadata: content-length=${contentLength}, supports-ranges=${supportsRanges}`);
+                }
+            } catch (error) {
+                // Ignore HEAD request failures, proceed to content inspection
+                logger.debug(`HEAD request failed, using content inspection: ${error.message}`);
+                validationResult.status = 'head-request-failed';
             }
-        } catch (error) {
-            // Ignore HEAD request failures, proceed to content inspection
-            logger.debug(`HEAD request failed, using content inspection: ${error.message}`);
-            validationResult.status = 'head-request-failed';
         }
-        
+
         // Download strategies for content inspection
         // Download completely if small file, size unknown, or no range support
         if (!contentLength || contentLength <= 40 * 1024 || !supportsRanges) {

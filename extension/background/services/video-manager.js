@@ -631,6 +631,29 @@ function getVideo(tabId, normalizedUrl) {
 }
 
 /**
+ * Get a video by URL from any tab
+ * @param {string} url - The URL of the video to find
+ * @returns {Object|null} Video object or null if not found
+ */
+function getVideoByUrl(url) {
+    try {
+        const normalizedUrl = normalizeUrl(url);
+        
+        // Search through all tabs
+        for (const [tabId, urlMap] of allDetectedVideos.entries()) {
+            if (urlMap instanceof Map && urlMap.has(normalizedUrl)) {
+                return urlMap.get(normalizedUrl);
+            }
+        }
+        
+        return null;
+    } catch (err) {
+        logger.error(`Error in getVideoByUrl: ${err.message}`);
+        return null;
+    }
+}
+
+/**
  * Single entry point for all video updates with proper logging
  * @param {string} functionName - Function making the update
  * @param {number} tabId - Tab ID
@@ -999,6 +1022,8 @@ function getAllDetectedVideos(tabId) {
  * @returns {boolean} - True if this is a new video, false if it's a duplicate
  */
 function addDetectedVideo(tabId, videoInfo) {
+
+    logger.debug(`Received video for Tab ${tabId}, with this info:`, videoInfo);
     // Normalize URL for deduplication
     const normalizedUrl = normalizeUrl(videoInfo.url);
     
@@ -1012,7 +1037,6 @@ function addDetectedVideo(tabId, videoInfo) {
     
     // Log source of video for debugging
     const sourceOfVideo = videoInfo.source || 'unknown';
-    logger.debug(`Video detection from source: ${sourceOfVideo} for URL: ${videoInfo.url} with timestamp: ${videoInfo.timestampDetected}`);
     
     // Skip if already in this tab's collection
     if (tabMap.has(normalizedUrl)) {
@@ -1074,5 +1098,6 @@ export {
     getAllDetectedVideos,
     getVideosForDisplay,
     clearVideoCache,
-    initVideoManager
+    initVideoManager,
+    getVideoByUrl
 };

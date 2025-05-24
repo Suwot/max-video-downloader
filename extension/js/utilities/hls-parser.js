@@ -15,6 +15,7 @@ import {
 } from './parser-utils.js';
 import { createLogger } from './logger.js';
 import { getSharedHeaders } from './headers-utils.js';
+import { getVideoByUrl } from '../../background/services/video-manager.js';
 
 // Create a logger for the HLS parser
 const logger = createLogger('HLS Parser');
@@ -327,8 +328,12 @@ export async function parseHlsManifest(url, headers = null) {
     try {
         logger.debug(`Validating manifest: ${url}`);
         
+        // Get video metadata from storage if available
+        const videoInfo = await getVideoByUrl(url);
+        const existingMetadata = videoInfo?.metadata;
+        
         // First perform universal validation to confirm this is an HLS manifest
-        const validation = await validateManifestType(url, headers);
+        const validation = await validateManifestType(url, headers, existingMetadata);
         
         // Preserve the light parsing timestamp
         const timestampLP = validation.timestampLP || Date.now();
