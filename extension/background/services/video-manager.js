@@ -925,7 +925,7 @@ function getAllDetectedVideos(tabId) {
  * This is the first step in the video processing pipeline
  * @param {number} tabId - The tab ID where the video was detected
  * @param {Object} videoInfo - Information about the detected video
- * @returns {boolean} - True if this is a new video, false if it's a duplicate
+ * @returns {boolean|string} - True if this is a new video, 'updated' if an existing video was updated, false otherwise
  */
 function addDetectedVideo(tabId, videoInfo) {
 
@@ -955,8 +955,49 @@ function addDetectedVideo(tabId, videoInfo) {
     // Log source of video for debugging
     const sourceOfVideo = videoInfo.source || 'unknown';
     
-    // Skip if already in this tab's collection
+    // Check if this is a duplicate
     if (tabMap.has(normalizedUrl)) {
+        // Special handling for direct video types to merge metadata
+        if (videoInfo.type === 'direct') {
+            const existingVideo = tabMap.get(normalizedUrl);
+            logger.debug(`Duplicate direct video found from ${sourceOfVideo}. Checking for metadata updates...`);
+            
+            // Track if we made any updates
+            let updatesApplied = false;
+            const updates = {};
+            
+            // Merge metadata if present in the new detection
+            if (videoInfo.metadata && Object.keys(videoInfo.metadata).length > 0) {
+                logger.debug(`Updating metadata for existing direct video: ${normalizedUrl}`);
+                updates.metadata = {
+                    ...(existingVideo.metadata || {}),
+                    ...videoInfo.metadata
+                };
+                updatesApplied = true;
+            }
+            
+            // Update originalContainer if it's set in the new detection but missing in the existing one
+            if (videoInfo.originalContainer && 
+                (!existingVideo.originalContainer || existingVideo.originalContainer === 'null')) {
+                logger.debug(`Updating originalContainer for existing direct video: ${normalizedUrl}`);
+                updates.originalContainer = videoInfo.originalContainer;
+                updatesApplied = true;
+            }
+            
+            // If we have updates to apply, update the video
+            if (updatesApplied) {
+                const updatedVideo = updateVideo('addDetectedVideo-update', tabId, normalizedUrl, updates);
+                
+                // Notify UI of the update
+                if (updatedVideo) {
+                    sendVideoUpdateToUI(tabId, normalizedUrl, updatedVideo);
+                }
+                
+                return 'updated';
+            }
+        }
+        
+        // For non-direct videos or when no updates needed
         const existingVideo = tabMap.get(normalizedUrl);
         logger.debug(`Duplicate video detection from ${sourceOfVideo}. URL: ${videoInfo.url}, Existing timestamp: ${existingVideo.timestampDetected}, New timestamp: ${videoInfo.timestampDetected}`);
         return false;
