@@ -486,21 +486,7 @@ function createVideoActions(video) {
             foundFromQueryParam: video.foundFromQueryParam
         };
         
-        if (video.type === 'hls' || video.type === 'dash') {
-            // Only fetch stream qualities if we don't have variants
-            if (!video.variants || video.variants.length === 0) {
-                const qualities = await videoStateService.fetchStreamQualities(selectedUrl);
-                if (qualities && qualities.length > 0) {
-                    const selectedQuality = await showQualityDialog(qualities);
-                    if (!selectedQuality) return; // User canceled
-                    handleDownload(downloadBtn, selectedQuality.url || selectedUrl, video.type, videoData);
-                    return;
-                }
-            }
-            handleDownload(downloadBtn, selectedUrl, video.type, videoData);
-        } else {
-            handleDownload(downloadBtn, selectedUrl, video.type, videoData);
-        }
+        handleDownload(downloadBtn, selectedUrl, video.type, videoData);
     });
     
     actionsDiv.appendChild(downloadBtn);

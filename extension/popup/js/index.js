@@ -272,15 +272,6 @@ function handlePortMessage(message) {
         return;
     }
 
-    // Handle ffprobe data responses
-    if (message.type === 'ffprobeDataResponse') {
-        logger.debug('Received ffprobeData data via port');
-        document.dispatchEvent(new CustomEvent('ffprobe-data-response', { 
-            detail: message 
-        }));
-        return;
-    }
-
     // Handle unified video updates - new handler for single video updates
     if (message.type === 'videoUpdated') {
         logger.debug('Received unified video update:', message.url);

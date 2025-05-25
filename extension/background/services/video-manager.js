@@ -821,36 +821,6 @@ function sendVideoUpdateToUI(tabId, singleVideoUrl = null, singleVideoObj = null
     return false;
 }
 
-// Get stream qualities
-async function getFFprobeData(url, tabId, mediaType = 'direct', representationId = null) {
-    try {
-        logger.info('🎥 Requesting media info from native host for:', url);
-        
-        // Get headers, using basic headers as fallback if tabId is not provided
-        let headers;
-        if (tabId) {
-            headers = await getSharedHeaders(tabId, url);
-        } else {
-            headers = await getSharedHeaders(null, url);
-        }
-        
-        logger.debug(`Using headers for stream qualities: ${JSON.stringify(headers)}`);
-        
-        const response = await nativeHostService.sendMessage({
-            type: 'getQualities',
-            url: url,
-            mediaType: mediaType,
-            representationId: representationId,
-            headers: headers
-        });
-        
-        return response;
-    } catch (error) {
-        logger.error('Error getting media info:', error);
-        return { error: error.message };
-    }
-}
-
 // Clean up for tab
 function cleanupForTab(tabId) {
     logger.debug(`Tab removed: ${tabId}`);
@@ -1028,7 +998,6 @@ function getVideosForDisplay(tabId) {
 export {
     addDetectedVideo,
     sendVideoUpdateToUI,
-    getFFprobeData,
     cleanupForTab,
     normalizeUrl,
     getAllDetectedVideos,

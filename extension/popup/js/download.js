@@ -294,21 +294,6 @@ export async function startDownload(video) {
     try {
         let downloadUrl = video.url;
         let quality = null;
-
-        // Get available qualities for HLS/DASH streams
-        if (video.type === 'hls' || video.type === 'dash') {
-            const qualities = await videoStateService.fetchStreamQualities(video.url);
-            if (qualities && qualities.length > 0) {
-                // Show quality selection dialog
-                quality = await showQualityDialog(qualities);
-                if (!quality) {
-                    // User canceled quality selection
-                    return null;
-                }
-                downloadUrl = quality.url || video.url;
-            }
-        }
-
         // Create port for progress updates
         const port = chrome.runtime.connect({ name: 'download_progress' });
         
