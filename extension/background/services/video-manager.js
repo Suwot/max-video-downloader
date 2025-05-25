@@ -240,16 +240,13 @@ class VideoProcessingPipeline {
       const updatedVideo = updateVideo('processHlsVideo', tabId, normalizedUrl, hlsUpdates);
       
       // Track variant-master relationships if this is a master playlist
-      if (hlsResult.isMaster && hlsResult.variants && hlsResult.variants.length > 0) {
+      if (hlsResult.isMaster && hlsResult.variants?.length > 0) {
         handleVariantMasterRelationships(tabId, hlsResult.variants, normalizedUrl);
         
-        // Process variants for detailed metadata and preview
-        await this.processHlsVariants(tabId, normalizedUrl, hlsResult.variants);
-      } 
-    //   else if (hlsResult.isVariant) {
-    //     // For standalone variants, generate preview directly
-    //     await this.generatePreview(tabId, normalizedUrl, headers);
-    //   }
+        // Generate preview for the first variant only
+        await this.generateVariantPreview(tabId, normalizedUrl, hlsResult.variants[0], 0, headers);
+
+      }
       
       // Notify UI of complete update using unified approach
       sendVideoUpdateToUI(tabId, normalizedUrl, { ...(updatedVideo || {}), _sendFullList: true });
@@ -348,69 +345,6 @@ class VideoProcessingPipeline {
     
     // Send update with unified approach
     sendVideoUpdateToUI(tabId, normalizedUrl, { _sendFullList: true });
-  }
-  
-  /**
-   * Process HLS variants (get FFprobe metadata and generate preview for best quality)
-   * @param {number} tabId - Tab ID
-   * @param {string} masterUrl - Normalized master URL
-   * @param {Array} variants - Array of variant objects
-   */
-  async processHlsVariants(tabId, masterUrl, variants) {
-    logger.debug(`Processing ${variants.length} HLS variants`);
-    
-    if (variants.length === 0) return;
-    
-    // Process best quality variant first for preview
-    try {
-      const bestVariant = variants[0];
-      const headers = await getSharedHeaders(tabId, bestVariant.url);
-      
-      // Get FFprobe metadata and generate preview in parallel
-      await Promise.all([
-        this.getVariantFFprobeMetadata(tabId, masterUrl, bestVariant, 0, headers),
-        this.generateVariantPreview(tabId, masterUrl, bestVariant, 0, headers)
-      ]);
-      
-      // Process remaining variants for metadata only (skip preview)
-      for (let i = 1; i < variants.length; i++) {
-        const variant = variants[i];
-        const variantHeaders = await getSharedHeaders(tabId, variant.url);
-        await this.getVariantFFprobeMetadata(tabId, masterUrl, variant, i, variantHeaders);
-      }
-    } catch (error) {
-      logger.error(`Error processing HLS variants: ${error.message}`);
-    }
-  }
-  
-  /**
-   * Get FFprobe metadata for a variant
-   * @param {number} tabId - Tab ID
-   * @param {string} masterUrl - Normalized master URL
-   * @param {Object} variant - Variant object
-   * @param {number} index - Index of variant in master's variants array
-   * @param {Object} headers - Request headers
-   */
-  async getVariantFFprobeMetadata(tabId, masterUrl, variant, index, headers) {
-    try {
-      logger.debug(`Getting FFprobe metadata for variant[${index}]: ${variant.url}`);
-      
-      const ffprobeData = await rateLimiter.enqueue(async () => {
-        const response = await nativeHostService.sendMessage({
-          type: 'getQualities',
-          url: variant.url,
-          mediaType: 'hls',
-          headers: headers || {}
-        });
-        return response?.streamInfo || null;
-      });
-      
-      if (ffprobeData) {
-        updateVariantWithFFprobeData(tabId, masterUrl, index, ffprobeData);
-      }
-    } catch (error) {
-      logger.error(`Error getting FFprobe data for variant: ${error.message}`);
-    }
   }
   
   /**
@@ -729,7 +663,7 @@ function handleVariantMasterRelationships(tabId, variants, masterUrl) {
 }
 
 /**
- * Update variant with FFprobe data
+ * Update variant with FFprobe data – for manual triggering from UI
  * @param {number} tabId - Tab ID
  * @param {string} masterUrl - Normalized master URL
  * @param {number} variantIndex - Index of variant in master's variants array
