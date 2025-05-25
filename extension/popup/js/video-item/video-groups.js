@@ -1,7 +1,7 @@
 // extension/popup/js/video-item/video-groups.js
 
 import { getAllGroupStates, setGroupState } from '../services/group-state-service.js';
-import { createVideoElement } from './video-renderer.js';
+import { createVideoElement } from './video-item.js';
 
 /**
  * Group videos by type for display
