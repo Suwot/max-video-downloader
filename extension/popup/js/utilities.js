@@ -68,45 +68,32 @@ export function formatDuration(seconds) {
 }
 
 /**
- * Extract filename from URL
+ * Extract filename (without extension) from URL
  * @param {string} url - URL to extract filename from
- * @returns {string} Extracted filename
+ * @returns {string} Extracted filename without extension
  */
 export function getFilenameFromUrl(url) {
     try {
         if (url.startsWith('blob:')) {
             return 'blob_video';
         }
-        
+
         const urlObj = new URL(url);
         const pathname = urlObj.pathname;
-        const filename = pathname.split('/').pop();
-        
+        let filename = pathname.split('/').pop();
+
         // Remove query parameters and fragments
-        const cleanFilename = filename.split(/[?#]/)[0];
-        
-        // Extract extension from URL for better format detection
-        const urlExtMatch = url.match(/\.([^./?#]+)($|\?|#)/i);
-        const urlExt = urlExtMatch ? urlExtMatch[1].toLowerCase() : null;
-        
-        // Use the clean filename if it has a video extension
-        if (/\.(mp4|webm|mkv|mov|m3u8|mpd|ts)$/i.test(cleanFilename)) {
-            return cleanFilename;
+        filename = filename.split(/[?#]/)[0];
+
+        // Remove extension if present
+        const dotIndex = filename.lastIndexOf('.');
+        if (dotIndex > 0) {
+            filename = filename.substring(0, dotIndex);
         }
-        
-        // If URL has a WebM extension, preserve it for container compatibility
-        if (urlExt && urlExt === 'webm') {
-            return cleanFilename + '.webm';
-        }
-        
-        // If no video extension, add .mp4 as default
-        if (!/\.\w+$/.test(cleanFilename)) {
-            return cleanFilename + '.mp4';
-        }
-        
-        return cleanFilename;
+
+        return filename || 'video';
     } catch (e) {
-        return 'video.mp4';
+        return 'video';
     }
 }
 

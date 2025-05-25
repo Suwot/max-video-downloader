@@ -7,6 +7,7 @@
 import nativeHostService from '../../js/native-host-service.js';
 import { getSharedHeaders, buildRequestHeaders } from '../../js/utilities/headers-utils.js';
 import { createLogger } from '../../js/utilities/logger.js';
+import { getFilenameFromUrl } from '../../popup/js/utilities.js';
 
 // Track downloads by ID for better connection persistence
 const downloads = new Map(); // key = downloadId, value = { url, progress, status, startTime, etc. }
@@ -45,88 +46,6 @@ export async function initDownloadManager() {
 // Generate a unique download ID
 function generateDownloadId() {
   return `download_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
-}
-
-// Get filename from URL and video metadata
-function getFilenameFromUrl(url, request = {}) {
-    // Use the title property if available, sanitized for filename use
-    if (request.title) {
-        // Sanitize title for use as filename
-        let safeTitle = request.title
-            .replace(/[\\/:*?"<>|]/g, '_')  // Remove invalid filename characters
-            .replace(/\s+/g, ' ')           // Normalize whitespace
-            .trim();
-            
-        // Truncate if too long
-        if (safeTitle.length > 100) {
-            safeTitle = safeTitle.substring(0, 97) + '...';
-        }
-        
-        // Add container extension from originalContainer or fallback to mp4
-        const extension = request.originalContainer || 'mp4';
-        return `${safeTitle}.${extension}`;
-    }
-    
-    // If no title or blob URL, use URL-based approach
-    if (url.startsWith('blob:')) {
-        return 'video_blob.mp4';
-    }
-    
-    try {
-        const urlObj = new URL(url);
-        const pathname = urlObj.pathname;
-        let filename = pathname.split('/').pop();
-        
-        // If original URL has 'file' parameter with extension, use that
-        if (url.includes('file=')) {
-            const fileMatch = url.match(/file=(?:[^&]+\/)?([^&/]+\.[^&./]+)/i);
-            if (fileMatch && fileMatch[1]) {
-                return decodeURIComponent(fileMatch[1]).replace(/[\\/:*?"<>|]/g, '_');
-            }
-        }
-        
-        // Check if the filename appears to be a script or contains query params
-        if (filename.endsWith('.php') || filename.endsWith('.aspx') || 
-            !filename.includes('.')) {
-            
-            // If we have originalContainer info, use it
-            if (request.originalContainer) {
-                return `video.${request.originalContainer}`;
-            }
-            
-            // Default to MP4 as fallback
-            filename = 'video.mp4';
-        } else {
-            // Clean up filename (remove query params)
-            filename = filename.replace(/[?#].*$/, '');
-            
-            // Make sure we preserve the original file extension if it exists
-            const fileExtMatch = url.match(/\.([^./?#]+)($|\?|#)/i);
-            if (fileExtMatch) {
-                const ext = fileExtMatch[1].toLowerCase();
-                
-                // If URL has extension but filename doesn't, add it
-                if (!filename.includes('.')) {
-                    filename += `.${ext}`;
-                } 
-                // If URL extension is a common video format, prioritize it
-                else if (['mp4', 'webm', 'mov', 'mkv'].includes(ext) && 
-                        !filename.toLowerCase().endsWith(`.${ext}`)) {
-                    const baseFilename = filename.replace(/\.[^.]+$/, '');
-                    filename = `${baseFilename}.${ext}`;
-                }
-            }
-        }
-        
-        if (filename && filename.length > 0) {
-            return filename;
-        }
-    } catch (e) {
-        logger.error('Error parsing filename:', e);
-    }
-    
-    // Ultimate fallback with originalContainer or default mp4
-    return `video.${request.originalContainer || 'mp4'}`;
 }
 
 function handleDownloadSuccess(response, notificationId) {
@@ -170,10 +89,7 @@ function startDownload(request, port) {
     const downloadId = generateDownloadId();
     
     // Get filename with proper title and container info
-    const filename = request.filename || getFilenameFromUrl(request.url, {
-        title: request.title,
-        originalContainer: request.originalContainer
-    });
+    const filename = request.filename || getFilenameFromUrl(request.url);
     
     // Show initial notification
     const notificationId = `download-${Date.now()}`;

@@ -104,7 +104,7 @@ export function createVideoElement(video) {
     
     const title = document.createElement('h3');
     title.className = 'video-title';
-    title.textContent = video.title || getFilenameFromUrl(video.url);
+    title.textContent = video.title || video.metadata?.filename || getFilenameFromUrl(video.url);
     
     // Add extracted badge for videos found in query parameters
     if (video.foundFromQueryParam) {

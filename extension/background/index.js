@@ -391,11 +391,18 @@ chrome.webRequest.onHeadersReceived.addListener(
         // Only use the URL part if it looks like a filename with extension
         if (lastPart && /\.\w{2,5}$/i.test(lastPart)) {
           // Decode URL encoded characters
+          let filename;
           try {
-            metadata.filename = decodeURIComponent(lastPart);
+            filename = decodeURIComponent(lastPart);
           } catch (e) {
-            metadata.filename = lastPart;
+            filename = lastPart;
           }
+          // Remove extension if present
+          const dotIndex = filename.lastIndexOf('.');
+          if (dotIndex > 0) {
+            filename = filename.substring(0, dotIndex);
+          }
+          metadata.filename = filename;
         }
       } catch (e) {
         // URL parsing failed, no filename will be set

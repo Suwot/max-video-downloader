@@ -157,7 +157,7 @@ async function registerNewDownload(url, type, button, videoData = {}) {
             url: url,
             manifestUrl: url, // Pass the manifest URL for better segment tracking
             tabId: await getCurrentTabId(), // Pass tabId for proper tracking
-            title: videoData.title || null, // Pass video title for better filenames
+            title: videoData.title || videoData.metadata?.title || null, // Pass video title for better filenames
             originalContainer: videoData.originalContainer || null, // Pass container format
             originalUrl: videoData.originalUrl || null, // Pass original URL if embedded
             foundFromQueryParam: videoData.foundFromQueryParam || false // Indicate if extracted

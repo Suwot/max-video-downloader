@@ -19,6 +19,7 @@ import { parseDashManifest } from '../../js/utilities/dash-parser.js';
 import { getSharedHeaders, clearHeaderCache, clearAllHeaderCaches } from '../../js/utilities/headers-utils.js';
 import { createLogger } from '../../js/utilities/logger.js';
 import { getPreview, storePreview } from '../../js/utilities/preview-cache.js';
+import { getFilenameFromUrl } from '../../popup/js/utilities.js';
 
 // Central store for all detected videos, keyed by tab ID, then normalized URL
 // Map<tabId, Map<normalizedUrl, videoInfo>>
@@ -701,25 +702,6 @@ function updateVariantWithFFprobeData(tabId, masterUrl, variantIndex, ffprobeDat
     }
 }
 
-// Extract filename from URL
-function getFilenameFromUrl(url) {
-    if (url.startsWith('blob:')) {
-        return 'video_blob';
-    }
-    
-    try {
-        const urlObj = new URL(url);
-        const pathname = urlObj.pathname;
-        const filename = pathname.split('/').pop();
-        
-        if (filename && filename.length > 0) {
-            return filename;
-        }
-    } catch {}
-    
-    return 'video';
-}
-
 /**
  * Prepare video object for transmission
  * Creates a clean deep copy to ensure all properties are transmitted
@@ -1039,7 +1021,7 @@ function getVideosForDisplay(tabId) {
         .filter(video => !(video.isVariant && video.hasKnownMaster))
         .map(video => ({
             ...video,
-            title: video.title || getFilenameFromUrl(video.url),
+            title: video.title || video.metadata?.title || getFilenameFromUrl(video.url),
             timestampLastProcessed: now,
             ...(video.poster ? { poster: video.poster } : {})
         }))

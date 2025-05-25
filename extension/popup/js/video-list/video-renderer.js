@@ -15,14 +15,6 @@
  * - Provides specialized UI for different video types and formats
  */
 
-// popup/js/video-renderer.js
-
-import { getFilenameFromUrl, formatDuration } from '../utilities.js';
-import { getAllGroupStates, setGroupState } from '../services/group-state-service.js';
-import { videoStateService } from '../services/video-state-service.js';
-import { handleDownload } from '../download.js';
-import { showQualityDialog } from '../ui.js';
-import { sendPortMessage } from '../index.js';
 import { groupVideosByType, createTypeGroup } from './video-groups.js';
 
 /**

@@ -98,7 +98,7 @@ function scanAllVideos() {
       const mimeType = source.getAttribute('type');
       detectVideo(src, mimeType || null, {
         source: 'CS_initial_scan',
-        title: document.title || 'Video'
+        title: document.title || null
       });
     }
   });
@@ -375,8 +375,7 @@ function getVideoTitle(videoElement) {
   return videoElement.getAttribute('aria-label') || 
          videoElement.getAttribute('title') || 
          findNearbyHeading(videoElement) ||
-         document.title || 
-         'Video';
+         document.title || null;
 }
 
 // Find nearby heading for video title
