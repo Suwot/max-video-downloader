@@ -4,7 +4,6 @@ import { addDetectedVideo, getAllDetectedVideos, initVideoManager } from './serv
 import { initTabTracking } from './services/tab-tracker.js';
 import { initDownloadManager } from './services/download-manager.js';
 import { initUICommunication } from './services/ui-communication.js';
-import { isValidVideoUrl } from '../js/utilities/video-validator.js';
 import { createLogger } from '../js/utilities/logger.js';
 import { clearCache, getCacheStats } from '../js/utilities/preview-cache.js';
 
@@ -108,13 +107,26 @@ function startDebugLogger() {
  * @returns {Object|null} Video type info or null if not video
  */
 function identifyVideoType(url) {
-  // First check if it's a valid video URL using the validator
-  if (!isValidVideoUrl(url)) {
-    return null;
-  }
+  if (!url) return null;
   
   try {
     const urlObj = new URL(url);
+
+    // Check for image extensions
+    if (/\.(gif|png|jpg|jpeg|webp|bmp|svg)(\?|$)/i.test(urlObj.pathname)) {
+      return null;
+    }
+    
+    // Known analytics endpoints
+    const trackingPatterns = [
+      /\/ping/i, /\/track/i, /\/pixel/i, /\/analytics/i, 
+      /\/telemetry/i, /\/stats/i, /\/metrics/i
+    ];
+    
+    if (trackingPatterns.some(pattern => pattern.test(urlObj.pathname))) {
+      return null;
+    }
+    
     const path = urlObj.pathname.toLowerCase();
     
     // Check for HLS streams (.m3u8)
@@ -152,7 +164,6 @@ function identifyVideoType(url) {
     
     // Not a recognized video format
     return null;
-    
   } catch (err) {
     // Simple fallback if URL parsing fails
     if (url.includes('.m3u8')) {
