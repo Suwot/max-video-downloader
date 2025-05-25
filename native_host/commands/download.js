@@ -50,52 +50,37 @@ class DownloadCommand extends BaseCommand {
             // Determine video type from URL
             const videoType = ffmpegService.getVideoTypeFromUrl(url);
             
-            // Ensure proper file extension
-            let outputFilename = filename || 'video.mp4';
-            
-            // Clean up filename:
-            // 1. Remove query params
-            outputFilename = outputFilename.replace(/[?#].*$/, '');
-            
-            // 2. Replace streaming manifest extensions with MP4
-            if (videoType === 'hls' || videoType === 'dash') {
-                outputFilename = outputFilename.replace(/\.(m3u8|mpd|ts)$/, '.mp4');
-            }
-            
-            // 3. Handle direct URL file extensions
-            if (videoType === 'direct') {
-                // Extract extension from URL for better format detection
-                const urlExtMatch = url.match(/\.([^./?#]+)($|\?|#)/i);
-                const urlExt = urlExtMatch ? `.${urlExtMatch[1].toLowerCase()}` : null;
-                
-                // Check if filename already has an extension
-                if (!/\.(mp4|webm|mov|avi|mkv|flv)$/i.test(outputFilename)) {
-                    // No extension - use URL extension or add .mp4 as default
-                    if (urlExt && /\.(mp4|webm|mov)$/i.test(urlExt)) {
-                        // Use the URL extension if it's a modern format
-                        outputFilename += urlExt;
-                    } else {
-                        // Fallback to mp4 as default
-                        outputFilename += '.mp4';
-                    }
-                } else {
-                    // For legacy formats, change extension to .mp4 for remuxing
-                    if (/\.(avi|mkv|flv)$/i.test(outputFilename)) {
-                        const baseName = outputFilename.replace(/\.(avi|mkv|flv)$/i, '');
-                        outputFilename = `${baseName}.mp4`;
-                    }
-                    // For WebM files, preserve extension if URL has .webm too
-                    else if (/\.webm$/i.test(outputFilename) && urlExt && !/\.webm$/i.test(urlExt)) {
-                        // Non-WebM source being saved as WebM - not appropriate, use MP4 instead
-                        const baseName = outputFilename.replace(/\.webm$/i, '');
-                        outputFilename = `${baseName}.mp4`;
-                    }
-                    // .mov and .webm (with WebM source) are preserved as is
+            // --- Unified output container/extension logic ---
+            // Determine preferred container: user > original > fallback
+            let container = null;
+            if (params.preferredContainer && /^(mp4|webm)$/i.test(params.preferredContainer)) {
+                container = params.preferredContainer.toLowerCase();
+            } else if (params.originalContainer) {
+                if (/^(mp4|mov|m4v|ts|avi|mkv|flv)$/i.test(params.originalContainer)) {
+                    container = 'mp4';
+                } else if (/^webm$/i.test(params.originalContainer)) {
+                    container = 'webm';
                 }
-                
-                // Log the format detection logic
-                logDebug(`URL extension: ${urlExt}, Output filename: ${outputFilename}`);
             }
+            if (!container) container = 'mp4';
+
+            // Clean up filename: remove query params and extension
+            let outputFilename = (filename ? filename.replace(/[?#].*$/, '') : 'video');
+            outputFilename = outputFilename.replace(/\.(mp4|webm|mov|m4v|ts|avi|mkv|flv)$/i, '');
+            // For HLS/DASH, always use mp4
+            if (videoType === 'hls' || videoType === 'dash') {
+                container = 'mp4';
+            }
+            // For direct, if URL is webm and no user override, use webm
+            if (videoType === 'direct' && !params.preferredContainer) {
+                const urlExtMatch = url.match(/\.([^./?#]+)($|\?|#)/i);
+                const urlExt = urlExtMatch ? urlExtMatch[1].toLowerCase() : null;
+                if (urlExt === 'webm') {
+                    container = 'webm';
+                }
+            }
+            outputFilename += `.${container}`;
+            logDebug(`Output container: ${container}, Output filename: ${outputFilename}`);
             
             // Set output path - prefer desktop by default
             const defaultDir = path.join(process.env.HOME || os.homedir(), 'Desktop');
