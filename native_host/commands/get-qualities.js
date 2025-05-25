@@ -24,11 +24,19 @@ class GetQualitiesCommand extends BaseCommand {
      * Execute the getQualities command
      * @param {Object} params Command parameters
      * @param {string} params.url Video URL to analyze
-     * @param {boolean} [params.light] Whether to do light analysis only
+     * @param {string} [params.mediaType] Media type: 'hls', 'dash', 'direct'
+     * @param {string} [params.representationId] For DASH: specific representation ID
+     * @param {Object} [params.headers] HTTP headers for requests
      */
     async execute(params) {
-        const { url, light = false, headers = {} } = params;
-        logDebug('🎥 Analyzing media from:', url, light ? '(light mode)' : '(full mode)');
+        const { 
+            url, 
+            mediaType = 'direct', 
+            representationId = null,
+            headers = {}
+        } = params;
+        
+        logDebug(`🎥 Analyzing media from: ${url} (type: ${mediaType})`);
         
         // Skip for blob URLs
         if (url.startsWith('blob:')) {
@@ -45,17 +53,6 @@ class GetQualitiesCommand extends BaseCommand {
         try {
             // Get required services
             const ffmpegService = this.getService('ffmpeg');
-            
-            // Format headers for FFprobe if available
-            let headerArg = '';
-            if (headers && Object.keys(headers).length > 0) {
-                // Format headers for FFprobe as "Key: Value\r\n" pairs
-                headerArg = Object.entries(headers)
-                    .map(([key, value]) => `${key}: ${value}`)
-                    .join('\r\n') + '\r\n';
-                
-                logDebug(`🔑 Using headers for FFprobe command: ${headerArg}`);
-            }
             
             return new Promise((resolve, reject) => {
                 // Build FFprobe args
@@ -79,21 +76,15 @@ class GetQualitiesCommand extends BaseCommand {
                     }
                 }
                 
-                // Add headers if provided
-                if (headers && Object.keys(headers).length > 0) {
-                    // Format headers for FFprobe as "Key: Value\r\n" pairs
-                    const headerLines = Object.entries(headers)
-                        .map(([key, value]) => `${key}: ${value}`)
-                        .join('\r\n');
-                    
-                    if (headerLines) {
-                        ffprobeArgs.push('-headers', headerLines + '\r\n');
-                        logDebug('🔑 Using headers for FFprobe request');
-                    }
+                // Handle DASH-specific representation selection
+                let analyzeUrl = url;
+                if (mediaType === 'dash' && representationId) {
+                    analyzeUrl = `${url}#${representationId}`;
+                    logDebug(`🎯 Targeting specific DASH representation: ${representationId}`);
                 }
                 
                 // Add URL as the last argument
-                ffprobeArgs.push(url);
+                ffprobeArgs.push(analyzeUrl);
                 
                 const ffprobe = spawn(ffmpegService.getFFprobePath(), ffprobeArgs, { env: getFullEnv() });
     
@@ -117,7 +108,10 @@ class GetQualitiesCommand extends BaseCommand {
                             
                             const streamInfo = {
                                 format: info.format?.format_name || 'unknown',
-                                container: info.format?.format_long_name || 'unknown'
+                                container: info.format?.format_long_name || 'unknown',
+                                mediaType: mediaType,
+                                inputUrl: url,
+                                analyzeUrl: analyzeUrl
                             };
     
                             logDebug('📊 Media analysis results:');

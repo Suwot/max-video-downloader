@@ -22,7 +22,6 @@ The UI follows **modern UX/UI standards**: minimal, responsive, fast, and cleanâ
 - when there are multiple ways to achieve the same goal, always give me relevant options to choose from and explain the pros and cons of each option
 - always show affected file name in the comment on the first line of each code snippet
 
-<!--
 ## RESPONSES
 
 - when you outline a plan, structure your response this way:
@@ -33,4 +32,4 @@ The UI follows **modern UX/UI standards**: minimal, responsive, fast, and cleanâ
   - REASON: clear explanation of what it addresses and why I need to implement this change
   - Code snippets: only show before snippet if it requires rewriting existing logic, and show only after when you just add code instead of rewriting, + clearly indicate what's new in the code
 
-- when applicable, outline implementation order in simple steps (bold titles, regular body) with bullet lists for each step about what needs to be done in order -->
+- when applicable, outline implementation order in simple steps (bold titles, regular body) with bullet lists for each step about what needs to be done in order

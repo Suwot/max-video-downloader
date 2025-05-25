@@ -157,7 +157,7 @@ export class NativeHostService {
                 // This prevents infinite retry loops with DASH manifests
                 if (message.type === 'getQualities' && 
                     message.url && 
-                    message.url.includes('.mpd')) {
+                    message.type === 'dash') {
                     console.warn('DASH manifest fetch failed, returning empty results to avoid retry loop');
                     resolve({ streamInfo: { hasVideo: true, hasAudio: true } });
                     return;

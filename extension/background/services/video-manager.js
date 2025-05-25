@@ -399,8 +399,8 @@ class VideoProcessingPipeline {
         const response = await nativeHostService.sendMessage({
           type: 'getQualities',
           url: variant.url,
-          light: false,
-          headers: headers
+          mediaType: 'hls',
+          headers: headers || {}
         });
         return response?.streamInfo || null;
       });
@@ -508,7 +508,7 @@ class VideoProcessingPipeline {
         const response = await nativeHostService.sendMessage({
           type: 'getQualities',
           url: video.url,
-          light: false,
+          mediaType: 'direct',
           headers: headers
         });
         return response?.streamInfo || null;
@@ -888,7 +888,7 @@ function sendVideoUpdateToUI(tabId, singleVideoUrl = null, singleVideoObj = null
 }
 
 // Get stream qualities
-async function getFFprobeData(url, tabId) {
+async function getFFprobeData(url, tabId, mediaType = 'direct', representationId = null) {
     try {
         logger.info('🎥 Requesting media info from native host for:', url);
         
@@ -905,6 +905,8 @@ async function getFFprobeData(url, tabId) {
         const response = await nativeHostService.sendMessage({
             type: 'getQualities',
             url: url,
+            mediaType: mediaType,
+            representationId: representationId,
             headers: headers
         });
         
