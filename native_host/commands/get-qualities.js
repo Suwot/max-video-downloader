@@ -296,13 +296,15 @@ class GetQualitiesCommand extends BaseCommand {
             
             logDebug(`🔎 [LIGHT-ANALYSIS] Starting light analysis for ${url} (${type})`);
             
-            // Use the manifest parser to check the first portion of the file
-            const manifestParser = this.getService('manifest-parser') || {
+            // Use a direct HTTP request to quickly check the first portion of the file
+            // This replaces the previous manifest-parser service dependency
+            const https = require('https');
+            const http = require('http');
+            const { URL } = require('url');
+            
+            // Simple manifest inspection implementation
+            const manifestInspector = {
                 lightParse: async (url, type) => {
-                    // Very basic fetch implementation if service not available
-                    const https = require('https');
-                    const http = require('http');
-                    const { URL } = require('url');
                     
                     return new Promise((resolve) => {
                         try {
@@ -365,7 +367,7 @@ class GetQualitiesCommand extends BaseCommand {
                 }
             };
             
-            const result = await manifestParser.lightParse(url, type);
+            const result = await manifestInspector.lightParse(url, type);
             
             if (result) {
                 logDebug(`🔎 [LIGHT-ANALYSIS] Success for ${url}: isMaster=${result.isMaster}, isVariant=${result.isVariant}`);

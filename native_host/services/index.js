@@ -13,7 +13,6 @@
 // services/index.js
 const ffmpegService = require('./ffmpeg');
 const configService = require('./config');
-const manifestParserService = require('./manifest-parser');
 const { logDebug } = require('../utils/logger');
 
 /**
@@ -23,8 +22,7 @@ class ServicesManager {
     constructor() {
         this.services = {
             ffmpeg: ffmpegService,
-            config: configService,
-            'manifest-parser': manifestParserService
+            config: configService
         };
         this.initialized = false;
     }
@@ -49,12 +47,6 @@ class ServicesManager {
             // 2. Initialize FFmpeg service
             if (!ffmpegService.initialize()) {
                 logDebug('FFmpeg service initialization failed');
-                return false;
-            }
-            
-            // 3. Initialize Manifest Parser service
-            if (!(await manifestParserService.initialize())) {
-                logDebug('Manifest Parser service initialization failed');
                 return false;
             }
 
