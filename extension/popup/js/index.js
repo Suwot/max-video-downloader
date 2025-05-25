@@ -18,7 +18,7 @@ import { initializeServices, getActiveTab } from './services/service-initializer
 import { themeService, applyTheme } from './services/theme-service.js';
 import { videoStateService } from './services/video-state-service.js';
 import { initializeUI, setScrollPosition, getScrollPosition, showLoadingState, hideLoadingState, showNoVideosMessage } from './ui.js';
-import { renderVideos } from './video-item/video-renderer.js';
+import { renderVideos } from './video-list/video-renderer.js';
 import { createLogger } from '../../js/utilities/logger.js';
 import { normalizeUrl } from '../../js/utilities/normalize-url.js';
 
@@ -60,7 +60,7 @@ const metadataUpdateBatch = {
         logger.debug(`Processing batch of ${this.updates.size} metadata updates`);
         
         // Get the module for DOM updates
-        import('./video-item/video-renderer.js').then(module => {
+        import('./video-list/video-renderer.js').then(module => {
             // Process all DOM updates in one go
             this.updates.forEach((mediaInfo, url) => {
                 module.updateVideoElement(url, mediaInfo, true);
@@ -247,7 +247,7 @@ function handlePortMessage(message) {
                 // Add hover functionality for the newly loaded preview
                 const previewContainer = videoElement.querySelector('.preview-container');
                 if (previewContainer) {
-                    import('./video-item/video-renderer.js').then(module => {
+                    import('./video-list/video-renderer.js').then(module => {
                         previewContainer.addEventListener('mouseenter', (event) => {
                             if (module.showHoverPreview) {
                                 module.showHoverPreview(message.previewUrl, event);
@@ -285,7 +285,7 @@ function handlePortMessage(message) {
         }));
         
         // Also update the UI element directly for faster response
-        import('./video-item/video-renderer.js').then(module => {
+        import('./video-list/video-renderer.js').then(module => {
             module.updateVideoElement(message.url, message.video);
         });
         

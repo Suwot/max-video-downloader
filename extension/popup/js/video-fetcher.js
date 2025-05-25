@@ -9,7 +9,7 @@
 
 // Import from videoStateService
 import { fetchVideos, on } from './services/video-state-service.js';
-import { renderVideos } from './video-item/video-renderer.js';
+import { renderVideos } from './video-list/video-renderer.js';
 import { sendPortMessage } from './index.js';
 import { createLogger } from '../../js/utilities/logger.js';
 

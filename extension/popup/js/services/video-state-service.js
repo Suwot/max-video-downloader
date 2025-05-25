@@ -10,7 +10,7 @@
 // popup/js/services/video-state-service.js
 
 import { sendPortMessage } from '../index.js';
-import { updateVideoElement } from '../video-item/video-renderer.js';
+import { updateVideoElement } from '../video-list/video-renderer.js';
 
 // Singleton service that manages state
 class VideoStateService {

@@ -1,4 +1,4 @@
-// extension/popup/js/video-item/preview-hover.js
+// extension/popup/js/video-list/preview-hover.js
 
 // Cache the hover preview elements for better performance
 let hoverPreviewContainer = null;

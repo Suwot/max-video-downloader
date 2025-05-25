@@ -1,4 +1,4 @@
-// extension/popup/js/video-item/video-item.js
+// extension/popup/js/video-list/video-item.js
 
 import { getFilenameFromUrl, formatDuration } from '../utilities.js';
 import { handleDownload } from '../download.js';
