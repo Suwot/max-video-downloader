@@ -252,7 +252,7 @@ export async function parseDashManifest(url, headers = null) {
     }
     
     try {
-        logger.debug(`Validating manifest: ${url}`);
+        logger.debug(`Validating manifest: ${url}, with these headers:`, headers);
         
         // Get video metadata from storage if available
         const videoInfo = await getVideoByUrl(url);
