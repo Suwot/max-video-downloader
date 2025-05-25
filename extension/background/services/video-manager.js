@@ -888,7 +888,7 @@ function sendVideoUpdateToUI(tabId, singleVideoUrl = null, singleVideoObj = null
 }
 
 // Get stream qualities
-async function getStreamQualities(url, tabId) {
+async function getFFprobeData(url, tabId) {
     try {
         logger.info('🎥 Requesting media info from native host for:', url);
         
@@ -1092,7 +1092,7 @@ function getVideosForDisplay(tabId) {
 export {
     addDetectedVideo,
     sendVideoUpdateToUI,
-    getStreamQualities,
+    getFFprobeData,
     cleanupForTab,
     normalizeUrl,
     getAllDetectedVideos,

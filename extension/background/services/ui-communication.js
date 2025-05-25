@@ -4,7 +4,7 @@
  */
 
 // Add static imports at the top
-import { getVideosForDisplay, getStreamQualities, clearVideoCache, sendVideoUpdateToUI } from './video-manager.js';
+import { getVideosForDisplay, getFFprobeData, clearVideoCache, sendVideoUpdateToUI } from './video-manager.js';
 import { getActiveDownloads, getDownloadDetails, startDownload } from './download-manager.js';
 import { createLogger } from '../../js/utilities/logger.js';
 
@@ -94,11 +94,11 @@ async function handlePortMessage(message, port, portId) {
     }
     
     // Handle stream qualities request
-    else if (message.type === 'getHLSQualities') {
-        const response = await getStreamQualities(message.url);
+    else if (message.type === 'getFFprobeData') {
+        const response = await getFFprobeData(message.url);
         
         port.postMessage({
-            type: 'qualitiesResponse',
+            type: 'ffprobeDataResponse',
             url: message.url,
             ...response
         });

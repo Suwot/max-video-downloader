@@ -271,11 +271,11 @@ function handlePortMessage(message) {
         }
         return;
     }
-    
-    // Handle quality responses
-    if (message.type === 'qualitiesResponse') {
-        logger.debug('Received qualities data via port');
-        document.dispatchEvent(new CustomEvent('qualities-response', { 
+
+    // Handle ffprobe data responses
+    if (message.type === 'ffprobeDataResponse') {
+        logger.debug('Received ffprobeData data via port');
+        document.dispatchEvent(new CustomEvent('ffprobe-data-response', { 
             detail: message 
         }));
         return;

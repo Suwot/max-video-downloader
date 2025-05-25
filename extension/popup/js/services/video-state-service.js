@@ -315,7 +315,7 @@ class VideoStateService {
     
     // Request qualities via port message
     sendPortMessage({
-      type: 'getHLSQualities',
+      type: 'getFFprobeData',
       url: url,
       tabId: this.activeTabId
     });
