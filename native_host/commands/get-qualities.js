@@ -5,7 +5,6 @@
  * - Analyzes video streams for available quality options
  * - Uses FFprobe to extract stream metadata
  * - Identifies resolution, bitrate, and codec information
- * - Parses HLS/DASH manifests for variant streams
  * - Maps technical stream data to user-friendly quality labels
  * - Returns structured quality options to the extension UI
  * - Handles various streaming protocol formats
@@ -44,24 +43,6 @@ class GetQualitiesCommand extends BaseCommand {
         }
         
         try {
-            // If light parsing is requested and this is a streaming URL (HLS/DASH),
-            // we can determine if it's a master playlist much more quickly
-            if (light && (url.includes('.m3u8') || url.includes('.mpd'))) {
-                logDebug('🔎 Performing light analysis to determine manifest type');
-                const lightResult = await this.performLightAnalysis(url);
-                
-                if (lightResult.success) {
-                    this.sendSuccess(lightResult);
-                    return lightResult;
-                }
-                
-                // If light analysis failed but we want full analysis, continue
-                if (!lightResult.success && !lightResult.needsFullParsing) {
-                    this.sendError('Light analysis failed: ' + (lightResult.error || 'Unknown error'));
-                    return lightResult;
-                }
-            }
-            
             // Get required services
             const ffmpegService = this.getService('ffmpeg');
             
@@ -280,113 +261,6 @@ class GetQualitiesCommand extends BaseCommand {
             logDebug('❌ GetQualities error:', err);
             this.sendError(err.message);
             return { error: err.message };
-        }
-    }
-
-    /**
-     * Perform light analysis to determine if a streaming URL is a master playlist
-     * without doing full ffprobe analysis
-     * @param {string} url URL to analyze
-     * @returns {Promise<Object>} Basic info result
-     */
-    async performLightAnalysis(url) {
-        try {
-            // Determine the type from extension
-            const type = url.includes('.m3u8') ? 'hls' : url.includes('.mpd') ? 'dash' : 'unknown';
-            
-            logDebug(`🔎 [LIGHT-ANALYSIS] Starting light analysis for ${url} (${type})`);
-            
-            // Use a direct HTTP request to quickly check the first portion of the file
-            // This replaces the previous manifest-parser service dependency
-            const https = require('https');
-            const http = require('http');
-            const { URL } = require('url');
-            
-            // Simple manifest inspection implementation
-            const manifestInspector = {
-                lightParse: async (url, type) => {
-                    
-                    return new Promise((resolve) => {
-                        try {
-                            const urlObj = new URL(url);
-                            const protocol = urlObj.protocol === 'https:' ? https : http;
-                            
-                            const options = {
-                                method: 'GET',
-                                hostname: urlObj.hostname,
-                                path: urlObj.pathname + urlObj.search,
-                                port: urlObj.port || (urlObj.protocol === 'https:' ? 443 : 80),
-                                timeout: 5000,
-                                headers: {
-                                    'Range': 'bytes=0-2047', // Just get first 2KB
-                                    'User-Agent': headers?.['User-Agent'] || 'Mozilla/5.0',
-                                    'Accept': '*/*',
-                                    'Referer': headers?.['Referer'] || undefined
-                                }
-                            };
-                            
-                            const req = protocol.request(options, (res) => {
-                                let data = '';
-                                res.on('data', (chunk) => {
-                                    data += chunk.toString();
-                                });
-                                
-                                res.on('end', () => {
-                                    // Basic detection
-                                    if (type === 'hls') {
-                                        const isMaster = data.includes('#EXT-X-STREAM-INF:');
-                                        resolve({
-                                            isMaster: isMaster,
-                                            isVariant: !isMaster,
-                                            type: 'hls',
-                                            format: 'hls', 
-                                            isLightParsed: true
-                                        });
-                                    } else if (type === 'dash') {
-                                        const isMaster = data.includes('<AdaptationSet') && 
-                                                        data.includes('<Representation');
-                                        resolve({
-                                            isMaster: isMaster,
-                                            isVariant: !isMaster,
-                                            type: 'dash',
-                                            format: 'dash',
-                                            isLightParsed: true
-                                        });
-                                    } else {
-                                        resolve(null);
-                                    }
-                                });
-                            });
-                            
-                            req.on('error', () => resolve(null));
-                            req.end();
-                        } catch (error) {
-                            resolve(null);
-                        }
-                    });
-                }
-            };
-            
-            const result = await manifestInspector.lightParse(url, type);
-            
-            if (result) {
-                logDebug(`🔎 [LIGHT-ANALYSIS] Success for ${url}: isMaster=${result.isMaster}, isVariant=${result.isVariant}`);
-                return { 
-                    success: true,
-                    streamInfo: {
-                        ...result,
-                        hasVideo: true,
-                        hasAudio: true,
-                        container: type
-                    }
-                };
-            }
-            
-            // If light parsing fails, indicate that full parsing is needed
-            return { success: false, needsFullParsing: true };
-        } catch (error) {
-            logDebug('Error in light analysis:', error);
-            return { success: false, error: error.message };
         }
     }
 }
