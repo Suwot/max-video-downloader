@@ -996,7 +996,8 @@ function addDetectedVideo(tabId, videoInfo) {
         ...videoInfo,
         normalizedUrl,
         tabId,
-        isBeingProcessed: false
+        isBeingProcessed: false,
+        title: videoInfo.metadata?.filename || getFilenameFromUrl(videoInfo.url)
     };
     
     updateVideo('addDetectedVideo', tabId, normalizedUrl, newVideo, true);
@@ -1027,7 +1028,6 @@ function getVideosForDisplay(tabId) {
         .filter(video => !(video.isVariant && video.hasKnownMaster))
         .map(video => ({
             ...video,
-            title: video.title || video.metadata?.title || getFilenameFromUrl(video.url),
             timestampLastProcessed: now,
             ...(video.poster ? { poster: video.poster } : {})
         }))
