@@ -932,6 +932,17 @@ function addDetectedVideo(tabId, videoInfo) {
     logger.debug(`Received video for Tab ${tabId}, with this info:`, videoInfo);
     // Normalize URL for deduplication
     const normalizedUrl = normalizeUrl(videoInfo.url);
+
+    // Check if this HLS is a known variant
+    if (videoInfo.type === 'hls' && variantMasterMap.has(tabId)) {
+        const tabVariantMap = variantMasterMap.get(tabId);
+        if (tabVariantMap.has(normalizedUrl)) {
+            videoInfo.isVariant = true;
+            videoInfo.hasKnownMaster = true;
+            videoInfo.masterUrl = tabVariantMap.get(normalizedUrl);
+            logger.debug(`HLS variant detected: ${normalizedUrl} is a variant of master ${videoInfo.masterUrl}`);
+        }
+    }
     
     // Initialize tab's video collection if it doesn't exist
     if (!allDetectedVideos.has(tabId)) {
