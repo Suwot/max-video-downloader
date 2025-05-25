@@ -17,12 +17,12 @@
 
 // popup/js/video-renderer.js
 
-import { getFilenameFromUrl, formatDuration } from './utilities.js';
-import { getAllGroupStates, setGroupState } from './services/group-state-service.js';
-import { videoStateService } from './services/video-state-service.js';
-import { handleDownload } from './download.js';
-import { showQualityDialog } from './ui.js';
-import { sendPortMessage } from './index.js';
+import { getFilenameFromUrl, formatDuration } from '../utilities.js';
+import { getAllGroupStates, setGroupState } from '../services/group-state-service.js';
+import { videoStateService } from '../services/video-state-service.js';
+import { handleDownload } from '../download.js';
+import { showQualityDialog } from '../ui.js';
+import { sendPortMessage } from '../index.js';
 
 // Cache the hover preview elements for better performance
 let hoverPreviewContainer = null;
@@ -151,7 +151,7 @@ export async function renderVideos(videos) {
     if (!videos || videos.length === 0) {
         // Use the shared function for showing "no videos" message
         // This ensures consistent UI and proper theming
-        const { showNoVideosMessage } = await import('./ui.js');
+        const { showNoVideosMessage } = await import('../ui.js');
         showNoVideosMessage();
         return;
     }
