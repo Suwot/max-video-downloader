@@ -964,6 +964,12 @@ function addDetectedVideo(tabId, videoInfo) {
                 logger.debug(`Updating originalContainer for existing direct video: ${normalizedUrl}`);
                 updates.originalContainer = videoInfo.originalContainer;
                 updatesApplied = true;
+
+                // NEW: If type is unknown, update to 'direct'
+                if (existingVideo.type === 'unknown') {
+                    logger.debug(`Updating type to 'direct' for video with known originalContainer: ${normalizedUrl}`);
+                    updates.type = 'direct';
+                }
             }
             
             // If we have updates to apply, update the video

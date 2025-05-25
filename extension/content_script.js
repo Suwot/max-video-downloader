@@ -471,8 +471,6 @@ function detectVideo(url, contentType = null, metadata = {}) {
   });
 }
 
-// validateVideo function has been removed as its functionality is now integrated into detectVideo
-
 /**
  * Extract embedded video URL from query parameters
  * Used by both identifyVideoType and normalizeUrl
@@ -545,8 +543,6 @@ function identifyVideoType(url) {
   
   return null;
 }
-
-// isVideoContent function has been removed as its functionality is now integrated into detectVideo
 
 /**
  * Simplified URL normalization focused only on basic deduplication
