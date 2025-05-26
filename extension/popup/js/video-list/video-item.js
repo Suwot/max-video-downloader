@@ -35,6 +35,12 @@ export function createVideoElement(video) {
         durationElement.className = 'video-duration';
         durationElement.textContent = formatDuration(duration);
         previewContainer.appendChild(durationElement);
+    } else {
+        const duration = video.metaFFprobe?.duration;
+        const durationElement = document.createElement('div');
+        durationElement.className = 'video-duration';
+        durationElement.textContent = formatDuration(duration);
+        previewContainer.appendChild(durationElement); 
     }
 
     // Add type badge to preview container
