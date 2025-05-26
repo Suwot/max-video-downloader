@@ -77,7 +77,7 @@ export async function renderVideos(videos) {
  * @param {Object} updatedVideo - Complete updated video object
  * @param {boolean} [isMetadataOnly=false] - If true, updatedVideo is treated as mediaInfo object
  */
-export function updateVideoElement(url, updatedVideo, isMetadataOnly = false) {
+export async function updateVideoElement(url, updatedVideo, isMetadataOnly = false) {
     if (!url || !updatedVideo) return;
     
     // Find the video element by URL
@@ -104,6 +104,10 @@ export function updateVideoElement(url, updatedVideo, isMetadataOnly = false) {
                 if (previewContainer) {
                     // Remove any existing listeners to avoid duplicates
                     const newPreviewUrl = updatedVideo.previewUrl;
+                    
+                    // Import the hover preview functions if needed
+                    const { showHoverPreview, hideHoverPreview } = await import('./preview-hover.js');
+                    
                     previewContainer.addEventListener('mouseenter', (event) => showHoverPreview(newPreviewUrl, event));
                     previewContainer.addEventListener('mousemove', (event) => showHoverPreview(newPreviewUrl, event));
                     previewContainer.addEventListener('mouseleave', hideHoverPreview);

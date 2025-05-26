@@ -1,8 +1,9 @@
 // extension/popup/js/video-list/video-item.js
 
-import { getFilenameFromUrl, formatDuration } from '../utilities.js';
-import { handleDownload } from '../download.js';
+import { formatDuration } from '../utilities.js';
 import { showHoverPreview, hideHoverPreview } from './preview-hover.js';
+import { renderVideoTypeActions } from './video-type-renderers.js';
+import { extractPreviewUrl } from './video-utils.js';
 
 /**
  * Create a video element for the UI
@@ -26,15 +27,8 @@ export function createVideoElement(video) {
     previewImage.src = chrome.runtime.getURL('icons/video-placeholder.png');
     previewImage.alt = 'Video preview';
 
-    // Unified preview selection logic
-    let previewUrl = null;
-    if (Array.isArray(video.variants) && video.variants.length > 0 && video.variants[0].previewUrl) {
-        previewUrl = video.variants[0].previewUrl;
-    } else if (video.previewUrl) {
-        previewUrl = video.previewUrl;
-    } else if (video.poster) {
-        previewUrl = video.poster;
-    }
+    // Get preview URL using utility function
+    let previewUrl = extractPreviewUrl(video);
 
     // Add duration display if available in video.variants.metaJS
     if (video.variants) {
@@ -151,8 +145,8 @@ export function createVideoElement(video) {
         infoColumn.append(titleRow);
     }
     
-    // Create download button 
-    const downloadGroup = createVideoActions(video);
+    // Create download button using type-specific renderer
+    const downloadGroup = renderVideoTypeActions(video);
     infoColumn.appendChild(downloadGroup);
     
     element.append(previewColumn, infoColumn);
@@ -160,88 +154,3 @@ export function createVideoElement(video) {
     return element;
 }
 
-/**
- * Create the download/quality selector/action group for a single video item
- * @param {Object} video - Video data
- * @returns {HTMLElement} Actions group element
- */
-export function createVideoActions(video) {
-    const actionsDiv = document.createElement('div');
-    actionsDiv.className = 'download-group';
-    
-    // Create quality selector if variants are available
-    if (video.variants && video.variants.length > 0) {
-        // Create quality selector only if we have actual variants
-        const qualitySelector = document.createElement('select');
-        qualitySelector.className = 'quality-selector';
-
-        // Simply render each variant as provided without sorting or special processing
-        video.variants.forEach(variant => {
-            const option = document.createElement('option');
-            option.value = variant.url;
-            
-            // Create user-friendly quality label
-            let qualityLabel = '';
-            
-            // Get height info
-            let height = variant.metaJS?.height || null;
-            
-            if (height) {
-                qualityLabel = `${height}p`;
-            } else {
-                qualityLabel = 'Alternative Quality';
-            }
-            
-            // Add fps if available
-            let fps = variant.metaJS?.fps || variant.metaFFprobe?.fps || null;
-            if (fps) {
-                qualityLabel += ` @${fps}fps`;
-            }
-            
-            // Add bandwidth info if available
-            let bandwidth = variant.metaJS?.averageBandwidth || variant.metaJS?.bandwidth || null;
-            if (bandwidth) {
-                const mbps = (bandwidth / 1000000).toFixed(1);
-                if (mbps > 0) {
-                    qualityLabel += ` (${mbps} Mbps)`;
-                }
-            }
-            
-            // Add estimated size info if available
-            let estimatedFileSizeBytes = variant.metaJS?.estimatedFileSizeBytes || null;
-            if (estimatedFileSizeBytes) {
-                const mb = (estimatedFileSizeBytes / 1000000).toFixed(1);
-                qualityLabel += ` (~${mb} MB)`;
-            }
-
-            option.textContent = qualityLabel;
-            qualitySelector.appendChild(option);
-        });
-
-        actionsDiv.appendChild(qualitySelector);
-    }
-    
-    // Create download button
-    const downloadBtn = document.createElement('button');
-    downloadBtn.className = 'download-btn';
-    downloadBtn.dataset.url = video.url;
-    downloadBtn.dataset.type = video.type;
-    downloadBtn.textContent = 'Download';
-    
-    downloadBtn.addEventListener('click', async () => {
-        const selectedUrl = actionsDiv.querySelector('.quality-selector')?.value || video.url;
-        
-        // Create video metadata object with essential properties for download
-        const videoData = {
-            title: video.title,
-            originalContainer: video.originalContainer,
-            originalUrl: video.originalUrl,
-            foundFromQueryParam: video.foundFromQueryParam
-        };
-        
-        handleDownload(downloadBtn, selectedUrl, video.type, videoData);
-    });
-    
-    actionsDiv.appendChild(downloadBtn);
-    return actionsDiv;
-}
