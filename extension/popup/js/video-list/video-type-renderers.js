@@ -9,18 +9,18 @@ import { handleDownload } from '../download.js';
  * @param {Object} video - Video data
  * @returns {HTMLElement} Actions group element
  */
-export function renderVideoTypeActions(video) {
+export function renderTypeSpecificElements(video) {
     switch (video.type) {
         case 'hls':
-            return renderHlsActions(video);
+            return renderHlsElements(video);
         case 'dash':
-            return renderDashActions(video);
+            return renderDashElements(video);
         case 'direct':
-            return renderDirectActions(video);
+            return renderDirectElements(video);
         case 'blob':
-            return renderBlobActions(video);
+            return renderBlobElements(video);
         default:
-            return renderGenericActions(video);
+            return renderGenericElements(video);
     }
 }
 
@@ -29,9 +29,9 @@ export function renderVideoTypeActions(video) {
  * @param {Object} video - HLS video data
  * @returns {HTMLElement} Actions group element
  */
-function renderHlsActions(video) {
-    const actionsDiv = document.createElement('div');
-    actionsDiv.className = 'download-group';
+function renderHlsElements(video) {
+    const elementsDiv = document.createElement('div');
+    elementsDiv.className = 'download-group';
     
     // Create quality selector if variants are available
     if (video.variants && video.variants.length > 0) {
@@ -46,7 +46,7 @@ function renderHlsActions(video) {
             qualitySelector.appendChild(option);
         });
 
-        actionsDiv.appendChild(qualitySelector);
+        elementsDiv.appendChild(qualitySelector);
     }
     
     // Create download button
@@ -57,13 +57,13 @@ function renderHlsActions(video) {
     downloadBtn.textContent = 'Download';
     
     downloadBtn.addEventListener('click', async () => {
-        const selectedUrl = actionsDiv.querySelector('.quality-selector')?.value || video.url;
+        const selectedUrl = elementsDiv.querySelector('.quality-selector')?.value || video.url;
         const videoData = createVideoMetadata(video);
         handleDownload(downloadBtn, selectedUrl, video.type, videoData);
     });
     
-    actionsDiv.appendChild(downloadBtn);
-    return actionsDiv;
+    elementsDiv.appendChild(downloadBtn);
+    return elementsDiv;
 }
 
 /**
@@ -71,11 +71,11 @@ function renderHlsActions(video) {
  * @param {Object} video - DASH video data
  * @returns {HTMLElement} Actions group element
  */
-function renderDashActions(video) {
+function renderDashElements(video) {
     // Currently using the same UI as HLS for DASH videos
     // Will be enhanced in the future to support video/audio/subtitle selections
-    const actionsDiv = document.createElement('div');
-    actionsDiv.className = 'download-group';
+    const elementsDiv = document.createElement('div');
+    elementsDiv.className = 'download-group';
     
     // Create quality selector if variants are available
     if (video.variants && video.variants.length > 0) {
@@ -90,7 +90,7 @@ function renderDashActions(video) {
             qualitySelector.appendChild(option);
         });
 
-        actionsDiv.appendChild(qualitySelector);
+        elementsDiv.appendChild(qualitySelector);
     }
     
     // Create download button
@@ -101,13 +101,13 @@ function renderDashActions(video) {
     downloadBtn.textContent = 'Download';
     
     downloadBtn.addEventListener('click', async () => {
-        const selectedUrl = actionsDiv.querySelector('.quality-selector')?.value || video.url;
+        const selectedUrl = elementsDiv.querySelector('.quality-selector')?.value || video.url;
         const videoData = createVideoMetadata(video);
         handleDownload(downloadBtn, selectedUrl, video.type, videoData);
     });
     
-    actionsDiv.appendChild(downloadBtn);
-    return actionsDiv;
+    elementsDiv.appendChild(downloadBtn);
+    return elementsDiv;
 }
 
 /**
@@ -115,11 +115,11 @@ function renderDashActions(video) {
  * @param {Object} video - Direct video data
  * @returns {HTMLElement} Actions group element
  */
-function renderDirectActions(video) {
+function renderDirectElements(video) {
     // Currently using the same UI as other types for direct videos
     // Will be enhanced in the future to show file info
-    const actionsDiv = document.createElement('div');
-    actionsDiv.className = 'download-group';
+    const elementsDiv = document.createElement('div');
+    elementsDiv.className = 'download-group';
     
     // Create quality selector if variants are available (rare for direct videos)
     if (video.variants && video.variants.length > 0) {
@@ -134,7 +134,7 @@ function renderDirectActions(video) {
             qualitySelector.appendChild(option);
         });
 
-        actionsDiv.appendChild(qualitySelector);
+        elementsDiv.appendChild(qualitySelector);
     }
     
     // Create download button
@@ -145,13 +145,13 @@ function renderDirectActions(video) {
     downloadBtn.textContent = 'Download';
     
     downloadBtn.addEventListener('click', async () => {
-        const selectedUrl = actionsDiv.querySelector('.quality-selector')?.value || video.url;
+        const selectedUrl = elementsDiv.querySelector('.quality-selector')?.value || video.url;
         const videoData = createVideoMetadata(video);
         handleDownload(downloadBtn, selectedUrl, video.type, videoData);
     });
     
-    actionsDiv.appendChild(downloadBtn);
-    return actionsDiv;
+    elementsDiv.appendChild(downloadBtn);
+    return elementsDiv;
 }
 
 /**
@@ -159,11 +159,11 @@ function renderDirectActions(video) {
  * @param {Object} video - Blob video data
  * @returns {HTMLElement} Actions group element
  */
-function renderBlobActions(video) {
+function renderBlobElements(video) {
     // Currently using the same UI as other types for blob videos
     // Will be enhanced in the future for blob-specific features
-    const actionsDiv = document.createElement('div');
-    actionsDiv.className = 'download-group';
+    const elementsDiv = document.createElement('div');
+    elementsDiv.className = 'download-group';
     
     // Create quality selector if variants are available (rare for blob videos)
     if (video.variants && video.variants.length > 0) {
@@ -178,7 +178,7 @@ function renderBlobActions(video) {
             qualitySelector.appendChild(option);
         });
 
-        actionsDiv.appendChild(qualitySelector);
+        elementsDiv.appendChild(qualitySelector);
     }
     
     // Create download button
@@ -189,13 +189,13 @@ function renderBlobActions(video) {
     downloadBtn.textContent = 'Download';
     
     downloadBtn.addEventListener('click', async () => {
-        const selectedUrl = actionsDiv.querySelector('.quality-selector')?.value || video.url;
+        const selectedUrl = elementsDiv.querySelector('.quality-selector')?.value || video.url;
         const videoData = createVideoMetadata(video);
         handleDownload(downloadBtn, selectedUrl, video.type, videoData);
     });
     
-    actionsDiv.appendChild(downloadBtn);
-    return actionsDiv;
+    elementsDiv.appendChild(downloadBtn);
+    return elementsDiv;
 }
 
 /**
@@ -203,9 +203,9 @@ function renderBlobActions(video) {
  * @param {Object} video - Video data
  * @returns {HTMLElement} Actions group element
  */
-function renderGenericActions(video) {
-    const actionsDiv = document.createElement('div');
-    actionsDiv.className = 'download-group';
+function renderGenericElements(video) {
+    const elementsDiv = document.createElement('div');
+    elementsDiv.className = 'download-group';
     
     // Create quality selector if variants are available
     if (video.variants && video.variants.length > 0) {
@@ -220,7 +220,7 @@ function renderGenericActions(video) {
             qualitySelector.appendChild(option);
         });
 
-        actionsDiv.appendChild(qualitySelector);
+        elementsDiv.appendChild(qualitySelector);
     }
     
     // Create download button
@@ -231,11 +231,11 @@ function renderGenericActions(video) {
     downloadBtn.textContent = 'Download';
     
     downloadBtn.addEventListener('click', async () => {
-        const selectedUrl = actionsDiv.querySelector('.quality-selector')?.value || video.url;
+        const selectedUrl = elementsDiv.querySelector('.quality-selector')?.value || video.url;
         const videoData = createVideoMetadata(video);
         handleDownload(downloadBtn, selectedUrl, video.type, videoData);
     });
     
-    actionsDiv.appendChild(downloadBtn);
-    return actionsDiv;
+    elementsDiv.appendChild(downloadBtn);
+    return elementsDiv;
 }

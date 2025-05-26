@@ -2,7 +2,7 @@
 
 import { formatDuration } from '../utilities.js';
 import { showHoverPreview, hideHoverPreview } from './preview-hover.js';
-import { renderVideoTypeActions } from './video-type-renderers.js';
+import { renderTypeSpecificElements } from './video-type-renderers.js';
 import { extractPreviewUrl } from './video-utils.js';
 
 /**
@@ -145,9 +145,9 @@ export function createVideoElement(video) {
         infoColumn.append(titleRow);
     }
     
-    // Create download button using type-specific renderer
-    const downloadGroup = renderVideoTypeActions(video);
-    infoColumn.appendChild(downloadGroup);
+    // Create type specific interactive elements
+    const typeSpecificElements = renderTypeSpecificElements(video);
+    infoColumn.appendChild(typeSpecificElements);
     
     element.append(previewColumn, infoColumn);
     
