@@ -1,7 +1,11 @@
 .DS_Store
 
 # Node modules
-node_modules/
+native_host/node_modules/
+native_host/bin/
+
+# Build directories
+build/
 
 # IDE files
 .vscode/

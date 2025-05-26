@@ -75,6 +75,11 @@ class ConfigService {
             useHardwareAcceleration: true,
             showNotifications: true,
             outputFormat: 'mp4',
+            ffmpegCustomPaths: {
+                enabled: true,
+                ffmpegPath: null,  // Will be auto-detected if null
+                ffprobePath: null  // Will be auto-detected if null
+            },
             version: 1
         };
     }
