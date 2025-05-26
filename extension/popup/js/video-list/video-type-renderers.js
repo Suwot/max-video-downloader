@@ -65,8 +65,8 @@ function renderHlsElements(video) {
     elementsDiv.appendChild(downloadBtn);
     
     // Add "More Details" toggle button
-    const detailsToggle = createDetailsToggle(video, 'hls');
-    elementsDiv.appendChild(detailsToggle);
+    // const detailsToggle = createDetailsToggle(video, 'hls');
+    // elementsDiv.appendChild(detailsToggle);
     
     return elementsDiv;
 }
@@ -114,8 +114,8 @@ function renderDashElements(video) {
     elementsDiv.appendChild(downloadBtn);
     
     // Add "More Details" toggle button
-    const detailsToggle = createDetailsToggle(video, 'dash');
-    elementsDiv.appendChild(detailsToggle);
+    // const detailsToggle = createDetailsToggle(video, 'dash');
+    // elementsDiv.appendChild(detailsToggle);
     
     return elementsDiv;
 }
@@ -163,8 +163,8 @@ function renderDirectElements(video) {
     elementsDiv.appendChild(downloadBtn);
     
     // Add "More Details" toggle button
-    const detailsToggle = createDetailsToggle(video, 'direct');
-    elementsDiv.appendChild(detailsToggle);
+    // const detailsToggle = createDetailsToggle(video, 'direct');
+    // elementsDiv.appendChild(detailsToggle);
     
     return elementsDiv;
 }
@@ -212,8 +212,8 @@ function renderBlobElements(video) {
     elementsDiv.appendChild(downloadBtn);
     
     // Add "More Details" toggle button
-    const detailsToggle = createDetailsToggle(video, 'blob');
-    elementsDiv.appendChild(detailsToggle);
+    // const detailsToggle = createDetailsToggle(video, 'blob');
+    // elementsDiv.appendChild(detailsToggle);
     
     return elementsDiv;
 }
@@ -259,8 +259,8 @@ function renderGenericElements(video) {
     elementsDiv.appendChild(downloadBtn);
     
     // Add "More Details" toggle button
-    const detailsToggle = createDetailsToggle(video, 'generic');
-    elementsDiv.appendChild(detailsToggle);
+    // const detailsToggle = createDetailsToggle(video, 'generic');
+    // elementsDiv.appendChild(detailsToggle);
     
     return elementsDiv;
 }

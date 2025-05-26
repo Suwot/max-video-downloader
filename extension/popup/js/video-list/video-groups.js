@@ -1,5 +1,3 @@
-// extension/popup/js/video-list/video-groups.js
-
 import { getAllGroupStates, setGroupState } from '../services/group-state-service.js';
 import { createVideoElement } from './video-item.js';
 

@@ -1,5 +1,3 @@
-// extension/popup/js/video-list/video-item.js
-
 import { formatDuration } from '../utilities.js';
 import { showHoverPreview, hideHoverPreview } from './preview-hover.js';
 import { renderTypeSpecificElements } from './video-type-renderers.js';
