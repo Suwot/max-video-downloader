@@ -13,7 +13,8 @@
     "webNavigation",
     "notifications",
     "downloads.shelf",
-    "storage"
+    "storage",
+    "cookies"
   ],
   "host_permissions": [
     "<all_urls>"

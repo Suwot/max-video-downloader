@@ -58,10 +58,41 @@ function clearAllHeaderCaches() {
 }
 
 /**
+ * Get cookies for a specific URL
+ * @param {string} url - URL to get cookies for
+ * @returns {Promise<string>} Cookie string in format "name1=value1; name2=value2"
+ */
+async function getCookiesForUrl(url) {
+    if (!url) return '';
+    
+    try {
+        const urlObj = new URL(url);
+        
+        // Get cookies for this domain
+        const cookies = await chrome.cookies.getAll({ url: urlObj.origin });
+        
+        if (!cookies || cookies.length === 0) {
+            return '';
+        }
+        
+        // Format cookies as string
+        const cookieString = cookies
+            .map(cookie => `${cookie.name}=${cookie.value}`)
+            .join('; ');
+        
+        logger.debug(`Retrieved ${cookies.length} cookies for ${urlObj.hostname}`);
+        return cookieString;
+    } catch (error) {
+        logger.warn(`Error getting cookies for ${url}: ${error.message}`);
+        return '';
+    }
+}
+
+/**
  * Build realistic browser-like request headers for video requests
  * @param {number} tabId - Tab ID where the video is located (optional)
  * @param {string} videoUrl - The URL of the video being requested
- * @returns {Object} Headers object mimicking a real browser request
+ * @returns {Promise<Object>} Headers object mimicking a real browser request
  */
 async function buildRequestHeaders(tabId, videoUrl) {
     const headers = {
@@ -87,13 +118,21 @@ async function buildRequestHeaders(tabId, videoUrl) {
                 headers['Origin'] = pageUrl.origin;
             }
         } catch (error) {
-            console.warn('Failed to get tab info for headers:', error.message);
+            logger.warn('Failed to get tab info for headers:', error.message);
             // We specifically DON'T add fake Referer/Origin here, 
             // better to omit than to send fake ones that trigger protections
         }
     }
-    logger.debug(`Generated headers for ${tabId}:`, headers);
-
+    
+    // Get cookies for the video URL if provided
+    if (videoUrl) {
+        const cookieString = await getCookiesForUrl(videoUrl);
+        if (cookieString) {
+            headers['Cookie'] = cookieString;
+        }
+    }
+    
+    logger.debug(`Generated headers for request to ${videoUrl}:`, headers);
     return headers;
 }
 
