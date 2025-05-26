@@ -7,6 +7,7 @@
 import { cleanupForTab } from './video-manager.js';
 import { cleanupDownloadsForTab } from './download-manager.js';
 import { createLogger } from '../../js/utilities/logger.js';
+import { cleanupMpdContext } from '../index.js';
 
 // Create a logger instance for the Tab Tracker module
 const logger = createLogger('Tab Tracker');
@@ -78,6 +79,7 @@ function initTabTracking() {
             cleanupForTab(tabId); // Cleanup videos and playlists
             cleanupDownloadsForTab(tabId); // Cleanup downloads
             cleanupScrollPositionForTab(tabId); // Cleanup saved scroll positions
+            cleanupMpdContext(tabId); // Cleanup MPD context if applicable
         });
         
         // Could add additional tab event listeners here

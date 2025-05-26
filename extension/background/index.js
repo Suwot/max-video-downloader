@@ -10,6 +10,9 @@ import { clearCache, getCacheStats } from '../js/utilities/preview-cache.js';
 // Create a logger instance for the background script
 const logger = createLogger('Background');
 
+// tabId -> timestamp when MPD was detected
+const tabsWithMpd = new Map(); 
+
 // Helper function to extract container format from URL
 function getContainerFromUrl(url) {
     try {
@@ -214,6 +217,9 @@ function processVideoUrl(tabId, url, metadata = null) {
       url.toLowerCase().includes('.mpd');
     
     if (isDash || isPossibleDash) {
+      // Record that this tab has an MPD manifest
+      tabsWithMpd.set(tabId, Date.now());
+
       addDetectedVideo(tabId, {
         url,
         type: 'dash',
@@ -256,13 +262,30 @@ function processVideoUrl(tabId, url, metadata = null) {
       }
       
       // Enhanced segment detection logic
-      // 1. Check existing segment patterns
-      const segmentPatterns = [/segment-\d+/, /chunk-\d+/, /frag-\d+/, /seq-\d+/, /part-\d+/];
-      // 2. Add byte range detection
-      const containsByteRange = /bytes=\d+-\d+/.test(url) || /range=\d+-\d+/.test(url);
+      const hasMpdContext = tabsWithMpd.has(tabId);
       
-      if (segmentPatterns.some(pattern => pattern.test(url)) || containsByteRange) {
-        logger.debug(`Skipping media segment: ${url}`);
+      // 1. Check standard segment patterns that always apply
+      const segmentPatterns = [/segment-\d+/, /chunk-\d+/, /frag-\d+/, /seq-\d+/, /part-\d+/];
+      const isCommonSegmentPattern = segmentPatterns.some(pattern => pattern.test(url));
+      
+      // 2. Check byte ranges only if we have MPD context
+      let hasByteRanges = false;
+      if (hasMpdContext) {
+        // First check if the URL contains "bytes=" or "range=" before expensive URL parsing
+        if (url.includes('bytes=') || url.includes('range=')) {
+          try {
+            const parsedUrl = new URL(url);
+            const byteRangePattern = /(?:bytes|range)=\d+-\d+/i;
+            hasByteRanges = byteRangePattern.test(parsedUrl.search);
+          } catch (e) {
+            // Fallback for URL parsing failure
+            hasByteRanges = /bytes=\d+-\d+/.test(url) || /range=\d+-\d+/.test(url);
+          }
+        }
+      }
+
+      if (isCommonSegmentPattern || hasByteRanges) {
+        logger.debug(`Skipping media segment: ${url} (MPD context: ${hasMpdContext}, ByteRanges: ${hasByteRanges})`);
         return;
       }
       
@@ -453,6 +476,13 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 });
 
 logger.debug('Background script initialized');
+
+// Add cleanup function to handle tab closure
+export function cleanupMpdContext(tabId) {
+  if (tabsWithMpd.has(tabId)) {
+    tabsWithMpd.delete(tabId);
+  }
+}
 
 // Sleep handler
 chrome.runtime.onSuspend.addListener(() => {
