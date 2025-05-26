@@ -3,41 +3,44 @@
 
 /**
  * Format quality label for video variants
- * @param {Object} variant - Video variant data
+ * @param {Object} video - Video object
  * @returns {string} - Formatted quality label
  */
-export function formatQualityLabel(variant) {
+export function formatQualityLabel(video) {
     let qualityLabel = '';
     
     // Get height info
-    let height = variant.metaJS?.height || null;
+    let height = video.metaJS?.height || video.metaFFprobe?.height || null;
     
     if (height) {
         qualityLabel = `${height}p`;
-    } else {
-        qualityLabel = 'Alternative Quality';
     }
     
     // Add fps if available
-    let fps = variant.metaJS?.fps || variant.metaFFprobe?.fps || null;
+    let fps = video.metaJS?.fps || video.metaFFprobe?.fps || null;
     if (fps) {
         qualityLabel += ` @${fps}fps`;
     }
     
-    // Add bandwidth info if available
-    let bandwidth = variant.metaJS?.averageBandwidth || variant.metaJS?.bandwidth || null;
-    if (bandwidth) {
-        const mbps = (bandwidth / 1000000).toFixed(1);
-        if (mbps > 0) {
-            qualityLabel += ` (${mbps} Mbps)`;
-        }
-    }
+    // // Add bandwidth info if available
+    // let bandwidth = video.metaFFprobe?.totalBitrate || video.metaJS?.averageBandwidth || video.metaJS?.bandwidth || null;
+    // if (bandwidth) {
+    //     const mbps = (bandwidth / 1000000).toFixed(1);
+    //     if (mbps > 0) {
+    //         qualityLabel += ` (${mbps} Mbps)`;
+    //     }
+    // }
     
-    // Add estimated size info if available
-    let estimatedFileSizeBytes = variant.metaJS?.estimatedFileSizeBytes || null;
-    if (estimatedFileSizeBytes) {
-        const mb = (estimatedFileSizeBytes / 1000000).toFixed(1);
-        qualityLabel += ` (~${mb} MB)`;
+     // Add file size info - prioritizing actual file size over estimated size
+    // This handles both direct media and streaming variants
+    let fileSizeBytes = video.metaJS?.estimatedFileSizeBytes || 
+                        video.metaFFprobe?.sizeBytes || null;
+
+    if (fileSizeBytes) {
+        const formattedSize = formatFileSize(fileSizeBytes);
+        if (formattedSize) {
+            qualityLabel += ` (~${formattedSize})`;
+        }
     }
 
     return qualityLabel;
@@ -78,12 +81,14 @@ export function extractPreviewUrl(video) {
  * @param {Number} bytes - File size in bytes
  * @returns {String|null} - Formatted file size or null if unavailable
  */
+// extension/popup/js/video-list/video-utils.js
 export function formatFileSize(bytes) {
     if (!bytes) return null;
-    
+
     const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
     if (bytes === 0) return '0 Bytes';
-    
+
     const i = Math.floor(Math.log(bytes) / Math.log(1024));
-    return parseFloat((bytes / Math.pow(1024, i)).toFixed(2)) + ' ' + sizes[i];
+    const value = bytes / Math.pow(1024, i);
+    return `${Math.round(value * 10) / 10} ${sizes[i]}`;
 }

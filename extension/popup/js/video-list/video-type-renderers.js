@@ -126,26 +126,28 @@ function renderDashElements(video) {
  * @returns {HTMLElement} Actions group element
  */
 function renderDirectElements(video) {
-    // Currently using the same UI as other types for direct videos
-    // Will be enhanced in the future to show file info
     const elementsDiv = document.createElement('div');
     elementsDiv.className = 'download-group';
     
-    // Create quality selector if variants are available (rare for direct videos)
-    if (video.variants && video.variants.length > 0) {
-        const qualitySelector = document.createElement('select');
-        qualitySelector.className = 'quality-selector';
+    // Create quality selector with a single option showing current quality
+    const qualitySelector = document.createElement('select');
+    qualitySelector.className = 'quality-selector';
+    
+    // Create a single option with formatted quality info
+    const option = document.createElement('option');
+    option.value = video.url;
+    
+    // Format quality label using existing utility function
+    let qualityText = formatQualityLabel(video);
 
-        // Render variants
-        video.variants.forEach(variant => {
-            const option = document.createElement('option');
-            option.value = variant.url;
-            option.textContent = formatQualityLabel(variant);
-            qualitySelector.appendChild(option);
-        });
-
-        elementsDiv.appendChild(qualitySelector);
+    // Fallback if no quality text was generated
+    if (!qualityText || qualityText === "Alternative Quality") {
+        qualityText = "Direct Media";
     }
+    
+    option.textContent = qualityText;
+    qualitySelector.appendChild(option);
+    elementsDiv.appendChild(qualitySelector);
     
     // Create download button
     const downloadBtn = document.createElement('button');
@@ -155,14 +157,14 @@ function renderDirectElements(video) {
     downloadBtn.textContent = 'Download';
     
     downloadBtn.addEventListener('click', async () => {
-        const selectedUrl = elementsDiv.querySelector('.quality-selector')?.value || video.url;
+        const selectedUrl = video.url; // For direct videos, always use the main URL
         const videoData = createVideoMetadata(video);
         handleDownload(downloadBtn, selectedUrl, video.type, videoData);
     });
     
     elementsDiv.appendChild(downloadBtn);
     
-    // Add "More Details" toggle button
+    // Uncomment to enable details toggle
     // const detailsToggle = createDetailsToggle(video, 'direct');
     // elementsDiv.appendChild(detailsToggle);
     
