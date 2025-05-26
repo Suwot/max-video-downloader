@@ -115,5 +115,22 @@ export async function updateVideoElement(url, updatedVideo, isMetadataOnly = fal
             }
         }
     }
+    
+    // Update details drawer if it's open
+    const detailsDrawer = videoElement.querySelector('.details-drawer');
+    const toggleBtn = videoElement.querySelector('.details-toggle-btn');
+    
+    if (detailsDrawer && toggleBtn && toggleBtn.dataset.expanded === 'true') {
+        // Get the video type from the details drawer or fallback to the type badge
+        const videoTypeBadge = videoElement.querySelector('.type-badge');
+        const videoType = videoTypeBadge ? videoTypeBadge.textContent.toLowerCase() : 'unknown';
+        
+        // Clear the drawer and rerender with updated data
+        detailsDrawer.innerHTML = '';
+        
+        // Import the function to render details content
+        const { renderDetailsContent } = await import('./video-type-renderers.js');
+        renderDetailsContent(detailsDrawer, updatedVideo, videoType);
+    }
 }
 

@@ -1,0 +1,24 @@
+{
+  "name": "video-downloader-mv3",
+  "version": "1.0.0",
+  "description": "Chrome MV3 extension to download HLS, DASH, and direct video/audio",
+  "main": "index.js",
+  "scripts": {
+    "bundle-css": "node bundle-css.js",
+    "build": "npm run bundle-css",
+    "dev": "node bundle-css.js && echo 'CSS bundled, watching for changes...' && chokidar 'extension/popup/css/**/*.css' -c 'node bundle-css.js'"
+  },
+  "keywords": [
+    "video",
+    "downloader",
+    "chrome-extension",
+    "mv3",
+    "hls",
+    "dash"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "chokidar-cli": "^2.0.0"
+  }
+}

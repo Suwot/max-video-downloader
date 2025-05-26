@@ -63,6 +63,11 @@ function renderHlsElements(video) {
     });
     
     elementsDiv.appendChild(downloadBtn);
+    
+    // Add "More Details" toggle button
+    const detailsToggle = createDetailsToggle(video, 'hls');
+    elementsDiv.appendChild(detailsToggle);
+    
     return elementsDiv;
 }
 
@@ -107,6 +112,11 @@ function renderDashElements(video) {
     });
     
     elementsDiv.appendChild(downloadBtn);
+    
+    // Add "More Details" toggle button
+    const detailsToggle = createDetailsToggle(video, 'dash');
+    elementsDiv.appendChild(detailsToggle);
+    
     return elementsDiv;
 }
 
@@ -151,6 +161,11 @@ function renderDirectElements(video) {
     });
     
     elementsDiv.appendChild(downloadBtn);
+    
+    // Add "More Details" toggle button
+    const detailsToggle = createDetailsToggle(video, 'direct');
+    elementsDiv.appendChild(detailsToggle);
+    
     return elementsDiv;
 }
 
@@ -195,6 +210,11 @@ function renderBlobElements(video) {
     });
     
     elementsDiv.appendChild(downloadBtn);
+    
+    // Add "More Details" toggle button
+    const detailsToggle = createDetailsToggle(video, 'blob');
+    elementsDiv.appendChild(detailsToggle);
+    
     return elementsDiv;
 }
 
@@ -237,5 +257,94 @@ function renderGenericElements(video) {
     });
     
     elementsDiv.appendChild(downloadBtn);
+    
+    // Add "More Details" toggle button
+    const detailsToggle = createDetailsToggle(video, 'generic');
+    elementsDiv.appendChild(detailsToggle);
+    
     return elementsDiv;
+}
+
+/**
+ * Creates a toggle button and container for displaying detailed video information
+ * @param {Object} video - The video object
+ * @param {string} videoType - Type of video (hls, dash, direct, blob, generic)
+ * @returns {HTMLElement} - The details toggle container
+ */
+function createDetailsToggle(video, videoType) {
+    const container = document.createElement('div');
+    container.className = 'details-toggle-container';
+    
+    // Create toggle button
+    const toggleBtn = document.createElement('button');
+    toggleBtn.className = 'details-toggle-btn';
+    toggleBtn.innerHTML = 'More details <span class="arrow-icon">▼</span>';
+    toggleBtn.dataset.expanded = 'false';
+    
+    // Create details drawer (initially hidden)
+    const detailsDrawer = document.createElement('div');
+    detailsDrawer.className = `details-drawer ${videoType}`;
+    detailsDrawer.style.display = 'none';
+    
+    // Toggle functionality
+    toggleBtn.addEventListener('click', () => {
+        const isExpanded = toggleBtn.dataset.expanded === 'true';
+        
+        if (isExpanded) {
+            // Collapse
+            detailsDrawer.style.display = 'none';
+            toggleBtn.dataset.expanded = 'false';
+            toggleBtn.innerHTML = 'More details <span class="arrow-icon">▼</span>';
+        } else {
+            // Expand
+            if (detailsDrawer.children.length === 0) {
+                // Render details content on first open
+                renderDetailsContent(detailsDrawer, video, videoType);
+            }
+            detailsDrawer.style.display = 'block';
+            toggleBtn.dataset.expanded = 'true';
+            toggleBtn.innerHTML = 'Hide details <span class="arrow-icon">▲</span>';
+        }
+    });
+    
+    container.appendChild(toggleBtn);
+    container.appendChild(detailsDrawer);
+    
+    return container;
+}
+
+/**
+ * Renders the content of the details drawer based on video type
+ * @param {HTMLElement} container - The details drawer container
+ * @param {Object} video - The video object
+ * @param {string} videoType - Type of video
+ */
+export function renderDetailsContent(container, video, videoType) {
+    // Create a heading
+    const heading = document.createElement('h4');
+    heading.className = 'details-heading';
+    heading.textContent = `${videoType.toUpperCase()} Video Details`;
+    container.appendChild(heading);
+    
+    // Create a pre element to display the JSON data
+    const jsonPre = document.createElement('pre');
+    jsonPre.className = 'json-content';
+    
+    // Format JSON for better readability
+    const jsonData = JSON.stringify(video, null, 2);
+    jsonPre.textContent = jsonData;
+    
+    // Add to container
+    container.appendChild(jsonPre);
+    
+    // In the future, each video type can have custom rendering here
+    // switch(videoType) {
+    //     case 'hls':
+    //         renderHlsDetails(container, video);
+    //         break;
+    //     case 'dash':
+    //         renderDashDetails(container, video);
+    //         break;
+    //     // etc.
+    // }
 }
