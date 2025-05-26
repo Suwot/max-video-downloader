@@ -255,9 +255,14 @@ function processVideoUrl(tabId, url, metadata = null) {
         return;
       }
       
-      // Skip suspicious streaming segments
+      // Enhanced segment detection logic
+      // 1. Check existing segment patterns
       const segmentPatterns = [/segment-\d+/, /chunk-\d+/, /frag-\d+/, /seq-\d+/, /part-\d+/];
-      if (segmentPatterns.some(pattern => pattern.test(url))) {
+      // 2. Add byte range detection
+      const containsByteRange = /bytes=\d+-\d+/.test(url) || /range=\d+-\d+/.test(url);
+      
+      if (segmentPatterns.some(pattern => pattern.test(url)) || containsByteRange) {
+        logger.debug(`Skipping media segment: ${url}`);
         return;
       }
       
