@@ -1,0 +1,147 @@
+/* Media Type Groups */
+.media-type-group {
+    margin-bottom: 4px;
+    border-radius: 4px;
+    /* Change from hidden to visible to allow sticky headers to work */
+    overflow: visible;
+    transition: box-shadow 0.3s, background-color 0.3s;
+    position: relative;
+}
+
+.theme-dark .media-type-group {
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+    background-color: #252525;
+}
+
+.theme-light .media-type-group {
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    background-color: white;
+}
+
+.media-type-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 4px 8px;
+    cursor: pointer;
+    transition: background-color 0.3s, border-color 0.3s, color 0.3s;
+    position: sticky;
+    top: 0;
+    /* Increase z-index to make sure headers stay on top */
+    z-index: 50;
+    /* Add width to ensure it spans the full width */
+    width: 100%;
+}
+
+/* Theme specific header colors */
+.theme-dark .media-type-header {
+    border-bottom: 1px solid #444;
+    color: white;
+}
+
+.theme-light .media-type-header {
+    border-bottom: 1px solid #e0e0e0;
+    color: #333;
+}
+
+/* Dark theme headers */
+.theme-dark .media-type-header.hls {
+    background-color: #ff5f5f;
+}
+
+.theme-dark .media-type-header.dash {
+    background-color: #5f9fff;
+}
+
+.theme-dark .media-type-header.direct {
+    background-color: #5fff7f;
+    color: #333;
+}
+
+.theme-dark .media-type-header.blob {
+    background-color: #ff5fff;
+}
+
+.theme-dark .media-type-header.unknown {
+    background-color: #7f7f7f;
+}
+
+/* Light theme headers */
+.theme-light .media-type-header.hls {
+    background-color: #ffebeb;
+    color: #c83737;
+}
+
+.theme-light .media-type-header.dash {
+    background-color: #e5f0ff;
+    color: #2a65b3;
+}
+
+.theme-light .media-type-header.direct {
+    background-color: #e5ffe5;
+    color: #258f25;
+}
+
+.theme-light .media-type-header.blob {
+    background-color: #ffe5ff;
+    color: #b329b3;
+}
+
+.theme-light .media-type-header.unknown {
+    background-color: #e5e5e5;
+    color: #444;
+}
+
+.media-type-title {
+    font-weight: 600;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.media-type-count {
+    border-radius: 12px;
+    padding: 1px 6px;
+    font-size: 10px;
+    transition: background-color 0.3s;
+}
+
+.theme-dark .media-type-count {
+    background-color: rgba(255,255,255,0.2);
+}
+
+.theme-light .media-type-count {
+    background-color: rgba(0,0,0,0.1);
+}
+
+.media-type-toggle {
+    transition: transform 0.2s;
+}
+
+/* Add white color for the toggle arrow in dark theme */
+.theme-dark .media-type-toggle {
+    color: white;
+    fill: white;
+}
+
+.media-type-toggle.collapsed {
+    transform: rotate(-90deg);
+}
+
+.media-type-content {
+    overflow: hidden; /* Changed from 'visible' to 'hidden' */
+    transition: max-height 0.3s;
+}
+
+.media-type-content.collapsed {
+    max-height: 0;
+    overflow: hidden;
+}
+
+/* Group styles */
+.video-group {
+    margin-bottom: 12px;
+    border-radius: 8px;
+    overflow: hidden;
+}

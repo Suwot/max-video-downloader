@@ -1,11 +1,6 @@
 /* Auto-generated bundle from css/*.css files - DO NOT EDIT DIRECTLY */
 
-/*.css files - DO NOT EDIT DIRECTLY */
-
-/*.css files - DO NOT EDIT DIRECTLY */
-
-/*.css files - DO NOT EDIT DIRECTLY */
-
+/* From base.css */
 /* Reset and base styles */
 * {
     margin: 0;
@@ -45,15 +40,6 @@ body.theme-light {
     --primary: #1976D2;
 }
 
-.container {
-    display: flex;
-    flex-direction: column;
-    height: 100%;
-    width: 100%;
-    overflow: hidden;
-    /* Removing the padding-right that might be affecting the layout */
-}
-
 /* App title */
 .app-title {
     font-size: 16px;
@@ -72,6 +58,17 @@ body.theme-light {
 .theme-light .app-title {
     color: #1a73e8;
     border-bottom: 1px solid #e0e0e0;
+}
+
+
+/* From layout.css */
+/* Layout structure */
+.container {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    width: 100%;
+    overflow: hidden;
 }
 
 /* Initial states */
@@ -118,23 +115,64 @@ body.theme-light {
     margin: 4px 0;
 }
 
-.initial-loader {
+/* Video list styles */
+#videos {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    height: 100%;
+    scroll-behavior: smooth;
+    padding: 0;
+    transition: background-color 0.3s;
     position: relative;
-    padding-bottom: 40px;
+    scrollbar-gutter: stable;
 }
 
-.initial-loader:after {
-    content: '';
-    position: absolute;
-    width: 24px;
-    height: 24px;
-    border-radius: 50%;
-    border: 3px solid rgba(33, 150, 243, 0.3);
-    border-top-color: #2196F3;
-    animation: spin 1s linear infinite;
-    bottom: 30px;
+.videos-container {
+    padding: 8px;
+    height: auto;
 }
 
+.theme-dark #videos {
+    background-color: #1e1e1e;
+}
+
+.theme-light #videos {
+    background-color: #f9f9f9;
+}
+
+/* Responsive adjustments for smaller screens */
+@media (max-width: 380px) {
+    .video-item {
+        flex-direction: column;
+        gap: 8px;
+    }
+    
+    .preview-column {
+        width: 100%;
+        max-width: 180px;
+        margin: 0 auto;
+    }
+    
+    .preview-container {
+        height: 100px;
+    }
+}
+
+@media (max-width: 400px) {
+    .clear-cache-button {
+        padding: 4px 6px;
+        font-size: 11px;
+    }
+    
+    .clear-cache-button svg {
+        width: 14px;
+        height: 14px;
+    }
+}
+
+
+/* From header.css */
 /* Refresh Container - Fixed Position */
 .refresh-container {
     position: sticky;
@@ -167,6 +205,78 @@ body.theme-light {
     fill: #666;
 }
 
+
+/* From loaders.css */
+/* Initial loader */
+.initial-loader {
+    position: relative;
+    padding-bottom: 40px;
+}
+
+.initial-loader:after {
+    content: '';
+    position: absolute;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    border: 3px solid rgba(33, 150, 243, 0.3);
+    border-top-color: #2196F3;
+    animation: spin 1s linear infinite;
+    bottom: 30px;
+}
+
+/* Spinning animation for the loading state */
+.spinning {
+    animation: spin 1.2s linear infinite;
+}
+
+/* Improved Loader */
+.loader {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1;
+    transition: background-color 0.3s;
+}
+
+.theme-dark .loader {
+    background-color: rgba(0,0,0,0.5);
+}
+
+.theme-light .loader {
+    background-color: rgba(0,0,0,0.2);
+}
+
+.loader:after {
+    content: '';
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    border: 2px solid rgba(255,255,255,0.5);
+    border-top-color: white;
+    animation: spin 1s linear infinite;
+}
+
+/* Animation */
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Add animation for the progress percentage text */
+@keyframes pulse {
+    0% { opacity: 0.6; }
+    50% { opacity: 1; }
+    100% { opacity: 0.6; }
+}
+
+
+/* From buttons.css */
 /* Button containers */
 .left-buttons-container {
     display: flex;
@@ -213,11 +323,6 @@ body.theme-light {
     cursor: wait;
 }
 
-/* Spinning animation for the loading state */
-.spinning {
-    animation: spin 1.2s linear infinite;
-}
-
 /* Theme toggle button */
 .theme-toggle {
     display: flex;
@@ -253,34 +358,196 @@ body.theme-light {
     opacity: 0.8;
 }
 
-/* Video list styles */
-#videos {
-    flex: 1;
-    overflow-y: auto;
-    overflow-x: hidden;
-    /* Use 100% height instead of calculated height to fill the container */
-    height: 100%;
-    scroll-behavior: smooth;
-    padding: 0;
-    transition: background-color 0.3s;
+/* Copy button */
+.copy-button {
+    background: none;
+    border: none;
+    padding: 3px;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: color 0.3s;
     position: relative;
-    scrollbar-gutter: stable;
 }
 
-.videos-container {
-    padding: 8px;
-    /* Ensuring the container uses all available space */
-    height: auto;
+.theme-dark .copy-button {
+    color: #aaa;
 }
 
-.theme-dark #videos {
-    background-color: #1e1e1e;
+.theme-light .copy-button {
+    color: #757575;
 }
 
-.theme-light #videos {
-    background-color: #f9f9f9;
+.theme-dark .copy-button:hover {
+    color: white;
 }
 
+.theme-light .copy-button:hover {
+    color: #333;
+}
+
+.theme-dark .copy-button svg {
+    fill: #aaa;
+}
+
+.theme-light .copy-button svg {
+    fill: #757575;
+}
+
+.theme-dark .copy-button:hover svg {
+    fill: white;
+}
+
+.theme-light .copy-button:hover svg {
+    fill: #333;
+}
+
+/* Download button */
+.download-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 4px;
+}
+
+.download-btn {
+    flex: 1;
+    padding: 3px 6px;
+    background-color: #1976D2;
+    color: white;
+    border: none;
+    border-radius: 3px;
+    font-size: 11px;
+    cursor: pointer;
+    text-align: center;
+    position: relative;
+    min-width: 80px;
+    overflow: hidden;
+}
+
+.download-btn::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+    width: 0;
+    background-color: rgba(255, 255, 255, 0.1);
+    transition: width 0.3s ease;
+}
+
+.download-btn:not(:disabled) {
+    background-image: linear-gradient(to right, #1565C0 0%, #1976D2 0%);
+    background-size: 200% 100%;
+    transition: background-position 0.3s ease;
+}
+
+.download-btn span {
+    position: relative;
+    z-index: 1;
+    mix-blend-mode: screen;
+}
+
+.download-btn:hover {
+    background-color: #1565C0;
+}
+
+.theme-dark .download-btn:disabled,
+.theme-light .download-btn:disabled {
+    cursor: default;
+    opacity: 1;
+}
+
+.download-btn[data-state="complete"] {
+    background-color: #43A047;
+    background-image: none;
+}
+
+/* Button progress styling */
+.download-button {
+    position: relative;
+    overflow: hidden;
+    transition: background-color 0.3s ease;
+}
+
+.download-button::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+    width: 0%;
+    background-color: rgba(255, 255, 255, 0.1);
+    transition: width 0.3s ease;
+}
+
+.download-button.downloading::after {
+    width: var(--progress, 0%);
+}
+
+.download-button.complete {
+    background-color: #43A047 !important;
+}
+
+
+/* From badges.css */
+/* Type badge styles */
+.type-badge {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    padding: 2px 4px;
+    border-radius: 3px;
+    font-size: 8px;
+    font-weight: bold;
+    color: white;
+    background-color: rgba(0, 0, 0, 0.7);
+    z-index: 1;
+}
+
+.type-badge.hls {
+    background-color: #ff5f5f;
+}
+
+.type-badge.dash {
+    background-color: #5f9fff;
+}
+
+.type-badge.direct {
+    background-color: #5fff7f;
+}
+
+.type-badge.blob {
+    background-color: #ff5fff;
+}
+
+.type-badge.unknown {
+    background-color: #7f7f7f;
+}
+
+/* Source badge styles */
+.source-badge {
+    position: absolute;
+    top: 4px;
+    left: 4px;
+    padding: 2px 4px;
+    border-radius: 3px;
+    font-size: 8px;
+    font-weight: bold;
+    color: white;
+    background-color: rgba(0, 0, 0, 0.7);
+    z-index: 1;
+}
+
+.source-badge.content_script {
+    background-color: #4caf50;
+}
+
+.source-badge.background {
+    background-color: #ff9800;
+}
+
+
+/* From media-groups.css */
 /* Media Type Groups */
 .media-type-group {
     margin-bottom: 4px;
@@ -422,6 +689,15 @@ body.theme-light {
     overflow: hidden;
 }
 
+/* Group styles */
+.video-group {
+    margin-bottom: 12px;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+
+/* From video-items.css */
 /* Video Item */
 .video-item {
     display: flex;
@@ -496,62 +772,6 @@ body.theme-light {
     z-index: 1;
 }
 
-/* Type badge styles */
-.type-badge {
-    position: absolute;
-    top: 4px;
-    right: 4px;
-    padding: 2px 4px;
-    border-radius: 3px;
-    font-size: 8px;
-    font-weight: bold;
-    color: white;
-    background-color: rgba(0, 0, 0, 0.7);
-    z-index: 1;
-}
-
-.type-badge.hls {
-    background-color: #ff5f5f;
-}
-
-.type-badge.dash {
-    background-color: #5f9fff;
-}
-
-.type-badge.direct {
-    background-color: #5fff7f;
-}
-
-.type-badge.blob {
-    background-color: #ff5fff;
-}
-
-.type-badge.unknown {
-    background-color: #7f7f7f;
-}
-
-/* Source badge styles */
-.source-badge {
-    position: absolute;
-    top: 4px;
-    left: 4px;
-    padding: 2px 4px;
-    border-radius: 3px;
-    font-size: 8px;
-    font-weight: bold;
-    color: white;
-    background-color: rgba(0, 0, 0, 0.7);
-    z-index: 1;
-}
-
-.source-badge.content_script {
-    background-color: #4caf50;
-}
-
-.source-badge.background {
-    background-color: #ff9800;
-}
-
 /* Info column */
 .info-column {
     flex: 1;
@@ -591,49 +811,6 @@ body.theme-light {
 
 .theme-light .video-title {
     color: #333;
-}
-
-/* Copy button */
-.copy-button {
-    background: none;
-    border: none;
-    padding: 3px;
-    cursor: pointer;
-    flex-shrink: 0;
-    transition: color 0.3s;
-    position: relative;
-}
-
-.theme-dark .copy-button {
-    color: #aaa;
-}
-
-.theme-light .copy-button {
-    color: #757575;
-}
-
-.theme-dark .copy-button:hover {
-    color: white;
-}
-
-.theme-light .copy-button:hover {
-    color: #333;
-}
-
-.theme-dark .copy-button svg {
-    fill: #aaa;
-}
-
-.theme-light .copy-button svg {
-    fill: #757575;
-}
-
-.theme-dark .copy-button:hover svg {
-    fill: white;
-}
-
-.theme-light .copy-button:hover svg {
-    fill: #333;
 }
 
 /* File info (resolution) */
@@ -740,173 +917,47 @@ body.theme-light {
     color: #D32F2F;
 }
 
-/* Download button */
-.download-group {
-    display: flex;
-    gap: 4px;
-    margin-top: 4px;
+/* Hover Preview Styles */
+.preview-hover {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 1000;
+  background-color: rgba(0, 0, 0, 0.8);
+  padding: 4px;
+  border-radius: 6px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.6);
+  display: none;
+  max-width: 80%;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+  opacity: 0;
 }
 
-.download-btn {
-    flex: 1;
-    padding: 3px 6px;
-    background-color: #1976D2;
-    color: white;
-    border: none;
-    border-radius: 3px;
-    font-size: 11px;
-    cursor: pointer;
-    text-align: center;
-    position: relative;
-    min-width: 80px;
-    overflow: hidden;
+.preview-hover.visible {
+  opacity: 1;
 }
 
-.download-btn::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    height: 100%;
-    width: 0;
-    background-color: rgba(255, 255, 255, 0.1);
-    transition: width 0.3s ease;
+.preview-hover img {
+  max-width: 100%;
+  max-height: 300px;
+  display: block;
+  border-radius: 3px;
 }
 
-.download-btn:not(:disabled) {
-    background-image: linear-gradient(to right, #1565C0 0%, #1976D2 0%);
-    background-size: 200% 100%;
-    transition: background-position 0.3s ease;
+/* Dark and light theme support */
+.theme-dark .preview-hover {
+  background-color: rgba(0, 0, 0, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.2);
 }
 
-.download-btn span {
-    position: relative;
-    z-index: 1;
-    mix-blend-mode: screen;
+.theme-light .preview-hover {
+  background-color: rgba(0, 0, 0, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.4);
 }
 
-.download-btn:hover {
-    background-color: #1565C0;
-}
 
-.theme-dark .download-btn:disabled,
-.theme-light .download-btn:disabled {
-    cursor: default;
-    opacity: 1;
-}
-
-.download-btn[data-state="complete"] {
-    background-color: #43A047;
-    background-image: none;
-}
-
-/* Tooltip */
-.tooltip {
-    position: absolute;
-    top: -24px;
-    left: 50%;
-    transform: translateX(-50%);
-    background-color: rgba(0,0,0,0.8);
-    color: white;
-    padding: 3px 6px;
-    border-radius: 3px;
-    font-size: 10px;
-    white-space: nowrap;
-    z-index: 100;
-    pointer-events: none;
-}
-
-/* Improved Loader */
-.loader {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 1;
-    transition: background-color 0.3s;
-}
-
-.theme-dark .loader {
-    background-color: rgba(0,0,0,0.5);
-}
-
-.theme-light .loader {
-    background-color: rgba(0,0,0,0.2);
-}
-
-.loader:after {
-    content: '';
-    width: 20px;
-    height: 20px;
-    border-radius: 50%;
-    border: 2px solid rgba(255,255,255,0.5);
-    border-top-color: white;
-    animation: spin 1s linear infinite;
-}
-
-/* Animation */
-@keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
-}
-
-/* Scrollbar styling */
-#videos::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
-}
-
-#videos::-webkit-scrollbar-track {
-    background: transparent;
-}
-
-.theme-dark #videos::-webkit-scrollbar-thumb {
-    background: #444;
-    border-radius: 3px;
-}
-
-.theme-dark #videos::-webkit-scrollbar-thumb:hover {
-    background: #555;
-}
-
-.theme-light #videos::-webkit-scrollbar-thumb {
-    background: #ccc;
-    border-radius: 3px;
-}
-
-.theme-light #videos::-webkit-scrollbar-thumb:hover {
-    background: #aaa;
-}
-
-/* Responsive adjustments for smaller screens */
-@media (max-width: 380px) {
-    .video-item {
-        flex-direction: column;
-        gap: 8px;
-    }
-    
-    .preview-column {
-        width: 100%;
-        max-width: 180px;
-        margin: 0 auto;
-    }
-    
-    .preview-container {
-        height: 100px;
-    }
-}
-
-/* Group styles */
-.video-group {
-    margin-bottom: 12px;
-    border-radius: 8px;
-    overflow: hidden;
-}
-
+/* From progress.css */
 /* Progress container */
 .progress-container {
     display: none;
@@ -915,6 +966,7 @@ body.theme-light {
     background-color: rgba(0, 0, 0, 0.1);
     border-radius: 3px;
     overflow: hidden;
+    height: 4px;
 }
 
 .theme-dark .progress-container {
@@ -939,61 +991,17 @@ body.theme-light {
     color: #aaa;
 }
 
-/* Add animation for the progress percentage text */
-@keyframes pulse {
-    0% { opacity: 0.6; }
-    50% { opacity: 1; }
-    100% { opacity: 0.6; }
+/* Cache stats styling */
+.cache-stats {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-top: 4px;
+  margin-left: 10px;
+  opacity: 0.8;
 }
 
-/* Error notification */
-.error-notification {
-    position: fixed;
-    bottom: 20px;
-    left: 50%;
-    transform: translateX(-50%) translateY(20px);
-    background-color: #d32f2f;
-    color: white;
-    padding: 8px 16px;
-    border-radius: 4px;
-    font-size: 14px;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-    z-index: 1000;
-    opacity: 0;
-    transition: opacity 0.3s ease, transform 0.3s ease;
-}
 
-/* Dark theme adjustments */
-.theme-dark .error-notification {
-    background-color: #ef5350;
-}
-
-/* Button progress styling */
-.download-button {
-    position: relative;
-    overflow: hidden;
-    transition: background-color 0.3s ease;
-}
-
-.download-button::after {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    height: 100%;
-    width: 0%;
-    background-color: rgba(255, 255, 255, 0.1);
-    transition: width 0.3s ease;
-}
-
-.download-button.downloading::after {
-    width: var(--progress, 0%);
-}
-
-.download-button.complete {
-    background-color: #43A047 !important;
-}
-
+/* From dialogs.css */
 /* Quality Dialog */
 .quality-dialog-overlay {
     position: fixed;
@@ -1110,24 +1118,6 @@ body.theme-light {
     filter: brightness(1.1);
 }
 
-/* Progress bar styles for download */
-.progress-container {
-    display: none;
-    width: 100%;
-    height: 4px;
-    background: var(--border);
-    border-radius: 2px;
-    margin-top: 8px;
-    overflow: hidden;
-}
-
-.progress-bar {
-    width: 0%;
-    height: 100%;
-    background: var(--primary);
-    transition: width 0.3s ease;
-}
-
 /* Quality selector dropdown */
 .quality-selector {
     height: 24px;
@@ -1163,64 +1153,72 @@ body.theme-light {
     box-shadow: 0 0 0 1px var(--primary);
 }
 
-@media (max-width: 400px) {
-    .clear-cache-button {
-        padding: 4px 6px;
-        font-size: 11px;
-    }
-    
-    .clear-cache-button svg {
-        width: 14px;
-        height: 14px;
-    }
+/* Tooltip */
+.tooltip {
+    position: absolute;
+    top: -24px;
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: rgba(0,0,0,0.8);
+    color: white;
+    padding: 3px 6px;
+    border-radius: 3px;
+    font-size: 10px;
+    white-space: nowrap;
+    z-index: 100;
+    pointer-events: none;
 }
 
-/* Hover Preview Styles */
-.preview-hover {
-  position: fixed;
-  top: 0;
-  left: 0;
-  z-index: 1000;
-  background-color: rgba(0, 0, 0, 0.8);
-  padding: 4px;
-  border-radius: 6px;
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.6);
-  display: none;
-  max-width: 80%;
-  pointer-events: none;
-  transition: opacity 0.2s ease;
-  opacity: 0;
+/* Error notification */
+.error-notification {
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%) translateY(20px);
+    background-color: #d32f2f;
+    color: white;
+    padding: 8px 16px;
+    border-radius: 4px;
+    font-size: 14px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+    z-index: 1000;
+    opacity: 0;
+    transition: opacity 0.3s ease, transform 0.3s ease;
 }
 
-.preview-hover.visible {
-  opacity: 1;
+/* Dark theme adjustments */
+.theme-dark .error-notification {
+    background-color: #ef5350;
 }
 
-.preview-hover img {
-  max-width: 100%;
-  max-height: 300px;
-  display: block;
-  border-radius: 3px;
+
+/* From utilities.css */
+/* Scrollbar styling */
+#videos::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
 }
 
-/* Dark and light theme support */
-.theme-dark .preview-hover {
-  background-color: rgba(0, 0, 0, 0.8);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+#videos::-webkit-scrollbar-track {
+    background: transparent;
 }
 
-.theme-light .preview-hover {
-  background-color: rgba(0, 0, 0, 0.7);
-  border: 1px solid rgba(255, 255, 255, 0.4);
+.theme-dark #videos::-webkit-scrollbar-thumb {
+    background: #444;
+    border-radius: 3px;
 }
 
-/* Cache stats styling */
-.cache-stats {
-  font-size: 11px;
-  color: var(--text-secondary);
-  margin-top: 4px;
-  margin-left: 10px;
-  opacity: 0.8;
+.theme-dark #videos::-webkit-scrollbar-thumb:hover {
+    background: #555;
+}
+
+.theme-light #videos::-webkit-scrollbar-thumb {
+    background: #ccc;
+    border-radius: 3px;
+}
+
+.theme-light #videos::-webkit-scrollbar-thumb:hover {
+    background: #aaa;
 }
 
 

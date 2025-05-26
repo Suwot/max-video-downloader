@@ -1,8 +1,5 @@
 .DS_Store
 
-# Ignore CSS modules folder - all styles are bundled into popup.css
-extension/popup/css/
-
 # Node modules
 node_modules/
 
