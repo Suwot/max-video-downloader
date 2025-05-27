@@ -13,24 +13,6 @@ const logger = createLogger('Background');
 // tabId -> timestamp when MPD was detected
 const tabsWithMpd = new Map(); 
 
-// Helper function to extract container format from URL
-function getContainerFromUrl(url) {
-    try {
-        const urlObj = new URL(url);
-        const directVideoMatch = urlObj.pathname.match(/\.(mp4|webm|ogg|mov|avi|mkv|flv|3gp|m4v|wmv)(\?|$)/i);
-        if (directVideoMatch && directVideoMatch[1]) {
-            return directVideoMatch[1].toLowerCase();
-        }
-    } catch (e) {
-        // If URL parsing fails, try simple regex matching
-        const directVideoMatch = url.match(/\.(mp4|webm|ogg|mov|avi|mkv|flv|3gp|m4v|wmv)(\?|$)/i);
-        if (directVideoMatch && directVideoMatch[1]) {
-            return directVideoMatch[1].toLowerCase();
-        }
-    }
-    return null;
-}
-
 // Debug logger for allDetectedVideos - will log every 10 seconds
 let debugInterval;
 function startDebugLogger() {
@@ -112,80 +94,78 @@ function startDebugLogger() {
 function identifyVideoType(url) {
   if (!url) return null;
   
+  // Quick checks before expensive URL parsing
+  const urlLower = url.toLowerCase();
+  
+  // Skip known segment formats without needing URL parsing
+  if (urlLower.endsWith('.m4s') || urlLower.endsWith('.ts')) {
+    return null;
+  }
+  
   try {
     const urlObj = new URL(url);
-
-    // Check for image extensions
-    if (/\.(gif|png|jpg|jpeg|webp|bmp|svg)(\?|$)/i.test(urlObj.pathname)) {
-      return null;
-    }
-    
-    // Known analytics endpoints
-    const trackingPatterns = [
-      /\/ping/i, /\/track/i, /\/pixel/i, /\/analytics/i, 
-      /\/telemetry/i, /\/stats/i, /\/metrics/i
-    ];
-    
-    if (trackingPatterns.some(pattern => pattern.test(urlObj.pathname))) {
-      return null;
-    }
-    
     const path = urlObj.pathname.toLowerCase();
     
+    // Combined exclusion patterns - do these checks first to exit early
+    if (
+      // Check for image extensions
+      /\.(gif|png|jpg|jpeg|webp|bmp|svg)(\?|$)/i.test(path) ||
+      // Known analytics endpoints
+      /\/(ping|track|pixel|analytics|telemetry|stats|metrics)\//i.test(path)
+    ) {
+      return null;
+    }
+    
+    // Positive checks for media types
+    
     // Check for HLS streams (.m3u8)
-    if (url.includes('.m3u8')) {
-      const isActualM3U8 = 
-          path.includes('.m3u8') || 
-          path.includes('/master.m3u8') || 
-          path.includes('/index-f');
+    if (urlLower.includes('.m3u8')) {
+      const isActualM3U8 = path.includes('.m3u8') || 
+                          path.includes('/index-f');
       
       if (isActualM3U8) {
-        return { 
-          type: 'hls'
-        };
+        return { type: 'hls' };
       }
     }
     
     // Check for DASH manifests (.mpd)
-    if (url.includes('.mpd')) {
-      const isActualMPD = path.includes('.mpd');
-      
-      if (isActualMPD) {
-        return { 
-          type: 'dash'
-        };
-      }
-    }
-    
-    // Check for direct video files
-    if (/\.(mp4|webm|ogg|mov|avi|mkv|flv|3gp|m4v|wmv)(\?|$)/i.test(url)) {
-      return { 
-        type: 'direct', 
-        container: getContainerFromUrl(url)
-      };
-    }
-    
-    // Not a recognized video format
-    return null;
-  } catch (err) {
-    // Simple fallback if URL parsing fails
-    if (url.includes('.m3u8')) {
-      return { type: 'hls' };
-    }
-    
-    if (url.includes('.mpd')) {
+    if (path.includes('.mpd')) {
       return { type: 'dash' };
     }
     
-    if (/\.(mp4|webm|ogg|mov|avi|mkv|flv|3gp|m4v|wmv)(\?|$)/i.test(url)) {
+    // Check for direct video files
+    const directVideoMatch = path.match(/\.(mp4|webm|ogg|mov|avi|mkv|flv|3gp|m4v|wmv)(\?|$)/i);
+    if (directVideoMatch) {
       return { 
         type: 'direct', 
-        container: getContainerFromUrl(url)
+        container: directVideoMatch[1].toLowerCase()
       };
     }
     
-    return null;
+  } catch (err) {
+    // Simple fallback if URL parsing fails - use string matching
+    
+    // Check for streaming formats
+    if (urlLower.includes('.m3u8')) {
+      return { type: 'hls' };
+    }
+    
+    if (urlLower.includes('.mpd')) {
+      return { type: 'dash' };
+    }
+    
+    // Check for direct video files
+    const directVideoMatch = url.match(/\.(mp4|webm|ogg|mov|avi|mkv|flv|3gp|m4v|wmv)(\?|$)/i);
+    if (directVideoMatch) {
+      return { 
+        type: 'direct', 
+        container: directVideoMatch[1].toLowerCase()
+      };
+    }
   }
+  
+  // Not a recognized video format
+  return null;
 }
 
 /**
@@ -256,8 +236,8 @@ function processVideoUrl(tabId, url, metadata = null) {
         return;
       }  
       
-      // Skip TS segments typically used in HLS
-      if (url.endsWith('.ts') || contentType === 'video/mp2t') {
+      // Skip TS segments typically used in HLS and M4S segments used in DASH
+      if (url.endsWith('.ts') || url.endsWith('.m4s') || contentType === 'video/mp2t') {
         return;
       }
       
