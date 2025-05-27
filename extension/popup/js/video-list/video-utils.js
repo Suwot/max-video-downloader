@@ -18,9 +18,9 @@ export function formatQualityLabel(video) {
     
     // Add fps if available
     let fps = video.metaJS?.fps || video.metaFFprobe?.fps || null;
-    if (fps) {
-        qualityLabel += ` @${fps}fps`;
-    }
+        if (fps && fps !== 30) {
+            qualityLabel += `${fps}`;
+        }
     
     // // Add bandwidth info if available
     // let bandwidth = video.metaFFprobe?.totalBitrate || video.metaJS?.averageBandwidth || video.metaJS?.bandwidth || null;
@@ -39,7 +39,7 @@ export function formatQualityLabel(video) {
     if (fileSizeBytes) {
         const formattedSize = formatFileSize(fileSizeBytes);
         if (formattedSize) {
-            qualityLabel += ` (~${formattedSize})`;
+            qualityLabel += ` · ${formattedSize}`;
         }
     }
 
