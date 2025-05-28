@@ -2,10 +2,9 @@
 
 # Node modules
 native_host/node_modules/
-native_host/bin/
 
 # Build directories
-build/
+ffmpeg_build/
 
 # IDE files
 .vscode/
