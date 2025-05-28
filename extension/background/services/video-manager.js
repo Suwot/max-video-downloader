@@ -1025,7 +1025,7 @@ function getVideosForDisplay(tabId) {
     
     // Create array directly from values() instead of entries()
     return Array.from(tabVideosMap.values())
-        .filter(video => !(video.isVariant && video.hasKnownMaster))
+        .filter(video => !(video.isVariant && video.hasKnownMaster) && video.isValid)
         .map(video => ({
             ...video,
             timestampLastProcessed: now,
