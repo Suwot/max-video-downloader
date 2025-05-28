@@ -60,7 +60,7 @@ export function parseFrameRate(frameRateStr) {
     }
     
     // Otherwise it's a direct number
-    return parseFloat(frameRateStr);
+    return Math.round(parseFloat(frameRateStr));
 }
 
 /**
