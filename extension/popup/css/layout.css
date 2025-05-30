@@ -8,7 +8,6 @@
 }
 
 /* Initial states */
-.initial-loader,
 .initial-message,
 .no-videos-message {
     display: flex;
@@ -22,13 +21,11 @@
     transition: color 0.3s;
 }
 
-.theme-dark .initial-loader,
 .theme-dark .initial-message,
 .theme-dark .no-videos-message {
     color: #aaa;
 }
 
-.theme-light .initial-loader,
 .theme-light .initial-message,
 .theme-light .no-videos-message {
     color: #757575;

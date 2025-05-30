@@ -1,21 +1,3 @@
-/* Initial loader */
-.initial-loader {
-    position: relative;
-    padding-bottom: 40px;
-}
-
-.initial-loader:after {
-    content: '';
-    position: absolute;
-    width: 24px;
-    height: 24px;
-    border-radius: 50%;
-    border: 3px solid rgba(33, 150, 243, 0.3);
-    border-top-color: #2196F3;
-    animation: spin 1s linear infinite;
-    bottom: 30px;
-}
-
 /* Spinning animation for the loading state */
 .spinning {
     animation: spin 1.2s linear infinite;
