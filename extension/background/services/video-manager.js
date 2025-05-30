@@ -451,6 +451,7 @@ class VideoProcessingPipeline {
       
       if (streamInfo) {
         const updatedVideo = updateVideo('getFFprobeMetadata', tabId, normalizedUrl, {
+          isValid: true,
           metaFFprobe: streamInfo,
           hasFFprobeMetadata: true,
           isFullyParsed: true,
