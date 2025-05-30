@@ -24,12 +24,6 @@ const logger = createLogger('Video Fetcher');
 export async function updateVideoList(forceRefresh = false, tabId = null) {
     logger.debug('Updating video list, force refresh:', forceRefresh);
     
-    // Show loader
-    const container = document.getElementById('videos');
-    if (container) {
-        showLoader(container);
-    }
-    
     // Get the tab ID if not provided
     if (!tabId) {
         try {

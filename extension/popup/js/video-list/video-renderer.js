@@ -6,14 +6,6 @@ import { groupVideosByType, createTypeGroup } from './video-groups.js';
  */
 export async function renderVideos(videos) {
     const container = document.getElementById('videos');
-        
-    if (!videos || videos.length === 0) {
-        // Use the shared function for showing "no videos" message
-        // This ensures consistent UI and proper theming
-        const { showNoVideosMessage } = await import('../ui.js');
-        showNoVideosMessage();
-        return;
-    }
     
     // Group videos by type
     const videoGroups = groupVideosByType(videos);

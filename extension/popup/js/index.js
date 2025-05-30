@@ -17,7 +17,7 @@
 import { initializeServices, getActiveTab } from './services/service-initializer.js';
 import { themeService, applyTheme } from './services/theme-service.js';
 import { videoStateService } from './services/video-state-service.js';
-import { initializeUI, setScrollPosition, getScrollPosition, showLoadingState, hideLoadingState, showNoVideosMessage } from './ui.js';
+import { initializeUI, setScrollPosition, getScrollPosition, hideInitMessage } from './ui.js';
 import { renderVideos } from './video-list/video-renderer.js';
 import { createLogger } from '../../js/utilities/logger.js';
 import { normalizeUrl } from '../../js/utilities/normalize-url.js';
@@ -312,12 +312,12 @@ function updateVideoDisplay(videos) {
         isEmptyState = false;
         // Render videos directly
         renderVideos(videos);
-        hideLoadingState();
+        hideInitMessage();
         logger.debug('Updated UI with', videos.length, 'videos');
     } else if (!isEmptyState) {
         // Only update if we're not already showing empty state
         renderVideos(videos);
-        hideLoadingState();
+        hideInitMessage();
         isEmptyState = true;
         logger.debug('No videos to display, showing empty state');
     }
@@ -407,10 +407,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         // Get the active tab ID using our helper
         const activeTab = await getActiveTab();
         currentTabId = activeTab.id;
-        
-        // Show loading state initially
-        showLoadingState('Loading videos...');
-        
+
         // Request videos directly from background script
         requestVideos(true);
         
