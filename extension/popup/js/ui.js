@@ -177,8 +177,12 @@ export function getScrollPosition(tabId, callback) {
  */
 export function showErrorMessage(container, message) {
     container.innerHTML = `
-        <div class="initial-message">
-            ${message} Try refreshing the page or extension.
+        <div class="initial-message error-message">
+            <svg viewBox="0 0 24 24" width="48" height="48">
+                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/>
+            </svg>
+            <p>${message}</p>
+            <p>Try refreshing the page or extension.</p>
         </div>
     `;
 }
@@ -188,11 +192,6 @@ export function showErrorMessage(container, message) {
  * @param {HTMLElement} container - Container to show loader in
  */
 export function showLoader(container) {
-    container.innerHTML = `
-        <div class="initial-loader">
-            <span>Searching for videos...</span>
-        </div>
-    `;
 }
 
 /**
@@ -200,24 +199,15 @@ export function showLoader(container) {
  * @param {string} message - Optional message to display
  */
 export function showLoadingState(message = 'Searching for videos...') {
-    const container = document.getElementById('videos');
-    if (!container) return;
-    
-    container.innerHTML = `
-        <div class="initial-loader">
-            <div class="loader"></div>
-            <span>${message}</span>
-        </div>
-    `;
 }
 
 /**
  * Hide loading state
  */
 export function hideLoadingState() {
-    const loader = document.querySelector('.initial-loader');
-    if (loader) {
-        loader.style.display = 'none';
+    const initialMessage = document.querySelector('.initial-message');
+    if (initialMessage) {
+        initialMessage.remove();
     }
 }
 
@@ -228,24 +218,16 @@ export function showNoVideosMessage() {
     const container = document.getElementById('videos');
     if (!container) return;
     
-    // Remove loader if it exists
-    const loader = container.querySelector('.initial-loader');
-    if (loader) {
-        container.removeChild(loader);
-    }
-    
-    // Add message if container is empty
-    if (!container.querySelector('.video-group') && !container.querySelector('.no-videos-message')) {
-        container.innerHTML = `
-            <div class="no-videos-message">
-                <svg viewBox="0 0 24 24" width="48" height="48">
-                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.42 0-8-3.58-8-8 0-1.85.63-3.55 1.69-4.9L16.9 18.31C15.55 19.37 13.85 20 12 20zm6.31-3.1L7.1 5.69C8.45 4.63 10.15 4 12 4c4.42 0 8 3.58 8 8 0 1.85-.63 3.55-1.69 4.9z"/>
-                </svg>
-                <p>No videos found on this page.</p>
-                <p>Try playing a video or refreshing the page.</p>
-            </div>
-        `;
-    }
+    // Clear the container first
+    container.innerHTML = `
+        <div class="no-videos-message">
+            <svg viewBox="0 0 24 24" width="48" height="48">
+                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.42 0-8-3.58-8-8 0-1.85.63-3.55 1.69-4.9L16.9 18.31C15.55 19.37 13.85 20 12 20zm6.31-3.1L7.1 5.69C8.45 4.63 10.15 4 12 4c4.42 0 8 3.58 8 8 0 1.85-.63 3.55-1.69 4.9z"/>
+            </svg>
+            <p>No videos found on this page.</p>
+            <p>Try playing a video or refreshing the page.</p>
+        </div>
+    `;
 }
 
 /**
