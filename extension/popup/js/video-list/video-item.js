@@ -43,12 +43,41 @@ export function createVideoElement(video) {
         previewContainer.appendChild(durationElement); 
     }
 
-    // Add type badge to preview container
-    const typeBadge = document.createElement('div');
-    typeBadge.className = `type-badge ${video.type || 'unknown'}`;
-    typeBadge.textContent = video.type ? video.type.toUpperCase() : 'UNKNOWN';
-    previewContainer.appendChild(typeBadge);
-
+    // Add Status badge for Live and/or Encrypted
+    if (video.isLive || video.isEncrypted) {
+        const statusBadge = document.createElement('div');
+        statusBadge.className = 'status-badge';
+        
+        // Add tooltip with encryption type if available
+        if (video.isEncrypted && video.encryptionType) {
+            statusBadge.title = `${video.encryptionType}`;
+        } else if (video.isEncrypted) {
+            statusBadge.title = 'Encrypted content';
+        }
+        
+        // Add Live text if applicable
+        if (video.isLive) {
+            const liveText = document.createElement('span');
+            liveText.className = 'live-text';
+            liveText.textContent = 'LIVE';
+            statusBadge.appendChild(liveText);
+        }
+        
+        // Add Encrypted lock icon if applicable
+        if (video.isEncrypted) {
+            const lockIcon = document.createElement('span');
+            lockIcon.className = 'lock-icon';
+            lockIcon.innerHTML = `
+                <svg viewBox="0 0 7 8" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M6.25 3.5H5.875V2.375C5.875 1.06562 4.80937 0 3.5 0C2.19062 0 1.125 1.06562 1.125 2.375V3.5H0.75C0.335938 3.5 0 3.83594 0 4.25V7.25C0 7.66406 0.335938 8 0.75 8H6.25C6.66406 8 7 7.66406 7 7.25V4.25C7 3.83594 6.66406 3.5 6.25 3.5ZM4.625 3.5H2.375V2.375C2.375 1.75469 2.87969 1.25 3.5 1.25C4.12031 1.25 4.625 1.75469 4.625 2.375V3.5Z" fill="#DB6B67"/>
+                </svg>
+            `;
+            statusBadge.appendChild(lockIcon);
+        }
+        
+        previewContainer.appendChild(statusBadge);
+    }
+    
     // Add source badge (CS or BG)
     const sourceBadge = document.createElement('div');
     const sourceOrigin = video.source.includes('BG');

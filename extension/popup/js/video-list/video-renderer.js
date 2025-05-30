@@ -91,21 +91,66 @@ export async function updateVideoElement(url, updatedVideo, isMetadataOnly = fal
         }
     }
     
-    // Update details drawer if it's open
-    const detailsDrawer = videoElement.querySelector('.details-drawer');
-    const toggleBtn = videoElement.querySelector('.details-toggle-btn');
-    
-    if (detailsDrawer && toggleBtn && toggleBtn.dataset.expanded === 'true') {
-        // Get the video type from the details drawer or fallback to the type badge
-        const videoTypeBadge = videoElement.querySelector('.type-badge');
-        const videoType = videoTypeBadge ? videoTypeBadge.textContent.toLowerCase() : 'unknown';
+    // Update status badge (isLive, isEncrypted) if applicable
+    const previewContainer = videoElement.querySelector('.preview-container');
+    if (previewContainer) {
+        // Remove any existing status badge
+        const existingBadge = previewContainer.querySelector('.status-badge');
+        if (existingBadge) {
+            existingBadge.remove();
+        }
         
-        // Clear the drawer and rerender with updated data
-        detailsDrawer.innerHTML = '';
-        
-        // Import the function to render details content
-        const { renderDetailsContent } = await import('./video-type-renderers.js');
-        renderDetailsContent(detailsDrawer, updatedVideo, videoType);
+        // Create new badge only if needed
+        if (updatedVideo.isLive || updatedVideo.isEncrypted) {
+            const statusBadge = document.createElement('div');
+            statusBadge.className = 'status-badge';
+            
+            // Add tooltip with encryption type if available
+            if (updatedVideo.isEncrypted && updatedVideo.encryptionType) {
+                statusBadge.title = `${updatedVideo.encryptionType}`;
+            } else if (updatedVideo.isEncrypted) {
+                statusBadge.title = 'Encrypted content';
+            }
+            
+            // Add Live text if applicable
+            if (updatedVideo.isLive) {
+                const liveText = document.createElement('span');
+                liveText.className = 'live-text';
+                liveText.textContent = 'LIVE';
+                statusBadge.appendChild(liveText);
+            }
+            
+            // Add Encrypted lock icon if applicable
+            if (updatedVideo.isEncrypted) {
+                const lockIcon = document.createElement('span');
+                lockIcon.className = 'lock-icon';
+                lockIcon.innerHTML = `
+                    <svg viewBox="0 0 24 24">
+                        <path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/>
+                    </svg>
+                `;
+                statusBadge.appendChild(lockIcon);
+            }
+            
+            previewContainer.appendChild(statusBadge);
+        }
     }
-}
+    
+    // Update details drawer if it's open
+//     const detailsDrawer = videoElement.querySelector('.details-drawer');
+//     const toggleBtn = videoElement.querySelector('.details-toggle-btn');
+    
+//     if (detailsDrawer && toggleBtn && toggleBtn.dataset.expanded === 'true') {
+//         // Get the video type from the details drawer or fallback to the type badge
+//         const videoTypeBadge = videoElement.querySelector('.type-badge');
+//         const videoType = videoTypeBadge ? videoTypeBadge.textContent.toLowerCase() : 'unknown';
+        
+//         // Clear the drawer and rerender with updated data
+//         detailsDrawer.innerHTML = '';
+        
+//         // Import the function to render details content
+//         const { renderDetailsContent } = await import('./video-type-renderers.js');
+//         renderDetailsContent(detailsDrawer, updatedVideo, videoType);
+//     }
+// }
 

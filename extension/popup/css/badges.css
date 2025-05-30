@@ -1,36 +1,4 @@
-/* Type badge styles */
-.type-badge {
-    position: absolute;
-    top: 4px;
-    right: 4px;
-    padding: 2px 4px;
-    border-radius: 3px;
-    font-size: 8px;
-    font-weight: bold;
-    color: white;
-    background-color: rgba(0, 0, 0, 0.7);
-    z-index: 1;
-}
-
-.type-badge.hls {
-    background-color: #ff5f5f;
-}
-
-.type-badge.dash {
-    background-color: #5f9fff;
-}
-
-.type-badge.direct {
-    background-color: #5fff7f;
-}
-
-.type-badge.blob {
-    background-color: #ff5fff;
-}
-
-.type-badge.unknown {
-    background-color: #7f7f7f;
-}
+/* Preview-container badge styles */
 
 /* Source badge styles */
 .source-badge {
@@ -52,4 +20,36 @@
 
 .source-badge.background {
     background-color: #ff9800;
+}
+
+/* Status badge - Combined Live and Encrypted */
+.status-badge {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    background-color: #1F1F1F;
+    border-radius: 4px;
+    padding: 4px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    z-index: 2;
+}
+
+.status-badge .live-text {
+    font-size: 10px;
+    font-weight: bold;
+    line-height: 10px;
+    color: #DB6B67;
+}
+
+.status-badge .lock-icon {
+    display: flex;
+    align-items: center;
+}
+
+.status-badge .lock-icon svg {
+    width: 9px;
+    height: 9px;
+    fill: #DB6B67;
 }
