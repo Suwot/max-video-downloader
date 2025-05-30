@@ -58,7 +58,6 @@ export function createVideoElement(video) {
 
     const loader = document.createElement('div');
     loader.className = 'loader';
-    loader.style.display = 'block'; // Always show loader initially
     previewContainer.append(previewImage, loader);
     previewColumn.appendChild(previewContainer);
 
