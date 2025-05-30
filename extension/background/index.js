@@ -268,10 +268,15 @@ function processVideoUrl(tabId, url, metadata = null) {
         logger.debug(`Skipping media segment: ${url} (MPD context: ${hasMpdContext}, ByteRanges: ${hasByteRanges})`);
         return;
       }
+
+      // Determine if it's audio-only or video content
+      const mediaType = contentType.startsWith('audio/') ? 'audio' : 'video';
+  
       
       addDetectedVideo(tabId, {
         url,
         type: 'direct',
+        mediaType: mediaType, // Add explicit type for UI differentiation
         source: 'BG_webRequest_mime_direct',
         originalContainer: contentType.split('/')[1],
         timestampDetected: metadata.timestampDetected || Date.now(),
@@ -296,7 +301,6 @@ function processVideoUrl(tabId, url, metadata = null) {
       ...(videoInfo.container ? {originalContainer: videoInfo.container} : {}),
       ...(metadata ? {metadata: metadata} : {}), // Still pass metadata even in URL-based detection
       timestampDetected: Date.now()
-
     });
   }
 }
