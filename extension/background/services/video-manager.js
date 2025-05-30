@@ -230,6 +230,7 @@ class VideoProcessingPipeline {
         isVariant: hlsResult.isVariant,
         variants: hlsResult.variants,
         duration: hlsResult.duration,
+        version: hlsResult.version, 
         isEncrypted: hlsResult.isEncrypted,
         encryptionType: hlsResult.encryptionType,
         isLightParsed: true,

@@ -78,15 +78,20 @@ async function parseHlsVariant(variantUrl, headers = null) {
         
         const encryptionInfo = extractHlsEncryptionInfo(content);
         logger.debug(`Variant encryption info: ${JSON.stringify(encryptionInfo)}`);
+
+        // Extract HLS version
+        const version = extractHlsVersion(content);
+        logger.debug(`Variant version: ${version}`);
         
         // Build a complete result object
         const result = {
             duration: durationInfo.duration,
             isLive: durationInfo.isLive,
             isEncrypted: encryptionInfo.isEncrypted,
-            encryptionType: encryptionInfo.isEncrypted ? encryptionInfo.encryptionType : null
+            encryptionType: encryptionInfo.isEncrypted ? encryptionInfo.encryptionType : null,
+            version: version
         };
-        
+
         logger.debug(`Complete variant info: ${JSON.stringify(result)}`);
         return result;
     } catch (error) {
@@ -175,6 +180,10 @@ function parseHlsMaster(content, baseUrl, masterUrl) {
     const lines = content.split(/\r?\n/);
     
     let currentStreamInf = null;
+
+    // Extract the HLS version from the master playlist
+    const version = extractHlsVersion(content);
+    logger.debug(`HLS master playlist version: ${version}`);
     
     logger.debug(`Processing master playlist with ${lines.length} lines`);
     logger.debug(`First few lines: ${lines.slice(0, 3).join('\n')}`);
@@ -238,7 +247,8 @@ function parseHlsMaster(content, baseUrl, masterUrl) {
     
     return { 
         variants,
-        status: 'success'
+        status: 'success',
+        version: version
     };
 }
 
@@ -399,11 +409,16 @@ export async function parseHlsManifest(url, headers = null) {
         let duration = null;
         let isEncrypted = false;
         let encryptionType = null;
+        let version = null; 
         
         if (isMaster) {
             // Parse the master playlist to extract variant URLs
             logger.debug(`Parsing HLS master playlist content: ${content.substring(0, 100)}...`);
             const masterParseResult = parseHlsMaster(content, baseUrl, url);
+
+            // Store version from master playlist
+            version = masterParseResult.version;
+            logger.debug(`Master playlist version: ${version}`);
             
             logger.debug(`Master parse result: ${JSON.stringify(masterParseResult)}`);
             
@@ -433,6 +448,7 @@ export async function parseHlsManifest(url, headers = null) {
                         updatedVariant.metaJS.isLive = variantInfo.isLive || false;
                         updatedVariant.metaJS.isEncrypted = variantInfo.isEncrypted || false;
                         updatedVariant.metaJS.encryptionType = variantInfo.encryptionType;
+                        updatedVariant.metaJS.version = variantInfo.version || version;
                         
                         logger.debug(`Successfully processed variant ${index+1}`);
                         return updatedVariant;
@@ -489,6 +505,10 @@ export async function parseHlsManifest(url, headers = null) {
             isEncrypted = encryptionInfo.isEncrypted;
             encryptionType = encryptionInfo.encryptionType;
             
+            // Extract HLS version for standalone variant
+            version = extractHlsVersion(content);
+            logger.debug(`Standalone variant version: ${version}`);
+            
             // Create a single-item variants array with this variant
             variants = [{
                 url: url,
@@ -501,7 +521,8 @@ export async function parseHlsManifest(url, headers = null) {
                     duration: duration,
                     isLive: isLive,
                     isEncrypted: isEncrypted,
-                    encryptionType: encryptionType
+                    encryptionType: encryptionType,
+                    version: version
                 },
                 source: 'parseHlsManifest()',
                 timestampDetected: Date.now()
@@ -526,6 +547,7 @@ export async function parseHlsManifest(url, headers = null) {
             duration: duration,
             isEncrypted: isEncrypted,
             encryptionType: encryptionType,
+            version: version,
             variants: variants,
             status: 'success'
         };
@@ -549,4 +571,24 @@ export async function parseHlsManifest(url, headers = null) {
             processingRequests.full.delete(normalizedUrl);
         }
     }
+}
+
+
+/**
+ * Extract HLS manifest version from content
+ * @param {string} content - HLS playlist content
+ * @returns {number|null} - HLS version number or null if not specified
+ */
+function extractHlsVersion(content) {
+    const lines = content.split(/\r?\n/);
+    for (const line of lines) {
+        const trimmedLine = line.trim();
+        if (trimmedLine.startsWith('#EXT-X-VERSION:')) {
+            const versionStr = trimmedLine.substring(15).trim();
+            const version = parseInt(versionStr, 10);
+            return isNaN(version) ? null : version;
+        }
+    }
+    // If no version tag is present, the specification states it defaults to version 1
+    return 1;
 }
