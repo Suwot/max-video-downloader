@@ -333,6 +333,14 @@ export async function parseDashManifest(url, headers = null) {
                 encryptionType = 'clearkey';
             } else if (content.includes('urn:uuid:94ce86fb-07ff-4f43-adb8-93d2fa968ca2')) {
                 encryptionType = 'fairplay';
+            } else if (content.includes('urn:uuid:5e629af5-38da-4063-8977-97ffbd9902d4')) {
+                encryptionType = 'marlin';
+            } else if (content.includes('urn:uuid:1077efecc0b24d02ace33c1e52e2fb4b')) {
+                encryptionType = 'verimatrix';
+            } else if (content.includes('urn:uuid:f239e769-efa3-4850-9c16-a903c6932efb')) {
+                encryptionType = 'adobe-primetime';
+            } else if (content.includes('urn:uuid:6a99532d-869f-40ea-a75b-8ebe2e279df6')) {
+                encryptionType = 'oma-drm';
             }
         }
         
