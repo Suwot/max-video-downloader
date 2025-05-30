@@ -338,12 +338,18 @@ class VideoProcessingPipeline {
     
     // Get headers for the request
     const headers = await getSharedHeaders(tabId, video.url);
-    
-    // Run both operations in parallel
-    await Promise.all([
-      this.getFFprobeMetadata(tabId, normalizedUrl, headers),
-      this.generatePreview(tabId, normalizedUrl, headers)
-    ]);
+
+    const isAudio = video.mediaType === 'audio';
+
+    if (isAudio) {
+      logger.debug(`Skipping processing for 'audio' mediaType: ${normalizedUrl}`);
+    } else {
+      logger.debug(`Processing as video content: ${normalizedUrl}`);
+      await Promise.all([
+        this.getFFprobeMetadata(tabId, normalizedUrl, headers),
+        this.generatePreview(tabId, normalizedUrl, headers)
+      ]);
+    }
     
     // Send update with unified approach
     sendVideoUpdateToUI(tabId, normalizedUrl, { _sendFullList: true });
@@ -959,7 +965,13 @@ function addDetectedVideo(tabId, videoInfo) {
                 };
                 updatesApplied = true;
             }
-            
+
+            // Update mediaType if it's set in the new detection
+            if (videoInfo.mediaType) {
+                updates.mediaType = videoInfo.mediaType;
+                updatesApplied = true;
+            }
+
             // Update originalContainer if it's set in the new detection but missing in the existing one
             if (videoInfo.originalContainer && 
                 (!existingVideo.originalContainer || existingVideo.originalContainer === 'null')) {
