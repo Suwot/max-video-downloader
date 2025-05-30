@@ -152,5 +152,5 @@ export async function updateVideoElement(url, updatedVideo, isMetadataOnly = fal
 //         const { renderDetailsContent } = await import('./video-type-renderers.js');
 //         renderDetailsContent(detailsDrawer, updatedVideo, videoType);
 //     }
-// }
+}
 
