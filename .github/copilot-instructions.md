@@ -21,3 +21,12 @@ The UI follows **modern UX/UI standards**: minimal, responsive, fast, and cleanâ
 - when you reference any files (existing or new), use VSCode hyperlink format
 - when there are multiple ways to achieve the same goal, always give me relevant options to choose from and explain the pros and cons of each option
 - always show affected file name in the comment on the first line of each code snippet
+
+- show me concise code snippets, without irrelevant context to the task at hand
+
+- when you make/propose changes, at the end include structured Summary of Changes:
+  - **File changed**([filename)]):
+  - unordered list of changes made/proposed
+    - change 1
+    - change 2
+  - summary in 1 line

@@ -56,7 +56,12 @@ function handleDownloadSuccess(response, notificationId) {
   
   for (const [portId, port] of downloadPorts.entries()) {
     try {
-      port.postMessage(response);
+      // Add complete state flag to the response
+      const enhancedResponse = {
+        ...response,
+        state: 'complete'
+      };
+      port.postMessage(enhancedResponse);
     } catch (e) {
       logger.error('Error sending success to port:', e);
       downloadPorts.delete(portId);
@@ -73,7 +78,12 @@ function handleDownloadError(error, notificationId) {
   
   for (const [portId, port] of downloadPorts.entries()) {
     try {
-      port.postMessage({ success: false, error: error });
+      // Add error state flag to the response
+      port.postMessage({ 
+        success: false, 
+        error: error,
+        state: 'error'
+      });
     } catch (e) {
       logger.error('Error sending error to port:', e);
       downloadPorts.delete(portId);

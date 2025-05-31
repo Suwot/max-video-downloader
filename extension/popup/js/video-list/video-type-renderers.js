@@ -28,7 +28,7 @@ export function renderTypeSpecificElements(video) {
  * Creates a styled download button with menu
  * @param {Object} video - The video object
  * @param {HTMLElement} elementsDiv - The parent container
- * @returns {Array} - Array containing [downloadBtn, menuBtn]
+ * @returns {Array} - Array containing [downloadBtn, menuBtn, buttonWrapper]
  */
 function createDownloadButtonWithMenu(video, elementsDiv) {
     // Create button wrapper
@@ -83,7 +83,8 @@ function createDownloadButtonWithMenu(video, elementsDiv) {
     // Add wrapper to parent
     elementsDiv.appendChild(buttonWrapper);
     
-    return [downloadBtn, menuBtn];
+    // Return all elements including the wrapper for state management
+    return [downloadBtn, menuBtn, buttonWrapper];
 }
 
 /**
@@ -111,8 +112,8 @@ function renderHlsElements(video) {
         elementsDiv.appendChild(qualitySelector);
     }
     
-    // Create download button with menu
-    const [downloadBtn, menuBtn] = createDownloadButtonWithMenu(video, elementsDiv);
+    // Create download button with menu, now also get buttonWrapper
+    const [downloadBtn, menuBtn, buttonWrapper] = createDownloadButtonWithMenu(video, elementsDiv);
     
     // Set up download functionality
     downloadBtn.addEventListener('click', async () => {
@@ -155,8 +156,8 @@ function renderDashElements(video) {
         elementsDiv.appendChild(qualitySelector);
     }
     
-    // Create download button with menu
-    const [downloadBtn, menuBtn] = createDownloadButtonWithMenu(video, elementsDiv);
+    // Create download button with menu, now also get buttonWrapper
+    const [downloadBtn, menuBtn, buttonWrapper] = createDownloadButtonWithMenu(video, elementsDiv);
     
     // Set up download functionality
     downloadBtn.addEventListener('click', async () => {
@@ -201,8 +202,8 @@ function renderDirectElements(video) {
     qualitySelector.appendChild(option);
     elementsDiv.appendChild(qualitySelector);
     
-    // Create download button with menu
-    const [downloadBtn, menuBtn] = createDownloadButtonWithMenu(video, elementsDiv);
+    // Create download button with menu, now also get buttonWrapper
+    const [downloadBtn, menuBtn, buttonWrapper] = createDownloadButtonWithMenu(video, elementsDiv);
     
     // Set up download functionality
     downloadBtn.addEventListener('click', async () => {
@@ -245,8 +246,8 @@ function renderBlobElements(video) {
         elementsDiv.appendChild(qualitySelector);
     }
     
-    // Create download button with menu
-    const [downloadBtn, menuBtn] = createDownloadButtonWithMenu(video, elementsDiv);
+    // Create download button with menu, now also get buttonWrapper
+    const [downloadBtn, menuBtn, buttonWrapper] = createDownloadButtonWithMenu(video, elementsDiv);
     
     // Set up download functionality
     downloadBtn.addEventListener('click', async () => {
@@ -287,8 +288,8 @@ function renderGenericElements(video) {
         elementsDiv.appendChild(qualitySelector);
     }
     
-    // Create download button with menu
-    const [downloadBtn, menuBtn] = createDownloadButtonWithMenu(video, elementsDiv);
+    // Create download button with menu, now also get buttonWrapper
+    const [downloadBtn, menuBtn, buttonWrapper] = createDownloadButtonWithMenu(video, elementsDiv);
     
     // Set up download functionality
     downloadBtn.addEventListener('click', async () => {

@@ -31,12 +31,18 @@ let downloadPort = null;
  * @param {Object} videoData - Additional video metadata
  */
 export async function handleDownload(button, url, type, videoData = {}) {
-    const originalText = button.textContent;
+    // Store the complete original HTML content of the button
+    const originalContent = button.innerHTML;
     button.disabled = true;
+    
+    // Get the button wrapper to apply downloading class
+    const buttonWrapper = button.closest('.download-btn-wrapper');
+    if (buttonWrapper) {
+        buttonWrapper.classList.add('downloading');
+    }
     
     // Set initial state
     button.innerHTML = '<span>Starting...</span>';
-    button.style.backgroundImage = `linear-gradient(to right, #1565C0 0%, #1976D2 0%)`;
     
     try {
         // For blob URLs, handle differently
@@ -68,8 +74,10 @@ export async function handleDownload(button, url, type, videoData = {}) {
                 
                 const progress = response.progress || 0;
                 
-                // Update button background to show progress
-                button.style.backgroundImage = `linear-gradient(to right, #1565C0 ${progress}%, #1976D2 ${progress}%)`;
+                // Update button progress using CSS variable
+                if (buttonWrapper) {
+                    buttonWrapper.style.setProperty('--progress', `${progress}%`);
+                }
                 
                 // Update text with enhanced information
                 let text = `${Math.round(progress)}%`;
@@ -102,17 +110,56 @@ export async function handleDownload(button, url, type, videoData = {}) {
                 }
                 
             } else if (response?.success) {
-                // Show complete state
-                button.style.backgroundImage = 'none';
-                button.style.backgroundColor = '#43A047';
-                button.querySelector('span').textContent = 'Complete!';
+                // Store original content before changing it, if not already stored
+                if (!button._originalContent && button.innerHTML.includes('download-btn-icon')) {
+                    button._originalContent = originalContent;
+                }
                 
-                // Reset after delay
-                setTimeout(() => resetDownloadState(), 2000);
+                // Use unified state transition logic
+                const updateButtonToComplete = () => {
+                    if (buttonWrapper) {
+                        buttonWrapper.classList.remove('downloading');
+                        buttonWrapper.classList.add('complete');
+                    }
+                    
+                    // Complete cleanup of ALL inline styles to let the CSS classes handle appearance
+                    button.removeAttribute('style'); // Remove entire style attribute
+                    
+                    // Also clear style from menu button to ensure both are handled the same way
+                    const menuBtn = buttonWrapper.querySelector('.download-menu-btn');
+                    if (menuBtn) {
+                        menuBtn.removeAttribute('style');
+                    }
+                    
+                    button.querySelector('span').textContent = 'Complete!';
+                    
+                    // Reset after delay using the same timer for everything
+                    setTimeout(() => resetDownloadState(), 2000);
+                };
+                
+                updateButtonToComplete();
                 
             } else if (response?.error) {
+                // Store original content before changing it, if not already stored
+                if (!button._originalContent && button.innerHTML.includes('download-btn-icon')) {
+                    button._originalContent = originalContent;
+                }
+                
+                // Use unified state transition logic
+                if (buttonWrapper) {
+                    buttonWrapper.classList.remove('downloading');
+                    buttonWrapper.classList.add('error');
+                }
+                
+                // Update text content
+                button.style.removeProperty('backgroundImage');
+                const span = button.querySelector('span');
+                if (span) span.textContent = 'Error!';
+                
                 showError(response.error);
-                resetDownloadState();
+                
+                // Use a short delay before resetting to show the error state
+                setTimeout(() => resetDownloadState(), 1500);
             }
         });
         
@@ -136,10 +183,33 @@ export async function handleDownload(button, url, type, videoData = {}) {
             downloadPort.disconnect();
             downloadPort = null;
         }
-        button.disabled = false;
-        button.style.backgroundImage = 'none';
-        button.style.backgroundColor = '#1976D2';
-        button.innerHTML = originalText;
+        
+        // Create a unified reset function that handles all elements in one go
+        const performReset = () => {
+            if (buttonWrapper) {
+                // Reset all classes
+                buttonWrapper.classList.remove('downloading', 'complete', 'error');
+                buttonWrapper.removeAttribute('style'); // Remove all inline styles from wrapper
+            }
+            
+            button.disabled = false;
+            // Remove ALL inline styles completely for a clean state
+            button.removeAttribute('style');
+            
+            // Also clean the menu button for consistency
+            if (buttonWrapper) {
+                const menuBtn = buttonWrapper.querySelector('.download-menu-btn');
+                if (menuBtn) {
+                    menuBtn.removeAttribute('style');
+                }
+            }
+            
+            // Restore the original content with download icon and text
+            button.innerHTML = originalContent;
+        };
+        
+        // Applying a small delay for better user experience
+        setTimeout(performReset, 1000);
     }
 }
 
@@ -405,186 +475,125 @@ function updateDownloadButtonProgress(button, progress, progressData = {}) {
     // Ensure progress is between 0 and 100
     progress = Math.max(0, Math.min(100, Math.round(progress)));
     
-    // Create progress container if it doesn't exist
-    let progressContainer = button.querySelector('.progress-container');
-    if (!progressContainer) {
-        // Replace button content with progress UI
-        button.innerHTML = '';
-        
-        progressContainer = document.createElement('div');
-        progressContainer.className = 'progress-container';
-        
-        // Create main progress bar
-        const progressBar = document.createElement('div');
-        progressBar.className = 'progress-bar';
-        
-        // Create progress fill
-        const progressFill = document.createElement('div');
-        progressFill.className = 'progress-fill';
-        progressBar.appendChild(progressFill);
-        
-        // Create progress text
-        const progressText = document.createElement('div');
-        progressText.className = 'progress-text';
-        
-        // Create progress info
-        const progressInfo = document.createElement('div');
-        progressInfo.className = 'progress-info';
-        
-        // Add elements to container
-        progressContainer.appendChild(progressBar);
-        progressContainer.appendChild(progressText);
-        progressContainer.appendChild(progressInfo);
-        button.appendChild(progressContainer);
-        
-        // Add progress styles if not already added
-        if (!document.getElementById('progress-styles')) {
-            const style = document.createElement('style');
-            style.id = 'progress-styles';
-            style.textContent = `
-                .progress-container {
-                    width: 100%;
-                    display: flex;
-                    flex-direction: column;
-                    gap: 4px;
-                }
-                .progress-bar {
-                    width: 100%;
-                    height: 8px;
-                    background: rgba(255, 255, 255, 0.2);
-                    border-radius: 4px;
-                    overflow: hidden;
-                }
-                .progress-fill {
-                    height: 100%;
-                    background: #90CAF9;
-                    border-radius: 4px;
-                    width: 0%;
-                    transition: width 0.3s ease;
-                }
-                .progress-text {
-                    font-weight: bold;
-                    text-align: center;
-                    color: white;
-                    font-size: 14px;
-                }
-                .progress-info {
-                    display: flex;
-                    justify-content: space-between;
-                    font-size: 12px;
-                    color: rgba(255, 255, 255, 0.8);
-                }
-                .download-complete .progress-fill {
-                    background: #81C784;
-                }
-            `;
-            document.head.appendChild(style);
-        }
+    // Get button wrapper and add downloading class if not already present
+    const buttonWrapper = button.closest('.download-btn-wrapper');
+    if (buttonWrapper && !buttonWrapper.classList.contains('downloading')) {
+        buttonWrapper.classList.add('downloading');
     }
     
-    // Get progress elements
-    const progressFill = progressContainer.querySelector('.progress-fill');
-    const progressText = progressContainer.querySelector('.progress-text');
-    const progressInfo = progressContainer.querySelector('.progress-info');
-    
-    // Update progress bar
-    progressFill.style.width = `${progress}%`;
-    
-    // Format progress text
-    let statusText = `Downloading ${progress}%`;
-    if (progress >= 100) {
-        statusText = 'Download Complete';
-        button.classList.add('download-complete');
-    } else if (progressData.segmentProgress) {
-        // Add segment information if available
-        statusText += ` (${progressData.segmentProgress})`;
+    // Set progress CSS variable on the wrapper
+    if (buttonWrapper) {
+        buttonWrapper.style.setProperty('--progress', `${progress}%`);
     }
     
-    progressText.textContent = statusText;
-    
-    // Format detailed progress information
-    let speedText = '';
-    let etaText = '';
-    
-    if (progressData.speed) {
-        speedText = formatSpeed(progressData.speed);
+    // Store original button content if not already stored
+    if (!button._originalContent && button.innerHTML.includes('download-btn-icon')) {
+        button._originalContent = button.innerHTML;
     }
     
-    if (progressData.eta && progressData.eta > 0 && progress < 100) {
-        etaText = formatTime(progressData.eta);
-    }
-    
-    // Update detailed info
-    if (speedText || etaText) {
-        progressInfo.innerHTML = '';
-        if (speedText) {
-            const speedElement = document.createElement('span');
-            speedElement.textContent = speedText;
-            progressInfo.appendChild(speedElement);
-        }
+    // Unified state handling function
+    const updateButtonState = (state, text) => {
+        if (!buttonWrapper) return;
         
-        if (etaText) {
-            const etaElement = document.createElement('span');
-            etaElement.textContent = `ETA: ${etaText}`;
-            progressInfo.appendChild(etaElement);
-        }
-    }
-    
-    // Add confidence indicator if available (for debugging)
-    if (progressData.confidence !== undefined && progressData.confidence !== null) {
-        // Higher confidence = more saturated color
-        const saturation = 50 + Math.round(progressData.confidence * 50);
-        progressFill.style.background = `hsl(210, ${saturation}%, 60%)`;
-    }
-    
-    // Display quality information if available
-    if (progressData.quality && !button.querySelector('.quality-indicator')) {
-        const quality = progressData.quality;
-        
-        // Create quality indicator
-        const qualityIndicator = document.createElement('div');
-        qualityIndicator.className = 'quality-indicator';
-        
-        // Format quality label based on available data
-        let qualityText = '';
-        if (quality.height) {
-            qualityText = `${quality.height}p`;
-            if (quality.fps && quality.fps > 30) {
-                qualityText += `@ ${quality.fps}`;
+        // Update wrapper classes
+        buttonWrapper.classList.remove('downloading', 'complete', 'error');
+        if (state) {
+            buttonWrapper.classList.add(state);
+            
+            // When changing to complete or error state, clean up all inline styles
+            if (state === 'complete' || state === 'error') {
+                // Remove ALL inline styles from the button
+                button.removeAttribute('style');
+                
+                // Also clean the menu button to ensure unified appearance
+                const menuBtn = buttonWrapper.querySelector('.download-menu-btn');
+                if (menuBtn) {
+                    menuBtn.removeAttribute('style');
+                }
             }
-        } else if (quality.resolution) {
-            qualityText = quality.resolution;
-        } else if (quality.label) {
-            qualityText = quality.label;
-        } else {
-            qualityText = 'Custom';
         }
         
-        qualityIndicator.textContent = qualityText;
+        // Create or update text content
+        let textElement = button.querySelector('span');
+        if (!textElement) {
+            textElement = document.createElement('span');
+            button.innerHTML = '';
+            button.appendChild(textElement);
+        }
+        textElement.textContent = text;
         
-        // Add styles for quality indicator
-        if (!document.getElementById('quality-indicator-styles')) {
-            const style = document.createElement('style');
-            style.id = 'quality-indicator-styles';
-            style.textContent = `
-                .quality-indicator {
-                    position: absolute;
-                    top: -8px;
-                    right: -8px;
-                    background: #ff9800;
-                    color: white;
-                    padding: 2px 5px;
-                    border-radius: 10px;
-                    font-size: 11px;
-                    font-weight: bold;
-                    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+        // If complete or error, set a timeout to restore original state
+        if (state === 'complete' || state === 'error') {
+            const originalContent = button._originalContent;
+            
+            // Using a single timeout for all state transitions
+            setTimeout(() => {
+                if (buttonWrapper) {
+                    // Single operation to update all states
+                    buttonWrapper.classList.remove('downloading', 'complete', 'error');
+                    buttonWrapper.removeAttribute('style'); // Remove all wrapper styles
+                    
+                    // Complete cleanup of all buttons
+                    button.removeAttribute('style');
+                    
+                    const menuBtn = buttonWrapper.querySelector('.download-menu-btn');
+                    if (menuBtn) {
+                        menuBtn.removeAttribute('style');
+                    }
+                    
+                    // Restore original content with download icon
+                    if (originalContent) {
+                        button.innerHTML = originalContent;
+                    }
                 }
-            `;
-            document.head.appendChild(style);
+            }, 2000);
         }
-        
-        // Add to button
-        button.style.position = 'relative';
-        button.appendChild(qualityIndicator);
+    };
+    
+    // Check for state information
+    if (progressData.state === 'complete') {
+        updateButtonState('complete', 'Complete!');
+        return;
+    } else if (progressData.state === 'error') {
+        updateButtonState('error', 'Error!');
+        return;
+    } else {
+        updateButtonState('downloading', null); // Just ensure the downloading class is there
+    }
+    
+    // Create or update text content for progress
+    let textElement = button.querySelector('span');
+    if (!textElement) {
+        textElement = document.createElement('span');
+        button.innerHTML = '';
+        button.appendChild(textElement);
+    }
+    
+    // Update text with enhanced information
+    let text = `${Math.round(progress)}%`;
+    
+    // Add segment information if available
+    if (progressData.segmentProgress) {
+        text += ` (${progressData.segmentProgress})`;
+    }
+    
+    // Add speed information
+    if (progressData.speed) {
+        text += ` • ${formatSpeed(progressData.speed)}`;
+    }
+    
+    // Add ETA if available
+    if (progressData.eta && progressData.eta > 0 && progress < 100) {
+        text += ` • ${formatTime(progressData.eta)}`;
+    }
+    
+    textElement.textContent = text;
+    
+    // If progress is 100% but no state is set, assume completion
+    if (progress >= 100 && buttonWrapper) {
+        // Use our unified state handling function
+        setTimeout(() => {
+            updateButtonState('complete', 'Complete!');
+        }, 500);
     }
 }

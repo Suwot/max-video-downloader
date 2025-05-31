@@ -154,6 +154,7 @@
     width: 73px;
     height: 100%;
     overflow: hidden;
+    transition: background-color 0.3s ease;
 }
 
 .download-btn-icon {
@@ -168,7 +169,8 @@
     fill: #FAFAFA;
 }
 
-.download-btn::before {
+/* Default state - non-downloading */
+.download-btn:not(.downloading)::before {
     content: '';
     position: absolute;
     top: 0;
@@ -176,23 +178,24 @@
     height: 100%;
     width: 0;
     background-color: rgba(255, 255, 255, 0.1);
-    transition: width 0.3s ease;
 }
 
-.download-btn:not(:disabled) {
+/* Hover state ONLY when not downloading */
+.download-btn:not(.downloading):hover {
+    background-color: #1565C0;
+}
+
+/* Downloading state */
+.download-btn-wrapper.downloading .download-btn {
     background-image: linear-gradient(to right, #1565C0 0%, #1976D2 0%);
     background-size: 200% 100%;
     transition: background-position 0.3s ease;
 }
 
-.download-btn span {
+.download-btn-wrapper.downloading .download-btn span {
     position: relative;
     z-index: 1;
     mix-blend-mode: screen;
-}
-
-.download-btn:hover {
-    background-color: #1565C0;
 }
 
 /* Menu button (three dots) */
@@ -207,10 +210,17 @@
     cursor: pointer;
     padding: 0;
     border-left: 1px solid #1565C0;
+    transition: background-color 0.3s ease;
 }
 
-.download-menu-btn:hover, .download-btn:hover {
+/* Menu button hover - only when not downloading */
+.download-btn-wrapper:not(.downloading) .download-menu-btn:hover {
     background-color: #1565C0;
+}
+
+/* Menu button in downloading state */
+.download-btn-wrapper.downloading .download-menu-btn {
+    background-color: #1976D2;
 }
 
 .download-menu-btn .dots {
@@ -234,33 +244,28 @@
     opacity: 1;
 }
 
-.download-btn[data-state="complete"] {
+/* Complete state - overrides all other styles */
+.download-btn-wrapper.complete .download-btn,
+.download-btn-wrapper.complete .download-menu-btn {
     background-color: #43A047;
     background-image: none;
 }
 
 /* Button progress styling */
-.download-button {
-    position: relative;
-    overflow: hidden;
-    transition: background-color 0.3s ease;
-}
-
-.download-button::after {
+.download-btn-wrapper.downloading .download-btn::after {
     content: '';
     position: absolute;
     top: 0;
     left: 0;
     height: 100%;
-    width: 0%;
+    width: var(--progress, 0%);
     background-color: rgba(255, 255, 255, 0.1);
     transition: width 0.3s ease;
 }
 
-.download-button.downloading::after {
-    width: var(--progress, 0%);
-}
-
-.download-button.complete {
-    background-color: #43A047 !important;
+/* Error state styling */
+.download-btn-wrapper.error .download-btn,
+.download-btn-wrapper.error .download-menu-btn {
+    background-color: #d32f2f;
+    background-image: none;
 }
