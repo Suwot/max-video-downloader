@@ -13,9 +13,7 @@
 
 // popup/js/download.js
 import { showError } from './utilities.js';
-import { debounce } from './utilities.js';
-import { showQualityDialog } from './ui.js';
-import { videoStateService } from './services/video-state-service.js';
+import  { formatSize } from './video-list/video-utils.js';
 import { getBackgroundPort } from './index.js';
 import { createLogger } from '../../js/utilities/logger.js';
 
@@ -295,15 +293,6 @@ function resetDownloadState(button, originalText) {
     button.removeAttribute('style');
     
     button.innerHTML = originalText;
-}
-
-// Format file size in human readable form
-function formatSize(bytes) {
-    if (bytes === 0) return '0 B';
-    const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return `${(bytes / Math.pow(k, i)).toFixed(1)} ${sizes[i]}`;
 }
 
 // Format speed in human readable form

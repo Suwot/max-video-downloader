@@ -31,13 +31,11 @@ export function formatQualityLabel(video) {
     //     }
     // }
     
-     // Add file size info - prioritizing actual file size over estimated size
     // This handles both direct media and streaming variants
-    let fileSizeBytes = video.metaJS?.estimatedFileSizeBytes || 
-                        video.metaFFprobe?.sizeBytes || null;
+    let fileSizeBytes = video.metaJS?.estimatedFileSizeBytes || video.metaFFprobe?.sizeBytes || null;
 
     if (fileSizeBytes) {
-        const formattedSize = formatFileSize(fileSizeBytes);
+        const formattedSize = formatSize(fileSizeBytes);
         if (formattedSize) {
             qualityLabel += ` · ${formattedSize}`;
         }
@@ -77,18 +75,14 @@ export function extractPreviewUrl(video) {
 }
 
 /**
- * Format file size in bytes to human readable format
- * @param {Number} bytes - File size in bytes
- * @returns {String|null} - Formatted file size or null if unavailable
+ * Format file size bytes to human readable format
+ * @param {number} bytes - Size in bytes
+ * @returns {string} Formatted size string
  */
-// extension/popup/js/video-list/video-utils.js
-export function formatFileSize(bytes) {
-    if (!bytes) return null;
-
-    const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
-    if (bytes === 0) return '0 Bytes';
-
-    const i = Math.floor(Math.log(bytes) / Math.log(1024));
-    const value = bytes / Math.pow(1024, i);
-    return `${Math.round(value * 10) / 10} ${sizes[i]}`;
+export function formatSize(bytes) {
+    if (!bytes || bytes === 0) return '0 MB';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return `${(bytes / Math.pow(k, i)).toFixed(1)} ${sizes[i]}`;
 }

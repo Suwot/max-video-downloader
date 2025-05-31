@@ -25,7 +25,7 @@ The UI follows **modern UX/UI standards**: minimal, responsive, fast, and cleanâ
 - show me concise code snippets, without irrelevant context to the task at hand
 
 - when you make/propose changes, at the end include structured Summary of Changes:
-  - **File changed**([filename)]):
+  - **File changed**([filename)](path/to/file)):
   - unordered list of changes made/proposed
     - change 1
     - change 2
