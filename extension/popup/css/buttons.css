@@ -259,8 +259,9 @@
     left: 0;
     height: 100%;
     width: var(--progress, 0%);
-    background-color: rgba(255, 255, 255, 0.1);
+    background-color: rgba(255, 255, 255, 0.2); /* Slightly more visible */
     transition: width 0.3s ease;
+    z-index: 0; /* Ensure it's behind text */
 }
 
 /* Error state styling */

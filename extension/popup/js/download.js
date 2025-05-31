@@ -99,15 +99,8 @@ export async function handleDownload(button, url, type, videoData = {}) {
                 
                 button.querySelector('span').textContent = text;
                 
-                // Adjust confidence through color saturation if available
-                if (response.confidence !== undefined && response.confidence !== null) {
-                    // Higher confidence = more vivid blue
-                    const saturation = 50 + Math.round(response.confidence * 50);
-                    const lightness = 50 - Math.round(response.confidence * 10);
-                    const startColor = `hsl(210, ${saturation}%, ${lightness}%)`;
-                    const endColor = `hsl(210, ${saturation-10}%, ${lightness+5}%)`;
-                    button.style.backgroundImage = `linear-gradient(to right, ${startColor} ${progress}%, ${endColor} ${progress}%)`;
-                }
+                // We don't need custom gradient coloring as we're using the CSS variable approach
+                // The progress is already set via buttonWrapper.style.setProperty('--progress', `${progress}%`);
                 
             } else if (response?.success) {
                 // Store original content before changing it, if not already stored
@@ -151,8 +144,15 @@ export async function handleDownload(button, url, type, videoData = {}) {
                     buttonWrapper.classList.add('error');
                 }
                 
-                // Update text content
-                button.style.removeProperty('backgroundImage');
+                // Update text content - use removeAttribute for consistency
+                button.removeAttribute('style');
+                
+                // Also clean menu button for consistency
+                if (buttonWrapper) {
+                    const menuBtn = buttonWrapper.querySelector('.download-menu-btn');
+                    if (menuBtn) menuBtn.removeAttribute('style');
+                }
+                
                 const span = button.querySelector('span');
                 if (span) span.textContent = 'Error!';
                 
@@ -264,12 +264,16 @@ function updateProgress(button, progress) {
     // Ensure progress is between 0 and 100
     progress = Math.max(0, Math.min(100, progress));
     
-    // Update background gradient
-    if (progress < 100) {
-        button.style.backgroundImage = `linear-gradient(to right, #1565C0 ${progress}%, #1976D2 ${progress}%)`;
-    } else {
-        button.style.backgroundImage = 'none';
-        button.style.backgroundColor = '#43A047';
+    // Use the CSS variable approach for consistency
+    const buttonWrapper = button.closest('.download-btn-wrapper');
+    if (buttonWrapper) {
+        buttonWrapper.style.setProperty('--progress', `${progress}%`);
+        
+        // Handle completion state through CSS classes
+        if (progress >= 100) {
+            buttonWrapper.classList.remove('downloading');
+            buttonWrapper.classList.add('complete');
+        }
     }
 }
 
@@ -279,8 +283,17 @@ function resetDownloadState(button, originalText) {
         downloadPort = null;
     }
     button.disabled = false;
-    button.style.backgroundImage = 'none';
-    button.style.backgroundColor = '#1976D2';
+    
+    // Use classes instead of inline styles for button appearance
+    const buttonWrapper = button.closest('.download-btn-wrapper');
+    if (buttonWrapper) {
+        buttonWrapper.classList.remove('downloading', 'complete', 'error');
+        buttonWrapper.style.removeProperty('--progress');
+    }
+    
+    // Remove any inline styles
+    button.removeAttribute('style');
+    
     button.innerHTML = originalText;
 }
 
