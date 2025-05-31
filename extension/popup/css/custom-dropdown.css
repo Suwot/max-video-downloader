@@ -46,7 +46,6 @@
 .options-container {
     position: absolute;
     left: 0;
-    width: 100%;
     margin-top: 1px;
     background: #2c2c2c;
     border-radius: 4px;
@@ -54,16 +53,32 @@
     z-index: 100;
     max-height: 0;
     overflow-y: auto;
-    transition: max-height 0.3s;
+    transition: all 0.3s;
     opacity: 0;
     visibility: hidden;
+    width: 280px;
+    scrollbar-gutter: stable; /* Reserve space for scrollbar */
+    /* Hide scrollbar but keep functionality 
+    -ms-overflow-style: none; /* IE and Edge 
+    scrollbar-width: none; /* Firefox */
+
 }
 
 .custom-dropdown.open .options-container {
-    padding: 6px 0;
-    max-height: 200px;
+    max-height: 300px;
     opacity: 1;
     visibility: visible;
+}
+
+/* DASH specific dropdown style */
+.video-item [data-type="dash"] .options-container {
+    width: 388px; /* Width for DASH dropdowns */
+    left: -108px; /* Center it */
+}
+
+/* Style for positioning wider options container */
+.video-item .download-group {
+    position: relative; /* Ensure proper positioning context */
 }
 
 /* Simple dropdown options */
@@ -89,8 +104,8 @@
 /* DASH multi-column layout */
 .tracks-columns-container {
     display: flex;
-    padding: 8px;
-    gap: 8px;
+    padding: 6px;
+    gap: 4px;
     max-width: 100%;
 }
 
@@ -101,8 +116,8 @@
 
 .column-title {
     font-size: 11px;
-    color: #99999c;
     font-weight: 500;
+    color: #FAFAFA;
     padding: 0 4px 4px;
     border-bottom: 1px solid #3a3a3a;
     margin-bottom: 4px;
@@ -113,7 +128,7 @@
     align-items: center;
     padding: 6px 4px;
     font-size: 12px;
-    color: #FAFAFA;
+    color: #999;
     cursor: pointer;
     transition: background-color 0.1s;
     border-radius: 2px;
@@ -125,6 +140,7 @@
 
 .track-option.selected {
     background: #3a3a3a;
+    color: #FAFAFA;
 }
 
 .track-option input {

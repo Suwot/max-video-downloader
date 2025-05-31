@@ -93,27 +93,7 @@ export function createCustomDropdown(options) {
  * @param {HTMLElement} optionsContainer - Options container element
  */
 function positionDropdown(container, optionsContainer) {
-    // Get container position
-    const rect = container.getBoundingClientRect();
-    
-    // Calculate space below
-    const spaceBelow = window.innerHeight - rect.bottom;
-    
-    // Ensure the dropdown options are visible with proper height
-    // Always position below
-    optionsContainer.style.top = '100%';
-    optionsContainer.style.bottom = 'auto';
-    
-    // Always add expanded class to ensure maximum space
     document.body.classList.add('expanded');
-    
-    // Use setTimeout to ensure the expanded class has been applied and layout recalculated
-    setTimeout(() => {
-        // Get the new available space (after expanded class is applied)
-        const newSpaceBelow = window.innerHeight - rect.bottom;
-        // Set height with a minimum of 200px if available
-        optionsContainer.style.maxHeight = `${Math.max(200, Math.min(300, newSpaceBelow - 10))}px`;
-    }, 0);
 }
 
 /**
