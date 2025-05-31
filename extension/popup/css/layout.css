@@ -4,7 +4,7 @@
     flex-direction: column;
     height: 100%;
     width: 100%;
-    overflow: hidden;
+    overflow: visible;
 }
 
 /* Initial states */
@@ -51,8 +51,7 @@
 /* Video list styles */
 #videos {
     flex: 1;
-    overflow-y: auto;
-    overflow-x: hidden;
+    overflow-y: visible;
     height: 100%;
     scroll-behavior: smooth;
     padding: 0;

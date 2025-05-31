@@ -18,6 +18,10 @@ body {
     transition: background-color 0.3s, color 0.3s;
 }
 
+body.expanded {
+    min-height: 500px;
+}
+
 /* Dark theme (default) */
 body.theme-dark {
     background-color: #121212;

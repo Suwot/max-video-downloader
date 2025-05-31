@@ -130,7 +130,6 @@
 }
 
 .media-type-content {
-    overflow: hidden; /* Changed from 'visible' to 'hidden' */
     transition: max-height 0.3s;
 }
 
