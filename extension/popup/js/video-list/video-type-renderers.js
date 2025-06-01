@@ -198,20 +198,11 @@ function renderDirectElements(video) {
     const elementsDiv = document.createElement('div');
     elementsDiv.className = 'download-group';
     
-    // Create a single variant with the direct video's info
-    const variant = {
-        url: video.url,
-        fileSize: video.fileSize || video.estimatedFileSizeBytes,
-        width: video.metaFFprobe?.width,
-        height: video.metaFFprobe?.height,
-        bandwidth: video.metaFFprobe?.bitrate
-    };
-    
     // Create custom dropdown with just one option
     const dropdown = createCustomDropdown({
         type: 'direct',
-        variants: [variant],
-        initialSelection: variant
+        variants: [video],
+        initialSelection: video
     });
     
     elementsDiv.appendChild(dropdown);

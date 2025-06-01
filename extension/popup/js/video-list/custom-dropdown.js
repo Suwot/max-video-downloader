@@ -3,6 +3,8 @@
  * Supports both simple selection (HLS/Direct) and multi-track selection (DASH)
  */
 
+import { formatSize } from './video-utils.js';
+
 /**
  * Creates a custom dropdown component
  * @param {Object} options - Configuration options
@@ -105,6 +107,7 @@ function positionDropdown(container, optionsContainer) {
  */
 function createSimpleOptions(container, variants, initialSelection, onSelect) {
     if (!variants || variants.length === 0) return;
+    console.log('Creating simple options for variants:', variants);
     
     variants.forEach(variant => {
         const option = document.createElement('div');
@@ -113,7 +116,9 @@ function createSimpleOptions(container, variants, initialSelection, onSelect) {
             option.classList.add('selected');
         }
         
-        option.textContent = formatVariantLabel(variant);
+        // Pass the container's type or fallback to 'direct'
+        const mediaType = container.closest('.custom-dropdown')?.dataset.type || 'direct';
+        option.textContent = formatVariantLabel(variant, mediaType);
         option.dataset.url = variant.url;
         
         option.addEventListener('click', () => {
@@ -286,73 +291,88 @@ function createTrackColumn(title, tracks, type, selectedIds = [], singleSelect =
  */
 function formatTrackLabel(track, type) {
     if (type === 'video') {
-        const res = track.width && track.height ? `${track.width}×${track.height}` : '';
-        const bitrate = track.bandwidth ? `${Math.round(track.bandwidth/1000)} Kbps` : '';
-        return `${res} ${bitrate}`.trim();
+        const res = track.height  || null;
+        const fileSizeBytes = formatSize(track.estimatedFileSizeBytes) || null;
+        // const bitrate = track.bandwidth ? `${Math.round(track.bandwidth/1000)} Kbps` : '';
+        return `${res}p • ${fileSizeBytes}`;
     } else if (type === 'audio') {
-        const lang = track.language || '';
-        const channels = track.channels || '';
-        const bitrate = track.bandwidth ? `${Math.round(track.bandwidth/1000)} Kbps` : '';
-        return `${lang} ${channels}ch ${bitrate}`.trim();
+        const label = track.label || null
+        const lang = track.language || null;
+        const codecs = track.codecs ? track.codecs.split('.')[0] : null;
+        const channels = track.channels ? `${track.channels}ch` : null;
+        // const bitrate = track.bandwidth ? `${Math.round(track.bandwidth / 1000)} Kbps` : null;
+        const fileSizeBytes = track.estimatedFileSizeBytes ? formatSize(track.estimatedFileSizeBytes) : null;
+
+        return [label, lang, codecs, channels, fileSizeBytes]
+            .filter(Boolean)
+            .join(' • ');
     } else {
         // Subtitle
-        return track.language || 'Unknown';
+        return track.label || track.language || 'Subtitles';
     }
 }
 
 /**
  * Format the displayed label for a variant
  * @param {Object} variant - Variant data
+ * @param {string} [type='direct'] - Media type ('hls', 'direct', 'blob')
  * @returns {string} Formatted label
  */
-function formatVariantLabel(variant) {
+function formatVariantLabel(variant, type = 'direct') {
     if (!variant) return "Unknown Quality";
-    
-    let label = '';
-    
-    // Add resolution if available
-    if (variant.resolution) {
-        label += variant.resolution;
-    } else if (variant.width && variant.height) {
-        label += `${variant.width}×${variant.height}`;
-    } else if (variant.height) {
-        label += `${variant.height}p`;
-    }
-    
-    // Add bitrate if available
-    if (variant.bandwidth) {
-        const kbps = Math.round(variant.bandwidth / 1000);
-        label += label ? ` • ${kbps} Kbps` : `${kbps} Kbps`;
-    }
-    
-    // Add file size if available
-    if (variant.fileSize) {
-        const size = formatFileSize(variant.fileSize);
-        label += label ? ` • ${size}` : size;
-    }
-    
-    // Fallback if no info available
-    if (!label) {
-        label = variant.codecs || 'Alternative Quality';
-    }
-    
-    return label;
-}
 
-/**
- * Format file size for display
- * @param {number} bytes - File size in bytes
- * @returns {string} Formatted file size
- */
-function formatFileSize(bytes) {
-    if (bytes === 0) return '0 Bytes';
-    if (!bytes) return '';
-    
-    const k = 1024;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+    // Different sources have different data structures
+    if (type === 'hls') {
+        // HLS-specific formatting
+        const resolutionP = variant.metaJS?.height ? 
+            ((variant.metaJS.fps && variant.metaJS.fps !== 30) ? `${variant.metaJS.height}p${variant.metaJS.fps}` : `${variant.metaJS.height}p`) : 
+            (variant.height ? `${variant.height}p` : null);
+        
+        const fileSizeBytes = variant.metaJS?.estimatedFileSizeBytes ? 
+            formatSize(variant.metaJS.estimatedFileSizeBytes) : null;
+
+        // const bitrate = variant.metaJS?.bandwidth ? `${Math.round(variant.metaJS.bandwidth/1000)} Kbps` : null;
+
+        const resolution = variant.metaJS?.resolution || null;
+        const formattedCodecs = variant.metaJS?.codecs
+        .split(',')
+        .map(codec => codec.split('.')[0]) // Keep only the part before first dot
+        .join(' & ');
+
+        return [resolutionP, fileSizeBytes, resolution, formattedCodecs]
+            .filter(Boolean)
+            .join(' • ') || 'Undefined Quality';
+    } else {
+        // Direct/blob video formatting
+        // Access height and fps from metaFFprobe (not nested under metaFFprobe as I thought)
+        const height = variant.metaFFprobe?.height || null;
+        const fps = variant.metaFFprobe?.fps || null;
+        const resolutionP = height ? 
+            ((fps && fps !== 30) ? `${height}p${fps}` : `${height}p`) : null;
+        
+        // Get file size info from fileSize or estimatedFileSizeBytes
+        const fileSize = variant.fileSize ? formatSize(variant.fileSize) : 
+            (variant.estimatedFileSizeBytes ? formatSize(variant.estimatedFileSizeBytes) : null);
+        
+        // Get codec info from metaFFprobe (which contains videoCodec and audioCodec objects)
+        const videoCodec = variant.metaFFprobe?.videoCodec?.name || null;
+        const audioCodec = variant.metaFFprobe?.audioCodec?.name || null;
+        const audioChannels = variant.metaFFprobe?.audioCodec?.channels ? 
+            `${variant.metaFFprobe.audioCodec.channels}ch` : null;
+        
+        let formattedCodecs = null;
+        if (videoCodec && audioCodec && audioChannels) {
+            formattedCodecs = `${videoCodec} & ${audioCodec} (${audioChannels})`;
+        } else if (videoCodec && audioCodec) {
+            formattedCodecs = `${videoCodec} & ${audioCodec}`;
+        } else {
+            formattedCodecs = videoCodec || audioCodec || null;
+        }
+        
+        return [resolutionP, fileSize, formattedCodecs]
+            .filter(Boolean)
+            .join(' • ') || 'Alternative Quality';
+    }
 }
 
 /**
@@ -393,7 +413,8 @@ function updateSelectedDisplay(display, selection, type) {
         // For HLS/Direct, show the selected quality
         const label = document.createElement('span');
         label.className = 'label';
-        label.textContent = formatVariantLabel(selection);
+        const parts = formatVariantLabel(selection, type).split(' • ');
+        label.textContent = parts.slice(0, 2).join(' • '); // show just the first 2 parts
         display.dataset.url = selection.url || '';
         display.prepend(label);
     }
