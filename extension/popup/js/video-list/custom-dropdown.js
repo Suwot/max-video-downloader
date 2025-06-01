@@ -161,20 +161,47 @@ function createDashOptions(container, tracks, initialSelection, onSelect) {
     applyButton.className = 'apply-button';
     applyButton.textContent = 'Apply';
     applyButton.addEventListener('click', () => {
-        // Collect selected tracks
-        const selectedVideo = videoColumn.querySelector('.track-option.selected')?.dataset.id;
-        const selectedAudio = [...audioColumn.querySelectorAll('.track-option.selected')]
-            .map(el => el.dataset.id);
-        const selectedSubs = subtitleTracks.length > 0 ? 
+        // Collect selected tracks with their ffmpegStreamIndex values
+        const selectedVideoTrack = videoColumn.querySelector('.track-option.selected');
+        const selectedVideoIndex = selectedVideoTrack ? 
+            videoTracks.find(track => track.id === selectedVideoTrack.dataset.id)?.ffmpegStreamIndex : null;
+        
+        // Get all selected audio tracks' ffmpegStreamIndex values
+        const selectedAudioIndices = [...audioColumn.querySelectorAll('.track-option.selected')]
+            .map(el => {
+                const trackId = el.dataset.id;
+                return audioTracks.find(track => track.id === trackId)?.ffmpegStreamIndex;
+            })
+            .filter(Boolean);
+            
+        // Get all selected subtitle tracks' ffmpegStreamIndex values
+        const selectedSubIndices = subtitleTracks.length > 0 ? 
+            [...columnsContainer.querySelector('.column.subtitle').querySelectorAll('.track-option.selected')]
+            .map(el => {
+                const trackId = el.dataset.id;
+                return subtitleTracks.find(track => track.id === trackId)?.ffmpegStreamIndex;
+            })
+            .filter(Boolean) : [];
+        
+        // Collect track IDs for UI reference
+        const selectedVideoId = selectedVideoTrack?.dataset.id;
+        const selectedAudioIds = [...audioColumn.querySelectorAll('.track-option.selected')].map(el => el.dataset.id);
+        const selectedSubIds = subtitleTracks.length > 0 ? 
             [...columnsContainer.querySelector('.column.subtitle').querySelectorAll('.track-option.selected')]
             .map(el => el.dataset.id) : [];
         
-        // Create selection object with mapping
+        // Create selection object with direct ffmpegStreamIndex values
+        const trackMap = [
+            ...(selectedVideoIndex ? [selectedVideoIndex] : []),
+            ...selectedAudioIndices,
+            ...selectedSubIndices
+        ].join(',');
+        
         const selection = {
-            selectedVideo,
-            selectedAudio,
-            selectedSubs,
-            trackMap: buildTrackMap(selectedVideo, selectedAudio, selectedSubs)
+            selectedVideo: selectedVideoId,
+            selectedAudio: selectedAudioIds,
+            selectedSubs: selectedSubIds,
+            trackMap
         };
         
         // Pass to callback
@@ -249,38 +276,6 @@ function createTrackColumn(title, tracks, type, selectedIds = [], singleSelect =
     });
     
     return column;
-}
-
-/**
- * Build a track map string for DASH download
- * @param {string} videoTrackId - Selected video track ID
- * @param {Array} audioTrackIds - Selected audio track IDs
- * @param {Array} subTrackIds - Selected subtitle track IDs
- * @returns {string} Track map string (e.g., "0:v:0,0:a:1,0:s:0")
- */
-function buildTrackMap(videoTrackId, audioTrackIds, subTrackIds) {
-    const parts = [];
-    
-    // Add video track if selected
-    if (videoTrackId) {
-        parts.push(`0:v:${videoTrackId}`);
-    }
-    
-    // Add audio tracks
-    if (audioTrackIds && audioTrackIds.length > 0) {
-        audioTrackIds.forEach(id => {
-            parts.push(`0:a:${id}`);
-        });
-    }
-    
-    // Add subtitle tracks
-    if (subTrackIds && subTrackIds.length > 0) {
-        subTrackIds.forEach(id => {
-            parts.push(`0:s:${id}`);
-        });
-    }
-    
-    return parts.join(',');
 }
 
 /**
