@@ -1408,9 +1408,9 @@ body.theme-light {
     transition: all 0.3s;
     opacity: 0;
     visibility: hidden;
-    width: 280px; /* Default width applied to both states */
-    scrollbar-gutter: stable; /* Reserve space for scrollbar */
-
+    width: 280px;
+    -ms-overflow-style: none;
+    scrollbar-width: none;
 }
 
 .custom-dropdown.open .options-container {

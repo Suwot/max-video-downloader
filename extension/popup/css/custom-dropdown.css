@@ -57,11 +57,8 @@
     opacity: 0;
     visibility: hidden;
     width: 280px;
-    scrollbar-gutter: stable; /* Reserve space for scrollbar */
-    /* Hide scrollbar but keep functionality 
-    -ms-overflow-style: none; /* IE and Edge 
-    scrollbar-width: none; /* Firefox */
-
+    -ms-overflow-style: none;
+    scrollbar-width: none;
 }
 
 .custom-dropdown.open .options-container {
