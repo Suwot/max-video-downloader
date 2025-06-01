@@ -18,7 +18,7 @@
     border-radius: 4px;
     background: #242424;
     color: #FAFAFA;
-    font-size: 10px;
+    font-size: 11px;
     transition: background-color 0.2s;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -81,8 +81,8 @@
 /* Simple dropdown options */
 .dropdown-option {
     padding: 8px 12px;
-    color: #FAFAFA;
-    font-size: 13px;
+    color: #999;
+    font-size: 11px;
     transition: background-color 0.1s;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -96,6 +96,7 @@
 .dropdown-option.selected {
     background: #3a3a3a;
     font-weight: 500;
+    color: #FAFAFA;
 }
 
 /* DASH multi-column layout */
@@ -124,7 +125,7 @@
     display: flex;
     align-items: center;
     padding: 6px 4px;
-    font-size: 12px;
+    font-size: 11px;
     color: #999;
     cursor: pointer;
     transition: background-color 0.1s;

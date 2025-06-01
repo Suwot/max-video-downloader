@@ -178,7 +178,7 @@
 
 /* Codec info */
 .codec-info {
-    font-size: 10px;
+    font-size: 11px;
     color: #666;
     margin-left: 8px;
     padding: 1px 4px;
@@ -193,7 +193,7 @@
 
 /* Format info */
 .format-info {
-    font-size: 10px;
+    font-size: 11px;
     color: #666;
     margin-bottom: 4px;
     font-style: italic;
