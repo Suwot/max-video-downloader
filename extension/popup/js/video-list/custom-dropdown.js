@@ -340,10 +340,10 @@ function formatVariantLabel(variant, type = 'direct') {
         // const bitrate = variant.metaJS?.bandwidth ? `${Math.round(variant.metaJS.bandwidth/1000)} Kbps` : null;
 
         const resolution = variant.metaJS?.resolution || null;
-        const formattedCodecs = variant.metaJS?.codecs
+        const formattedCodecs = variant.metaJS?.codecs ? variant.metaJS.codecs
         .split(',')
         .map(codec => codec.split('.')[0]) // Keep only the part before first dot
-        .join(' & ');
+        .join(' & ') : null;
 
         return [resolutionP, fileSizeBytes, resolution, formattedCodecs]
             .filter(Boolean)
