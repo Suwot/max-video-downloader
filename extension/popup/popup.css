@@ -1367,7 +1367,6 @@ body.theme-light {
 
 .dropdown-option.selected {
     background: #3a3a3a;
-    font-weight: 500;
     color: #FAFAFA;
 }
 
@@ -1397,7 +1396,7 @@ body.theme-light {
     display: flex;
     align-items: center;
     padding: 6px 4px;
-    font-size: 12px;
+    font-size: 11px;
     color: #999;
     cursor: pointer;
     transition: background-color 0.1s;

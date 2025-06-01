@@ -245,6 +245,7 @@ function createTrackColumn(title, tracks, type, selectedIds = [], singleSelect =
         option.className = 'track-option';
         option.dataset.id = track.id;
         
+        // Ensure selected class is added for initial state
         if (selectedArray.includes(track.id)) {
             option.classList.add('selected');
         }
@@ -308,7 +309,12 @@ function formatTrackLabel(track, type) {
             .join(' • ');
     } else {
         // Subtitle
-        return track.label || track.language || 'Subtitles';
+        const label = track.label || track.language || null;
+        const fileSizeBytes = track.estimatedFileSizeBytes ? formatSize(track.estimatedFileSizeBytes) : null;
+
+        return [label, fileSizeBytes]
+            .filter(Boolean)
+            .join(' • ');   
     }
 }
 
@@ -401,11 +407,95 @@ function updateSelectedDisplay(display, selection, type) {
         // Store the track map for download
         display.dataset.trackMap = selection.trackMap || '';
         
-        // Show selected quality info
-        if (selection.selectedVideo) {
-            label.textContent = 'Custom Quality';
-        } else {
-            label.textContent = 'Select tracks';
+        // Find tracks from selected IDs
+        const parentDropdown = display.closest('.custom-dropdown');
+        let totalSizeBytes = 0;
+        let resolutionText = '';
+        
+        // Get video track details and selected audio/subtitle counts from DOM
+        if (parentDropdown) {
+            const tracks = parentDropdown.querySelector('.tracks-columns-container');
+            
+            if (tracks) {
+                // Get video details
+                const selectedVideoOption = tracks.querySelector('.column.video .track-option.selected');
+                if (selectedVideoOption) {
+                    // Extract resolution
+                    const trackLabel = selectedVideoOption.querySelector('.track-label')?.textContent;
+                    if (trackLabel) {
+                        // Extract resolution (e.g., "1080p • 351.4 MB" → "1080p")
+                        const resMatch = trackLabel.match(/(\d+)p/);
+                        const fpsMatch = trackLabel.match(/(\d+)p(\d+)/); // for fps like 1080p60
+                        
+                        if (resMatch) {
+                            resolutionText = resMatch[0];
+                            if (fpsMatch && fpsMatch[2]) {
+                                resolutionText = `${resMatch[0]}${fpsMatch[2]}`;
+                            }
+                        }
+                        
+                        // Extract size
+                        const sizeMatch = trackLabel.match(/[\d.]+\s*[KMGT]B/i);
+                        if (sizeMatch) {
+                            totalSizeBytes += estimateSizeInBytes(sizeMatch[0]);
+                        }
+                    }
+                }
+                
+                // Get audio details from DOM
+                const selectedAudioOptions = tracks.querySelectorAll('.column.audio .track-option.selected');
+                selectedAudioOptions.forEach(option => {
+                    const trackLabel = option.querySelector('.track-label')?.textContent;
+                    const sizeMatch = trackLabel?.match(/[\d.]+\s*[KMGT]B/i);
+                    if (sizeMatch) {
+                        totalSizeBytes += estimateSizeInBytes(sizeMatch[0]);
+                    }
+                });
+                
+                // Get subtitle details from DOM
+                const selectedSubOptions = tracks.querySelectorAll('.column.subtitle .track-option.selected');
+                selectedSubOptions.forEach(option => {
+                    const trackLabel = option.querySelector('.track-label')?.textContent;
+                    const sizeMatch = trackLabel?.match(/[\d.]+\s*[KMGT]B/i);
+                    if (sizeMatch) {
+                        totalSizeBytes += estimateSizeInBytes(sizeMatch[0]);
+                    }
+                });
+                
+                // Create summary label
+                let summary = '';
+                
+                // Resolution part
+                if (resolutionText) {
+                    summary = resolutionText;
+                } else {
+                    summary = 'Custom';
+                }
+                
+                // Add "no audio" indicator if no audio tracks are selected
+                const audioCount = selectedAudioOptions.length;
+                if (audioCount === 0 && selectedVideoOption) {
+                    summary += ' (no audio)';
+                }
+                
+                // Tracks count part for selected audio/subtitle tracks
+                const trackCounts = [];
+                const subsCount = selectedSubOptions.length;
+                
+                if (audioCount > 0) trackCounts.push(`${audioCount} audio`);
+                if (subsCount > 0) trackCounts.push(`${subsCount} subs`);
+                
+                if (trackCounts.length > 0) {
+                    summary += ` (${trackCounts.join(', ')})`;
+                }
+                
+                // Size part
+                if (totalSizeBytes > 0) {
+                    summary += ` ≈ ${formatSize(totalSizeBytes)}`;
+                }
+                
+                label.textContent = summary || 'Select tracks';
+            }
         }
         
         display.prepend(label);
@@ -417,5 +507,28 @@ function updateSelectedDisplay(display, selection, type) {
         label.textContent = parts.slice(0, 2).join(' • '); // show just the first 2 parts
         display.dataset.url = selection.url || '';
         display.prepend(label);
+    }
+}
+
+/**
+ * Estimates size in bytes from formatted size string
+ * @param {string} sizeStr - Formatted size string (e.g. "10.5 MB")
+ * @returns {number} Size in bytes
+ */
+function estimateSizeInBytes(sizeStr) {
+    if (!sizeStr) return 0;
+    
+    const match = sizeStr.match(/([\d.]+)\s*([KMGT]B)/i);
+    if (!match) return 0;
+    
+    const value = parseFloat(match[1]);
+    const unit = match[2].toUpperCase();
+    
+    switch(unit) {
+        case 'KB': return value * 1024;
+        case 'MB': return value * 1024 * 1024;
+        case 'GB': return value * 1024 * 1024 * 1024;
+        case 'TB': return value * 1024 * 1024 * 1024 * 1024;
+        default: return value;
     }
 }
