@@ -30,7 +30,7 @@ class GeneratePreviewCommand extends BaseCommand {
      * @param {string} params.url Video URL to generate preview for
      */
     async execute(params) {
-        const { url, headers = {} } = params;
+        const { url, headers = {}, mediaInfo = {} } = params;
         logDebug('Generating preview for video:', url);
         
         // Skip for blob URLs
@@ -51,8 +51,28 @@ class GeneratePreviewCommand extends BaseCommand {
             return new Promise((resolve, reject) => {
                 const previewPath = path.join(process.env.HOME || os.homedir(), '.cache', 'video-preview-' + Date.now() + '.jpg');
                 
+                // Set a timeout to prevent hanging
+                const timeout = setTimeout(() => {
+                    if (ffmpeg && !ffmpeg.killed) {
+                        ffmpeg.kill('SIGTERM');
+                    }
+                    this.sendError('Preview generation timeout');
+                    reject(new Error('Preview generation timeout after 30 seconds'));
+                }, 30000); // 30 second timeout
+                
+                // Calculate ideal timestamp based on duration if available
+                let timestamp = '00:00:01'; // Default timestamp
+                if (mediaInfo && mediaInfo.duration) {
+                    // Choose 10% into the video, but not less than 1 sec and not more than 30 secs
+                    const durationSecs = parseFloat(mediaInfo.duration);
+                    if (!isNaN(durationSecs)) {
+                        const previewTime = Math.min(Math.max(durationSecs * 0.1, 1), 30);
+                        timestamp = new Date(previewTime * 1000).toISOString().substring(11, 19);
+                    }
+                }
+                
                 // Build FFmpeg args
-                let ffmpegArgs = ['-ss', '00:00:01'];  // Skip to 1 second in
+                let ffmpegArgs = ['-ss', timestamp];  // Skip to smart timestamp
                 
                 // Add headers if provided
                 if (headers && Object.keys(headers).length > 0) {
@@ -84,6 +104,7 @@ class GeneratePreviewCommand extends BaseCommand {
                 });
         
                 ffmpeg.on('close', (code) => {
+                    clearTimeout(timeout);
                     if (code === 0) {
                         try {
                             // Convert image to data URL
@@ -107,6 +128,7 @@ class GeneratePreviewCommand extends BaseCommand {
                 });
         
                 ffmpeg.on('error', (err) => {
+                    clearTimeout(timeout);
                     this.sendError(err.message);
                     reject(err);
                 });

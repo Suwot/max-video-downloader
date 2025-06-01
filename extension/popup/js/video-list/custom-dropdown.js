@@ -331,8 +331,7 @@ function formatVariantLabel(variant, type = 'direct') {
     if (type === 'hls') {
         // HLS-specific formatting
         const resolutionP = variant.metaJS?.height ? 
-            ((variant.metaJS.fps && variant.metaJS.fps !== 30) ? `${variant.metaJS.height}p${variant.metaJS.fps}` : `${variant.metaJS.height}p`) : 
-            (variant.height ? `${variant.height}p` : null);
+            ((variant.metaJS.fps && variant.metaJS.fps !== 30) ? `${variant.metaJS.height}p${variant.metaJS.fps}` : `${variant.metaJS.height}p`) : null;
         
         const fileSizeBytes = variant.metaJS?.estimatedFileSizeBytes ? 
             formatSize(variant.metaJS.estimatedFileSizeBytes) : null;
@@ -347,10 +346,9 @@ function formatVariantLabel(variant, type = 'direct') {
 
         return [resolutionP, fileSizeBytes, resolution, formattedCodecs]
             .filter(Boolean)
-            .join(' • ') || 'Undefined Quality';
+            .join(' • ') || 'Unknown Quality';
     } else {
         // Direct/blob video formatting
-        // Access height and fps from metaFFprobe (not nested under metaFFprobe as I thought)
         const height = variant.metaFFprobe?.height || null;
         const fps = variant.metaFFprobe?.fps || null;
         const resolutionP = height ? 
@@ -377,7 +375,7 @@ function formatVariantLabel(variant, type = 'direct') {
         
         return [resolutionP, fileSize, formattedCodecs]
             .filter(Boolean)
-            .join(' • ') || 'Alternative Quality';
+            .join(' • ') || 'Unknown Quality';
     }
 }
 
