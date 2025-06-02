@@ -1310,6 +1310,7 @@ body.theme-light {
     position: absolute;
     left: 0;
     margin-top: 1px;
+    padding: 2px 0;
     background: #2c2c2c;
     border-radius: 4px;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
@@ -1343,7 +1344,7 @@ body.theme-light {
 
 /* Simple dropdown options */
 .dropdown-option {
-    padding: 8px 12px;
+    padding: 8px;
     color: #999;
     font-size: 11px;
     transition: background-color 0.1s;
@@ -1352,13 +1353,16 @@ body.theme-light {
     white-space: nowrap;
 }
 
-.dropdown-option:hover {
-    background: #3a3a3a;
-}
 
 .dropdown-option.selected {
     background: #3a3a3a;
     color: #FAFAFA;
+}
+
+.dropdown-option:hover {
+    position: relative;
+    background: #3a3a3a;
+    box-shadow: 0 0 0 1px #1976D2;
 }
 
 /* DASH multi-column layout */
