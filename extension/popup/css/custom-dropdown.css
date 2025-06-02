@@ -152,6 +152,15 @@
     accent-color: #2196F3;
 }
 
+.track-option.compatible {
+    border-left: 3px solid #4CAF50; /* Green indicator */
+}
+
+.track-option.incompatible {
+    border-left: 3px solid #F44336; /* Red indicator */
+    opacity: 0.8;
+}
+
 .track-label {
     overflow: hidden;
     text-overflow: ellipsis;

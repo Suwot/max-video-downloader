@@ -66,6 +66,14 @@ export function createCustomDropdown(options) {
                     input.checked = option.classList.contains('selected');
                 }
             });
+
+            const columnsContainer = container.querySelector('.tracks-columns-container');
+            if (columnsContainer) {
+                const selectedVideo = columnsContainer.querySelector('.column.video .track-option.selected');
+                if (selectedVideo) {
+                    updateAudioTracksCompatibility(selectedVideo.dataset.container, columnsContainer);
+                }
+            }
         }
         
         // Position the dropdown
@@ -155,21 +163,21 @@ function createSimpleOptions(container, variants, initialSelection, onSelect) {
 function createDashOptions(container, tracks, initialSelection, onSelect) {
     const { videoTracks = [], audioTracks = [], subtitleTracks = [] } = tracks || {};
     
-    // Create columns container
+     // Create columns container
     const columnsContainer = document.createElement('div');
     columnsContainer.className = 'tracks-columns-container';
     
     // Create column for video tracks
-    const videoColumn = createTrackColumn('VIDEO', videoTracks, 'video', initialSelection?.selectedVideo, true);
+    const videoColumn = createTrackColumn('VIDEO', videoTracks, 'video', initialSelection?.selectedVideo, true, columnsContainer);
     columnsContainer.appendChild(videoColumn);
     
     // Create column for audio tracks
-    const audioColumn = createTrackColumn('AUDIO', audioTracks, 'audio', initialSelection?.selectedAudio);
+    const audioColumn = createTrackColumn('AUDIO', audioTracks, 'audio', initialSelection?.selectedAudio, false, columnsContainer);
     columnsContainer.appendChild(audioColumn);
     
     // Create column for subtitle tracks
     if (subtitleTracks.length > 0) {
-        const subsColumn = createTrackColumn('SUBS', subtitleTracks, 'subtitle', initialSelection?.selectedSubs);
+        const subsColumn = createTrackColumn('SUBS', subtitleTracks, 'subtitle', initialSelection?.selectedSubs, false, columnsContainer);
         columnsContainer.appendChild(subsColumn);
     }
     
@@ -238,7 +246,7 @@ function createDashOptions(container, tracks, initialSelection, onSelect) {
  * @param {boolean} [singleSelect=false] - Whether only one option can be selected
  * @returns {HTMLElement} Column element
  */
-function createTrackColumn(title, tracks, type, selectedIds = [], singleSelect = false) {
+function createTrackColumn(title, tracks, type, selectedIds = [], singleSelect = false, columnsContainer = null) {
     const column = document.createElement('div');
     column.className = `column ${type}`;
     
@@ -257,6 +265,16 @@ function createTrackColumn(title, tracks, type, selectedIds = [], singleSelect =
         option.className = 'track-option';
         option.dataset.id = track.id;
         
+        // Add MIME type as data attribute
+        if (track.mimeType) {
+            option.dataset.mimeType = track.mimeType;
+            // Extract container format (e.g., "video/mp4" → "mp4")
+            const container = track.mimeType.split('/')[1]?.split(';')[0];
+            if (container) {
+                option.dataset.container = container;
+            }
+        }
+
         // Add file size as data attribute
         if (track.estimatedFileSizeBytes) {
             option.dataset.filesize = track.estimatedFileSizeBytes;
@@ -287,6 +305,14 @@ function createTrackColumn(title, tracks, type, selectedIds = [], singleSelect =
                     opt.classList.remove('selected');
                     opt.querySelector('input').checked = false;
                 });
+
+                // If this is a video track, update compatibility status of audio tracks
+                if (type === 'video' && track.mimeType) {
+                    const videoContainer = track.mimeType.split('/')[1]?.split(';')[0];
+                    if (videoContainer) {
+                        updateAudioTracksCompatibility(videoContainer);
+                    }
+                }
             }
             
             // Toggle selection
@@ -529,5 +555,62 @@ function updateSelectedDisplay(display, selection, type) {
         label.textContent = parts.slice(0, 2).join(' • '); // show just the first 2 parts
         display.dataset.url = selection.url || '';
         display.prepend(label);
+    }
+}
+
+/**
+ * Update audio tracks compatibility status based on selected video container
+ * @param {string} videoContainer - The container format of the selected video track (e.g., 'mp4', 'webm')
+ * @param {HTMLElement} columnsContainer - The container element for all columns
+ */
+function updateAudioTracksCompatibility(videoContainer, columnsContainer) {
+    if (!videoContainer || !columnsContainer) return;
+    
+    // Find the audio column
+    const audioColumn = columnsContainer.querySelector('.column.audio');
+    if (!audioColumn) return;
+    
+    // Get all audio tracks
+    const audioTracks = audioColumn.querySelectorAll('.track-option');
+    
+    // Auto-select first compatible audio track if none is selected
+    let hasSelectedAudio = false;
+    let firstCompatibleAudio = null;
+    
+    // Check each audio track for compatibility
+    audioTracks.forEach(track => {
+        const audioContainer = track.dataset.container;
+        
+        // Remove existing compatibility classes
+        track.classList.remove('compatible', 'incompatible');
+        
+        if (audioContainer) {
+            // Simple compatibility check - same container format is compatible
+            const isCompatible = audioContainer === videoContainer;
+            
+            // Add appropriate class
+            if (isCompatible) {
+                track.classList.add('compatible');
+                if (!firstCompatibleAudio) {
+                    firstCompatibleAudio = track;
+                }
+            } else {
+                track.classList.add('incompatible');
+            }
+        }
+        
+        // Check if any audio is selected
+        if (track.classList.contains('selected')) {
+            hasSelectedAudio = true;
+        }
+    });
+    
+    // Auto-select the first compatible audio if none is selected
+    if (!hasSelectedAudio && firstCompatibleAudio) {
+        firstCompatibleAudio.classList.add('selected');
+        const input = firstCompatibleAudio.querySelector('input');
+        if (input) {
+            input.checked = true;
+        }
     }
 }
