@@ -224,19 +224,10 @@
     background-color: #1976D2;
 }
 
-.download-menu-btn .dots {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 2px;
-}
-
-.download-menu-btn .dot {
-    width: 2px;
-    height: 2px;
-    background-color: white;
-    border-radius: 50%;
+.download-menu-btn svg {
+    width: 10px;
+    height: 16px;
+    display: block;
 }
 
 .theme-dark .download-btn:disabled,

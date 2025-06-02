@@ -67,15 +67,14 @@ function createDownloadButtonWithMenu(video, elementsDiv) {
     menuBtn.className = 'download-menu-btn';
     menuBtn.title = 'More options';
     
-    // Add three dots
-    const dotsContainer = document.createElement('div');
-    dotsContainer.className = 'dots';
-    for (let i = 0; i < 3; i++) {
-        const dot = document.createElement('div');
-        dot.className = 'dot';
-        dotsContainer.appendChild(dot);
-    }
-    menuBtn.appendChild(dotsContainer);
+    // Add SVG dots
+    menuBtn.innerHTML = `
+        <svg width="10" height="16" viewBox="0 0 10 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="5" cy="5" r="1" fill="#FAFAFA"/>
+            <circle cx="5" cy="8" r="1" fill="#FAFAFA"/>
+            <circle cx="5" cy="11" r="1" fill="#FAFAFA"/>
+        </svg>
+    `;
     
     // Add buttons to wrapper
     buttonWrapper.appendChild(downloadBtn);
