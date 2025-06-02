@@ -1395,7 +1395,11 @@ body.theme-light {
 }
 
 .track-option:hover {
+    position: relative;
+    min-width: 100%;
+    width: fit-content;
     background: #3a3a3a;
+    box-shadow: 0 0 0 1px #1976D2;
 }
 
 .track-option.selected {

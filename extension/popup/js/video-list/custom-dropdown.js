@@ -259,7 +259,10 @@ function createTrackColumn(title, tracks, type, selectedIds = [], singleSelect =
         // Create track label
         const label = document.createElement('span');
         label.className = 'track-label';
-        label.textContent = formatTrackLabel(track, type);
+        const formattedLabel = formatTrackLabel(track, type);
+        label.textContent = formattedLabel;
+        // label.title = formattedLabel;
+
         
         option.appendChild(input);
         option.appendChild(label);
@@ -292,25 +295,37 @@ function createTrackColumn(title, tracks, type, selectedIds = [], singleSelect =
  */
 function formatTrackLabel(track, type) {
     if (type === 'video') {
-        const res = track.height  || null;
+        const res = track.standardizedResolution  || null;
+        const fps = track.frameRate || null;
+        const formattedResolution = res ? 
+        ((fps && fps !== 30) ? `${res}${fps}` : res) : null;
+        
         const fileSizeBytes = formatSize(track.estimatedFileSizeBytes) || null;
+        const codecs = track.codecs ? track.codecs.split('.')[0] : null;
         // const bitrate = track.bandwidth ? `${Math.round(track.bandwidth/1000)} Kbps` : '';
-        return `${res}p • ${fileSizeBytes}`;
+
+        return [formattedResolution, fileSizeBytes, codecs]
+            .filter(Boolean)
+            .join(' • '); 
+
     } else if (type === 'audio') {
         const label = track.label || null
         const lang = track.language || null;
         const codecs = track.codecs ? track.codecs.split('.')[0] : null;
         const channels = track.channels ? `${track.channels}ch` : null;
         // const bitrate = track.bandwidth ? `${Math.round(track.bandwidth / 1000)} Kbps` : null;
-        const fileSizeBytes = track.estimatedFileSizeBytes ? formatSize(track.estimatedFileSizeBytes) : null;
+        const fileSizeBytes = track.estimatedFileSizeBytes ? 
+        formatSize(track.estimatedFileSizeBytes) : null;
 
         return [label, lang, codecs, channels, fileSizeBytes]
             .filter(Boolean)
             .join(' • ');
+
     } else {
         // Subtitle
         const label = track.label || track.language || null;
-        const fileSizeBytes = track.estimatedFileSizeBytes ? formatSize(track.estimatedFileSizeBytes) : null;
+        const fileSizeBytes = track.estimatedFileSizeBytes ? 
+        formatSize(track.estimatedFileSizeBytes) : null;
 
         return [label, fileSizeBytes]
             .filter(Boolean)
@@ -330,30 +345,32 @@ function formatVariantLabel(variant, type = 'direct') {
     // Different sources have different data structures
     if (type === 'hls') {
         // HLS-specific formatting
-        const resolutionP = variant.metaJS?.height ? 
-            ((variant.metaJS.fps && variant.metaJS.fps !== 30) ? `${variant.metaJS.height}p${variant.metaJS.fps}` : `${variant.metaJS.height}p`) : null;
-        
+        const res = variant.metaJS?.standardizedResolution || null;
+        const fps = variant.metaJS?.fps || null;
+        const formattedResolution = res ? 
+            ((fps && fps !== 30) ? `${res}${fps}` : res) : null;
+
         const fileSizeBytes = variant.metaJS?.estimatedFileSizeBytes ? 
             formatSize(variant.metaJS.estimatedFileSizeBytes) : null;
 
-        // const bitrate = variant.metaJS?.bandwidth ? `${Math.round(variant.metaJS.bandwidth/1000)} Kbps` : null;
-
-        const resolution = variant.metaJS?.resolution || null;
+        const fullResolution = variant.metaJS?.resolution || null;
         const formattedCodecs = variant.metaJS?.codecs ? variant.metaJS.codecs
         .split(',')
         .map(codec => codec.split('.')[0]) // Keep only the part before first dot
         .join(' & ') : null;
 
-        return [resolutionP, fileSizeBytes, resolution, formattedCodecs]
+        // const bitrate = variant.metaJS?.bandwidth ? `${Math.round(variant.metaJS.bandwidth/1000)} Kbps` : null;
+
+        return [formattedResolution, fileSizeBytes, fullResolution, formattedCodecs]
             .filter(Boolean)
             .join(' • ') || 'Unknown Quality';
     } else {
         // Direct/blob video formatting
-        const height = variant.metaFFprobe?.height || null;
+        const res = variant.metaFFprobe?.standardizedResolution || null;
         const fps = variant.metaFFprobe?.fps || null;
-        const resolutionP = height ? 
-            ((fps && fps !== 30) ? `${height}p${fps}` : `${height}p`) : null;
-        
+        const formattedResolution = res ? 
+            ((fps && fps !== 30) ? `${res}${fps}` : res) : null;
+
         // Get file size info from fileSize or estimatedFileSizeBytes
         const fileSize = variant.fileSize ? formatSize(variant.fileSize) : 
             (variant.estimatedFileSizeBytes ? formatSize(variant.estimatedFileSizeBytes) : null);
@@ -373,7 +390,7 @@ function formatVariantLabel(variant, type = 'direct') {
             formattedCodecs = videoCodec || audioCodec || null;
         }
         
-        return [resolutionP, fileSize, formattedCodecs]
+        return [formattedResolution, fileSize, formattedCodecs]
             .filter(Boolean)
             .join(' • ') || 'Unknown Quality';
     }
