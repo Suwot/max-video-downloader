@@ -56,6 +56,18 @@ export function createCustomDropdown(options) {
             }
         });
         
+        // Ensure radio buttons match selected classes when dropdown is opened
+        if (container.classList.contains('open') && type === 'dash') {
+            // Sync selected state with radio button state for video tracks
+            const videoOptions = container.querySelectorAll('.column .track-option');
+            videoOptions.forEach(option => {
+                const input = option.querySelector('input');
+                if (input) {
+                    input.checked = option.classList.contains('selected');
+                }
+            });
+        }
+        
         // Position the dropdown
         positionDropdown(container, optionsContainer);
     });
@@ -259,13 +271,11 @@ function createTrackColumn(title, tracks, type, selectedIds = [], singleSelect =
         const input = document.createElement('input');
         input.type = singleSelect ? 'radio' : 'checkbox';
         input.name = `track-${type}`;
-        input.checked = selectedArray.includes(track.id);
         
         // Create track label
         const label = document.createElement('span');
         label.className = 'track-label';
-        const formattedLabel = formatTrackLabel(track, type);
-        label.textContent = formattedLabel;
+        label.textContent = formatTrackLabel(track, type);
         
         option.appendChild(input);
         option.appendChild(label);
