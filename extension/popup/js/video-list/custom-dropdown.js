@@ -470,19 +470,26 @@ function updateSelectedDisplay(display, selection, type) {
                     summary = 'Custom';
                 }
                 
-                // Add "no audio" indicator if no audio tracks are selected
-                const audioCount = selectedAudioOptions.length;
-                if (audioCount === 0 && selectedVideoOption) {
-                    summary += ' (no audio)';
-                }
-                
                 // Tracks count part for selected audio/subtitle tracks
                 const trackCounts = [];
+                const audioCount = selectedAudioOptions.length;
                 const subsCount = selectedSubOptions.length;
                 
-                if (audioCount > 0) trackCounts.push(`${audioCount} audio`);
-                if (subsCount > 0) trackCounts.push(`${subsCount} subs`);
+                // Add audio info to track counts
+                if (selectedVideoOption) {
+                    if (audioCount === 0) {
+                        trackCounts.push('no audio');
+                    } else {
+                        trackCounts.push(`${audioCount} audio`);
+                    }
+                }
                 
+                // Add subtitle info to track counts
+                if (subsCount > 0) {
+                    trackCounts.push(`${subsCount} subs`);
+                }
+                
+                // Add the track counts to the summary
                 if (trackCounts.length > 0) {
                     summary += ` (${trackCounts.join(', ')})`;
                 }
