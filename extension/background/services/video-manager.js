@@ -345,10 +345,15 @@ class VideoProcessingPipeline {
       logger.debug(`Skipping processing for 'audio' mediaType: ${normalizedUrl}`);
     } else {
       logger.debug(`Processing as video content: ${normalizedUrl}`);
-      await Promise.all([
-        this.getFFprobeMetadata(tabId, normalizedUrl, headers),
-        this.generatePreview(tabId, normalizedUrl, headers)
-      ]);
+      
+      // Get metadata first, then generate preview with that metadata
+      await this.getFFprobeMetadata(tabId, normalizedUrl, headers);
+      
+      // Get updated video with metadata for preview generation
+      const updatedVideo = getVideo(tabId, normalizedUrl);
+      if (updatedVideo) {
+        await this.generatePreview(tabId, normalizedUrl, headers);
+      }
     }
     
     // Send update with unified approach
@@ -374,12 +379,19 @@ class VideoProcessingPipeline {
         return;
       }
       
+      // Extract media info from variant
+      const mediaInfo = {};
+      if (variant.metaJS.duration) {
+        mediaInfo.duration = variant.metaJS.duration;
+      }
+      
       // Generate preview if not cached
       const response = await rateLimiter.enqueue(async () => {
         return await nativeHostService.sendMessage({
           type: 'generatePreview',
           url: variant.url,
-          headers: headers
+          headers: headers,
+          mediaInfo
         });
       });
       
@@ -510,11 +522,20 @@ class VideoProcessingPipeline {
       // Generate preview if not cached
       logger.debug(`Generating preview for ${video.url}`);
       
+      // Extract media info to send to the native host
+      const mediaInfo = {};
+      
+      // Get duration for direct videos only
+      if (video.metaFFprobe?.duration) {
+        mediaInfo.duration = video.metaFFprobe.duration;
+      }
+      
       const response = await rateLimiter.enqueue(async () => {
         return await nativeHostService.sendMessage({
           type: 'generatePreview',
           url: video.url,
-          headers: headers
+          headers: headers,
+          mediaInfo
         });
       });
       
