@@ -381,7 +381,7 @@ class VideoProcessingPipeline {
       
       // Extract media info from variant
       const mediaInfo = {};
-      if (variant.metaJS.duration) {
+      if (variant.metaJS?.duration) {
         mediaInfo.duration = variant.metaJS.duration;
       }
       

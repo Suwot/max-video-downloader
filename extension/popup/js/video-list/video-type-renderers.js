@@ -1,7 +1,7 @@
 // extension/popup/js/video-list/video-type-renderers.js
 // Type-specific renderers for different video types
 
-import { formatQualityLabel, createVideoMetadata } from './video-utils.js';
+import { createVideoMetadata } from './video-utils.js';
 import { handleDownload } from '../download.js';
 import { createCustomDropdown } from './custom-dropdown.js';
 
