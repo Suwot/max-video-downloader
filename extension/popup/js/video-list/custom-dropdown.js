@@ -245,6 +245,11 @@ function createTrackColumn(title, tracks, type, selectedIds = [], singleSelect =
         option.className = 'track-option';
         option.dataset.id = track.id;
         
+        // Add file size as data attribute
+        if (track.estimatedFileSizeBytes) {
+            option.dataset.filesize = track.estimatedFileSizeBytes;
+        }
+        
         // Ensure selected class is added for initial state
         if (selectedArray.includes(track.id)) {
             option.classList.add('selected');
@@ -261,8 +266,6 @@ function createTrackColumn(title, tracks, type, selectedIds = [], singleSelect =
         label.className = 'track-label';
         const formattedLabel = formatTrackLabel(track, type);
         label.textContent = formattedLabel;
-        // label.title = formattedLabel;
-
         
         option.appendChild(input);
         option.appendChild(label);
@@ -432,7 +435,18 @@ function updateSelectedDisplay(display, selection, type) {
             const tracks = parentDropdown.querySelector('.tracks-columns-container');
             
             if (tracks) {
-                // Get video details
+                // Get all selected tracks at once for size calculation
+                const allSelectedTracks = tracks.querySelectorAll('.track-option.selected');
+                let totalSizeBytes = 0;
+                
+                // Calculate total size in one go
+                allSelectedTracks.forEach(option => {
+                    if (option.dataset.filesize) {
+                        totalSizeBytes += parseInt(option.dataset.filesize, 10);
+                    }
+                });
+                
+                // Extract video details (if there's a selected video track)
                 const selectedVideoOption = tracks.querySelector('.column.video .track-option.selected');
                 if (selectedVideoOption) {
                     // Extract resolution
@@ -448,34 +462,12 @@ function updateSelectedDisplay(display, selection, type) {
                                 resolutionText = `${resMatch[0]}${fpsMatch[2]}`;
                             }
                         }
-                        
-                        // Extract size
-                        const sizeMatch = trackLabel.match(/[\d.]+\s*[KMGT]B/i);
-                        if (sizeMatch) {
-                            totalSizeBytes += estimateSizeInBytes(sizeMatch[0]);
-                        }
                     }
                 }
                 
-                // Get audio details from DOM
-                const selectedAudioOptions = tracks.querySelectorAll('.column.audio .track-option.selected');
-                selectedAudioOptions.forEach(option => {
-                    const trackLabel = option.querySelector('.track-label')?.textContent;
-                    const sizeMatch = trackLabel?.match(/[\d.]+\s*[KMGT]B/i);
-                    if (sizeMatch) {
-                        totalSizeBytes += estimateSizeInBytes(sizeMatch[0]);
-                    }
-                });
-                
-                // Get subtitle details from DOM
-                const selectedSubOptions = tracks.querySelectorAll('.column.subtitle .track-option.selected');
-                selectedSubOptions.forEach(option => {
-                    const trackLabel = option.querySelector('.track-label')?.textContent;
-                    const sizeMatch = trackLabel?.match(/[\d.]+\s*[KMGT]B/i);
-                    if (sizeMatch) {
-                        totalSizeBytes += estimateSizeInBytes(sizeMatch[0]);
-                    }
-                });
+                // Get counts for UI display
+                const audioCount = tracks.querySelectorAll('.column.audio .track-option.selected').length;
+                const subsCount = tracks.querySelectorAll('.column.subtitle .track-option.selected').length;
                 
                 // Create summary label
                 let summary = '';
@@ -489,8 +481,6 @@ function updateSelectedDisplay(display, selection, type) {
                 
                 // Tracks count part for selected audio/subtitle tracks
                 const trackCounts = [];
-                const audioCount = selectedAudioOptions.length;
-                const subsCount = selectedSubOptions.length;
                 
                 // Add audio info to track counts
                 if (selectedVideoOption) {
@@ -529,28 +519,5 @@ function updateSelectedDisplay(display, selection, type) {
         label.textContent = parts.slice(0, 2).join(' • '); // show just the first 2 parts
         display.dataset.url = selection.url || '';
         display.prepend(label);
-    }
-}
-
-/**
- * Estimates size in bytes from formatted size string
- * @param {string} sizeStr - Formatted size string (e.g. "10.5 MB")
- * @returns {number} Size in bytes
- */
-function estimateSizeInBytes(sizeStr) {
-    if (!sizeStr) return 0;
-    
-    const match = sizeStr.match(/([\d.]+)\s*([KMGT]B)/i);
-    if (!match) return 0;
-    
-    const value = parseFloat(match[1]);
-    const unit = match[2].toUpperCase();
-    
-    switch(unit) {
-        case 'KB': return value * 1024;
-        case 'MB': return value * 1024 * 1024;
-        case 'GB': return value * 1024 * 1024 * 1024;
-        case 'TB': return value * 1024 * 1024 * 1024 * 1024;
-        default: return value;
     }
 }

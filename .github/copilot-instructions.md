@@ -21,7 +21,7 @@ The UI follows **modern UX/UI standards**: minimal, responsive, fast, and cleanâ
 - when you reference any files (existing or new), use VSCode hyperlink format
 - when there are multiple ways to achieve the same goal, always give me relevant options to choose from and explain the pros and cons of each option
 - always show affected file name in the comment on the first line of each code snippet
-- indent code with 2 spaces
+- indent code with 4 spaces
 
 - show me concise code snippets, without irrelevant context to the task at hand
 
