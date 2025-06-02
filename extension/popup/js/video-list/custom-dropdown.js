@@ -573,7 +573,13 @@ function updateAudioTracksCompatibility(videoContainer, columnsContainer) {
     // Get all audio tracks
     const audioTracks = audioColumn.querySelectorAll('.track-option');
     
-    // Auto-select first compatible audio track if none is selected
+    // Check if we previously applied a "no audio" selection
+    // Get the dropdown's selected display element
+    const dropdown = columnsContainer.closest('.custom-dropdown');
+    const selectedDisplay = dropdown?.querySelector('.selected-option');
+    const userSelectedNoAudio = selectedDisplay?.querySelector('.label')?.textContent.includes('no audio');
+    
+    // Only auto-select if user hasn't explicitly chosen "no audio"
     let hasSelectedAudio = false;
     let firstCompatibleAudio = null;
     
@@ -605,8 +611,10 @@ function updateAudioTracksCompatibility(videoContainer, columnsContainer) {
         }
     });
     
-    // Auto-select the first compatible audio if none is selected
-    if (!hasSelectedAudio && firstCompatibleAudio) {
+    // Auto-select the first compatible audio ONLY if:
+    // 1. None is selected AND
+    // 2. User hasn't explicitly chosen "no audio" in a previous selection
+    if (!hasSelectedAudio && firstCompatibleAudio && !userSelectedNoAudio) {
         firstCompatibleAudio.classList.add('selected');
         const input = firstCompatibleAudio.querySelector('input');
         if (input) {
