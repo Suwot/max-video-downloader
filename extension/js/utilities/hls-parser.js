@@ -16,6 +16,7 @@ import {
 import { createLogger } from './logger.js';
 import { getSharedHeaders } from './headers-utils.js';
 import { getVideoByUrl } from '../../background/services/video-manager.js';
+import { standardizeResolution } from '../../popup/js/video-list/video-utils.js';
 
 // Create a logger for the HLS parser
 const logger = createLogger('HLS Parser');
@@ -220,6 +221,7 @@ function parseHlsMaster(content, baseUrl, masterUrl) {
                     resolution: currentStreamInf.resolution,
                     width: currentStreamInf.width,
                     height: currentStreamInf.height,
+                    standardizedResolution: currentStreamInf.height ? standardizeResolution(currentStreamInf.height) : null,
                     fps: currentStreamInf.fps
                 },
                 source: 'parseHlsMaster()',

@@ -57,3 +57,19 @@ export function formatSize(bytes) {
     
     return `${(bytes / Math.pow(k, i)).toFixed(decimals)} ${sizes[i]}`;
 }
+
+/**
+ * Standardize video resolution to common formats
+ * @param {number} height - Actual pixel height of the video
+ * @returns {string} Standardized resolution string (e.g. "1080p")
+ */
+export function standardizeResolution(height) {
+    if (height >= 2160) return '2160p';
+    if (height >= 1440) return '1440p';
+    if (height >= 1080) return '1080p';
+    if (height >= 720) return '720p';
+    if (height >= 480) return '480p';
+    if (height >= 360) return '360p';
+    if (height >= 240) return '240p';
+    return `${height}p`; // Fallback
+}

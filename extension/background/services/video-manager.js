@@ -20,6 +20,7 @@ import { getSharedHeaders, clearHeaderCache, clearAllHeaderCaches } from '../../
 import { createLogger } from '../../js/utilities/logger.js';
 import { getPreview, storePreview } from '../../js/utilities/preview-cache.js';
 import { getFilenameFromUrl } from '../../popup/js/utilities.js';
+import { standardizeResolution } from '../../popup/js/video-list/video-utils.js';
 
 // Central store for all detected videos, keyed by tab ID, then normalized URL
 // Map<tabId, Map<normalizedUrl, videoInfo>>
@@ -447,44 +448,51 @@ class VideoProcessingPipeline {
    */
   async getFFprobeMetadata(tabId, normalizedUrl, headers) {
     try {
-      const video = getVideo(tabId, normalizedUrl);
-      if (!video) return;
-      
-      // Skip if already has metadata
-      if (video.isFullyParsed) {
-        logger.debug(`Video ${video.url} is already fully parsed, skipping FFprobe`);
-        return;
-      }
-      
-      logger.debug(`Getting FFprobe metadata for ${video.url}`);
-      
-      const streamInfo = await rateLimiter.enqueue(async () => {
-        const response = await nativeHostService.sendMessage({
-          type: 'getQualities',
-          url: video.url,
-          mediaType: 'direct',
-          headers: headers
-        });
-        return response?.streamInfo || null;
-      });
-      
-      if (streamInfo) {
-        const updatedVideo = updateVideo('getFFprobeMetadata', tabId, normalizedUrl, {
-          isValid: true,
-          metaFFprobe: streamInfo,
-          hasFFprobeMetadata: true,
-          isFullyParsed: true,
-          estimatedFileSizeBytes: streamInfo.estimatedFileSizeBytes || video.fileSize,
-          fileSize: streamInfo.sizeBytes || null
+        const video = getVideo(tabId, normalizedUrl);
+        if (!video) return;
+        
+        // Skip if already has metadata
+        if (video.isFullyParsed) {
+            logger.debug(`Video ${video.url} is already fully parsed, skipping FFprobe`);
+            return;
+        }
+        
+        logger.debug(`Getting FFprobe metadata for ${video.url}`);
+        
+        const streamInfo = await rateLimiter.enqueue(async () => {
+            const response = await nativeHostService.sendMessage({
+                type: 'getQualities',
+                url: video.url,
+                mediaType: 'direct',
+                headers: headers
+            });
+            return response?.streamInfo || null;
         });
         
-        if (updatedVideo) {
-          // Use unified update approach
-          sendVideoUpdateToUI(tabId, normalizedUrl, updatedVideo);
+        if (streamInfo) {
+            // Add standardizedResolution if height is available
+            let standardizedRes = null;
+            if (streamInfo.height) {
+                standardizedRes = standardizeResolution(streamInfo.height);
+            }
+            
+            const updatedVideo = updateVideo('getFFprobeMetadata', tabId, normalizedUrl, {
+                isValid: true,
+                metaFFprobe: streamInfo,
+                hasFFprobeMetadata: true,
+                isFullyParsed: true,
+                standardizedResolution: standardizedRes, 
+                estimatedFileSizeBytes: streamInfo.estimatedFileSizeBytes || video.fileSize,
+                fileSize: streamInfo.sizeBytes || null
+            });
+            
+            if (updatedVideo) {
+                // Use unified update approach
+                sendVideoUpdateToUI(tabId, normalizedUrl, updatedVideo);
+            }
         }
-      }
     } catch (error) {
-      logger.error(`Error getting FFprobe metadata: ${error.message}`);
+        logger.error(`Error getting FFprobe metadata: ${error.message}`);
     }
   }
   

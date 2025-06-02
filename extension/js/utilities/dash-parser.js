@@ -17,6 +17,7 @@ import {
 } from './parser-utils.js';
 import { createLogger } from './logger.js';
 import { getVideoByUrl } from '../../background/services/video-manager.js';
+import { standardizeResolution } from '../../popup/js/video-list/video-utils.js';
 
 // Create a logger for the DASH parser
 const logger = createLogger('DASH Parser');
@@ -433,6 +434,8 @@ export async function parseDashManifest(url, headers = null) {
                 if (mediaType === 'video') {
                     flatRepresentation.width = parseInt(extractAttribute(representation, 'width'), 10) || null;
                     flatRepresentation.height = parseInt(extractAttribute(representation, 'height'), 10) || null;
+                    flatRepresentation.standardizedResolution = flatRepresentation.height ? 
+                    standardizeResolution(flatRepresentation.height) : null;
                     flatRepresentation.frameRate = parseFrameRate(extractAttribute(representation, 'frameRate') || null);
                     flatRepresentation.sar = extractAttribute(representation, 'sar') || null;
                     flatRepresentation.scanType = extractAttribute(representation, 'scanType') || null;
@@ -504,6 +507,7 @@ export async function parseDashManifest(url, headers = null) {
                         audioCodec: audioCodec,
                         width: videoTrack.width,
                         height: videoTrack.height,
+                        standardizedResolution: videoTrack.standardizedResolution,
                         fps: videoTrack.frameRate,
                         resolution: videoTrack.resolution,
                         estimatedFileSizeBytes: videoTrack.estimatedFileSizeBytes,
