@@ -37,9 +37,23 @@ export function extractPreviewUrl(video) {
  * @returns {string} Formatted size string
  */
 export function formatSize(bytes) {
-    if (!bytes || bytes === 0) return '0 MB';
+    if (!bytes || bytes === 0) return '0 KB';
     const k = 1024;
     const sizes = ['B', 'KB', 'MB', 'GB'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return `${(bytes / Math.pow(k, i)).toFixed(1)} ${sizes[i]}`;
+    
+    // Different decimal precision based on size unit
+    let decimals;
+    switch (sizes[i]) {
+        case 'GB':
+            decimals = 2;
+            break;
+        case 'MB':
+            decimals = 1;
+            break;
+        default: // KB and B
+            decimals = 0;
+    }
+    
+    return `${(bytes / Math.pow(k, i)).toFixed(decimals)} ${sizes[i]}`;
 }
