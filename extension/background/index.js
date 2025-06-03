@@ -11,7 +11,10 @@ import { clearCache, getCacheStats } from '../js/utilities/preview-cache.js';
 const logger = createLogger('Background');
 
 // tabId -> timestamp when MPD was detected
-const tabsWithMpd = new Map(); 
+const tabsWithMpd = new Map();
+
+// tabId -> Set of segment paths
+const dashSegmentPathCache = new Map();
 
 // Debug logger for allDetectedVideos - will log every 10 seconds
 let debugInterval;
@@ -231,24 +234,69 @@ function processVideoUrl(tabId, url, metadata = null) {
     // For direct video/audio files, check MIME type AND apply filters
     if (contentType.startsWith('video/') || contentType.startsWith('audio/')) {
       // First check file size before anything else
-      if (metadata.contentLength < 102400) {  // Skip files smaller than 100kb
+      if (metadata.contentLength < 153600) {  // Skip files smaller than 150kb
         logger.debug(`Skipping small media file (${metadata.contentLength} bytes): ${url}`);
         return;
-      }  
+      } 
       
       // Skip TS segments typically used in HLS and M4S segments used in DASH
       if (url.endsWith('.ts') || url.endsWith('.m4s') || contentType === 'video/mp2t') {
         return;
       }
       
-      // Enhanced segment detection logic
+      // OPTIMIZED SEGMENT DETECTION
+      // 1. Fast pre-filtering for common segment indicators
+      if (url.endsWith('.ts') || url.endsWith('.m4s') || 
+          contentType === 'video/mp2t' || 
+          (url.includes('.mp4') && url.includes('range='))) {
+        logger.debug(`Skipping detected segment by extension/query: ${url}`);
+        return;
+      }
+      
+      // 2. Check for MPD context
       const hasMpdContext = tabsWithMpd.has(tabId);
       
-      // 1. Check standard segment patterns that always apply
-      const segmentPatterns = [/segment-\d+/, /chunk-\d+/, /frag-\d+/, /seq-\d+/, /part-\d+/];
-      const isCommonSegmentPattern = segmentPatterns.some(pattern => pattern.test(url));
+      // 3. Check against cached segment paths
+      if (hasMpdContext && dashSegmentPathCache.has(tabId)) {
+        const segmentPaths = dashSegmentPathCache.get(tabId);
+        
+        try {
+          // Extract path from URL for comparison
+          const urlObj = new URL(url);
+          const urlPath = urlObj.pathname;
+          
+          // Check if any cached segment path is part of this URL's path
+          for (const basePath of segmentPaths) {
+            if (urlPath.includes(basePath)) {
+              logger.debug(`Skipping segment matching cached path pattern: ${basePath} in ${url}`);
+              return;
+            }
+          }
+        } catch (e) {
+          // URL parsing failed, fall back to string includes
+          for (const basePath of segmentPaths) {
+            if (url.includes(basePath)) {
+              logger.debug(`Skipping segment matching cached path pattern (string match): ${basePath} in ${url}`);
+              return;
+            }
+          }
+        }
+      }
       
-      // 2. Check byte ranges only if we have MPD context
+      // 4. Standard segment pattern detection (as a fallback)
+      const segmentPatterns = [
+        /segment-\d+/, /chunk-\d+/, /frag-\d+/, /seq-\d+/, /part-\d+/,
+        /\/(media|video|audio)_\d+/, /dash\d+/, /\d+\.(m4s|ts)$/,
+        /-\d+\.m4[sv]$/i,
+        /[_-]\d+_\d+\.(m4s|mp4)$/i
+      ];
+      
+      if (segmentPatterns.some(pattern => pattern.test(url))) {
+        logger.debug(`Skipping media segment by pattern: ${url}`);
+        return;
+      }
+      
+      // 5. Check byte ranges as the last resort (most expensive check)
       let hasByteRanges = false;
       if (hasMpdContext) {
         // First check if the URL contains "bytes=" or "range=" before expensive URL parsing
@@ -262,11 +310,11 @@ function processVideoUrl(tabId, url, metadata = null) {
             hasByteRanges = /bytes=\d+-\d+/.test(url) || /range=\d+-\d+/.test(url);
           }
         }
-      }
-
-      if (isCommonSegmentPattern || hasByteRanges) {
-        logger.debug(`Skipping media segment: ${url} (MPD context: ${hasMpdContext}, ByteRanges: ${hasByteRanges})`);
-        return;
+        
+        if (hasByteRanges) {
+          logger.debug(`Skipping media segment with byte ranges: ${url}`);
+          return;
+        }
       }
 
       // Determine if it's audio-only or video content
@@ -456,6 +504,42 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         return true; // Keep channel open for async response
     }
     
+    // Handle DASH segment paths from parser
+    if (request.action === 'registerDashSegmentPaths' && request.paths) {
+        let tabId = request.tabId;
+        
+        // If no tabId was provided but we have a URL, try to find the corresponding tab
+        if (!tabId && request.url) {
+            // Try to find the tab that loaded this MPD
+            for (const [existingTabId, timestamp] of tabsWithMpd.entries()) {
+                // We can check if this tab has the same MPD URL in its detected videos
+                // This is a simplified approach - in a real implementation you might want
+                // to check if the URL is actually from this tab
+                if (timestamp > Date.now() - 60000) { // Only check tabs with recent MPD activity (1 minute)
+                    tabId = existingTabId;
+                    logger.debug(`Found matching tab ${tabId} for MPD URL: ${request.url}`);
+                    break;
+                }
+            }
+        }
+        
+        if (tabId) {
+            // Initialize segment paths set for this tab if it doesn't exist
+            if (!dashSegmentPathCache.has(tabId)) {
+                dashSegmentPathCache.set(tabId, new Set());
+            }
+            
+            // Add all paths to the cache
+            const pathCache = dashSegmentPathCache.get(tabId);
+            request.paths.forEach(path => pathCache.add(path));
+            
+            logger.debug(`Added ${request.paths.length} segment paths to cache for tab ${tabId}`);
+        } else {
+            logger.warn('Could not determine tab ID for segment paths, ignoring');
+        }
+        return false;
+    }
+    
     return false;
 });
 
@@ -465,6 +549,12 @@ logger.debug('Background script initialized');
 export function cleanupMpdContext(tabId) {
   if (tabsWithMpd.has(tabId)) {
     tabsWithMpd.delete(tabId);
+  }
+  
+  // Also clean up segment paths
+  if (dashSegmentPathCache.has(tabId)) {
+    dashSegmentPathCache.delete(tabId);
+    logger.debug(`Cleaned up segment paths for tab ${tabId}`);
   }
 }
 

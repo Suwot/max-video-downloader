@@ -225,6 +225,70 @@ function extractSegmentList(xmlContent) {
 }
 
 /**
+ * Extract base paths for segments from MPD content
+ * Used to identify and filter media segments in the background script
+ * 
+ * @param {string} content - MPD XML content
+ * @returns {Array<string>} Array of segment base paths
+ */
+function extractSegmentBasePaths(content) {
+    const paths = new Set();
+    
+    try {
+        // Extract SegmentTemplate media attributes
+        const segmentTemplateRegex = /<SegmentTemplate[^>]*media="([^"]+)"[^>]*>/g;
+        let match;
+        
+        while ((match = segmentTemplateRegex.exec(content)) !== null) {
+            const mediaPattern = match[1];
+            
+            // Extract the base path (directory) from the pattern
+            // e.g. from "video/$RepresentationID$/segment-$Number$.m4s" get "video/"
+            const pathParts = mediaPattern.split('/');
+            if (pathParts.length > 1) {
+                // Remove the filename part and join the path
+                pathParts.pop();
+                const basePath = pathParts.join('/');
+                
+                if (basePath) {
+                    paths.add(basePath);
+                }
+            }
+        }
+        
+        // Also check BaseURL elements which often contain segment paths
+        const baseUrlRegex = /<BaseURL[^>]*>([^<]+)<\/BaseURL>/g;
+        while ((match = baseUrlRegex.exec(content)) !== null) {
+            const baseUrl = match[1].trim();
+            
+            // Look for common segment directory indicators
+            if (baseUrl.includes('segment') || baseUrl.includes('chunk') || 
+                baseUrl.includes('frag') || baseUrl.includes('media')) {
+                paths.add(baseUrl);
+            }
+        }
+        
+        // Extract common segment patterns from initialization attributes
+        const initRegex = /<SegmentTemplate[^>]*initialization="([^"]+)"[^>]*>/g;
+        while ((match = initRegex.exec(content)) !== null) {
+            const initPattern = match[1];
+            const pathParts = initPattern.split('/');
+            if (pathParts.length > 1) {
+                pathParts.pop();
+                const basePath = pathParts.join('/');
+                if (basePath) {
+                    paths.add(basePath);
+                }
+            }
+        }
+    } catch (e) {
+        logger.error('Error extracting segment base paths:', e);
+    }
+    
+    return Array.from(paths);
+}
+
+/**
  * Parse a DASH MPD document and organize content by media type
  * First validates if it's really a DASH manifest using light parsing
  * 
@@ -307,6 +371,37 @@ export async function parseDashManifest(url, headers = null) {
         }
         
         const baseUrl = getBaseDirectory(url);
+        
+        // Extract segment base paths to help filter out segments in the background script
+        const segmentPaths = extractSegmentBasePaths(content);
+        
+        // Try to send segment paths to background script
+        if (segmentPaths.length > 0) {
+            try {
+                // Try to extract tabId from URL if it contains it (common in background fetch)
+                let tabId = null;
+                try {
+                    const urlParams = new URL(url).searchParams;
+                    if (urlParams.has('tabId')) {
+                        tabId = parseInt(urlParams.get('tabId'), 10);
+                    }
+                } catch (e) {
+                    logger.debug('No tabId in URL params');
+                }
+                
+                // Send paths to background
+                chrome.runtime.sendMessage({
+                    action: 'registerDashSegmentPaths',
+                    tabId: tabId,
+                    paths: segmentPaths,
+                    url: url
+                }).catch(e => logger.warn('Error sending segment paths:', e));
+                
+                logger.debug(`Sent ${segmentPaths.length} segment paths to background for URL: ${url}`);
+            } catch (e) {
+                logger.warn('Error sending segment paths to background:', e);
+            }
+        }
         
         // Extract basic MPD properties
         const durationMatch = content.match(/mediaPresentationDuration="([^"]+)"/);
@@ -547,6 +642,7 @@ export async function parseDashManifest(url, headers = null) {
             audioTracks: audioTracks,
             subtitleTracks: subtitleTracks,
             variants: variants, // For backward compatibility
+            segmentPaths: segmentPaths, // Add segment paths for filtering in background script
             status: 'success'
         };
         
