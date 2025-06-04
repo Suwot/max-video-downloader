@@ -406,7 +406,7 @@ function formatVariantLabel(variant, type = 'direct') {
             .join(' • ') || 'Unknown Quality';
     } else {
         // Direct/blob video formatting
-        const res = variant.metaFFprobe?.standardizedResolution || null;
+        const res = variant.standardizedResolution || null;
         const fps = variant.metaFFprobe?.fps || null;
         const formattedResolution = res ? 
             ((fps && fps !== 30) ? `${res}${fps}` : res) : null;
