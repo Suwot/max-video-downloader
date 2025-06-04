@@ -101,88 +101,153 @@ export function resolveUrl(baseUrl, relativeUrl) {
 }
 
 /**
- * Perform lightweight content request with range limiting
+ * Fetch manifest content with built-in retry logic
  * 
  * @param {string} url - URL to fetch
- * @param {Object} [headers] - Optional request headers
- * @param {number} [rangeBytes=4096] - Number of bytes to request
- * @param {number} [timeoutMs=5000] - Timeout in milliseconds
- * @returns {Promise<{content: string, ok: boolean, status: number}>} - Response
+ * @param {Object} [options] - Fetch options
+ * @param {Object} [options.headers] - Optional request headers
+ * @param {number} [options.rangeBytes] - If provided, fetches only specified bytes (partial content)
+ * @param {number} [options.timeoutMs=10000] - Timeout in milliseconds
+ * @param {number} [options.maxRetries=2] - Maximum number of retry attempts
+ * @param {number} [options.retryDelayMs=500] - Base delay between retries in milliseconds
+ * @returns {Promise<{content: string, ok: boolean, status: number, retryCount: number}>}
  */
-export async function fetchContentRange(url, headers = null, rangeBytes = 4096, timeoutMs = 5000) {
-    try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-        
-        logger.debug(`Fetching first ${rangeBytes} bytes of ${url}`);
-        
-        // Use provided headers or get shared headers
-        const requestHeaders = headers || await getSharedHeaders(null, url);
-        
-        // Add Range header
+export async function fetchManifest(url, options = {}) {
+    const {
+        headers = null,
+        rangeBytes = null,
+        timeoutMs = 10000,
+        maxRetries = 2,
+        retryDelayMs = 500
+    } = options;
+    
+    const logger = createLogger('Fetch');
+    const fetchMode = rangeBytes ? `first ${rangeBytes} bytes` : 'full content';
+    
+    let attempt = 0;
+    let lastError = null;
+    
+    // Get appropriate headers
+    const requestHeaders = headers || await getSharedHeaders(null, url);
+    
+    // Configure range header if needed
+    if (rangeBytes) {
         requestHeaders['Range'] = `bytes=0-${rangeBytes - 1}`;
-        
-        const response = await fetch(url, {
-            signal: controller.signal,
-            headers: requestHeaders
-        });
-        
-        clearTimeout(timeoutId);
-        
-        if (!response.ok) {
-            logger.debug(`❌ Failed to fetch content: ${response.status}`);
-            return { content: '', ok: false, status: response.status };
-        }
-        
-        const content = await response.text();
-        return { content, ok: true, status: response.status };
-    } catch (error) {
-        logger.error(`❌ Error fetching content: ${error.message}`);
-        return { content: '', ok: false, status: 0, error: error.message };
-    }
-}
-
-/**
- * Fetch full content of a URL
- * 
- * @param {string} url - URL to fetch
- * @param {Object} [headers] - Optional request headers
- * @param {number} [timeoutMs=10000] - Timeout in milliseconds
- * @returns {Promise<{content: string, ok: boolean, status: number}>} - Response
- */
-export async function fetchFullContent(url, headers = null, timeoutMs = 10000) {
-    try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-        
-        logger.debug(`Fetching full content of ${url}`);
-        
-        // Use provided headers or get shared headers
-        const requestHeaders = headers || await getSharedHeaders(null, url);
-        
+        logger.debug(`Fetching ${fetchMode} of ${url}`);
+    } else {
         // Remove any Range header to ensure we get the full content
         if (requestHeaders['Range']) {
             delete requestHeaders['Range'];
         }
-        
-        const response = await fetch(url, {
-            signal: controller.signal,
-            headers: requestHeaders
-        });
-        
-        clearTimeout(timeoutId);
-        
-        if (!response.ok) {
-            logger.debug(`❌ Failed to fetch content: ${response.status}`);
-            return { content: '', ok: false, status: response.status };
-        }
-        
-        const content = await response.text();
-        return { content, ok: true, status: response.status };
-    } catch (error) {
-        logger.error(`❌ Error fetching content: ${error.message}`);
-        return { content: '', ok: false, status: 0, error: error.message };
+        logger.debug(`Fetching ${fetchMode} of ${url}`);
     }
+    
+    while (attempt <= maxRetries) {
+        try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+            
+            // Log retry attempts after the first one
+            if (attempt > 0) {
+                logger.debug(`Retry attempt ${attempt}/${maxRetries} for ${url}`);
+            }
+            
+            const response = await fetch(url, {
+                signal: controller.signal,
+                headers: requestHeaders
+            });
+            
+            clearTimeout(timeoutId);
+            
+            // Handle retry-worthy status codes
+            if (!response.ok) {
+                // Don't retry client errors (except 429 Too Many Requests)
+                if (response.status !== 429 && response.status < 500) {
+                    logger.debug(`Non-retriable error: HTTP ${response.status} for ${url}`);
+                    return { 
+                        content: '', 
+                        ok: false, 
+                        status: response.status, 
+                        retryCount: attempt 
+                    };
+                }
+                
+                // For retriable errors, check if we have attempts left
+                if (attempt >= maxRetries) {
+                    logger.debug(`Out of retry attempts (${maxRetries}) for ${url}`);
+                    return { 
+                        content: '', 
+                        ok: false, 
+                        status: response.status, 
+                        retryCount: attempt 
+                    };
+                }
+                
+                // Handle rate limiting specifically
+                let delay = retryDelayMs * Math.pow(2, attempt);
+                
+                if (response.status === 429) {
+                    // Check for Retry-After header
+                    const retryAfter = response.headers.get('Retry-After');
+                    if (retryAfter) {
+                        if (!isNaN(retryAfter)) {
+                            delay = parseInt(retryAfter, 10) * 1000; // Convert to ms
+                        } else {
+                            const retryDate = new Date(retryAfter).getTime();
+                            if (!isNaN(retryDate)) {
+                                delay = Math.max(retryDate - Date.now(), retryDelayMs);
+                            }
+                        }
+                        logger.debug(`Rate limited with Retry-After, waiting ${delay}ms`);
+                    }
+                }
+                
+                // Increment attempt and retry after delay
+                attempt++;
+                logger.debug(`HTTP error ${response.status}, retrying in ${delay}ms (attempt ${attempt}/${maxRetries})`);
+                await new Promise(resolve => setTimeout(resolve, delay));
+                continue;
+            }
+            
+            // On successful response, extract content
+            const content = await response.text();
+            return { 
+                content, 
+                ok: true, 
+                status: response.status, 
+                retryCount: attempt 
+            };
+            
+        } catch (error) {
+            // Network error or timeout
+            lastError = error;
+            
+            if (attempt >= maxRetries) {
+                logger.error(`Failed after ${attempt + 1} attempts: ${error.message}`);
+                return { 
+                    content: '', 
+                    ok: false, 
+                    status: 0, 
+                    error: error.message, 
+                    retryCount: attempt 
+                };
+            }
+            
+            // Increment attempt and retry with minimal delay for network errors
+            attempt++;
+            logger.debug(`Network error: ${error.message}, retrying immediately (attempt ${attempt}/${maxRetries})`);
+            await new Promise(resolve => setTimeout(resolve, 100)); // Small delay before retry
+        }
+    }
+    
+    // Should never reach here but just in case
+    return { 
+        content: '', 
+        ok: false, 
+        status: 0, 
+        error: lastError?.message || 'Unknown error', 
+        retryCount: attempt 
+    };
 }
 
 /**
@@ -261,7 +326,10 @@ export async function validateManifestType(url, headers = null, existingMetadata
             logger.debug(`${downloadType} - downloading fully`);
             
             try {
-                const fullFetchResult = await fetchFullContent(url, reqHeaders);
+                const fullFetchResult = await fetchManifest(url, {
+                    headers: reqHeaders,
+                    maxRetries: 3
+                });
                 
                 if (!fullFetchResult.ok) {
                     logger.warn(`Failed to fetch content: ${fullFetchResult.status}`);
@@ -318,7 +386,11 @@ export async function validateManifestType(url, headers = null, existingMetadata
         else {
             logger.debug(`Large manifest with range support - fetching partial content`);
             
-            const result = await fetchContentRange(url, reqHeaders, 10 * 1024); // 10 KB for manifest header
+            const result = await fetchManifest(url, {
+                headers: reqHeaders,
+                rangeBytes: 10 * 1024,
+                maxRetries: 3
+            });
             
             if (!result.ok) {
                 logger.warn(`Failed to fetch partial content: ${result.status}`);

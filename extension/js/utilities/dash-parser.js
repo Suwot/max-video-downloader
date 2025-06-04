@@ -11,8 +11,7 @@ import {
     resolveUrl,
     getBaseDirectory,
     extractAttribute,
-    fetchContentRange,
-    fetchFullContent,
+    fetchManifest,
     validateManifestType
 } from './parser-utils.js';
 import { createLogger } from './logger.js';
@@ -352,7 +351,10 @@ export async function parseDashManifest(url, headers = null) {
             content = validation.content;
         } else {
             logger.debug('Content not available from light parsing, fetching full content');
-            const fetchResult = await fetchFullContent(url, headers);
+            const fetchResult = await fetchManifest(url, {
+                headers,
+                maxRetries: 3
+            });
             
             if (!fetchResult.ok) {
                 logger.error(`Failed to fetch MPD: ${fetchResult.status}`);
@@ -360,6 +362,7 @@ export async function parseDashManifest(url, headers = null) {
                     status: 'fetch-failed',
                     isValid: false,
                     timestampLP,
+                    retryCount: fetchResult.retryCount || 0,
                     videoTracks: [],
                     audioTracks: [],
                     subtitleTracks: [],

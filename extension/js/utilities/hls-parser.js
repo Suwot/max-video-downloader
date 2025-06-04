@@ -10,7 +10,7 @@ import {
     calculateEstimatedFileSizeBytes,
     resolveUrl,
     getBaseDirectory,
-    fetchFullContent,
+    fetchManifest,
     validateManifestType
 } from './parser-utils.js';
 import { createLogger } from './logger.js';
@@ -31,36 +31,25 @@ async function parseHlsVariant(variantUrl, headers = null) {
     try {
         logger.debug(`Fetching variant: ${variantUrl}`);
         
-        // Set up request with timeout
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 10000);  
-        
-        // Use provided headers or build basic headers
-        const requestHeaders = headers || await getSharedHeaders(null, variantUrl);
-        
-        // Remove any Range header that might limit the response size
-        if (requestHeaders['Range']) {
-            delete requestHeaders['Range'];
-        }
-        
-        const response = await fetch(variantUrl, {
-            signal: controller.signal,
-            headers: requestHeaders
+        // Use the unified fetchManifest function with retry logic
+        const fetchResult = await fetchManifest(variantUrl, {
+            headers,
+            timeoutMs: 10000,
+            maxRetries: 2
         });
         
-        clearTimeout(timeoutId);
-        
-        if (!response.ok) {
-            logger.warn(`❌ Failed fetching variant ${variantUrl}: ${response.status}`);
+        if (!fetchResult.ok) {
+            logger.warn(`❌ Failed fetching variant ${variantUrl}: ${fetchResult.status}`);
             return { 
                 duration: null, 
                 isLive: true,
                 isEncrypted: false,
-                encryptionType: null
+                encryptionType: null,
+                retryCount: fetchResult.retryCount || 0
             };
         }
         
-        const content = await response.text();
+        const content = fetchResult.content;
         logger.debug(`Received variant playlist (${content.length} bytes)`);
         
         if (content.length === 0) {
@@ -376,7 +365,10 @@ export async function parseHlsManifest(url, headers = null) {
             content = validation.content;
         } else {
             logger.debug('Content not available from light parsing, fetching full content');
-            const fetchResult = await fetchFullContent(url, headers);
+            const fetchResult = await fetchManifest(url, {
+                headers,
+                maxRetries: 3
+            });
             
             if (!fetchResult.ok) {
                 logger.error(`Failed to fetch HLS playlist: ${fetchResult.status}`);
