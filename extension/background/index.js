@@ -217,10 +217,9 @@ function processVideoUrl(tabId, url, metadata = null) {
     const isHls = hlsMimePatterns.some(pattern => contentType.includes(pattern));
     
     // More restrictive check for misconfigured HLS
-    const isPossibleHls = contentType.includes('text/plain') && 
-                          url.toLowerCase().includes('.m3u8');
-    
-    if (isHls || isPossibleHls) {
+    const isLikelyHls = url.toLowerCase().includes('.m3u8');
+
+    if (isHls || isLikelyHls) {
       addDetectedVideo(tabId, {
         url,
         type: 'hls',
@@ -234,7 +233,7 @@ function processVideoUrl(tabId, url, metadata = null) {
     // For direct video/audio files, check MIME type AND apply filters
     if (contentType.startsWith('video/') || contentType.startsWith('audio/')) {
       // First check file size before anything else
-      if (metadata.contentLength < 153600) {  // Skip files smaller than 150kb
+      if (metadata.contentLength < 100 * 1024) {  // Skip files smaller than 100kb
         logger.debug(`Skipping small media file (${metadata.contentLength} bytes): ${url}`);
         return;
       } 
