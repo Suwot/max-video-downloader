@@ -244,6 +244,7 @@ function createDashOptions(container, tracks, initialSelection, onSelect) {
  * @param {string} type - Track type (video, audio, subtitle)
  * @param {Array|string} selectedIds - Initially selected track ids
  * @param {boolean} [singleSelect=false] - Whether only one option can be selected
+ * @param {HTMLElement} columnsContainer - Container for all columns
  * @returns {HTMLElement} Column element
  */
 function createTrackColumn(title, tracks, type, selectedIds = [], singleSelect = false, columnsContainer = null) {
@@ -307,10 +308,10 @@ function createTrackColumn(title, tracks, type, selectedIds = [], singleSelect =
                 });
 
                 // If this is a video track, update compatibility status of audio tracks
-                if (type === 'video' && track.mimeType) {
-                    const videoContainer = track.mimeType.split('/')[1]?.split(';')[0];
+                if (type === 'video' && columnsContainer) {
+                    const videoContainer = option.dataset.container;
                     if (videoContainer) {
-                        updateAudioTracksCompatibility(videoContainer);
+                        updateAudioTracksCompatibility(videoContainer, columnsContainer);
                     }
                 }
             }
@@ -564,22 +565,28 @@ function updateSelectedDisplay(display, selection, type) {
  * @param {HTMLElement} columnsContainer - The container element for all columns
  */
 function updateAudioTracksCompatibility(videoContainer, columnsContainer) {
-    if (!videoContainer || !columnsContainer) return;
+    // Early return if parameters are invalid
+    if (!videoContainer || !columnsContainer) {
+        console.warn('Cannot update audio tracks compatibility: missing parameters', { videoContainer, columnsContainer });
+        return;
+    }
     
     // Find the audio column
     const audioColumn = columnsContainer.querySelector('.column.audio');
-    if (!audioColumn) return;
+    if (!audioColumn) {
+        console.warn('Audio column not found');
+        return;
+    }
     
     // Get all audio tracks
     const audioTracks = audioColumn.querySelectorAll('.track-option');
     
     // Check if we previously applied a "no audio" selection
-    // Get the dropdown's selected display element
     const dropdown = columnsContainer.closest('.custom-dropdown');
     const selectedDisplay = dropdown?.querySelector('.selected-option');
     const userSelectedNoAudio = selectedDisplay?.querySelector('.label')?.textContent.includes('no audio');
     
-    // Only auto-select if user hasn't explicitly chosen "no audio"
+    // Clear existing selection state
     let hasSelectedAudio = false;
     let firstCompatibleAudio = null;
     
@@ -591,7 +598,7 @@ function updateAudioTracksCompatibility(videoContainer, columnsContainer) {
         track.classList.remove('compatible', 'incompatible');
         
         if (audioContainer) {
-            // Simple compatibility check - same container format is compatible
+            // Container compatibility check - same container format is compatible
             const isCompatible = audioContainer === videoContainer;
             
             // Add appropriate class
@@ -602,18 +609,23 @@ function updateAudioTracksCompatibility(videoContainer, columnsContainer) {
                 }
             } else {
                 track.classList.add('incompatible');
+                // If incompatible track is selected, deselect it
+                if (track.classList.contains('selected')) {
+                    track.classList.remove('selected');
+                    const input = track.querySelector('input');
+                    if (input) input.checked = false;
+                    hasSelectedAudio = false;
+                }
             }
         }
         
-        // Check if any audio is selected
+        // Check if any audio is still selected
         if (track.classList.contains('selected')) {
             hasSelectedAudio = true;
         }
     });
     
-    // Auto-select the first compatible audio ONLY if:
-    // 1. None is selected AND
-    // 2. User hasn't explicitly chosen "no audio" in a previous selection
+    // Auto-select the first compatible audio if necessary
     if (!hasSelectedAudio && firstCompatibleAudio && !userSelectedNoAudio) {
         firstCompatibleAudio.classList.add('selected');
         const input = firstCompatibleAudio.querySelector('input');
