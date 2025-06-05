@@ -63,7 +63,8 @@ export function formatSize(bytes) {
  * @param {number} height - Actual pixel height of the video
  * @returns {string} Standardized resolution string (e.g. "1080p")
  */
-export function standardizeResolution(height) {
+export function standardizeResolution(height) { 
+    if (height >= 4320) return '4320p';
     if (height >= 2160) return '2160p';
     if (height >= 1440) return '1440p';
     if (height >= 1080) return '1080p';
@@ -71,5 +72,6 @@ export function standardizeResolution(height) {
     if (height >= 480) return '480p';
     if (height >= 360) return '360p';
     if (height >= 240) return '240p';
+    if (height >= 144) return '144p';
     return `${height}p`; // Fallback
 }
