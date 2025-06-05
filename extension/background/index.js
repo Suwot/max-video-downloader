@@ -10,6 +10,98 @@ import { clearCache, getCacheStats } from '../js/utilities/preview-cache.js';
 // Create a logger instance for the background script
 const logger = createLogger('Background');
 
+/**
+ * Extracts expiration information from URL parameters
+ * @param {string} url - The URL to analyze
+ * @returns {Object|null} - Expiration data or null if none found
+ */
+function extractExpiryInfo(url) {
+    if (!url) return null;
+    
+    try {
+        const urlObj = new URL(url);
+        const params = urlObj.searchParams;
+        
+        // Check for common expiration parameters
+        const expiryParams = {
+            // Standard expiry parameters
+            expires: params.get('expires'),
+            exp: params.get('exp'),
+            expiry: params.get('expiry'),
+            token_expires: params.get('token_expires'),
+            valid_until: params.get('valid_until'),
+            validUntil: params.get('validUntil'),
+            e: params.get('e'),
+            // CDN specific parameters
+            cdn_expiry: params.get('cdn_expiry'),
+            edge_expires: params.get('edge_expires'),
+            // Token parameters
+            token: params.get('token'), // Often contains encoded expiry
+            auth_token: params.get('auth_token'),
+            access_token: params.get('access_token'),
+            // AWS/CDN specific
+            Expires: params.get('Expires'), // AWS S3 parameter
+            expire: params.get('expire'),
+            expiration: params.get('expiration')
+        };
+        
+        // Filter out undefined/null values
+        const expiryData = Object.entries(expiryParams)
+            .filter(([, value]) => value !== null && value !== undefined)
+            .reduce((obj, [key, value]) => {
+                obj[key] = value;
+                return obj;
+            }, {});
+            
+        // If we have data, add timestamp for easier programmatic use
+        if (Object.keys(expiryData).length > 0) {
+            // Try to identify a numeric timestamp for easy processing
+            // Common formats: unix timestamp (seconds or milliseconds)
+            const numericValues = Object.values(expiryData)
+                .filter(value => !isNaN(Number(value)))
+                .map(value => Number(value));
+                
+            if (numericValues.length > 0) {
+                // Find the most likely timestamp (future date, reasonable range)
+                const now = Date.now();
+                const nowInSeconds = Math.floor(now / 1000);
+                
+                // Check both millisecond and second formats
+                const possibleTimestamps = numericValues.filter(val => {
+                    // If it's a timestamp in milliseconds (13 digits typically)
+                    if (val > now && val < now + 365 * 24 * 60 * 60 * 1000) {
+                        return true;
+                    }
+                    // If it's a timestamp in seconds (10 digits typically)
+                    if (val > nowInSeconds && val < nowInSeconds + 365 * 24 * 60 * 60) {
+                        return true;
+                    }
+                    return false;
+                });
+                
+                if (possibleTimestamps.length > 0) {
+                    // Use the earliest expiry as the most restrictive
+                    const earliestExpiry = Math.min(...possibleTimestamps);
+                    
+                    // If it's likely seconds format, convert to milliseconds
+                    const expiryTimestamp = 
+                        (earliestExpiry < 10000000000) ? earliestExpiry * 1000 : earliestExpiry;
+                        
+                    expiryData._expiryTimestamp = expiryTimestamp;
+                    expiryData._expiresIn = expiryTimestamp - now;
+                }
+            }
+            
+            return expiryData;
+        }
+        
+        return null;
+    } catch (err) {
+        logger.debug(`Error extracting expiry info: ${err.message}`);
+        return null;
+    }
+}
+
 // tabId -> timestamp when MPD was detected
 const tabsWithMpd = new Map();
 
@@ -203,12 +295,16 @@ function processVideoUrl(tabId, url, metadata = null) {
       // Record that this tab has an MPD manifest
       tabsWithMpd.set(tabId, Date.now());
 
+      // Check for expiration info before adding the video
+      const expiryInfo = extractExpiryInfo(url);
+
       addDetectedVideo(tabId, {
         url,
         type: 'dash',
         source: 'BG_webRequest_mime_dash',
         timestampDetected: metadata.timestampDetected || Date.now(),
-        metadata: metadata
+        metadata: metadata,
+        ...(expiryInfo ? { expiryInfo } : {})
       });
       return;
     }
@@ -220,12 +316,16 @@ function processVideoUrl(tabId, url, metadata = null) {
     const isLikelyHls = url.toLowerCase().includes('.m3u8');
 
     if (isHls || isLikelyHls) {
+      // Check for expiration info before adding the video
+      const expiryInfo = extractExpiryInfo(url);
+      
       addDetectedVideo(tabId, {
         url,
         type: 'hls',
         source: 'BG_webRequest_mime_hls',
         timestampDetected: metadata.timestampDetected || Date.now(),
-        metadata: metadata
+        metadata: metadata,
+        ...(expiryInfo ? { expiryInfo } : {})
       });
       return;
     }
@@ -320,6 +420,9 @@ function processVideoUrl(tabId, url, metadata = null) {
       const mediaType = contentType.startsWith('audio/') ? 'audio' : 'video';
   
       
+      // Check for expiration info before adding the video
+      const expiryInfo = extractExpiryInfo(url);
+
       addDetectedVideo(tabId, {
         url,
         type: 'direct',
@@ -327,7 +430,8 @@ function processVideoUrl(tabId, url, metadata = null) {
         source: 'BG_webRequest_mime_direct',
         originalContainer: contentType.split('/')[1],
         timestampDetected: metadata.timestampDetected || Date.now(),
-        metadata: metadata
+        metadata: metadata,
+        ...(expiryInfo ? { expiryInfo } : {})
       });
       return;
     }
@@ -341,13 +445,16 @@ function processVideoUrl(tabId, url, metadata = null) {
   
   // For streaming formats, add directly
   if (videoInfo.type === 'hls' || videoInfo.type === 'dash' || videoInfo.type === 'direct') {
+    const expiryInfo = extractExpiryInfo(url);
+    
     addDetectedVideo(tabId, {
       url,
       type: videoInfo.type,
       source: `BG_webRequest_${videoInfo.type}`,
       ...(videoInfo.container ? {originalContainer: videoInfo.container} : {}),
       ...(metadata ? {metadata: metadata} : {}), // Still pass metadata even in URL-based detection
-      timestampDetected: Date.now()
+      timestampDetected: Date.now(),
+      ...(expiryInfo ? { expiryInfo } : {})
     });
   }
 }
