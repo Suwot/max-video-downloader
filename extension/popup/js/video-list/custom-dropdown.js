@@ -71,7 +71,7 @@ export function createCustomDropdown(options) {
             if (columnsContainer) {
                 const selectedVideo = columnsContainer.querySelector('.column.video .track-option.selected');
                 if (selectedVideo) {
-                    updateAudioTracksCompatibility(selectedVideo.dataset.container, columnsContainer);
+                    updateTracksCompatibility(selectedVideo.dataset.container, columnsContainer);
                 }
             }
         }
@@ -307,11 +307,11 @@ function createTrackColumn(title, tracks, type, selectedIds = [], singleSelect =
                     opt.querySelector('input').checked = false;
                 });
 
-                // If this is a video track, update compatibility status of audio tracks
+                // If this is a video track, update compatibility status of audio and subtitle tracks
                 if (type === 'video' && columnsContainer) {
                     const videoContainer = option.dataset.container;
                     if (videoContainer) {
-                        updateAudioTracksCompatibility(videoContainer, columnsContainer);
+                        updateTracksCompatibility(videoContainer, columnsContainer);
                     }
                 }
             }
@@ -560,75 +560,103 @@ function updateSelectedDisplay(display, selection, type) {
 }
 
 /**
- * Update audio tracks compatibility status based on selected video container
+ * Update track compatibility status based on selected video container
  * @param {string} videoContainer - The container format of the selected video track (e.g., 'mp4', 'webm')
  * @param {HTMLElement} columnsContainer - The container element for all columns
  */
-function updateAudioTracksCompatibility(videoContainer, columnsContainer) {
+function updateTracksCompatibility(videoContainer, columnsContainer) {
     // Early return if parameters are invalid
     if (!videoContainer || !columnsContainer) {
-        console.warn('Cannot update audio tracks compatibility: missing parameters', { videoContainer, columnsContainer });
+        console.warn('Cannot update tracks compatibility: missing parameters', { videoContainer, columnsContainer });
         return;
     }
     
-    // Find the audio column
-    const audioColumn = columnsContainer.querySelector('.column.audio');
-    if (!audioColumn) {
-        console.warn('Audio column not found');
+    // Update audio tracks compatibility
+    updateTrackTypeCompatibility(videoContainer, columnsContainer, 'audio');
+    
+    // Update subtitle tracks compatibility (if they exist)
+    const subtitleColumn = columnsContainer.querySelector('.column.subtitle');
+    if (subtitleColumn) {
+        updateTrackTypeCompatibility(videoContainer, columnsContainer, 'subtitle');
+    }
+}
+
+/**
+ * Update compatibility status for a specific track type
+ * @param {string} videoContainer - The container format of selected video
+ * @param {HTMLElement} columnsContainer - The container for all columns
+ * @param {string} trackType - Type of track ('audio' or 'subtitle')
+ */
+function updateTrackTypeCompatibility(videoContainer, columnsContainer, trackType) {
+    const column = columnsContainer.querySelector(`.column.${trackType}`);
+    if (!column) {
+        console.warn(`${trackType} column not found`);
         return;
     }
     
-    // Get all audio tracks
-    const audioTracks = audioColumn.querySelectorAll('.track-option');
+    const tracks = column.querySelectorAll('.track-option');
     
-    // Check if we previously applied a "no audio" selection
+    // Check if there was a deliberate selection of "no tracks"
     const dropdown = columnsContainer.closest('.custom-dropdown');
     const selectedDisplay = dropdown?.querySelector('.selected-option');
-    const userSelectedNoAudio = selectedDisplay?.querySelector('.label')?.textContent.includes('no audio');
+    const userSelectedNone = selectedDisplay?.querySelector('.label')?.textContent.includes(`no ${trackType}`);
     
-    // Clear existing selection state
-    let hasSelectedAudio = false;
-    let firstCompatibleAudio = null;
+    // Track state
+    let hasSelectedTrack = false;
+    let firstCompatibleTrack = null;
     
-    // Check each audio track for compatibility
-    audioTracks.forEach(track => {
-        const audioContainer = track.dataset.container;
+    // Process each track
+    tracks.forEach(track => {
+        const trackContainer = track.dataset.container;
+        const mimeType = track.dataset.mimeType;
         
         // Remove existing compatibility classes
         track.classList.remove('compatible', 'incompatible');
         
-        if (audioContainer) {
-            // Container compatibility check - same container format is compatible
-            const isCompatible = audioContainer === videoContainer;
-            
-            // Add appropriate class
-            if (isCompatible) {
-                track.classList.add('compatible');
-                if (!firstCompatibleAudio) {
-                    firstCompatibleAudio = track;
+        // Determine compatibility based on track type
+        let isCompatible = true;
+        
+        if (trackType === 'audio') {
+            // For audio, container must match video container
+            isCompatible = trackContainer === videoContainer;
+        } else if (trackType === 'subtitle') {
+            // For subtitles, most formats work with both containers except specific ones
+            if (mimeType) {
+                if (mimeType.includes('application/mp4')) {
+                    // MP4-specific subtitle formats
+                    isCompatible = videoContainer === 'mp4';
                 }
-            } else {
-                track.classList.add('incompatible');
-                // If incompatible track is selected, deselect it
-                if (track.classList.contains('selected')) {
-                    track.classList.remove('selected');
-                    const input = track.querySelector('input');
-                    if (input) input.checked = false;
-                    hasSelectedAudio = false;
-                }
+                // Most subtitle formats like text/vtt are compatible with both containers
             }
         }
         
-        // Check if any audio is still selected
+        // Apply compatibility class
+        if (isCompatible) {
+            track.classList.add('compatible');
+            if (!firstCompatibleTrack) {
+                firstCompatibleTrack = track;
+            }
+        } else {
+            track.classList.add('incompatible');
+            // If incompatible track is selected, deselect it
+            if (track.classList.contains('selected')) {
+                track.classList.remove('selected');
+                const input = track.querySelector('input');
+                if (input) input.checked = false;
+                hasSelectedTrack = false;
+            }
+        }
+        
+        // Check if any track is still selected
         if (track.classList.contains('selected')) {
-            hasSelectedAudio = true;
+            hasSelectedTrack = true;
         }
     });
     
-    // Auto-select the first compatible audio if necessary
-    if (!hasSelectedAudio && firstCompatibleAudio && !userSelectedNoAudio) {
-        firstCompatibleAudio.classList.add('selected');
-        const input = firstCompatibleAudio.querySelector('input');
+    // Auto-select the first compatible track if necessary
+    if (!hasSelectedTrack && firstCompatibleTrack && !userSelectedNone) {
+        firstCompatibleTrack.classList.add('selected');
+        const input = firstCompatibleTrack.querySelector('input');
         if (input) {
             input.checked = true;
         }
