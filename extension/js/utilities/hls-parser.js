@@ -291,7 +291,7 @@ function parseStreamInf(line) {
                 result.height = parseInt(height, 10);
                 break;
             case 'FRAME-RATE':
-                result.fps = parseFloat(value);
+                result.fps = Math.round(parseFloat(value));
                 break;
         }
     }
