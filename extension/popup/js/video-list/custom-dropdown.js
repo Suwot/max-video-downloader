@@ -76,8 +76,12 @@ export function createCustomDropdown(options) {
             }
         }
         
-        // Position the dropdown
-        positionDropdown(container, optionsContainer);
+        // Add expanded class to body when dropdown is open
+        if (container.classList.contains('open')) {
+            document.body.classList.add('expanded');
+        } else {
+            document.body.classList.remove('expanded');
+        }
     });
     
     // Close dropdown when clicking outside
@@ -107,15 +111,6 @@ export function createCustomDropdown(options) {
     updateSelectedDisplay(selectedDisplay, initialSelection || (variants?.[0]), type);
     
     return container;
-}
-
-/**
- * Position the dropdown options container
- * @param {HTMLElement} container - Main dropdown container
- * @param {HTMLElement} optionsContainer - Options container element
- */
-function positionDropdown(container, optionsContainer) {
-    document.body.classList.add('expanded');
 }
 
 /**
