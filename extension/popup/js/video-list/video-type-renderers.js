@@ -154,7 +154,7 @@ function renderDashElements(video) {
         initialSelection: {
             selectedVideo: tracks.videoTracks?.[0]?.id,
             selectedAudio: tracks.audioTracks?.[0]?.id,
-            selectedSubs: []
+            selectedSubs: tracks.subtitleTracks?.[0]?.id
         },
         onChange: (selection) => {
             // Update download button with track map

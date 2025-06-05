@@ -633,12 +633,12 @@ function updateTrackTypeCompatibility(videoContainer, columnsContainer, trackTyp
         } else {
             track.classList.add('incompatible');
             // If incompatible track is selected, deselect it
-            if (track.classList.contains('selected')) {
-                track.classList.remove('selected');
-                const input = track.querySelector('input');
-                if (input) input.checked = false;
-                hasSelectedTrack = false;
-            }
+            // if (track.classList.contains('selected')) {
+            //     track.classList.remove('selected');
+            //     const input = track.querySelector('input');
+            //     if (input) input.checked = false;
+            //     hasSelectedTrack = false;
+            // }
         }
         
         // Check if any track is still selected
@@ -648,11 +648,11 @@ function updateTrackTypeCompatibility(videoContainer, columnsContainer, trackTyp
     });
     
     // Auto-select the first compatible track if necessary
-    if (!hasSelectedTrack && firstCompatibleTrack && !userSelectedNone) {
-        firstCompatibleTrack.classList.add('selected');
-        const input = firstCompatibleTrack.querySelector('input');
-        if (input) {
-            input.checked = true;
-        }
-    }
+    // if (!hasSelectedTrack && firstCompatibleTrack && !userSelectedNone) {
+    //     firstCompatibleTrack.classList.add('selected');
+    //     const input = firstCompatibleTrack.querySelector('input');
+    //     if (input) {
+    //         input.checked = true;
+    //     }
+    // }
 }
