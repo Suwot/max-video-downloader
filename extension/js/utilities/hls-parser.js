@@ -412,74 +412,76 @@ export async function parseHlsManifest(url, headers = null) {
 
             // Store version from master playlist
             version = masterParseResult.version;
-            logger.debug(`Master playlist version: ${version}`);
-            
-            logger.debug(`Master parse result: ${JSON.stringify(masterParseResult)}`);
             
             if (masterParseResult.variants && masterParseResult.variants.length > 0) {
+                // Get basic variant information
                 const basicVariants = masterParseResult.variants;
                 logger.debug(`Found ${basicVariants.length} basic variants in master playlist`);
                 
-                // Process variants in parallel but ensure we catch errors per variant
-                const variantPromises = basicVariants.map(async (variant, index) => {
+                // Prepare variants array with basic info
+                variants = [...basicVariants];
+                
+                // Try to fetch the highest quality variant first
+                let variantInfo = null;
+                let processedVariantIndex = 0;
+                
+                // Try highest quality first, then fall back to others if needed
+                while (!variantInfo && processedVariantIndex < Math.min(3, basicVariants.length)) {
                     try {
-                        logger.debug(`Processing variant ${index+1}/${basicVariants.length}: ${variant.url}`);
-                        const variantInfo = await parseHlsVariant(variant.url, headers);
+                        const currentVariant = basicVariants[processedVariantIndex];
+                        logger.debug(`Processing variant ${processedVariantIndex+1}: ${currentVariant.url}`);
                         
-                        // Create a new variant object to avoid mutation issues
+                        variantInfo = await parseHlsVariant(currentVariant.url, headers);
+                        
+                        if (variantInfo) {
+                            logger.debug(`Successfully fetched variant ${processedVariantIndex+1}`);
+                            break;
+                        }
+                    } catch (error) {
+                        logger.warn(`Failed to fetch variant ${processedVariantIndex+1}: ${error.message}`);
+                    }
+                    
+                    processedVariantIndex++;
+                }
+                
+                if (variantInfo) {
+                    // Extract metadata for all variants from this one
+                    duration = variantInfo.duration;
+                    isEncrypted = variantInfo.isEncrypted || false;
+                    encryptionType = variantInfo.encryptionType;
+                    const isLive = variantInfo.isLive || false;
+                    
+                    // Apply this metadata to all variants
+                    variants = variants.map(variant => {
+                        // Create a new variant object with detailed information
                         const updatedVariant = {...variant};
                         
-                        // Update variant with detailed information
-                        if (variantInfo.duration !== null && variantInfo.duration >= 0) {
-                            updatedVariant.metaJS.duration = variantInfo.duration;
+                        // Apply metadata from the processed variant
+                        updatedVariant.metaJS.duration = duration;
+                        updatedVariant.metaJS.isLive = isLive;
+                        updatedVariant.metaJS.isEncrypted = isEncrypted;
+                        updatedVariant.metaJS.encryptionType = encryptionType;
+                        updatedVariant.metaJS.version = variantInfo.version || version;
+                        
+                        // Distinguish the actually fetched variant
+                        if (variant.url === basicVariants[processedVariantIndex].url) {
+                            updatedVariant.metaJS.directlyFetched = true;
+                        }
+                        
+                        // Calculate estimated file size based on bandwidth and duration
+                        if (duration !== null && duration >= 0) {
                             const effectiveBandwidth = updatedVariant.metaJS.averageBandwidth || updatedVariant.metaJS.bandwidth;
                             updatedVariant.metaJS.estimatedFileSizeBytes = calculateEstimatedFileSizeBytes(
                                 effectiveBandwidth, 
-                                variantInfo.duration
+                                duration
                             );
                         }
                         
-                        updatedVariant.metaJS.isLive = variantInfo.isLive || false;
-                        updatedVariant.metaJS.isEncrypted = variantInfo.isEncrypted || false;
-                        updatedVariant.metaJS.encryptionType = variantInfo.encryptionType;
-                        updatedVariant.metaJS.version = variantInfo.version || version;
-                        
-                        logger.debug(`Successfully processed variant ${index+1}`);
                         return updatedVariant;
-                    } catch (error) {
-                        logger.error(`Error processing variant ${index+1}: ${error.message}`);
-                        return variant; // Return the basic variant on error
-                    }
-                });
-                
-                try {
-                    // Wait for all variant processing to complete
-                    variants = await Promise.all(variantPromises);
-                    logger.debug(`All ${variants.length} variants processed successfully`);
-                    
-                    // If we have any variants, use data from the first one (highest quality)
-                    if (variants.length > 0) {
-                        const bestVariant = variants[0];
-                        duration = bestVariant.metaJS.duration;
-                        isEncrypted = bestVariant.metaJS.isEncrypted || false;
-                        encryptionType = bestVariant.metaJS.encryptionType;
-                    }
-                    
-                    // Ensure variants are properly sorted by quality
-                    variants.sort((a, b) => {
-                        // First try to sort by resolution if available
-                        if (a.metaJS?.height && b.metaJS?.height) {
-                            if (a.metaJS.height !== b.metaJS.height) {
-                                return b.metaJS.height - a.metaJS.height;
-                            }
-                        }
-                        // Then by bandwidth
-                        const aBandwidth = a.metaJS?.averageBandwidth || a.metaJS?.bandwidth || 0;
-                        const bBandwidth = b.metaJS?.averageBandwidth || b.metaJS?.bandwidth || 0;
-                        return bBandwidth - aBandwidth;
                     });
-                } catch (error) {
-                    logger.error(`Error during Promise.all for variants: ${error.message}`);
+                } else {
+                    // If all fetches failed, return basic variants
+                    logger.warn('Failed to fetch any variant for metadata extraction');
                 }
             } else {
                 logger.debug(`No variants found in master playlist`);
