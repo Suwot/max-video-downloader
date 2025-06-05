@@ -185,6 +185,45 @@ function createDashOptions(container, tracks, initialSelection, onSelect) {
     const applyButton = document.createElement('button');
     applyButton.className = 'apply-button';
     applyButton.textContent = 'Apply';
+    
+    // Function to update button text based on track compatibility
+    const updateButtonText = () => {
+        const selectedVideoTrack = videoColumn.querySelector('.track-option.selected');
+        if (!selectedVideoTrack) {
+            applyButton.textContent = 'Apply';
+            return;
+        }
+        
+        const videoContainer = selectedVideoTrack.dataset.container;
+        if (!videoContainer) {
+            applyButton.textContent = 'Apply';
+            return;
+        }
+        
+        // Check if any selected track is incompatible
+        const hasIncompatibleTracks = columnsContainer.querySelectorAll('.track-option.selected.incompatible').length > 0;
+        
+        if (hasIncompatibleTracks) {
+            applyButton.textContent = `Apply as .mkv`;
+            applyButton.dataset.container = 'mkv';
+        } else {
+            applyButton.textContent = `Apply as .${videoContainer}`;
+            applyButton.dataset.container = videoContainer;
+        }
+    };
+    
+    // Update button text on initial render (after a small delay to ensure compatibility classes are set)
+    setTimeout(updateButtonText, 0);
+    
+    // Listen for click events on the entire columnsContainer to catch any track option clicks
+    columnsContainer.addEventListener('click', (e) => {
+        const trackOption = e.target.closest('.track-option');
+        if (trackOption) {
+            // Small delay to ensure classes are updated first
+            setTimeout(updateButtonText, 0);
+        }
+    });
+    
     applyButton.addEventListener('click', () => {
         // Collect selected tracks with their ffmpegStreamIndex values
         const selectedVideoTrack = videoColumn.querySelector('.track-option.selected');
@@ -222,11 +261,15 @@ function createDashOptions(container, tracks, initialSelection, onSelect) {
             ...selectedSubIndices
         ].join(',');
         
+        // Get container format from button's dataset
+        const containerFormat = applyButton.dataset.container || 'mkv';
+        
         const selection = {
             selectedVideo: selectedVideoId,
             selectedAudio: selectedAudioIds,
             selectedSubs: selectedSubIds,
-            trackMap
+            trackMap,
+            container: containerFormat
         };
         
         // Pass to callback
@@ -455,6 +498,11 @@ function updateSelectedDisplay(display, selection, type) {
         
         // Store the track map for download
         display.dataset.trackMap = selection.trackMap || '';
+        
+        // Store the container format for download
+        if (selection.container) {
+            display.dataset.container = selection.container;
+        }
         
         // Find tracks from selected IDs
         const parentDropdown = display.closest('.custom-dropdown');
