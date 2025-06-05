@@ -363,13 +363,7 @@ function formatTrackLabel(track, type) {
 
     } else {
         // Subtitle
-        const label = track.label || track.language || null;
-        const fileSizeBytes = track.estimatedFileSizeBytes ? 
-        formatSize(track.estimatedFileSizeBytes) : null;
-
-        return [label, fileSizeBytes]
-            .filter(Boolean)
-            .join(' • ');   
+        return track.label || track.language || 'unknown';
     }
 }
 
@@ -473,11 +467,11 @@ function updateSelectedDisplay(display, selection, type) {
             
             if (tracks) {
                 // Get all selected tracks at once for size calculation
-                const allSelectedTracks = tracks.querySelectorAll('.track-option.selected');
+                const selectedTracks = tracks.querySelectorAll('.column.video .track-option.selected, .column.audio .track-option.selected');
                 let totalSizeBytes = 0;
                 
-                // Calculate total size in one go
-                allSelectedTracks.forEach(option => {
+                // Calculate total size
+                selectedTracks.forEach(option => {
                     if (option.dataset.filesize) {
                         totalSizeBytes += parseInt(option.dataset.filesize, 10);
                     }
