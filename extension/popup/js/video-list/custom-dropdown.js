@@ -6,6 +6,38 @@
 import { formatSize } from './video-utils.js';
 
 /**
+ * Creates all dropdown elements at once with proper structure
+ * @param {string} type - Video type
+ * @returns {HTMLElement} Container with nested elements
+ */
+function createDropdownElements(type) {
+    const container = document.createElement('div');
+    container.className = 'custom-dropdown';
+    container.dataset.type = type;
+    
+    const selectedDisplay = document.createElement('div');
+    selectedDisplay.className = 'selected-option';
+    
+    const dropdownIcon = document.createElement('div');
+    dropdownIcon.className = 'dropdown-icon';
+    dropdownIcon.innerHTML = `<svg width="10" height="6" viewBox="0 0 10 6" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M1 1L5 5L9 1" stroke="#FAFAFA" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>`;
+    
+    const optionsContainer = document.createElement('div');
+    optionsContainer.className = 'options-container';
+    
+    selectedDisplay.appendChild(dropdownIcon);
+    container.appendChild(selectedDisplay);
+    container.appendChild(optionsContainer);
+    
+    // Store element references for quick access
+    container.elements = { selectedDisplay, optionsContainer };
+    
+    return container;
+}
+
+/**
  * Creates a custom dropdown component
  * @param {Object} options - Configuration options
  * @param {string} options.type - Video type ('hls', 'dash', 'direct', 'blob')
@@ -18,32 +50,9 @@ import { formatSize } from './video-utils.js';
 export function createCustomDropdown(options) {
     const { type, variants, onChange, initialSelection, tracks } = options;
     
-    // Create main container
-    const container = document.createElement('div');
-    container.className = 'custom-dropdown';
-    container.dataset.type = type;
-    
-    // Create selected display element (always visible)
-    const selectedDisplay = document.createElement('div');
-    selectedDisplay.className = 'selected-option';
-    
-    // Create dropdown icon
-    const dropdownIcon = document.createElement('div');
-    dropdownIcon.className = 'dropdown-icon';
-    dropdownIcon.innerHTML = `
-        <svg width="10" height="6" viewBox="0 0 10 6" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M1 1L5 5L9 1" stroke="#FAFAFA" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
-    `;
-    
-    // Create options container (hidden by default)
-    const optionsContainer = document.createElement('div');
-    optionsContainer.className = 'options-container';
-    
-    // Handle click to toggle dropdown
-    selectedDisplay.appendChild(dropdownIcon);
-    container.appendChild(selectedDisplay);
-    container.appendChild(optionsContainer);
+    // Create all dropdown elements at once
+    const container = createDropdownElements(type);
+    const { selectedDisplay, optionsContainer } = container.elements;
     
     // For DASH videos, set initial trackMap on the selected display
     if (type === 'dash' && tracks) {
@@ -61,51 +70,8 @@ export function createCustomDropdown(options) {
         selectedDisplay.dataset.trackMap = trackMap;
     }
     
-    // Toggle dropdown when clicking the selected display
-    selectedDisplay.addEventListener('click', () => {
-        container.classList.toggle('open');
-        
-        // Close other dropdowns
-        document.querySelectorAll('.custom-dropdown.open').forEach(dropdown => {
-            if (dropdown !== container) {
-                dropdown.classList.remove('open');
-            }
-        });
-        
-        // Ensure radio buttons match selected classes when dropdown is opened
-        if (container.classList.contains('open') && type === 'dash') {
-            // Sync selected state with radio button state for video tracks
-            const videoOptions = container.querySelectorAll('.column .track-option');
-            videoOptions.forEach(option => {
-                const input = option.querySelector('input');
-                if (input) {
-                    input.checked = option.classList.contains('selected');
-                }
-            });
-
-            const columnsContainer = container.querySelector('.tracks-columns-container');
-            if (columnsContainer) {
-                const selectedVideo = columnsContainer.querySelector('.column.video .track-option.selected');
-                if (selectedVideo) {
-                    updateTracksCompatibility(selectedVideo.dataset.container, columnsContainer);
-                }
-            }
-        }
-        
-        // Add expanded class to body when dropdown is open
-        if (container.classList.contains('open')) {
-            document.body.classList.add('expanded');
-        } else {
-            document.body.classList.remove('expanded');
-        }
-    });
-    
-    // Close dropdown when clicking outside
-    document.addEventListener('click', (e) => {
-        if (!container.contains(e.target)) {
-            container.classList.remove('open');
-        }
-    });
+    // Setup event handlers for dropdown interactions
+    setupDropdownEvents(container, type);
     
     // Fill with content based on video type
     if (type === 'dash') {
@@ -127,6 +93,57 @@ export function createCustomDropdown(options) {
     updateSelectedDisplay(selectedDisplay, initialSelection || (variants?.[0]), type);
     
     return container;
+}
+
+/**
+ * Sets up event handlers for dropdown interactions
+ * @param {HTMLElement} container - Dropdown container element
+ * @param {string} type - Video type
+ */
+function setupDropdownEvents(container, type) {
+    const { selectedDisplay } = container.elements;
+    
+    // Toggle dropdown when clicking the selected display
+    selectedDisplay.addEventListener('click', () => {
+        container.classList.toggle('open');
+        
+        // Close other dropdowns
+        document.querySelectorAll('.custom-dropdown.open').forEach(dropdown => {
+            if (dropdown !== container) {
+                dropdown.classList.remove('open');
+            }
+        });
+        
+        // Ensure radio buttons match selected classes when dropdown is opened
+        if (container.classList.contains('open') && type === 'dash') {
+            // Sync selected state with radio button state for tracks
+            const videoOptions = container.querySelectorAll('.column .track-option');
+            videoOptions.forEach(option => {
+                const input = option.querySelector('input');
+                if (input) {
+                    input.checked = option.classList.contains('selected');
+                }
+            });
+
+            const columnsContainer = container.querySelector('.tracks-columns-container');
+            if (columnsContainer) {
+                const selectedVideo = columnsContainer.querySelector('.column.video .track-option.selected');
+                if (selectedVideo) {
+                    updateTracksCompatibility(selectedVideo.dataset.container, columnsContainer);
+                }
+            }
+        }
+        
+        // Add expanded class to body when dropdown is open
+        document.body.classList.toggle('expanded', container.classList.contains('open'));
+    });
+    
+    // Close dropdown when clicking outside
+    document.addEventListener('click', (e) => {
+        if (!container.contains(e.target)) {
+            container.classList.remove('open');
+        }
+    });
 }
 
 /**
@@ -422,6 +439,41 @@ function formatTrackLabel(track, type) {
 }
 
 /**
+ * Get formatted codecs based on media type
+ * @param {Object} media - Media object (variant or track)
+ * @param {string} type - Media type
+ * @returns {string|null} Formatted codecs string
+ */
+function getFormattedCodecs(media, type) {
+    if (type === 'hls') {
+        return media.metaJS?.codecs ? 
+            media.metaJS.codecs
+                .split(',')
+                .map(codec => codec.split('.')[0])
+                .join(' & ') 
+            : null;
+    }
+    
+    if (media.codecs) {
+        return media.codecs.split('.')[0];
+    }
+    
+    // For direct/blob videos
+    const videoCodec = media.metaFFprobe?.videoCodec?.name || null;
+    const audioCodec = media.metaFFprobe?.audioCodec?.name || null;
+    const audioChannels = media.metaFFprobe?.audioCodec?.channels ? 
+        `${media.metaFFprobe.audioCodec.channels}ch` : null;
+    
+    if (videoCodec && audioCodec && audioChannels) {
+        return `${videoCodec} & ${audioCodec} (${audioChannels})`;
+    } else if (videoCodec && audioCodec) {
+        return `${videoCodec} & ${audioCodec}`;
+    } else {
+        return videoCodec || audioCodec || null;
+    }
+}
+
+/**
  * Format the displayed label for a variant
  * @param {Object} variant - Variant data
  * @param {string} [type='direct'] - Media type ('hls', 'direct', 'blob')
@@ -430,25 +482,20 @@ function formatTrackLabel(track, type) {
 function formatVariantLabel(variant, type = 'direct') {
     if (!variant) return "Unknown Quality";
 
-    // Different sources have different data structures
+    // Extract common properties with consistent paths
     if (type === 'hls') {
-        // HLS-specific formatting
-        const res = variant.metaJS?.standardizedResolution || null;
-        const fps = variant.metaJS?.fps || null;
+        const meta = variant.metaJS || {};
+        const res = meta.standardizedResolution || null;
+        const fps = meta.fps || null;
         const formattedResolution = res ? 
             ((fps && fps !== 30) ? `${res}${fps}` : res) : null;
-
-        const fileSizeBytes = variant.metaJS?.estimatedFileSizeBytes ? 
-            formatSize(variant.metaJS.estimatedFileSizeBytes) : null;
-
-        const fullResolution = variant.metaJS?.resolution || null;
-        const formattedCodecs = variant.metaJS?.codecs ? variant.metaJS.codecs
-        .split(',')
-        .map(codec => codec.split('.')[0]) // Keep only the part before first dot
-        .join(' & ') : null;
-
-        // const bitrate = variant.metaJS?.bandwidth ? `${Math.round(variant.metaJS.bandwidth/1000)} Kbps` : null;
-
+            
+        const fileSizeBytes = meta.estimatedFileSizeBytes ? 
+            formatSize(meta.estimatedFileSizeBytes) : null;
+            
+        const fullResolution = meta.resolution || null;
+        const formattedCodecs = getFormattedCodecs(variant, 'hls');
+        
         return [formattedResolution, fileSizeBytes, fullResolution, formattedCodecs]
             .filter(Boolean)
             .join(' • ') || 'Unknown Quality';
@@ -459,24 +506,10 @@ function formatVariantLabel(variant, type = 'direct') {
         const formattedResolution = res ? 
             ((fps && fps !== 30) ? `${res}${fps}` : res) : null;
 
-        // Get file size info from fileSize or estimatedFileSizeBytes
         const fileSize = variant.fileSize ? formatSize(variant.fileSize) : 
             (variant.estimatedFileSizeBytes ? formatSize(variant.estimatedFileSizeBytes) : null);
         
-        // Get codec info from metaFFprobe (which contains videoCodec and audioCodec objects)
-        const videoCodec = variant.metaFFprobe?.videoCodec?.name || null;
-        const audioCodec = variant.metaFFprobe?.audioCodec?.name || null;
-        const audioChannels = variant.metaFFprobe?.audioCodec?.channels ? 
-            `${variant.metaFFprobe.audioCodec.channels}ch` : null;
-        
-        let formattedCodecs = null;
-        if (videoCodec && audioCodec && audioChannels) {
-            formattedCodecs = `${videoCodec} & ${audioCodec} (${audioChannels})`;
-        } else if (videoCodec && audioCodec) {
-            formattedCodecs = `${videoCodec} & ${audioCodec}`;
-        } else {
-            formattedCodecs = videoCodec || audioCodec || null;
-        }
+        const formattedCodecs = getFormattedCodecs(variant, 'direct');
         
         return [formattedResolution, fileSize, formattedCodecs]
             .filter(Boolean)
@@ -613,6 +646,30 @@ function updateSelectedDisplay(display, selection, type) {
 }
 
 /**
+ * Check if a track is compatible with the selected video container
+ * @param {string} trackType - Type of track ('audio' or 'subtitle')
+ * @param {string} trackContainer - Container format of the track
+ * @param {string} trackMimeType - MIME type of the track
+ * @param {string} videoContainer - Container format of the selected video
+ * @returns {boolean} Whether the track is compatible
+ */
+function isTrackCompatible(trackType, trackContainer, trackMimeType, videoContainer) {
+    if (trackType === 'audio') {
+        // For audio, container must match video container
+        return trackContainer === videoContainer;
+    } else if (trackType === 'subtitle') {
+        // For subtitles, most formats work with both containers except specific ones
+        if (trackMimeType && trackMimeType.includes('application/mp4')) {
+            // MP4-specific subtitle formats
+            return videoContainer === 'mp4';
+        }
+        // Most subtitle formats like text/vtt are compatible with both containers
+        return true;
+    }
+    return true;
+}
+
+/**
  * Update track compatibility status based on selected video container
  * @param {string} videoContainer - The container format of the selected video track (e.g., 'mp4', 'webm')
  * @param {HTMLElement} columnsContainer - The container element for all columns
@@ -642,21 +699,11 @@ function updateTracksCompatibility(videoContainer, columnsContainer) {
  */
 function updateTrackTypeCompatibility(videoContainer, columnsContainer, trackType) {
     const column = columnsContainer.querySelector(`.column.${trackType}`);
-    if (!column) {
-        console.warn(`${trackType} column not found`);
-        return;
-    }
+    if (!column) return;
     
     const tracks = column.querySelectorAll('.track-option');
-    
-    // Check if there was a deliberate selection of "no tracks"
-    const dropdown = columnsContainer.closest('.custom-dropdown');
-    const selectedDisplay = dropdown?.querySelector('.selected-option');
-    const userSelectedNone = selectedDisplay?.querySelector('.label')?.textContent.includes(`no ${trackType}`);
-    
-    // Track state
-    let hasSelectedTrack = false;
     let firstCompatibleTrack = null;
+    let hasSelectedTrack = false;
     
     // Process each track
     tracks.forEach(track => {
@@ -666,38 +713,14 @@ function updateTrackTypeCompatibility(videoContainer, columnsContainer, trackTyp
         // Remove existing compatibility classes
         track.classList.remove('compatible', 'incompatible');
         
-        // Determine compatibility based on track type
-        let isCompatible = true;
-        
-        if (trackType === 'audio') {
-            // For audio, container must match video container
-            isCompatible = trackContainer === videoContainer;
-        } else if (trackType === 'subtitle') {
-            // For subtitles, most formats work with both containers except specific ones
-            if (mimeType) {
-                if (mimeType.includes('application/mp4')) {
-                    // MP4-specific subtitle formats
-                    isCompatible = videoContainer === 'mp4';
-                }
-                // Most subtitle formats like text/vtt are compatible with both containers
-            }
-        }
+        // Check compatibility using helper function
+        const isCompatible = isTrackCompatible(trackType, trackContainer, mimeType, videoContainer);
         
         // Apply compatibility class
-        if (isCompatible) {
-            track.classList.add('compatible');
-            if (!firstCompatibleTrack) {
-                firstCompatibleTrack = track;
-            }
-        } else {
-            track.classList.add('incompatible');
-            // If incompatible track is selected, deselect it
-            // if (track.classList.contains('selected')) {
-            //     track.classList.remove('selected');
-            //     const input = track.querySelector('input');
-            //     if (input) input.checked = false;
-            //     hasSelectedTrack = false;
-            // }
+        track.classList.add(isCompatible ? 'compatible' : 'incompatible');
+        
+        if (isCompatible && !firstCompatibleTrack) {
+            firstCompatibleTrack = track;
         }
         
         // Check if any track is still selected
@@ -705,13 +728,4 @@ function updateTrackTypeCompatibility(videoContainer, columnsContainer, trackTyp
             hasSelectedTrack = true;
         }
     });
-    
-    // Auto-select the first compatible track if necessary
-    // if (!hasSelectedTrack && firstCompatibleTrack && !userSelectedNone) {
-    //     firstCompatibleTrack.classList.add('selected');
-    //     const input = firstCompatibleTrack.querySelector('input');
-    //     if (input) {
-    //         input.checked = true;
-    //     }
-    // }
 }
