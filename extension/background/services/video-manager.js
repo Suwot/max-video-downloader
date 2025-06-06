@@ -352,7 +352,7 @@ class VideoProcessingPipeline {
       
       // Get updated video with metadata for preview generation
       const updatedVideo = getVideo(tabId, normalizedUrl);
-      if (updatedVideo) {
+      if (updatedVideo.metaFFprobe?.hasVideo) {
         await this.generatePreview(tabId, normalizedUrl, headers);
       }
     }
