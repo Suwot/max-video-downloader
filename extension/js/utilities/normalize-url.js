@@ -119,20 +119,6 @@ export function normalizeUrl(url) {
 }
 
 /**
- * Get base URL for video
- * @param {string} url - Video URL
- * @returns {string} Base URL
- */
-export function getBaseUrl(url) {
-    try {
-        const urlObj = new URL(url);
-        return urlObj.origin;
-    } catch {
-        return '';
-    }
-}
-
-/**
  * Get base directory for a URL
  * @param {string} url - URL to process
  * @returns {string} Base directory of the URL

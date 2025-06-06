@@ -9,48 +9,6 @@
  * - Offers data conversion and transformation utilities
  */
 
-// popup/js/utilities.js
-
-/**
- * Debounce helper to limit function calls
- * @param {Function} func - Function to debounce
- * @param {number} wait - Wait time in milliseconds
- * @returns {Function} Debounced function
- */
-export function debounce(func, wait) {
-    let timeout;
-    return function executedFunction(...args) {
-        const later = () => {
-            clearTimeout(timeout);
-            func(...args);
-        };
-        clearTimeout(timeout);
-        timeout = setTimeout(later, wait);
-    };
-}
-
-/**
- * Format bitrate for display
- * @param {number|string} bitrate - Video bitrate
- * @returns {string|null} Formatted bitrate string
- */
-export function formatBitrate(bitrate) {
-    if (!bitrate) return null;
-    
-    // Convert to number if it's a string
-    const rate = typeof bitrate === 'string' ? parseInt(bitrate, 10) : bitrate;
-    
-    if (isNaN(rate) || rate <= 0) return null;
-    
-    if (rate >= 1000000) {
-        return `${(rate / 1000000).toFixed(1)} Mbps`;
-    } else if (rate >= 1000) {
-        return `${(rate / 1000).toFixed(0)} Kbps`;
-    } else {
-        return `${rate} bps`;
-    }
-}
-
 /**
  * Format duration in seconds to HH:MM:SS or MM:SS format
  * @param {number} seconds - Duration in seconds
@@ -94,25 +52,6 @@ export function getFilenameFromUrl(url) {
         return filename || 'video';
     } catch (e) {
         return 'video';
-    }
-}
-
-/**
- * Extract base URL without quality parameters
- * @param {string} url - URL to process
- * @returns {string} Base URL
- */
-export function getBaseUrl(url) {
-    try {
-        const urlObj = new URL(url);
-        // Remove common quality-related parameters
-        urlObj.searchParams.delete('quality');
-        urlObj.searchParams.delete('q');
-        urlObj.searchParams.delete('res');
-        urlObj.searchParams.delete('resolution');
-        return urlObj.toString();
-    } catch {
-        return url;
     }
 }
 
