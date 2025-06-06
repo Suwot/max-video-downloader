@@ -45,6 +45,22 @@ export function createCustomDropdown(options) {
     container.appendChild(selectedDisplay);
     container.appendChild(optionsContainer);
     
+    // For DASH videos, set initial trackMap on the selected display
+    if (type === 'dash' && tracks) {
+        // Get ffmpegStreamIndex from first track of each type
+        const indices = [
+            tracks.videoTracks?.[0]?.ffmpegStreamIndex,
+            tracks.audioTracks?.[0]?.ffmpegStreamIndex,
+            tracks.subtitleTracks?.[0]?.ffmpegStreamIndex
+        ].filter(Boolean);
+        
+        // Create track map string
+        const trackMap = indices.join(',');
+        
+        // Set on selected display element
+        selectedDisplay.dataset.trackMap = trackMap;
+    }
+    
     // Toggle dropdown when clicking the selected display
     selectedDisplay.addEventListener('click', () => {
         container.classList.toggle('open');
@@ -491,9 +507,9 @@ function updateSelectedDisplay(display, selection, type) {
         const label = document.createElement('span');
         label.className = 'label';
         
-        // Store the track map for download
-        display.dataset.trackMap = selection.trackMap || '';
-        
+        // Store the track map for download, preserving any existing value
+        display.dataset.trackMap = selection.trackMap || display.dataset.trackMap || '';   
+
         // Store the container format for download
         if (selection.container) {
             display.dataset.container = selection.container;
