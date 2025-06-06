@@ -103,6 +103,12 @@ export function createCustomDropdown(options) {
 function setupDropdownEvents(container, type) {
     const { selectedDisplay } = container.elements;
     
+    // Helper function to update body expanded state based on open dropdowns
+    const updateBodyExpandedState = () => {
+        const anyDropdownOpen = document.querySelector('.custom-dropdown.open') !== null;
+        document.body.classList.toggle('expanded', anyDropdownOpen);
+    };
+    
     // Toggle dropdown when clicking the selected display
     selectedDisplay.addEventListener('click', () => {
         container.classList.toggle('open');
@@ -134,14 +140,15 @@ function setupDropdownEvents(container, type) {
             }
         }
         
-        // Add expanded class to body when dropdown is open
-        document.body.classList.toggle('expanded', container.classList.contains('open'));
+        // Update body expanded state
+        updateBodyExpandedState();
     });
     
     // Close dropdown when clicking outside
     document.addEventListener('click', (e) => {
         if (!container.contains(e.target)) {
             container.classList.remove('open');
+            updateBodyExpandedState();
         }
     });
 }
