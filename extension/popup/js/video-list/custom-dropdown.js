@@ -435,7 +435,7 @@ function formatTrackLabel(track, type) {
         const fileSizeBytes = track.estimatedFileSizeBytes ? 
         formatSize(track.estimatedFileSizeBytes) : null;
 
-        return [label, lang, codecs, channels, fileSizeBytes]
+        return [label, lang, channels, fileSizeBytes, codecs]
             .filter(Boolean)
             .join(' • ');
 
