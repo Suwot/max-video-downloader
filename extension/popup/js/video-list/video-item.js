@@ -27,19 +27,13 @@ export function createVideoElement(video) {
     // Get preview URL using utility function
     let previewUrl = video.previewUrl || video.poster;
 
-    // Add duration display if available in video.variants.metaJS
-    if (video.variants) {
-        const duration = video.variants[0].metaJS?.duration;
+    // Add duration display if available
+    if (video.duration) {
+        const duration = video.duration;
         const durationElement = document.createElement('div');
         durationElement.className = 'video-duration';
         durationElement.textContent = formatDuration(duration);
         previewContainer.appendChild(durationElement);
-    } else {
-        const duration = video.metaFFprobe?.duration;
-        const durationElement = document.createElement('div');
-        durationElement.className = 'video-duration';
-        durationElement.textContent = formatDuration(duration);
-        previewContainer.appendChild(durationElement); 
     }
 
     // Add Status badge for Live and/or Encrypted
@@ -49,7 +43,7 @@ export function createVideoElement(video) {
         
         // Add tooltip with encryption type if available
         if (video.isEncrypted && video.encryptionType) {
-            statusBadge.title = `${video.encryptionType}`;
+            statusBadge.title = `Encryption: ${video.encryptionType}`;
         } else if (video.isEncrypted) {
             statusBadge.title = 'Encrypted content';
         }

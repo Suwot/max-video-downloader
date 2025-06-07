@@ -467,7 +467,7 @@ class VideoProcessingPipeline {
             const updatedVideo = updateVideo('getFFprobeMetadata', tabId, normalizedUrl, {
                 isValid: true,
                 metaFFprobe: streamInfo,
-                hasFFprobeMetadata: true,
+                duration: streamInfo.duration,
                 isFullyParsed: true,
                 standardizedResolution: standardizedRes, 
                 estimatedFileSizeBytes: streamInfo.estimatedFileSizeBytes || video.fileSize,
