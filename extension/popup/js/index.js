@@ -16,7 +16,6 @@
 // Import ServiceInitializer to coordinate service initialization
 import { initializeServices, getActiveTab } from './services/service-initializer.js';
 import { themeService, applyTheme } from './services/theme-service.js';
-import { videoStateService } from './services/video-state-service.js';
 import { initializeUI, setScrollPosition, getScrollPosition, hideInitMessage } from './ui.js';
 import { renderVideos } from './video-list/video-renderer.js';
 import { createLogger } from '../../js/utilities/logger.js';

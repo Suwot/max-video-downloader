@@ -14,7 +14,10 @@
     "notifications",
     "downloads.shelf",
     "storage",
-    "cookies"
+    "cookies",
+    "tabs",
+    "contextMenus",
+    "sidePanel"
   ],
   "host_permissions": [
     "<all_urls>"
