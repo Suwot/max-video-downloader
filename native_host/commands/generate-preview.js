@@ -30,7 +30,7 @@ class GeneratePreviewCommand extends BaseCommand {
      * @param {string} params.url Video URL to generate preview for
      */
     async execute(params) {
-        const { url, headers = {}, mediaInfo = {} } = params;
+        const { url, headers = {}, duration } = params;
         logDebug('Generating preview for video:', url);
         
         // Skip for blob URLs
@@ -62,9 +62,9 @@ class GeneratePreviewCommand extends BaseCommand {
                 
                 // Calculate ideal timestamp based on duration if available
                 let timestamp = '00:00:01'; // Default timestamp
-                if (mediaInfo?.duration) {
+                if (duration) {
                     // Choose 10% into the video, but not less than 1 sec and not more than 30 secs
-                    const durationSecs = parseFloat(mediaInfo.duration);
+                    const durationSecs = parseFloat(duration);
                     if (!isNaN(durationSecs) && durationSecs > 0) {
                         const previewTime = Math.min(Math.max(durationSecs * 0.1, 1), 5);
                         timestamp = new Date(previewTime * 1000).toISOString().substring(11, 19);

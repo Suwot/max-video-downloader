@@ -186,7 +186,6 @@ class VideoProcessingPipeline {
         type: 'blob', 
         format: 'blob', 
         container: 'blob',
-        isValid: true,
         hasVideo: null,
         hasAudio: null
       },
@@ -370,8 +369,8 @@ class VideoProcessingPipeline {
           const video = getVideo(tabId, normalizedUrl);
           if (!video) return;
           
-          // Skip if already has preview or is a blob
-          if (video.previewUrl || video.poster || video.url.startsWith('blob:')) {
+          // Skip if already has preview
+          if (video.previewUrl || video.poster) {
               return;
           }
           
@@ -393,21 +392,13 @@ class VideoProcessingPipeline {
           const urlToUse = sourceUrl || video.url;
           logger.debug(`Generating preview for ${normalizedUrl} using source: ${urlToUse}`);
           
-          // Extract media info to send to the native host
-          const mediaInfo = {};
-          
-          // Add duration if available (from either direct metadata or variant)
-          if (video.metaFFprobe?.duration) {
-              mediaInfo.duration = video.metaFFprobe.duration;
-          }
-          
           // Request preview from native host
           const response = await rateLimiter.enqueue(async () => {
               return await nativeHostService.sendMessage({
                   type: 'generatePreview',
                   url: urlToUse,
                   headers: headers,
-                  mediaInfo
+                  duration: video.duration || null
               });
           });
           
