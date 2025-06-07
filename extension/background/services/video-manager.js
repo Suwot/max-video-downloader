@@ -1,13 +1,6 @@
 /**
  * Video Manager Service
  * Manages video detection, metadata, and tracking across tabs
- * 
- * VARIANT HANDLING APPROACH:
- * - Master playlists store their variants as nested objects within their `variants` array
- * - Variants from a master playlist are NOT added as standalone entries in the main collection
- * - Variants are only visible in the UI when viewing their parent master playlist
- * - When a variant needs metadata, we update it both as a standalone entity (if it exists)
- *   and within its master playlist
  */
 
 // Add static imports at the top
@@ -697,45 +690,6 @@ function handleVariantMasterRelationships(tabId, variants, masterUrl) {
             });
             logger.debug(`Updated existing standalone variant ${variantUrl} with master info`);
         }
-    }
-}
-
-/**
- * Update variant with FFprobe data – for manual triggering from UI
- * @param {number} tabId - Tab ID
- * @param {string} masterUrl - Normalized master URL
- * @param {number} variantIndex - Index of variant in master's variants array
- * @param {Object} ffprobeData - FFprobe metadata
- */
-function updateVariantWithFFprobeData(tabId, masterUrl, variantIndex, ffprobeData) {
-    const tabMap = allDetectedVideos.get(tabId);
-    if (!tabMap || !tabMap.has(masterUrl)) {
-        return;
-    }
-    
-    const masterVideo = tabMap.get(masterUrl);
-    if (!masterVideo.variants || variantIndex >= masterVideo.variants.length) {
-        return;
-    }
-    
-    // Create updated variants array
-    const updatedVariants = [...masterVideo.variants];
-    updatedVariants[variantIndex] = {
-        ...updatedVariants[variantIndex],
-        metaFFprobe: ffprobeData,
-        hasFFprobeMetadata: true,
-        isFullyParsed: true,
-        timestampFFProbe: Date.now()
-    };
-    
-    // Update master with new variants array using our unified function
-    const updatedVideo = updateVideo('updateVariantWithFFprobeData', tabId, masterUrl, {
-        variants: updatedVariants
-    });
-    
-    if (updatedVideo) {
-        // Update UI with unified approach
-        sendVideoUpdateToUI(tabId, masterUrl, updatedVideo);
     }
 }
 
