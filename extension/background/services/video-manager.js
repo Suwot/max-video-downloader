@@ -186,6 +186,7 @@ class VideoProcessingPipeline {
         type: 'blob', 
         format: 'blob', 
         container: 'blob',
+        isValid: true,
         hasVideo: null,
         hasAudio: null
       },
@@ -481,75 +482,6 @@ class VideoProcessingPipeline {
         }
     } catch (error) {
         logger.error(`Error getting FFprobe metadata: ${error.message}`);
-    }
-  }
-  
-  /**
-   * Generate preview for video
-   * @param {number} tabId - Tab ID
-   * @param {string} normalizedUrl - Normalized video URL
-   * @param {Object} headers - Request headers
-   */
-  async generatePreview(tabId, normalizedUrl, headers) {
-    try {
-      const video = getVideo(tabId, normalizedUrl);
-      if (!video) return;
-      
-      // Skip if already has preview or is a blob
-      if (video.previewUrl || video.poster || video.url.startsWith('blob:')) {
-        return;
-      }
-      
-      // Check for cached preview first
-      const cachedPreview = await getPreview(normalizedUrl);
-      if (cachedPreview) {
-        const updatedVideo = updateVideo('generatePreview-cache', tabId, normalizedUrl, {
-          previewUrl: cachedPreview,
-          fromCache: true
-        });
-        
-        if (updatedVideo) {
-          // Use unified update approach
-          sendVideoUpdateToUI(tabId, normalizedUrl, updatedVideo);
-        }
-        return;
-      }
-      
-      // Generate preview if not cached
-      logger.debug(`Generating preview for ${video.url}`);
-      
-      // Extract media info to send to the native host
-      const mediaInfo = {};
-      
-      // Get duration for direct videos only
-      if (video.metaFFprobe?.duration) {
-        mediaInfo.duration = video.metaFFprobe.duration;
-      }
-      
-      const response = await rateLimiter.enqueue(async () => {
-        return await nativeHostService.sendMessage({
-          type: 'generatePreview',
-          url: video.url,
-          headers: headers,
-          mediaInfo
-        });
-      });
-      
-      if (response && response.previewUrl) {
-        // Cache the generated preview
-        await storePreview(normalizedUrl, response.previewUrl);
-        
-        const updatedVideo = updateVideo('generatePreview', tabId, normalizedUrl, {
-          previewUrl: response.previewUrl
-        });
-        
-        if (updatedVideo) {
-          // Use unified update approach
-          sendVideoUpdateToUI(tabId, normalizedUrl, updatedVideo);
-        }
-      }
-    } catch (error) {
-      logger.error(`Error generating preview: ${error.message}`);
     }
   }
 }
