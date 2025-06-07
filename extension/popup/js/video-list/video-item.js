@@ -1,7 +1,6 @@
 import { formatDuration } from '../utilities.js';
 import { showHoverPreview, hideHoverPreview } from './preview-hover.js';
 import { renderTypeSpecificElements } from './video-type-renderers.js';
-import { extractPreviewUrl } from './video-utils.js';
 
 /**
  * Create a video element for the UI
@@ -26,7 +25,7 @@ export function createVideoElement(video) {
     previewImage.alt = 'Video preview';
 
     // Get preview URL using utility function
-    let previewUrl = extractPreviewUrl(video);
+    let previewUrl = video.previewUrl || video.poster;
 
     // Add duration display if available in video.variants.metaJS
     if (video.variants) {

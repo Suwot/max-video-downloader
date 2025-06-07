@@ -16,22 +16,6 @@ export function createVideoMetadata(video) {
 }
 
 /**
- * Extract preview URL from video object
- * @param {Object} video - Video data
- * @returns {string|null} - Preview URL or null
- */
-export function extractPreviewUrl(video) {
-    if (Array.isArray(video.variants) && video.variants.length > 0 && video.variants[0].previewUrl) {
-        return video.variants[0].previewUrl;
-    } else if (video.previewUrl) {
-        return video.previewUrl;
-    } else if (video.poster) {
-        return video.poster;
-    }
-    return null;
-}
-
-/**
  * Format file size bytes to human readable format
  * @param {number} bytes - Size in bytes
  * @returns {string} Formatted size string

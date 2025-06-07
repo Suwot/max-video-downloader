@@ -4,7 +4,7 @@
  */
 
 // Add static imports at the top
-import { normalizeUrl, getBaseDirectory } from '../../js/utilities/normalize-url.js';
+import { normalizeUrl } from '../../js/utilities/normalize-url.js';
 import nativeHostService from '../../js/native-host-service.js';
 import { getActivePopupPortForTab } from './ui-communication.js';
 import { parseHlsManifest } from '../../js/utilities/hls-parser.js';
@@ -239,9 +239,13 @@ class VideoProcessingPipeline {
       if (hlsResult.isMaster && hlsResult.variants?.length > 0) {
         handleVariantMasterRelationships(tabId, hlsResult.variants, normalizedUrl);
         
-        // Generate preview for the first variant only
-        await this.generateVariantPreview(tabId, normalizedUrl, hlsResult.variants[0], 0, headers);
-
+        // Generate preview for the master using the first variant as source
+        const firstVariant = hlsResult.variants[0];
+        // Use unified preview function with source URL from first variant
+        await this.generateVideoPreview(tabId, normalizedUrl, headers, firstVariant.url);
+      } else {
+        // For variant playlists, generate preview directly
+        await this.generateVideoPreview(tabId, normalizedUrl, headers);
       }
       
       // Notify UI of complete update using unified approach
@@ -300,7 +304,7 @@ class VideoProcessingPipeline {
       const updatedVideo = updateVideo('processDashVideo', tabId, normalizedUrl, dashUpdates);
       
       // Generate preview for the manifest
-      await this.generatePreview(tabId, normalizedUrl, headers);
+      await this.generateVideoPreview(tabId, normalizedUrl, headers);
       
       // Notify UI of complete update using unified approach
       sendVideoUpdateToUI(tabId, normalizedUrl, { ...(updatedVideo || {}), _sendFullList: true });
@@ -346,91 +350,82 @@ class VideoProcessingPipeline {
       // Get updated video with metadata for preview generation
       const updatedVideo = getVideo(tabId, normalizedUrl);
       if (updatedVideo.metaFFprobe?.hasVideo) {
-        await this.generatePreview(tabId, normalizedUrl, headers);
+        await this.generateVideoPreview(tabId, normalizedUrl, headers);
       }
     }
     
     // Send update with unified approach
     sendVideoUpdateToUI(tabId, normalizedUrl, { _sendFullList: true });
   }
-  
   /**
-   * Generate preview for a variant
+   * Unified preview generation for all video types
    * @param {number} tabId - Tab ID
-   * @param {string} masterUrl - Normalized master URL
-   * @param {Object} variant - Variant object
-   * @param {number} index - Index of variant in master's variants array
+   * @param {string} normalizedUrl - URL to store the preview against
    * @param {Object} headers - Request headers
+   * @param {string} [sourceUrl=null] - Optional source URL to generate from (if different)
    */
-  async generateVariantPreview(tabId, masterUrl, variant, index, headers) {
-    try {
-      const variantNormalizedUrl = normalizeUrl(variant.url);
-      
-      // Check for cached preview first
-      const cachedPreview = await getPreview(variantNormalizedUrl);
-      if (cachedPreview) {
-        this.updateVariantWithPreview(tabId, masterUrl, index, cachedPreview, true);
-        return;
+  async generateVideoPreview(tabId, normalizedUrl, headers, sourceUrl = null) {
+      try {
+          const video = getVideo(tabId, normalizedUrl);
+          if (!video) return;
+          
+          // Skip if already has preview or is a blob
+          if (video.previewUrl || video.poster || video.url.startsWith('blob:')) {
+              return;
+          }
+          
+          // Check for cached preview first (using destination URL for cache lookup)
+          const cachedPreview = await getPreview(normalizedUrl);
+          if (cachedPreview) {
+              const updatedVideo = updateVideo('generateVideoPreview-cache', tabId, normalizedUrl, {
+                  previewUrl: cachedPreview,
+                  fromCache: true
+              });
+              
+              if (updatedVideo) {
+                  sendVideoUpdateToUI(tabId, normalizedUrl, updatedVideo);
+              }
+              return;
+          }
+          
+          // Determine source URL for preview generation
+          const urlToUse = sourceUrl || video.url;
+          logger.debug(`Generating preview for ${normalizedUrl} using source: ${urlToUse}`);
+          
+          // Extract media info to send to the native host
+          const mediaInfo = {};
+          
+          // Add duration if available (from either direct metadata or variant)
+          if (video.metaFFprobe?.duration) {
+              mediaInfo.duration = video.metaFFprobe.duration;
+          }
+          
+          // Request preview from native host
+          const response = await rateLimiter.enqueue(async () => {
+              return await nativeHostService.sendMessage({
+                  type: 'generatePreview',
+                  url: urlToUse,
+                  headers: headers,
+                  mediaInfo
+              });
+          });
+          
+          if (response && response.previewUrl) {
+              // Cache the generated preview
+              await storePreview(normalizedUrl, response.previewUrl);
+              
+              const updatedVideo = updateVideo('generateVideoPreview', tabId, normalizedUrl, {
+                  previewUrl: response.previewUrl,
+                  previewSourceUrl: sourceUrl || null // Track where preview came from
+              });
+              
+              if (updatedVideo) {
+                  sendVideoUpdateToUI(tabId, normalizedUrl, updatedVideo);
+              }
+          }
+      } catch (error) {
+          logger.error(`Error generating preview: ${error.message}`);
       }
-      
-      // Extract media info from variant
-      const mediaInfo = {};
-      if (variant.metaJS?.duration) {
-        mediaInfo.duration = variant.metaJS.duration;
-      }
-      
-      // Generate preview if not cached
-      const response = await rateLimiter.enqueue(async () => {
-        return await nativeHostService.sendMessage({
-          type: 'generatePreview',
-          url: variant.url,
-          headers: headers,
-          mediaInfo
-        });
-      });
-      
-      if (response && response.previewUrl) {
-        // Cache the generated preview
-        await storePreview(variantNormalizedUrl, response.previewUrl);
-        this.updateVariantWithPreview(tabId, masterUrl, index, response.previewUrl, false);
-      }
-    } catch (error) {
-      logger.error(`Error generating preview for variant: ${error.message}`);
-    }
-  }
-  
-  /**
-   * Update variant with preview URL
-   * @param {number} tabId - Tab ID
-   * @param {string} masterUrl - Normalized master URL
-   * @param {number} index - Index of variant in master's variants array
-   * @param {string} previewUrl - Preview URL
-   * @param {boolean} fromCache - Whether preview was from cache
-   */
-  updateVariantWithPreview(tabId, masterUrl, index, previewUrl, fromCache) {
-    const masterVideo = getVideo(tabId, masterUrl);
-    if (!masterVideo || !masterVideo.variants || index >= masterVideo.variants.length) {
-      return;
-    }
-    
-    // Create updated variants array with the preview URL
-    const updatedVariants = [...masterVideo.variants];
-    updatedVariants[index] = {
-      ...updatedVariants[index],
-      previewUrl: previewUrl,
-      fromCache: fromCache
-    };
-    
-    // Update master with the new variants array
-    const updatedVideo = updateVideo('updateVariantWithPreview', tabId, masterUrl, {
-      variants: updatedVariants
-    });
-    
-    if (updatedVideo) {
-      logger.debug(`Updated variant[${index}] with preview: ${previewUrl}`);
-      // Use unified update approach
-      sendVideoUpdateToUI(tabId, masterUrl, { ...updatedVideo, _sendFullList: true });
-    }
   }
   
   /**
@@ -1030,7 +1025,6 @@ function getVideosForDisplay(tabId) {
         }))
         .sort((a, b) => b.timestampDetected - a.timestampDetected);
 }
-
 
 export {
     addDetectedVideo,
