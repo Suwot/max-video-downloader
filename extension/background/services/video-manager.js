@@ -189,7 +189,8 @@ class VideoProcessingPipeline {
         hasVideo: null,
         hasAudio: null
       },
-      isFullyParsed: true
+      isFullyParsed: true,
+      isValid: true
     });
     
     if (updatedVideo) {
