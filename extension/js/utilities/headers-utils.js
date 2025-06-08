@@ -15,8 +15,8 @@ const tabHeadersStore = new Map();
 // Track active rules: URL -> Rule ID
 const activeRules = new Map();
 
-// Rule ID counter for generating unique IDs
-let nextRuleId = 1;
+// Maximum rule ID supported by Chrome (2^31 - 1)
+const MAX_RULE_ID = 2147483647;
 
 // Skip tracking headers for these extensions to reduce overhead
 const IGNORE_EXTENSIONS = [
@@ -184,13 +184,25 @@ function getRequestHeaders(tabId, url) {
 /**
  * Initialize header tracking with Chrome listeners
  */
-function initHeaderTracking() {
+async function initHeaderTracking() {
     if (!chrome.webRequest) {
         logger.error('webRequest API not available, header tracking disabled');
         return;
     }
     
     try {
+        // First check for any existing rules to avoid conflicts
+        if (chrome.declarativeNetRequest) {
+            try {
+                const sessionRules = await chrome.declarativeNetRequest.getSessionRules();
+                if (sessionRules.length > 0) {
+                    logger.debug(`Found ${sessionRules.length} existing rules on startup`);
+                }
+            } catch (e) {
+                logger.warn('Error checking existing rules:', e);
+            }
+        }
+        
         // Define options with extraHeaders to access referer and origin
         const listenerOptions = ["requestHeaders"];
         
@@ -236,6 +248,30 @@ function clearAllHeaders() {
 }
 
 /**
+ * Clear all active header rules
+ * @returns {Promise<boolean>} Success status
+ */
+async function clearAllHeaderRules() {
+    if (!chrome.declarativeNetRequest || activeRules.size === 0) {
+        return true;
+    }
+    
+    try {
+        const ruleIds = Array.from(activeRules.values());
+        await chrome.declarativeNetRequest.updateSessionRules({
+            removeRuleIds: ruleIds
+        });
+        
+        activeRules.clear();
+        logger.debug(`Cleared ${ruleIds.length} header rules`);
+        return true;
+    } catch (e) {
+        logger.error('Error clearing header rules:', e);
+        return false;
+    }
+}
+
+/**
  * Get statistics about stored headers
  * @returns {Object} Stats object with counts
  */
@@ -250,6 +286,22 @@ function getHeadersStats() {
         totalUrlsTracked: totalUrls,
         activeRules: activeRules.size
     };
+}
+
+/**
+ * Generate a unique rule ID that stays within Chrome's allowed range
+ * @returns {number} - Unique rule ID between 1 and MAX_RULE_ID
+ */
+function generateRuleId() {
+    // Start with a random base between 1 and 100,000
+    const base = 1 + Math.floor(Math.random() * 100000);
+    
+    // Add timestamp component but keep within valid range
+    // Using modulo to ensure we stay within Chrome's limits
+    const timestamp = Date.now() % 10000000; // Last 7 digits of timestamp
+    
+    // Combine and ensure within valid range
+    return (base + timestamp) % MAX_RULE_ID + 1;
 }
 
 /**
@@ -295,7 +347,7 @@ async function applyHeaderRule(tabId, url) {
         }
         
         // Create unique rule ID
-        const ruleId = nextRuleId++;
+        const ruleId = generateRuleId();
         
         // Create the rule
         const rule = {
@@ -377,6 +429,7 @@ export {
     getRequestHeaders,
     clearHeadersForTab,
     clearAllHeaders,
+    clearAllHeaderRules,
     getHeadersStats,
     applyHeaderRule,
     removeHeaderRule,
