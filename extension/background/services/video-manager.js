@@ -408,12 +408,7 @@ class VideoProcessingPipeline {
           });
           
           // Clean up the rule after native host request completes
-          try {
-              await removeHeaderRule(urlToUse);
-              logger.debug(`Removed header rule for ${urlToUse}`);
-          } catch (e) {
-              logger.warn(`Error removing header rule for ${urlToUse}:`, e);
-          }
+          await removeHeaderRule(urlToUse);
           
           if (response && response.previewUrl) {
               // Cache the generated preview
@@ -432,15 +427,8 @@ class VideoProcessingPipeline {
           logger.error(`Error generating preview: ${error.message}`);
           
           // Clean up rule even if there was an error
-          try {
-              const urlToUse = sourceUrl || video?.url;
-              if (urlToUse) {
-                  await removeHeaderRule(urlToUse);
-                  logger.debug(`Removed header rule for ${urlToUse} after error`);
-              }
-          } catch (e) {
-              // Ignore cleanup errors
-          }
+          const urlToUse = sourceUrl || video?.url;
+          if (urlToUse) await removeHeaderRule(urlToUse);
       }
   }
   
@@ -478,12 +466,7 @@ class VideoProcessingPipeline {
         });
         
         // Clean up the rule after native host request completes
-        try {
-            await removeHeaderRule(video.url);
-            logger.debug(`Removed header rule for ${video.url}`);
-        } catch (e) {
-            logger.warn(`Error removing header rule for ${video.url}:`, e);
-        }
+        await removeHeaderRule(video.url);
         
         if (streamInfo) {
             // Add standardizedResolution if height is available
@@ -511,15 +494,7 @@ class VideoProcessingPipeline {
         logger.error(`Error getting FFprobe metadata: ${error.message}`);
         
         // Clean up rule even if there was an error
-        try {
-            const video = getVideo(tabId, normalizedUrl);
-            if (video) {
-                await removeHeaderRule(video.url);
-                logger.debug(`Removed header rule for ${video.url} after error`);
-            }
-        } catch (e) {
-            // Ignore cleanup errors
-        }
+        await removeHeaderRule(video.url);
     }
   }
 }
