@@ -11,7 +11,8 @@ import {
     resolveUrl,
     getBaseDirectory,
     fetchManifest,
-    validateManifestType
+    validateManifestType,
+    removeHeaderRule
 } from './parser-utils.js';
 import { createLogger } from './logger.js';
 import { getVideoByUrl } from '../../background/services/video-manager.js';
@@ -306,7 +307,7 @@ function parseStreamInf(line) {
  * @param {Object} [headers] - Optional request headers
  * @returns {Promise<Object>} Validated and parsed HLS content with variants
  */
-export async function parseHlsManifest(url, headers = null) {
+export async function parseHlsManifest(url, headers = null, tabId) {
     const normalizedUrl = normalizeUrl(url);
     
     // Skip if already being processed
@@ -333,7 +334,7 @@ export async function parseHlsManifest(url, headers = null) {
         const existingMetadata = videoInfo?.metadata;
         
         // First perform universal validation to confirm this is an HLS manifest
-        const validation = await validateManifestType(url, headers, existingMetadata);
+        const validation = await validateManifestType(url, headers, existingMetadata, tabId);
         
         // Preserve the light parsing timestamp
         const timestampLP = validation.timestampLP || Date.now();
@@ -366,7 +367,8 @@ export async function parseHlsManifest(url, headers = null) {
             logger.debug('Content not available from light parsing, fetching full content');
             const fetchResult = await fetchManifest(url, {
                 headers,
-                maxRetries: 3
+                maxRetries: 3,
+                tabId: tabId
             });
             
             if (!fetchResult.ok) {
@@ -564,6 +566,14 @@ export async function parseHlsManifest(url, headers = null) {
         // Clean up
         if (processingRequests.full) {
             processingRequests.full.delete(normalizedUrl);
+        }
+        
+        // Clean up header rule if it was applied
+        try {
+            await removeHeaderRule(url);
+            logger.debug(`Removed header rule for ${url}`);
+        } catch (e) {
+            logger.warn(`Error removing header rule for ${url}:`, e);
         }
     }
 }

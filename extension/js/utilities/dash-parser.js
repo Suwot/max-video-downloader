@@ -12,7 +12,8 @@ import {
     getBaseDirectory,
     extractAttribute,
     fetchManifest,
-    validateManifestType
+    validateManifestType,
+    removeHeaderRule
 } from './parser-utils.js';
 import { createLogger } from './logger.js';
 import { getVideoByUrl } from '../../background/services/video-manager.js';
@@ -295,7 +296,7 @@ function extractSegmentBasePaths(content) {
  * @param {Object} [headers] - Optional request headers
  * @returns {Promise<Object>} Validated and parsed DASH content structured by media type
  */
-export async function parseDashManifest(url, headers = null) {
+export async function parseDashManifest(url, headers = null, tabId) {
     const normalizedUrl = normalizeUrl(url);
     
     // Skip if already being processed
@@ -323,7 +324,7 @@ export async function parseDashManifest(url, headers = null) {
         const existingMetadata = videoInfo?.metadata;
         
         // First perform light parsing to validate this is actually a DASH manifest
-        const validation = await validateManifestType(url, headers, existingMetadata);
+        const validation = await validateManifestType(url, headers, existingMetadata, tabId);
         
         // Preserve the light parsing timestamp
         const timestampLP = validation.timestampLP || Date.now();
@@ -353,7 +354,8 @@ export async function parseDashManifest(url, headers = null) {
             logger.debug('Content not available from light parsing, fetching full content');
             const fetchResult = await fetchManifest(url, {
                 headers,
-                maxRetries: 3
+                maxRetries: 3,
+                tabId: tabId
             });
             
             if (!fetchResult.ok) {
@@ -667,6 +669,14 @@ export async function parseDashManifest(url, headers = null) {
         // Clean up
         if (processingRequests.full) {
             processingRequests.full.delete(normalizedUrl);
+        }
+        
+        // Clean up header rule if it was applied
+        try {
+            await removeHeaderRule(url);
+            logger.debug(`Removed header rule for ${url}`);
+        } catch (e) {
+            logger.warn(`Error removing header rule for ${url}:`, e);
         }
     }
 }

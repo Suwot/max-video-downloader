@@ -4,7 +4,7 @@
  */
 
 import { normalizeUrl, getBaseDirectory } from './normalize-url.js';
-import { getRequestHeaders } from './headers-utils.js';
+import { getRequestHeaders, applyHeaderRule, removeHeaderRule } from './headers-utils.js';
 import { createLogger } from './logger.js';
 
 const logger = createLogger('Parser Utils');
@@ -110,6 +110,7 @@ export function resolveUrl(baseUrl, relativeUrl) {
  * @param {number} [options.timeoutMs=10000] - Timeout in milliseconds
  * @param {number} [options.maxRetries=2] - Maximum number of retry attempts
  * @param {number} [options.retryDelayMs=500] - Base delay between retries in milliseconds
+ * @param {number} [options.tabId] - Tab ID for context to use with declarativeNetRequest
  * @returns {Promise<{content: string, ok: boolean, status: number, retryCount: number}>}
  */
 export async function fetchManifest(url, options = {}) {
@@ -118,7 +119,8 @@ export async function fetchManifest(url, options = {}) {
         rangeBytes = null,
         timeoutMs = 10000,
         maxRetries = 2,
-        retryDelayMs = 500
+        retryDelayMs = 500,
+        tabId = null
     } = options;
     
     const logger = createLogger('Fetch');
@@ -126,128 +128,161 @@ export async function fetchManifest(url, options = {}) {
     
     let attempt = 0;
     let lastError = null;
+    let ruleApplied = false;
     
     // Get appropriate headers
-    const requestHeaders = headers || getRequestHeaders(null, url);
-    
+    const requestHeaders = headers || getRequestHeaders(tabId, url);
+
     // Configure range header if needed
     if (rangeBytes) {
-        requestHeaders['Range'] = `bytes=0-${rangeBytes - 1}`;
+        if (requestHeaders) {
+            requestHeaders['Range'] = `bytes=0-${rangeBytes - 1}`;
+        }
         logger.debug(`Fetching ${fetchMode} of ${url}`);
     } else {
         // Remove any Range header to ensure we get the full content
-        if (requestHeaders['Range']) {
+        if (requestHeaders && requestHeaders['Range']) {
             delete requestHeaders['Range'];
         }
         logger.debug(`Fetching ${fetchMode} of ${url}`);
     }
     
-    while (attempt <= maxRetries) {
+    // Use declarativeNetRequest if possible (tabId > 0 and not in a native host context)
+    if (tabId > 0 && typeof chrome !== 'undefined' && chrome.declarativeNetRequest) {
         try {
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-            
-            // Log retry attempts after the first one
-            if (attempt > 0) {
-                logger.debug(`Retry attempt ${attempt}/${maxRetries} for ${url}`);
+            // Apply header rule
+            ruleApplied = await applyHeaderRule(tabId, url);
+            if (ruleApplied) {
+                logger.debug(`Applied declarative header rule for ${url}`);
+            } else {
+                logger.warn(`Failed to apply declarative header rule for ${url}`);
             }
-            
-            const response = await fetch(url, {
-                signal: controller.signal,
-                headers: requestHeaders
-            });
-            
-            clearTimeout(timeoutId);
-            
-            // Handle retry-worthy status codes
-            if (!response.ok) {
-                // Don't retry client errors (except 429 Too Many Requests)
-                if (response.status !== 429 && response.status < 500) {
-                    logger.debug(`Non-retriable error: HTTP ${response.status} for ${url}`);
-                    return { 
-                        content: '', 
-                        ok: false, 
-                        status: response.status, 
-                        retryCount: attempt 
-                    };
-                }
-                
-                // For retriable errors, check if we have attempts left
-                if (attempt >= maxRetries) {
-                    logger.debug(`Out of retry attempts (${maxRetries}) for ${url}`);
-                    return { 
-                        content: '', 
-                        ok: false, 
-                        status: response.status, 
-                        retryCount: attempt 
-                    };
-                }
-                
-                // Handle rate limiting specifically
-                let delay = retryDelayMs * Math.pow(2, attempt);
-                
-                if (response.status === 429) {
-                    // Check for Retry-After header
-                    const retryAfter = response.headers.get('Retry-After');
-                    if (retryAfter) {
-                        if (!isNaN(retryAfter)) {
-                            delay = parseInt(retryAfter, 10) * 1000; // Convert to ms
-                        } else {
-                            const retryDate = new Date(retryAfter).getTime();
-                            if (!isNaN(retryDate)) {
-                                delay = Math.max(retryDate - Date.now(), retryDelayMs);
-                            }
-                        }
-                        logger.debug(`Rate limited with Retry-After, waiting ${delay}ms`);
-                    }
-                }
-                
-                // Increment attempt and retry after delay
-                attempt++;
-                logger.debug(`HTTP error ${response.status}, retrying in ${delay}ms (attempt ${attempt}/${maxRetries})`);
-                await new Promise(resolve => setTimeout(resolve, delay));
-                continue;
-            }
-            
-            // On successful response, extract content
-            const content = await response.text();
-            return { 
-                content, 
-                ok: true, 
-                status: response.status, 
-                retryCount: attempt 
-            };
-            
-        } catch (error) {
-            // Network error or timeout
-            lastError = error;
-            
-            if (attempt >= maxRetries) {
-                logger.error(`Failed after ${attempt + 1} attempts: ${error.message}`);
-                return { 
-                    content: '', 
-                    ok: false, 
-                    status: 0, 
-                    error: error.message, 
-                    retryCount: attempt 
-                };
-            }
-            
-            // Increment attempt and retry with minimal delay for network errors
-            attempt++;
-            logger.debug(`Network error: ${error.message}, retrying immediately (attempt ${attempt}/${maxRetries})`);
-            await new Promise(resolve => setTimeout(resolve, 100)); // Small delay before retry
+        } catch (e) {
+            logger.error('Error applying header rule:', e);
         }
     }
     
-    // Should never reach here but just in case
-    return { 
-        content: '', 
-        ok: false, 
-        status: 0, 
-        error: lastError?.message || 'Unknown error', 
-        retryCount: attempt 
-    };
+    try {
+        while (attempt <= maxRetries) {
+            try {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+                
+                // Log retry attempts after the first one
+                if (attempt > 0) {
+                    logger.debug(`Retry attempt ${attempt}/${maxRetries} for ${url}`);
+                }
+                
+                // If we're using declarativeNetRequest, don't pass headers directly
+                const fetchOptions = {
+                    signal: controller.signal
+                };
+                
+                // Only pass headers directly if we're not using declarativeNetRequest
+                if (!ruleApplied && requestHeaders) {
+                    fetchOptions.headers = requestHeaders;
+                }
+                
+                const response = await fetch(url, fetchOptions);
+                
+                clearTimeout(timeoutId);
+                
+                // Handle retry-worthy status codes
+                if (!response.ok) {
+                    // Don't retry client errors (except 429 Too Many Requests)
+                    if (response.status !== 429 && response.status < 500) {
+                        logger.debug(`Non-retriable error: HTTP ${response.status} for ${url}`);
+                        return { 
+                            content: '', 
+                            ok: false, 
+                            status: response.status, 
+                            retryCount: attempt 
+                        };
+                    }
+                    
+                    // For retriable errors, check if we have attempts left
+                    if (attempt >= maxRetries) {
+                        logger.debug(`Out of retry attempts (${maxRetries}) for ${url}`);
+                        return { 
+                            content: '', 
+                            ok: false, 
+                            status: response.status, 
+                            retryCount: attempt 
+                        };
+                    }
+                    
+                    // Handle rate limiting specifically
+                    let delay = retryDelayMs * Math.pow(2, attempt);
+                    
+                    if (response.status === 429) {
+                        // Check for Retry-After header
+                        const retryAfter = response.headers.get('Retry-After');
+                        if (retryAfter) {
+                            if (!isNaN(retryAfter)) {
+                                delay = parseInt(retryAfter, 10) * 1000; // Convert to ms
+                            } else {
+                                const retryDate = new Date(retryAfter).getTime();
+                                if (!isNaN(retryDate)) {
+                                    delay = Math.max(retryDate - Date.now(), retryDelayMs);
+                                }
+                            }
+                            logger.debug(`Rate limited with Retry-After, waiting ${delay}ms`);
+                        }
+                    }
+                    
+                    // Increment attempt and retry after delay
+                    attempt++;
+                    logger.debug(`HTTP error ${response.status}, retrying in ${delay}ms (attempt ${attempt}/${maxRetries})`);
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                    continue;
+                }
+                
+                // On successful response, extract content
+                const content = await response.text();
+                return { 
+                    content, 
+                    ok: true, 
+                    status: response.status, 
+                    retryCount: attempt,
+                    url: url // Include the original URL for rule cleanup
+                };
+                
+            } catch (error) {
+                // Network error or timeout
+                lastError = error;
+                
+                if (attempt >= maxRetries) {
+                    logger.error(`Failed after ${attempt + 1} attempts: ${error.message}`);
+                    return { 
+                        content: '', 
+                        ok: false, 
+                        status: 0, 
+                        error: error.message, 
+                        retryCount: attempt,
+                        url: url // Include the original URL for rule cleanup
+                    };
+                }
+                
+                // Increment attempt and retry with minimal delay for network errors
+                attempt++;
+                logger.debug(`Network error: ${error.message}, retrying immediately (attempt ${attempt}/${maxRetries})`);
+                await new Promise(resolve => setTimeout(resolve, 100)); // Small delay before retry
+            }
+        }
+        
+        // Should never reach here but just in case
+        return { 
+            content: '', 
+            ok: false, 
+            status: 0, 
+            error: lastError?.message || 'Unknown error', 
+            retryCount: attempt,
+            url: url // Include the original URL for rule cleanup
+        };
+    } finally {
+        // Don't automatically clean up the rule at this level
+        // Let the caller handle cleanup after all related requests
+    }
 }
 
 /**
@@ -259,7 +294,7 @@ export async function fetchManifest(url, options = {}) {
  * @param {Object} [headers] - Optional request headers
  * @returns {Promise<Object>} - Validation result with additional metadata
  */
-export async function validateManifestType(url, headers = null, existingMetadata = null) {
+export async function validateManifestType(url, headers = null, existingMetadata = null, tabId) {
     const logger = createLogger('Manifest Validator');
     try {
         logger.debug(`Checking manifest type for ${url}`);
@@ -328,7 +363,8 @@ export async function validateManifestType(url, headers = null, existingMetadata
             try {
                 const fullFetchResult = await fetchManifest(url, {
                     headers: reqHeaders,
-                    maxRetries: 3
+                    maxRetries: 3,
+                    tabId: tabId
                 });
                 
                 if (!fullFetchResult.ok) {
@@ -389,9 +425,10 @@ export async function validateManifestType(url, headers = null, existingMetadata
             const result = await fetchManifest(url, {
                 headers: reqHeaders,
                 rangeBytes: 10 * 1024,
-                maxRetries: 3
+                maxRetries: 3,
+                tabId: tabId
             });
-            
+
             if (!result.ok) {
                 logger.warn(`Failed to fetch partial content: ${result.status}`);
                 validationResult.status = 'fetch-failed';
@@ -447,4 +484,4 @@ export async function validateManifestType(url, headers = null, existingMetadata
 }
 
 // Re-export utilities that we're using directly from other modules
-export { normalizeUrl, getBaseDirectory };
+export { normalizeUrl, getBaseDirectory, removeHeaderRule };
