@@ -212,7 +212,10 @@ function parseHlsMaster(content, baseUrl, masterUrl) {
                     width: currentStreamInf.width,
                     height: currentStreamInf.height,
                     standardizedResolution: currentStreamInf.height ? standardizeResolution(currentStreamInf.height) : null,
-                    fps: currentStreamInf.fps
+                    fps: currentStreamInf.fps,
+                    hasVideo: currentStreamInf.hasVideo,
+                    hasAudio: currentStreamInf.hasAudio,
+                    isAudioOnly: currentStreamInf.isAudioOnly
                 },
                 source: 'parseHlsMaster()',
                 timestampDetected: Date.now()
@@ -226,19 +229,26 @@ function parseHlsMaster(content, baseUrl, masterUrl) {
     
     logger.debug(`Total variants found in master: ${variants.length}`);
     
+    // Filter out audio-only variants
+    const filteredVariants = variants.filter(variant => !variant.metaJS.isAudioOnly);
+    
+    if (variants.length !== filteredVariants.length) {
+        logger.debug(`Filtered out ${variants.length - filteredVariants.length} audio-only variants`);
+    }
+    
     // Sort variants by bandwidth (highest first for best quality)
-    if (variants.length > 0) {
-        variants.sort((a, b) => {
+    if (filteredVariants.length > 0) {
+        filteredVariants.sort((a, b) => {
             const aBandwidth = a.metaJS.averageBandwidth || a.metaJS.bandwidth || 0;
             const bBandwidth = b.metaJS.averageBandwidth || b.metaJS.bandwidth || 0;
             return bBandwidth - aBandwidth;
         });
         
-        logger.debug(`Variants sorted by bandwidth, highest: ${variants[0].metaJS.bandwidth}`);
+        logger.debug(`Variants sorted by bandwidth, highest: ${filteredVariants[0].metaJS.bandwidth}`);
     }
     
     return { 
-        variants,
+        variants: filteredVariants,
         status: 'success',
         version: version
     };
@@ -263,7 +273,10 @@ function parseStreamInf(line) {
         resolution: null,
         width: null,
         height: null,
-        fps: null
+        fps: null,
+        hasAudio: null,
+        hasVideo: null,
+        isAudioOnly: false // Default to false, will be set based on codecs
     };
     
     // Pattern for parsing attribute expressions, handling quoted values properly
@@ -283,6 +296,17 @@ function parseStreamInf(line) {
                 break;
             case 'CODECS':
                 result.codecs = value;
+                // Check if this is an audio-only stream based on codecs
+                if (value) {
+                    // Audio-only streams typically only have audio codec (mp4a, ac-3, etc.) 
+                    // and no video codec (avc1, hvc1, vp9, etc.)
+                    const hasVideoCodec = /avc1|hvc1|hev1|vp\d|av01/.test(value);
+                    const hasAudioCodec = /mp4a|ac-3|ec-3|mp3/.test(value);
+
+                    if (hasAudioCodec) {result.hasAudio = true;}
+                    if (hasVideoCodec) {result.hasVideo = true;}
+                    result.isAudioOnly = !hasVideoCodec && hasAudioCodec;
+                }
                 break;
             case 'RESOLUTION':
                 result.resolution = value;
