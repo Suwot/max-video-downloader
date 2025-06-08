@@ -5,7 +5,7 @@
 
 // Add static import at the top
 import nativeHostService from '../../js/native-host-service.js';
-import { getSharedHeaders, buildRequestHeaders } from '../../js/utilities/headers-utils.js';
+import { getRequestHeaders } from '../../js/utilities/headers-utils.js';
 import { createLogger } from '../../js/utilities/logger.js';
 import { getFilenameFromUrl } from '../../popup/js/utilities.js';
 
@@ -243,10 +243,11 @@ function startDownload(request, port) {
     // Send to native host using our service with enhanced parameters
     logger.debug('🔄 Forwarding download request to native host:', request.url);
     
-    // Fetch headers for the video first
-    getSharedHeaders(request.tabId || -1, request.url).then(headers => {
+    try {
+        // Fetch headers for the video first
+        const headers = getRequestHeaders(request.tabId || -1, request.url);
         logger.debug('Using headers for download request:', Object.keys(headers));
-        
+
         // Using imported nativeHostService with headers
         nativeHostService.sendMessage({
             type: 'download',
@@ -301,7 +302,7 @@ function startDownload(request, port) {
             
             handleDownloadError(error.message, notificationId);
         });
-    }).catch(error => {
+    } catch (error) {
         logger.error('❌ Error getting headers:', error);
         
         // Continue with download without headers as fallback
@@ -358,7 +359,7 @@ function startDownload(request, port) {
             
             handleDownloadError(error.message, notificationId);
         });
-    });
+    };
     
     return downloadId;
 }

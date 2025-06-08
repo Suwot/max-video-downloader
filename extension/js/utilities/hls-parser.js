@@ -14,7 +14,6 @@ import {
     validateManifestType
 } from './parser-utils.js';
 import { createLogger } from './logger.js';
-import { getSharedHeaders } from './headers-utils.js';
 import { getVideoByUrl } from '../../background/services/video-manager.js';
 import { standardizeResolution } from '../../popup/js/video-list/video-utils.js';
 
@@ -29,7 +28,7 @@ const logger = createLogger('HLS Parser');
  */
 async function parseHlsVariant(variantUrl, headers = null) {
     try {
-        logger.debug(`Fetching variant: ${variantUrl}`);
+        logger.debug(`Fetching variant: ${variantUrl} with headers:`, headers);
         
         // Use the unified fetchManifest function with retry logic
         const fetchResult = await fetchManifest(variantUrl, {
@@ -327,7 +326,7 @@ export async function parseHlsManifest(url, headers = null) {
     }
     
     try {
-        logger.debug(`Validating manifest: ${url}`);
+        logger.debug(`Validating manifest: ${url} with these headers:`, headers);
         
         // Get video metadata from storage if available
         const videoInfo = await getVideoByUrl(url);

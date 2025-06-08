@@ -4,7 +4,7 @@
  */
 
 import { normalizeUrl, getBaseDirectory } from './normalize-url.js';
-import { getSharedHeaders } from './headers-utils.js';
+import { getRequestHeaders } from './headers-utils.js';
 import { createLogger } from './logger.js';
 
 const logger = createLogger('Parser Utils');
@@ -128,7 +128,7 @@ export async function fetchManifest(url, options = {}) {
     let lastError = null;
     
     // Get appropriate headers
-    const requestHeaders = headers || await getSharedHeaders(null, url);
+    const requestHeaders = headers || getRequestHeaders(null, url);
     
     // Configure range header if needed
     if (rangeBytes) {
@@ -264,7 +264,7 @@ export async function validateManifestType(url, headers = null, existingMetadata
     try {
         logger.debug(`Checking manifest type for ${url}`);
         
-        const reqHeaders = headers || await getSharedHeaders(null, url);
+        const reqHeaders = headers || getRequestHeaders(null, url);
         let contentLength = null;
         let supportsRanges = false;
         let fullContent = null;
@@ -447,4 +447,4 @@ export async function validateManifestType(url, headers = null, existingMetadata
 }
 
 // Re-export utilities that we're using directly from other modules
-export { normalizeUrl, getSharedHeaders, getBaseDirectory };
+export { normalizeUrl, getBaseDirectory };

@@ -9,7 +9,7 @@ import nativeHostService from '../../js/native-host-service.js';
 import { getActivePopupPortForTab } from './ui-communication.js';
 import { parseHlsManifest } from '../../js/utilities/hls-parser.js';
 import { parseDashManifest } from '../../js/utilities/dash-parser.js';
-import { getSharedHeaders, clearHeaderCache, clearAllHeaderCaches } from '../../js/utilities/headers-utils.js';
+import { getRequestHeaders, clearHeadersForTab, clearAllHeaders } from '../../js/utilities/headers-utils.js';
 import { createLogger } from '../../js/utilities/logger.js';
 import { getPreview, storePreview } from '../../js/utilities/preview-cache.js';
 import { getFilenameFromUrl } from '../../popup/js/utilities.js';
@@ -211,7 +211,8 @@ class VideoProcessingPipeline {
     if (!video) return;
     
     // Get headers for the request
-    const headers = await getSharedHeaders(tabId, video.url);
+    const headers = getRequestHeaders(tabId, video.url);
+    logger.debug(`Using headers for HLS video ${normalizedUrl}:`, headers);
     
     // Run combined validation and parsing
     const hlsResult = await parseHlsManifest(video.url, headers);
@@ -278,7 +279,7 @@ class VideoProcessingPipeline {
     if (!video) return;
     
     // Get headers for the request
-    const headers = await getSharedHeaders(tabId, video.url);
+    const headers = getRequestHeaders(tabId, video.url);
     
     // Run combined validation and parsing
     const dashResult = await parseDashManifest(video.url, headers);
@@ -336,7 +337,7 @@ class VideoProcessingPipeline {
     if (!video) return;
     
     // Get headers for the request
-    const headers = await getSharedHeaders(tabId, video.url);
+    const headers = getRequestHeaders(tabId, video.url);
 
     const isAudio = video.mediaType === 'audio';
 
@@ -739,7 +740,7 @@ function cleanupForTab(tabId) {
     }
     
     // Clear header cache for this tab
-    clearHeaderCache(tabId);
+    clearHeadersForTab(tabId);
 }
 
 /**
