@@ -7,6 +7,7 @@ import { initDownloadManager } from './services/download-manager.js';
 import { initUICommunication } from './services/ui-communication.js';
 import { createLogger } from '../js/utilities/logger.js';
 import { clearCache, getCacheStats } from '../js/utilities/preview-cache.js';
+import { shouldIgnoreForMediaDetection } from '../js/utilities/url-filters.js';
 
 // Create a logger instance for the background script
 const logger = createLogger('Background');
@@ -190,19 +191,16 @@ function startDebugLogger() {
 function identifyVideoType(url) {
   if (!url) return null;
   
-  // Quick checks before expensive URL parsing
-  const urlLower = url.toLowerCase();
-  
-  // Skip known segment formats without needing URL parsing
-  if (urlLower.endsWith('.m4s') || urlLower.endsWith('.ts')) {
-    return null;
-  }
-  
   try {
     const urlObj = new URL(url);
     const path = urlObj.pathname.toLowerCase();
     
-    // Combined exclusion patterns - do these checks first to exit early
+    // Check for segments first (most common case to filter out quickly)
+    if (path.endsWith('.m4s') || path.endsWith('.ts')) {
+      return null;
+    }
+    
+    // Combined exclusion patterns - do these checks to exit early
     if (
       // Check for image extensions
       /\.(gif|png|jpg|jpeg|webp|bmp|svg)(\?|$)/i.test(path) ||
@@ -215,13 +213,8 @@ function identifyVideoType(url) {
     // Positive checks for media types
     
     // Check for HLS streams (.m3u8)
-    if (urlLower.includes('.m3u8')) {
-      const isActualM3U8 = path.includes('.m3u8') || 
-                          path.includes('/index-f');
-      
-      if (isActualM3U8) {
-        return { type: 'hls' };
-      }
+    if (path.includes('.m3u8')) {
+      return { type: 'hls' };
     }
     
     // Check for DASH manifests (.mpd)
@@ -238,8 +231,14 @@ function identifyVideoType(url) {
       };
     }
     
+    // Not a recognized video format
+    return null;
+    
   } catch (err) {
-    // Simple fallback if URL parsing fails - use string matching
+    logger.debug(`Error in identifyVideoType: ${err.message}`);
+    
+    // Less accurate but simple fallback if URL parsing fails - use string matching
+    const urlLower = url.toLowerCase();
     
     // Check for streaming formats
     if (urlLower.includes('.m3u8')) {
@@ -258,10 +257,10 @@ function identifyVideoType(url) {
         container: directVideoMatch[1].toLowerCase()
       };
     }
+    
+    // Not a recognized video format or URL parsing failed
+    return null;
   }
-  
-  // Not a recognized video format
-  return null;
 }
 
 /**
@@ -575,6 +574,11 @@ chrome.webRequest.onHeadersReceived.addListener(
       } catch (e) {
         // URL parsing failed, no filename will be set
       }
+    }
+
+    // First check if we should ignore this URL
+    if (shouldIgnoreForMediaDetection(details.url, metadata)) {
+      return;
     }
 
     // Call the unified processVideoUrl function with the metadata

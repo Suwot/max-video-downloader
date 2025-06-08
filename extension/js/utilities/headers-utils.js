@@ -4,6 +4,7 @@
  */
 
 import { createLogger } from './logger.js';
+import { shouldIgnoreForHeaderCapture } from './url-filters.js';
 
 // Create a logger instance for the headers utilities
 const logger = createLogger('Headers Utils');
@@ -19,12 +20,6 @@ const activeRules = new Map();
 // Maximum rule ID supported by Chrome (2^31 - 1)
 const MAX_RULE_ID = 2147483647;
 
-// Skip tracking headers for these extensions to reduce overhead
-const IGNORE_EXTENSIONS = [
-    '.js', '.css', '.png', '.jpg', '.jpeg', '.gif', '.svg', '.ico', '.woff', '.woff2',
-    '.ttf', '.eot', '.otf', '.json', '.xml', '.webp', '.avif', '.ts'
-];
-
 // Important headers to preserve
 const IMPORTANT_HEADERS = [
     'origin',
@@ -38,31 +33,6 @@ const IMPORTANT_HEADERS = [
     'accept',
     'accept-language'
 ];
-
-/**
- * Checks if a URL should be ignored for header tracking
- * @param {string} url - URL to check
- * @returns {boolean} True if URL should be ignored
- */
-function shouldIgnoreUrl(url) {
-    try {
-        // Quick check for file extensions we want to ignore
-        const lowerUrl = url.toLowerCase();
-        if (IGNORE_EXTENSIONS.some(ext => lowerUrl.endsWith(ext))) {
-            return true;
-        }
-        
-        // More detailed check for analytics/tracking/ads
-        if (/\/(analytics|track|pixel|impression|ad|ga|beacon|stats|metrics)\//i.test(url)) {
-            return true;
-        }
-        
-        return false;
-    } catch {
-        // If URL parsing fails, don't ignore
-        return false;
-    }
-}
 
 /**
  * Extract headers from webRequest details
@@ -97,7 +67,7 @@ function extractHeaders(requestHeaders) {
  */
 function captureRequestHeaders(details) {
     // Skip if no tabId (extension requests) or if URL should be ignored
-    if (details.tabId <= 0 || shouldIgnoreUrl(details.url)) {
+    if (details.tabId <= 0 || shouldIgnoreForHeaderCapture(details.url)) {
         return;
     }
     
