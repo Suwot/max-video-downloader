@@ -17,7 +17,8 @@
     "cookies",
     "tabs",
     "contextMenus",
-    "sidePanel"
+    "sidePanel",
+    "declarativeNetRequest"
   ],
   "host_permissions": [
     "<all_urls>"
