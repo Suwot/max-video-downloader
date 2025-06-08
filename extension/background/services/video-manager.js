@@ -9,7 +9,11 @@ import nativeHostService from '../../js/native-host-service.js';
 import { getActivePopupPortForTab } from './ui-communication.js';
 import { parseHlsManifest } from '../../js/utilities/hls-parser.js';
 import { parseDashManifest } from '../../js/utilities/dash-parser.js';
-import { getRequestHeaders, applyHeaderRule, clearHeadersForTab, clearAllHeaders } from '../../js/utilities/headers-utils.js';
+import { 
+    getRequestHeaders, 
+    applyHeaderRule,
+    clearAllHeaderCaches 
+} from '../../js/utilities/headers-utils.js';
 import { createLogger } from '../../js/utilities/logger.js';
 import { getPreview, storePreview } from '../../js/utilities/preview-cache.js';
 import { getFilenameFromUrl } from '../../popup/js/utilities.js';
@@ -358,6 +362,7 @@ class VideoProcessingPipeline {
     // Send update with unified approach
     sendVideoUpdateToUI(tabId, normalizedUrl, { _sendFullList: true });
   }
+
   /**
    * Unified preview generation for all video types
    * @param {number} tabId - Tab ID
@@ -405,10 +410,7 @@ class VideoProcessingPipeline {
                   duration: video.duration || null
               });
           });
-          
-          // Clean up the rule after native host request completes
-          // await removeHeaderRule(urlToUse);
-          
+                    
           if (response && response.previewUrl) {
               // Cache the generated preview
               await storePreview(normalizedUrl, response.previewUrl);
@@ -424,10 +426,6 @@ class VideoProcessingPipeline {
           }
       } catch (error) {
           logger.error(`Error generating preview: ${error.message}`);
-          
-          // Clean up rule even if there was an error
-          // const urlToUse = sourceUrl || video?.url;
-          // if (urlToUse) await removeHeaderRule(urlToUse);
       }
   }
   
@@ -450,8 +448,7 @@ class VideoProcessingPipeline {
         
         logger.debug(`Getting FFprobe metadata for ${video.url}`);
         
-        // Apply header rule before sending to native host - this way the native host's requests
-        // will follow the same rules, even though we're passing headers directly too
+        // Apply header rule before sending to native host
         await applyHeaderRule(tabId, video.url);
         
         const streamInfo = await rateLimiter.enqueue(async () => {
@@ -463,10 +460,7 @@ class VideoProcessingPipeline {
             });
             return response?.streamInfo || null;
         });
-        
-        // Clean up the rule after native host request completes
-        // await removeHeaderRule(video.url);
-        
+                
         if (streamInfo) {
             // Add standardizedResolution if height is available
             let standardizedRes = null;
@@ -491,9 +485,6 @@ class VideoProcessingPipeline {
         }
     } catch (error) {
         logger.error(`Error getting FFprobe metadata: ${error.message}`);
-        
-        // Clean up rule even if there was an error
-        // await removeHeaderRule(video.url);
     }
   }
 }
@@ -757,9 +748,6 @@ function cleanupForTab(tabId) {
     if (variantMasterMap.has(tabId)) {
         variantMasterMap.delete(tabId);
     }
-    
-    // Clear header cache for this tab
-    clearHeadersForTab(tabId);
 }
 
 /**
