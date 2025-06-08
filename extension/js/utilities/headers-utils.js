@@ -436,6 +436,73 @@ async function applyHeaderRule(tabId, url) {
     }
 }
 
+/**
+ * Propagate headers from one URL to other URLs in the same tab context
+ * Useful for HLS variants derived from master playlists
+ * 
+ * @param {number} tabId - Tab ID context
+ * @param {string} sourceUrl - URL to copy headers from
+ * @param {Array<string>} targetUrls - URLs to copy headers to
+ * @returns {boolean} Success status
+ */
+function propagateHeaders(tabId, sourceUrl, targetUrls) {
+    if (!tabId || tabId <= 0) {
+        logger.error(`Invalid tabId ${tabId} for header propagation`);
+        return false;
+    }
+    
+    if (!sourceUrl || !targetUrls || !Array.isArray(targetUrls) || targetUrls.length === 0) {
+        logger.error('Invalid source or target URLs for header propagation');
+        return false;
+    }
+    
+    try {
+        // Check if we have the source tab in our store
+        if (!tabHeadersStore.has(tabId)) {
+            logger.warn(`No headers data for tab ${tabId}`);
+            return false;
+        }
+        
+        // Get the tab's URL map
+        const tabUrls = tabHeadersStore.get(tabId);
+        
+        // Check if we have headers for the source URL
+        if (!tabUrls.has(sourceUrl)) {
+            logger.warn(`No headers found for source URL: ${sourceUrl}`);
+            return false;
+        }
+        
+        // Get the source headers
+        const sourceHeaders = tabUrls.get(sourceUrl);
+        
+        // Copy headers to each target URL
+        let propagatedCount = 0;
+        for (const targetUrl of targetUrls) {
+            // Skip if target already has headers
+            if (tabUrls.has(targetUrl)) {
+                logger.debug(`Target URL already has headers: ${targetUrl}`);
+                continue;
+            }
+            
+            // Clone the headers to avoid reference issues
+            const clonedHeaders = {...sourceHeaders};
+            
+            // Update timestamp to current time
+            clonedHeaders.timestamp = Date.now();
+            
+            // Store in the tab's URL map
+            tabUrls.set(targetUrl, clonedHeaders);
+            propagatedCount++;
+        }
+        
+        logger.debug(`Propagated headers from ${sourceUrl} to ${propagatedCount} target URLs`);
+        return propagatedCount > 0;
+    } catch (e) {
+        logger.error(`Error propagating headers: ${e.message}`);
+        return false;
+    }
+}
+
 // Export functions
 export {
     initHeaderTracking,
@@ -446,5 +513,6 @@ export {
     clearAllHeaderRules,
     clearAllHeaderCaches,
     getHeadersStats,
-    applyHeaderRule
+    applyHeaderRule,
+    propagateHeaders
 };

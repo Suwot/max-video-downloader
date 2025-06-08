@@ -16,6 +16,7 @@ import {
 import { createLogger } from './logger.js';
 import { getVideoByUrl } from '../../background/services/video-manager.js';
 import { standardizeResolution } from '../../popup/js/video-list/video-utils.js';
+import { propagateHeaders } from './headers-utils.js';
 
 // Create a logger for the HLS parser
 const logger = createLogger('HLS Parser');
@@ -418,6 +419,20 @@ export async function parseHlsManifest(url, headers = null, tabId) {
                 // Get basic variant information
                 const basicVariants = masterParseResult.variants;
                 logger.debug(`Found ${basicVariants.length} basic variants in master playlist`);
+                
+                // Propagate headers from master URL to variant URLs
+                if (tabId && headers) {
+                    try {
+                        // Collect all variant URLs
+                        const variantUrls = basicVariants.map(variant => variant.url);
+                        
+                        // Call propagateHeaders with master URL and all variant URLs
+                        const propagated = propagateHeaders(tabId, url, variantUrls);
+                        logger.debug(`Header propagation from master to variants: ${propagated ? 'successful' : 'failed'}`);
+                    } catch (error) {
+                        logger.error(`Error propagating headers: ${error.message}`);
+                    }
+                }
                 
                 // Prepare variants array with basic info
                 variants = [...basicVariants];
