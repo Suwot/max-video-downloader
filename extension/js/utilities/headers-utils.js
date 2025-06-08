@@ -12,7 +12,8 @@ const logger = createLogger('Headers Utils');
 // Map<tabId, Map<url, headers>>
 const tabHeadersStore = new Map();
 
-// Track active rules: URL -> Rule ID
+// Track active rules by tab ID, then URL
+// Map<tabId, Map<url, ruleId>>
 const activeRules = new Map();
 
 // Maximum rule ID supported by Chrome (2^31 - 1)
@@ -219,9 +220,6 @@ async function initHeaderTracking() {
             listenerOptions
         );
         
-        // Set up tab cleanup listener
-        chrome.tabs.onRemoved.addListener(clearHeadersForTab);
-        
         logger.info('Header tracking initialized with options:', listenerOptions);
     } catch (e) {
         logger.error('Failed to initialize header tracking:', e);
@@ -240,11 +238,50 @@ function clearHeadersForTab(tabId) {
 }
 
 /**
+ * Clear header rules for a specific tab
+ * @param {number} tabId - Tab ID to clear rules for
+ * @returns {Promise<boolean>} Success status
+ */
+async function clearHeaderRulesForTab(tabId) {
+    if (!chrome.declarativeNetRequest || !activeRules.has(tabId)) {
+        return true;
+    }
+    
+    try {
+        const tabRules = activeRules.get(tabId);
+        const ruleIds = Array.from(tabRules.values());
+        
+        if (ruleIds.length === 0) {
+            return true;
+        }
+        
+        await chrome.declarativeNetRequest.updateSessionRules({
+            removeRuleIds: ruleIds
+        });
+        
+        activeRules.delete(tabId);
+        logger.debug(`Cleared ${ruleIds.length} header rules for tab ${tabId}`);
+        return true;
+    } catch (e) {
+        logger.error(`Error clearing header rules for tab ${tabId}:`, e);
+        return false;
+    }
+}
+
+/**
  * Clear all stored headers
  */
 function clearAllHeaders() {
     tabHeadersStore.clear();
     logger.debug('All headers cleared');
+}
+
+/**
+ * Clear all header caches including headers and rules
+ */
+function clearAllHeaderCaches() {
+    clearAllHeaders();
+    clearAllHeaderRules();
 }
 
 /**
@@ -257,13 +294,22 @@ async function clearAllHeaderRules() {
     }
     
     try {
-        const ruleIds = Array.from(activeRules.values());
+        // Collect all rule IDs from all tabs
+        const allRuleIds = [];
+        for (const [tabId, tabRules] of activeRules.entries()) {
+            allRuleIds.push(...tabRules.values());
+        }
+        
+        if (allRuleIds.length === 0) {
+            return true;
+        }
+        
         await chrome.declarativeNetRequest.updateSessionRules({
-            removeRuleIds: ruleIds
+            removeRuleIds: allRuleIds
         });
         
         activeRules.clear();
-        logger.debug(`Cleared ${ruleIds.length} header rules`);
+        logger.debug(`Cleared ${allRuleIds.length} header rules across all tabs`);
         return true;
     } catch (e) {
         logger.error('Error clearing header rules:', e);
@@ -281,10 +327,15 @@ function getHeadersStats() {
         totalUrls += urls.size;
     }
     
+    let totalRules = 0;
+    for (const [tabId, rules] of activeRules.entries()) {
+        totalRules += rules.size;
+    }
+    
     return {
         tabsTracked: tabHeadersStore.size,
         totalUrlsTracked: totalUrls,
-        activeRules: activeRules.size
+        activeRules: totalRules
     };
 }
 
@@ -316,9 +367,16 @@ async function applyHeaderRule(tabId, url) {
         return false;
     }
     
-    // If rule already exists, don't create another one
-    if (activeRules.has(url)) {
-        logger.debug(`Rule already exists for ${url}`);
+    // Initialize tab rules if needed
+    if (!activeRules.has(tabId)) {
+        activeRules.set(tabId, new Map());
+    }
+    
+    const tabRules = activeRules.get(tabId);
+    
+    // If rule already exists for this URL in this tab, don't create another one
+    if (tabRules.has(url)) {
+        logger.debug(`Rule already exists for ${url} in tab ${tabId}`);
         return true;
     }
     
@@ -326,7 +384,7 @@ async function applyHeaderRule(tabId, url) {
         // Get headers for this URL
         const headers = getRequestHeaders(tabId, url);
         if (!headers) {
-            logger.warn(`No headers available for ${url}`);
+            logger.warn(`No headers available for ${url} in tab ${tabId}`);
             return false;
         }
         
@@ -368,58 +426,13 @@ async function applyHeaderRule(tabId, url) {
             addRules: [rule]
         });
         
-        // Store rule ID for cleanup
-        activeRules.set(url, ruleId);
-        logger.debug(`Applied header rule ${ruleId} for ${url}`);
+        // Store rule ID for cleanup (in tab-specific map)
+        tabRules.set(url, ruleId);
+        logger.debug(`Applied header rule ${ruleId} for ${url} in tab ${tabId}`);
         return true;
     } catch (e) {
-        logger.error(`Error applying header rule for ${url}:`, e);
+        logger.error(`Error applying header rule for ${url} in tab ${tabId}:`, e);
         return false;
-    }
-}
-
-/**
- * Remove declarativeNetRequest rule for a URL
- * @param {string} url - URL to remove rule for
- * @returns {Promise<boolean>} Success status
- */
-async function removeHeaderRule(url) {
-    if (!activeRules.has(url)) {
-        return true;
-    }
-    
-    try {
-        const ruleId = activeRules.get(url);
-        await chrome.declarativeNetRequest.updateSessionRules({
-            removeRuleIds: [ruleId]
-        });
-        
-        activeRules.delete(url);
-        logger.debug(`Removed header rule ${ruleId} for ${url}`);
-        return true;
-    } catch (e) {
-        logger.error(`Error removing header rule for ${url}:`, e);
-        return false;
-    }
-}
-
-/**
- * Fetch a URL with proper headers using declarativeNetRequest
- * @param {number} tabId - Tab ID for context
- * @param {string} url - URL to fetch
- * @param {Object} options - Fetch options
- * @returns {Promise<Response>} Fetch response
- */
-async function fetchWithCorrectHeaders(tabId, url, options = {}) {
-    // Apply header rule
-    await applyHeaderRule(tabId, url);
-    
-    try {
-        // Make the request
-        return await fetch(url, options);
-    } finally {
-        // We'll let the caller decide when to remove the rule
-        // Don't remove here as there could be multiple related requests
     }
 }
 
@@ -428,10 +441,10 @@ export {
     initHeaderTracking,
     getRequestHeaders,
     clearHeadersForTab,
+    clearHeaderRulesForTab,
     clearAllHeaders,
     clearAllHeaderRules,
+    clearAllHeaderCaches,
     getHeadersStats,
-    applyHeaderRule,
-    removeHeaderRule,
-    fetchWithCorrectHeaders
+    applyHeaderRule
 };

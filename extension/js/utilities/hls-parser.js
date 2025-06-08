@@ -11,8 +11,7 @@ import {
     resolveUrl,
     getBaseDirectory,
     fetchManifest,
-    validateManifestType,
-    removeHeaderRule
+    validateManifestType
 } from './parser-utils.js';
 import { createLogger } from './logger.js';
 import { getVideoByUrl } from '../../background/services/video-manager.js';
@@ -27,7 +26,7 @@ const logger = createLogger('HLS Parser');
  * @param {Object} [headers] - Optional headers to use for the request
  * @returns {Promise<Object>} - Complete variant metadata
  */
-async function parseHlsVariant(variantUrl, headers = null) {
+async function parseHlsVariant(variantUrl, headers = null, tabId) {
     try {
         logger.debug(`Fetching variant: ${variantUrl} with headers:`, headers);
         
@@ -35,7 +34,8 @@ async function parseHlsVariant(variantUrl, headers = null) {
         const fetchResult = await fetchManifest(variantUrl, {
             headers,
             timeoutMs: 10000,
-            maxRetries: 2
+            maxRetries: 2,
+            tabId: tabId
         });
         
         if (!fetchResult.ok) {
@@ -432,7 +432,7 @@ export async function parseHlsManifest(url, headers = null, tabId) {
                         const currentVariant = basicVariants[processedVariantIndex];
                         logger.debug(`Processing variant ${processedVariantIndex+1}: ${currentVariant.url}`);
                         
-                        variantInfo = await parseHlsVariant(currentVariant.url, headers);
+                        variantInfo = await parseHlsVariant(currentVariant.url, headers, tabId);
                         
                         if (variantInfo) {
                             logger.debug(`Successfully fetched variant ${processedVariantIndex+1}`);
@@ -566,14 +566,6 @@ export async function parseHlsManifest(url, headers = null, tabId) {
         // Clean up
         if (processingRequests.full) {
             processingRequests.full.delete(normalizedUrl);
-        }
-        
-        // Clean up header rule if it was applied
-        try {
-            await removeHeaderRule(url);
-            logger.debug(`Removed header rule for ${url}`);
-        } catch (e) {
-            logger.warn(`Error removing header rule for ${url}:`, e);
         }
     }
 }

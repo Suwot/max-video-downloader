@@ -80,6 +80,8 @@ function initTabTracking() {
             cleanupDownloadsForTab(tabId); // Cleanup downloads
             cleanupScrollPositionForTab(tabId); // Cleanup saved scroll positions
             cleanupMpdContext(tabId); // Cleanup MPD context if applicable
+            clearHeadersForTab(tabId); // Clear any init request headers
+            clearHeaderRulesForTab(tabId); // Clear any header rules per tab
         });
         
         // Could add additional tab event listeners here

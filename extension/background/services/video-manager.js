@@ -9,7 +9,7 @@ import nativeHostService from '../../js/native-host-service.js';
 import { getActivePopupPortForTab } from './ui-communication.js';
 import { parseHlsManifest } from '../../js/utilities/hls-parser.js';
 import { parseDashManifest } from '../../js/utilities/dash-parser.js';
-import { getRequestHeaders, applyHeaderRule, removeHeaderRule, clearHeadersForTab, clearAllHeaders } from '../../js/utilities/headers-utils.js';
+import { getRequestHeaders, applyHeaderRule, clearHeadersForTab, clearAllHeaders } from '../../js/utilities/headers-utils.js';
 import { createLogger } from '../../js/utilities/logger.js';
 import { getPreview, storePreview } from '../../js/utilities/preview-cache.js';
 import { getFilenameFromUrl } from '../../popup/js/utilities.js';
@@ -212,7 +212,6 @@ class VideoProcessingPipeline {
     
     // Get headers for the request
     const headers = getRequestHeaders(tabId, video.url);
-    logger.debug(`Using headers for HLS video ${normalizedUrl}:`, headers);
     
     // Run combined validation and parsing
     const hlsResult = await parseHlsManifest(video.url, headers, tabId);
@@ -408,7 +407,7 @@ class VideoProcessingPipeline {
           });
           
           // Clean up the rule after native host request completes
-          await removeHeaderRule(urlToUse);
+          // await removeHeaderRule(urlToUse);
           
           if (response && response.previewUrl) {
               // Cache the generated preview
@@ -427,8 +426,8 @@ class VideoProcessingPipeline {
           logger.error(`Error generating preview: ${error.message}`);
           
           // Clean up rule even if there was an error
-          const urlToUse = sourceUrl || video?.url;
-          if (urlToUse) await removeHeaderRule(urlToUse);
+          // const urlToUse = sourceUrl || video?.url;
+          // if (urlToUse) await removeHeaderRule(urlToUse);
       }
   }
   
@@ -466,7 +465,7 @@ class VideoProcessingPipeline {
         });
         
         // Clean up the rule after native host request completes
-        await removeHeaderRule(video.url);
+        // await removeHeaderRule(video.url);
         
         if (streamInfo) {
             // Add standardizedResolution if height is available
@@ -494,7 +493,7 @@ class VideoProcessingPipeline {
         logger.error(`Error getting FFprobe metadata: ${error.message}`);
         
         // Clean up rule even if there was an error
-        await removeHeaderRule(video.url);
+        // await removeHeaderRule(video.url);
     }
   }
 }
@@ -770,12 +769,7 @@ function cleanupForTab(tabId) {
 async function initVideoManager() {
     logger.info('Initializing video manager service');
     
-    try {
-        // Set up event listeners to clear videos when tabs are closed or navigated
-        chrome.tabs.onRemoved.addListener((tabId) => {
-            cleanupForTab(tabId);
-        });
-        
+    try {        
         // Listen for page navigation to clear videos
         chrome.webNavigation.onCommitted.addListener((details) => {
             // Only clear for main frame navigation (not iframes)

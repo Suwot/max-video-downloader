@@ -4,7 +4,7 @@
  */
 
 import { normalizeUrl, getBaseDirectory } from './normalize-url.js';
-import { getRequestHeaders, applyHeaderRule, removeHeaderRule } from './headers-utils.js';
+import { getRequestHeaders, applyHeaderRule } from './headers-utils.js';
 import { createLogger } from './logger.js';
 
 const logger = createLogger('Parser Utils');
@@ -149,17 +149,8 @@ export async function fetchManifest(url, options = {}) {
     
     // Use declarativeNetRequest if possible (tabId > 0 and not in a native host context)
     if (tabId > 0 && typeof chrome !== 'undefined' && chrome.declarativeNetRequest) {
-        try {
-            // Apply header rule
-            ruleApplied = await applyHeaderRule(tabId, url);
-            if (ruleApplied) {
-                logger.debug(`Applied declarative header rule for ${url}`);
-            } else {
-                logger.warn(`Failed to apply declarative header rule for ${url}`);
-            }
-        } catch (e) {
-            logger.error('Error applying header rule:', e);
-        }
+        try { ruleApplied = await applyHeaderRule(tabId, url); } 
+        catch (e) { logger.error('Error applying header rule:', e); }
     }
     
     try {
@@ -484,4 +475,4 @@ export async function validateManifestType(url, headers = null, existingMetadata
 }
 
 // Re-export utilities that we're using directly from other modules
-export { normalizeUrl, getBaseDirectory, removeHeaderRule };
+export { normalizeUrl, getBaseDirectory };

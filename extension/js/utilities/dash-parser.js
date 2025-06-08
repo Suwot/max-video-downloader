@@ -12,8 +12,7 @@ import {
     getBaseDirectory,
     extractAttribute,
     fetchManifest,
-    validateManifestType,
-    removeHeaderRule
+    validateManifestType
 } from './parser-utils.js';
 import { createLogger } from './logger.js';
 import { getVideoByUrl } from '../../background/services/video-manager.js';
@@ -669,14 +668,6 @@ export async function parseDashManifest(url, headers = null, tabId) {
         // Clean up
         if (processingRequests.full) {
             processingRequests.full.delete(normalizedUrl);
-        }
-        
-        // Clean up header rule if it was applied
-        try {
-            await removeHeaderRule(url);
-            logger.debug(`Removed header rule for ${url}`);
-        } catch (e) {
-            logger.warn(`Error removing header rule for ${url}:`, e);
         }
     }
 }
