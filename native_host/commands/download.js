@@ -1,17 +1,17 @@
 /**
- * @ai-guide-component DownloadCommand
- * @ai-guide-description Handles video download operations using FFmpeg
- * @ai-guide-responsibilities
- * - Processes download requests from the extension
- * - Handles different stream types (HLS, DASH, direct)
- * - Constructs appropriate FFmpeg command based on video type
- * - Monitors download progress and reports back to extension
- * - Supports quality selection for different stream variants
- * - Handles download errors and reports them to the extension
- * - Sends progress updates every 250ms during download
+ * DownloadCommand
+ * Orchestrates video/audio downloads via FFmpeg, supporting HLS, DASH, and direct URLs with progress tracking and error reporting.
+ * - Receives and validates download parameters from the extension
+ * - Determines media type and optimal container format
+ * - Constructs FFmpeg command-line arguments for various stream types
+ * - Ensures unique output file naming and resolves save paths
+ * - Integrates HTTP headers and stream selection for advanced scenarios
+ * - Launches FFmpeg as a child process and tracks progress using ProgressTracker
+ * - Probes media duration if not provided, for accurate progress reporting
+ * - Sends regular progress updates and handles completion or error events
+ * - Logs key actions and errors for debugging and transparency
  */
 
-// commands/download.js
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
