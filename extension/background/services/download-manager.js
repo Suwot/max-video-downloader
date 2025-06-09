@@ -1,6 +1,14 @@
 /**
  * Download Manager Service
- * Handles video download operations including progress tracking, notifications, and port communication
+ * Handles video download operations including progress tracking and notifications
+ * Uses a simplified approach with direct communication to UI through existing popup ports
+ * 
+ * SIMPLIFIED FLOW:
+ * 1. UI sends download request with data-url as ID
+ * 2. Download manager tracks download in single Map using data-url as key
+ * 3. Native host downloads and reports progress
+ * 4. Download manager broadcasts updates to all UIs via shared communication system
+ * 5. UI matches updates to video items by data-url
  */
 
 // Add static import at the top
@@ -8,11 +16,10 @@ import nativeHostService from '../../js/native-host-service.js';
 import { getRequestHeaders } from '../../js/utilities/headers-utils.js';
 import { createLogger } from '../../js/utilities/logger.js';
 import { getFilenameFromUrl } from '../../popup/js/utilities.js';
+import { broadcastToPopups } from './ui-communication.js';
 
-// Track downloads by ID for better connection persistence
-const downloads = new Map(); // key = downloadId, value = { url, progress, status, startTime, etc. }
-const activeDownloads = new Map(); // key = url, value = { progress, tabId, notificationId, lastUpdated, filename, etc. }
-const downloadPorts = new Map(); // key = portId, value = port object
+// Track all downloads in a single map using data-url as key
+const downloads = new Map(); // key = dataUrl (downloadId), value = { url, progress, status, startTime, etc. }
 
 // Create a logger instance for the Download Manager module
 const logger = createLogger('Download Manager');
@@ -25,17 +32,7 @@ export async function initDownloadManager() {
     logger.info('Initializing download manager service');
     
     try {
-        // Setup listener for port connections related to downloads
-        chrome.runtime.onConnect.addListener(port => {
-            if (port.name === 'download_progress') {
-                // Create unique port ID
-                const portId = Date.now().toString();
-                setupDownloadPort(port, portId);
-            }
-        });
-        
-        // Perform any other initialization tasks here
-        
+        // Simple initialization - no port setup needed as we use the main UI communication system
         return true;
     } catch (error) {
         logger.error('Failed to initialize download manager:', error);
@@ -43,66 +40,54 @@ export async function initDownloadManager() {
     }
 }
 
-// Generate a unique download ID
-function generateDownloadId() {
-  return `download_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
-}
-
-function handleDownloadSuccess(response, notificationId) {
-  chrome.notifications.update(notificationId, {
-    title: 'Download Complete',
-    message: `Saved to: ${response.path}`
-  });
-  
-  for (const [portId, port] of downloadPorts.entries()) {
-    try {
-      // Add complete state flag to the response
-      const enhancedResponse = {
-        ...response,
-        state: 'complete'
-      };
-      port.postMessage(enhancedResponse);
-    } catch (e) {
-      logger.error('Error sending success to port:', e);
-      downloadPorts.delete(portId);
-      logger.debug('Removed dead port after success failure:', portId);
-    }
-  }
-}
-
-function handleDownloadError(error, notificationId) {
-  chrome.notifications.update(notificationId, {
-    title: 'Download Failed',
-    message: error
-  });
-  
-  for (const [portId, port] of downloadPorts.entries()) {
-    try {
-      // Add error state flag to the response
-      port.postMessage({ 
-        success: false, 
-        error: error,
-        state: 'error'
-      });
-    } catch (e) {
-      logger.error('Error sending error to port:', e);
-      downloadPorts.delete(portId);
-      logger.debug('Removed dead port after error failure:', portId);
-    }
-  }
+/**
+ * Broadcasts download status update to all connected popups
+ * @param {Object} message - The message to broadcast
+ */
+function broadcastDownloadUpdate(message) {
+    // Use the existing UI communication broadcast system
+    broadcastToPopups(message);
 }
 
 /**
  * Initiates a download and sets up progress tracking
+ * @param {Object} request - Download request details
+ * @param {Object} port - Port to send immediate responses to
+ * @returns {string} The download ID (same as data-url)
  */
 function startDownload(request, port) {
-    const downloadId = generateDownloadId();
+    // Use data-url as the download ID for simple tracking
+    const downloadId = request.dataUrl || request.url;
+    
+    // Check if this download is already in progress
+    if (downloads.has(downloadId) && downloads.get(downloadId).status === 'downloading') {
+        logger.debug('Download already in progress for:', downloadId);
+        
+        if (port) {
+            try {
+                const download = downloads.get(downloadId);
+                port.postMessage({
+                    type: 'progress',
+                    downloadId: downloadId,
+                    progress: download.progress || 0,
+                    filename: download.filename,
+                    url: download.url
+                });
+            } catch (e) {
+                logger.error('Error sending existing download info to port:', e);
+            }
+        }
+        
+        return downloadId;
+    }
     
     // Get filename with proper title and container info
-    const filename = request.filename || getFilenameFromUrl(request.url);
+    const filename = request.title ? 
+        `${request.title}.${request.container || 'mp4'}` : 
+        (request.filename || getFilenameFromUrl(request.url));
     
     // Show initial notification
-    const notificationId = `download-${Date.now()}`;
+    const notificationId = `download-${downloadId}`;
     chrome.notifications.create(notificationId, {
       type: 'basic',
       iconUrl: 'icons/48.png',
@@ -110,113 +95,101 @@ function startDownload(request, port) {
       message: `Starting download: ${filename}`
     });
     
-    // Store initial download information
+    // Store initial download information in a single map
     downloads.set(downloadId, {
         url: request.url,
         progress: 0,
         status: 'downloading',
         startTime: Date.now(),
+        lastUpdated: Date.now(),
         filename: filename,
         tabId: request.tabId || -1,
-        type: request.type === 'downloadHLS' ? 'hls' : 'direct',
-        quality: request.quality || null,
-        originalContainer: request.originalContainer || null,
-        originalUrl: request.originalUrl || request.url,
-        title: request.title || null
+        type: request.type || 'direct',  // 'hls', 'dash', or 'direct'
+        container: request.container || null,
+        title: request.title || null,
+        notificationId: notificationId,
+        savePath: request.savePath || null
     });
     
     // Send download ID back to popup
     if (port) {
-        port.postMessage({
-            type: 'downloadInitiated',
-            downloadId: downloadId,
-            url: request.url
-        });
+        try {
+            port.postMessage({
+                type: 'downloadInitiated',
+                downloadId: downloadId,
+                url: request.url,
+                filename: filename
+            });
+        } catch (e) {
+            logger.error('Error sending download init message to port:', e);
+        }
     }
     
     // Create response handler with downloadId context
     let hasError = false;
     const responseHandler = (response) => {
-        if (response && response.type === 'progress' && !hasError) {
+        if (!response) return;
+        
+        const download = downloads.get(downloadId);
+        if (!download) {
+            logger.error('Received response for unknown download:', downloadId);
+            return;
+        }
+        
+        if (response.type === 'progress' && !hasError) {
             // Update stored download information
-            const download = downloads.get(downloadId);
-            if (download) {
-                download.progress = response.progress || 0;
-                download.speed = response.speed;
-                download.eta = response.eta;
-                download.segmentProgress = response.segmentProgress;
-                download.confidence = response.confidence;
-                download.downloaded = response.downloaded;
-                download.size = response.size;
-                download.lastUpdated = Date.now();
-            }
+            download.progress = response.progress || 0;
+            download.speed = response.speed;
+            download.eta = response.eta;
+            download.segmentProgress = response.segmentProgress;
+            download.downloaded = response.downloaded;
+            download.size = response.size;
+            download.lastUpdated = Date.now();
             
-            // Ensure all progress data is passed through, including confidence levels,
-            // segment tracking, ETA, and other enhanced tracking metrics
-            const enhancedResponse = {
-                ...response,
-                type: 'progress',
-                // Add download ID for tracking
-                downloadId: downloadId,
-                // Format filename if available
-                filename: response.filename || request.filename || getFilenameFromUrl(request.url),
-                // Add URL for tracking
-                url: request.url
-            };
-            
-            // Store in activeDownloads map for reconnecting popups (legacy approach)
-            activeDownloads.set(request.url, {
-                downloadId: downloadId, // Add download ID to legacy structure
-                tabId: request.tabId || -1,
-                notificationId: notificationId,
-                progress: response.progress || 0,
-                filename: enhancedResponse.filename,
-                lastUpdated: Date.now(),
-                speed: response.speed,
-                eta: response.eta,
-                segmentProgress: response.segmentProgress,
-                confidence: response.confidence,
-                downloaded: response.downloaded,
-                size: response.size
-            });
-            
-            // Update notification less frequently
+            // Update notification less frequently to avoid flooding
             if (response.progress % 10 === 0) {
                 let message = `Downloading: ${Math.round(response.progress)}%`;
-                
-                // Add segment info if available
                 if (response.segmentProgress) {
                     message += ` (Segment: ${response.segmentProgress})`;
                 }
                 
-                chrome.notifications.update(notificationId, {
-                    message: message
-                });
+                chrome.notifications.update(download.notificationId, { message });
             }
             
-            // Forward progress to all connected popups (live iteration)
-            for (const [portId, port] of downloadPorts.entries()) {
-                try {
-                    port.postMessage(enhancedResponse);
-                } catch (e) {
-                    logger.error('Error sending progress to port:', e);
-                    downloadPorts.delete(portId);
-                    logger.debug('Removed dead port after send failure:', portId);
-                }
-            }
-        } else if (response && response.success && !hasError) {
+            // Broadcast progress to all connected popups
+            broadcastDownloadUpdate({
+                type: 'progress',
+                downloadId: downloadId,
+                progress: response.progress || 0,
+                filename: download.filename,
+                url: download.url,
+                speed: response.speed,
+                eta: response.eta,
+                segmentProgress: response.segmentProgress,
+                downloaded: response.downloaded,
+                size: response.size
+            });
+            
+        } else if (response.success && !hasError) {
             // Update download status
-            const download = downloads.get(downloadId);
-            if (download) {
-                download.status = 'completed';
-                download.completeTime = Date.now();
-                download.progress = 100;
-            }
+            download.status = 'completed';
+            download.completeTime = Date.now();
+            download.progress = 100;
             
-            // On success, remove from active downloads
-            activeDownloads.delete(request.url);
+            // Show completion notification
+            chrome.notifications.update(download.notificationId, {
+                title: 'Download Complete',
+                message: `Saved to: ${response.path}`
+            });
             
-            handleDownloadSuccess(response, notificationId);
+            // Broadcast completion to all connected popups
+            broadcastDownloadUpdate({
+                type: 'complete',
+                downloadId: downloadId,
+                path: response.path,
+                filename: download.filename,
+                url: download.url
+            });
             
             // Keep completed download info for a while
             setTimeout(() => {
@@ -224,19 +197,25 @@ function startDownload(request, port) {
                 logger.debug('Removed completed download info:', downloadId);
             }, 30 * 60 * 1000); // 30 minutes
             
-        } else if (response && response.error && !hasError) {
+        } else if (response.error && !hasError) {
             // Update download status
-            const download = downloads.get(downloadId);
-            if (download) {
-                download.status = 'error';
-                download.error = response.error;
-            }
-            
-            // On error, remove from active downloads
-            activeDownloads.delete(request.url);
+            download.status = 'error';
+            download.error = response.error;
             hasError = true;
             
-            handleDownloadError(response.error, notificationId);
+            // Show error notification
+            chrome.notifications.update(download.notificationId, {
+                title: 'Download Failed',
+                message: response.error
+            });
+            
+            // Broadcast error to all connected popups
+            broadcastDownloadUpdate({
+                type: 'error',
+                downloadId: downloadId,
+                error: response.error,
+                url: download.url
+            });
         }
     };
     
@@ -246,118 +225,75 @@ function startDownload(request, port) {
     try {
         // Fetch headers for the video first
         const headers = getRequestHeaders(request.tabId || -1, request.url);
-        logger.debug('Using headers for download request:', Object.keys(headers));
-
-        // Using imported nativeHostService with headers
-        nativeHostService.sendMessage({
+        
+        // Construct native host message with all necessary data
+        const nativeHostMessage = {
             type: 'download',
             url: request.url,
             filename: filename,
-            savePath: request.savePath,
-            quality: request.quality,
+            savePath: request.savePath || null,
+            mediaType: request.type || 'direct',  // 'hls', 'dash', or 'direct'
+            container: request.container || null,
             manifestUrl: request.manifestUrl || request.url,
             headers: headers
-        }, responseHandler).catch(error => {
-            logger.error('❌ Native host error:', error);
-            
-            // If error contains "codec not currently supported in container", attempt to retry with webm extension
-            if (error.message && error.message.includes("codec not currently supported in container") && 
-                request.url.toLowerCase().includes(".webm")) {
+        };
+        
+        // If we have quality info, add it
+        if (request.quality) {
+            nativeHostMessage.quality = request.quality;
+        }
+        
+        logger.debug('Sending download request to native host with params:', 
+            Object.keys(nativeHostMessage).join(', '));
+        
+        // Send to native host service
+        nativeHostService.sendMessage(nativeHostMessage, responseHandler)
+            .catch(error => {
+                logger.error('❌ Native host error:', error);
                 
-                logger.debug('⚠️ Codec incompatibility detected. Retrying with WebM extension...');
-                
-                // Force WebM extension for this download
-                let updatedFilename = filename;
-                if (!/\.webm$/i.test(updatedFilename)) {
-                    updatedFilename = updatedFilename.replace(/\.[^.]+$/, '') + '.webm';
+                // Update download status
+                const download = downloads.get(downloadId);
+                if (download) {
+                    download.status = 'error';
+                    download.error = error.message;
                 }
                 
-                nativeHostService.sendMessage({
-                    type: 'download',
-                    url: request.url,
-                    filename: updatedFilename,
-                    savePath: request.savePath,
-                    quality: request.quality,
-                    manifestUrl: request.manifestUrl || request.url,
-                    headers: headers
-                }, responseHandler).catch(retryError => {
-                    // Update download status for retry error
-                    const download = downloads.get(downloadId);
-                    if (download) {
-                        download.status = 'error';
-                        download.error = retryError.message;
-                    }
-                    
-                    handleDownloadError(retryError.message, notificationId);
+                // Show error notification
+                chrome.notifications.update(notificationId, {
+                    title: 'Download Failed',
+                    message: error.message
                 });
-                return;
-            }
-            
-            // Update download status
-            const download = downloads.get(downloadId);
-            if (download) {
-                download.status = 'error';
-                download.error = error.message;
-            }
-            
-            handleDownloadError(error.message, notificationId);
-        });
+                
+                // Broadcast error to UI
+                broadcastDownloadUpdate({
+                    type: 'error',
+                    downloadId: downloadId,
+                    error: error.message,
+                    url: request.url
+                });
+            });
     } catch (error) {
-        logger.error('❌ Error getting headers:', error);
+        logger.error('❌ Error initiating download:', error);
         
-        // Continue with download without headers as fallback
-        logger.debug('Continuing download without custom headers');
+        // Update download status
+        const download = downloads.get(downloadId);
+        if (download) {
+            download.status = 'error';
+            download.error = error.message;
+        }
         
-        nativeHostService.sendMessage({
-            type: 'download',
-            url: request.url,
-            filename: filename,
-            savePath: request.savePath,
-            quality: request.quality,
-            manifestUrl: request.manifestUrl || request.url
-        }, responseHandler).catch(error => {
-            logger.error('❌ Native host error:', error);
-            
-            // If error contains "codec not currently supported in container", attempt to retry with webm extension
-            if (error.message && error.message.includes("codec not currently supported in container") && 
-                request.url.toLowerCase().includes(".webm")) {
-                
-                logger.debug('⚠️ Codec incompatibility detected. Retrying with WebM extension...');
-                
-                // Force WebM extension for this download
-                let updatedFilename = filename;
-                if (!/\.webm$/i.test(updatedFilename)) {
-                    updatedFilename = updatedFilename.replace(/\.[^.]+$/, '') + '.webm';
-                }
-                
-                nativeHostService.sendMessage({
-                    type: 'download',
-                    url: request.url,
-                    filename: updatedFilename,
-                    savePath: request.savePath,
-                    quality: request.quality,
-                    manifestUrl: request.manifestUrl || request.url
-                }, responseHandler).catch(retryError => {
-                    // Update download status for retry error
-                    const download = downloads.get(downloadId);
-                    if (download) {
-                        download.status = 'error';
-                        download.error = retryError.message;
-                    }
-                    
-                    handleDownloadError(retryError.message, notificationId);
-                });
-                return;
-            }
-            
-            // Update download status
-            const download = downloads.get(downloadId);
-            if (download) {
-                download.status = 'error';
-                download.error = error.message;
-            }
-            
-            handleDownloadError(error.message, notificationId);
+        // Show error notification
+        chrome.notifications.update(notificationId, {
+            title: 'Download Failed',
+            message: error.message
+        });
+        
+        // Broadcast error to UI
+        broadcastDownloadUpdate({
+            type: 'error',
+            downloadId: downloadId,
+            error: error.message,
+            url: request.url
         });
     };
     
@@ -365,86 +301,6 @@ function startDownload(request, port) {
 }
 
 /**
- * Sets up port connection for download progress tracking
- */
-function setupDownloadPort(port, portId) {
-    // Store in download-specific port collection
-    downloadPorts.set(portId, port);
-
-    // Set up message listener for this port
-    port.onMessage.addListener((message) => {
-        // Handle registration for specific download updates
-        if (message.action === 'registerForDownload' && message.downloadUrl) {
-            const downloadInfo = activeDownloads.get(message.downloadUrl);
-
-            if (downloadInfo) {
-                logger.debug('Sending immediate download state for URL:', message.downloadUrl);
-                try {
-                    port.postMessage({
-                        type: 'progress',
-                        progress: downloadInfo.progress || 0,
-                        url: message.downloadUrl,
-                        downloadId: downloadInfo.downloadId, // Include download ID in progress updates
-                        filename: downloadInfo.filename || getFilenameFromUrl(message.downloadUrl),
-                        speed: downloadInfo.speed,
-                        eta: downloadInfo.eta,
-                        segmentProgress: downloadInfo.segmentProgress,
-                        confidence: downloadInfo.confidence,
-                        downloaded: downloadInfo.downloaded,
-                        size: downloadInfo.size
-                    });
-                } catch (e) {
-                    logger.error('Error sending immediate progress to port:', e);
-                    downloadPorts.delete(portId);
-                }
-            }
-        }
-        // Handle download reconnection by ID
-        else if (message.action === 'reconnectToDownload' && message.downloadId) {
-            const downloadInfo = downloads.get(message.downloadId);
-            
-            if (downloadInfo) {
-                logger.debug('Reconnecting to download:', message.downloadId);
-                try {
-                    port.postMessage({
-                        type: 'progress',
-                        progress: downloadInfo.progress || 0,
-                        url: downloadInfo.url,
-                        downloadId: message.downloadId,
-                        filename: downloadInfo.filename || getFilenameFromUrl(downloadInfo.url),
-                        speed: downloadInfo.speed,
-                        eta: downloadInfo.eta,
-                        segmentProgress: downloadInfo.segmentProgress,
-                        confidence: downloadInfo.confidence,
-                        downloaded: downloadInfo.downloaded,
-                        size: downloadInfo.size
-                    });
-                } catch (e) {
-                    logger.error('Error sending reconnection data to port:', e);
-                    downloadPorts.delete(portId);
-                }
-            } else {
-                // Download ID not found
-                try {
-                    port.postMessage({
-                        type: 'download_not_found',
-                        downloadId: message.downloadId
-                    });
-                } catch (e) {
-                    downloadPorts.delete(portId);
-                }
-            }
-        } else if (message.type === 'download' || message.type === 'downloadHLS') {
-            startDownload(message, port);
-        }
-    });
-
-    // Handle port disconnection
-    port.onDisconnect.addListener(() => {
-        downloadPorts.delete(portId);
-        logger.debug('Download port disconnected and removed:', portId);
-    });
-}
 
 /**
  * Gets list of active downloads
@@ -490,17 +346,17 @@ function getDownloadDetails(downloadId) {
  * Cleans up downloads for a closed tab
  */
 function cleanupDownloadsForTab(tabId) {
-    for (const [url, downloadInfo] of activeDownloads.entries()) {
-        if (downloadInfo.tabId === tabId) {
-            logger.debug('Cleaning up download for closed tab:', url);
-            activeDownloads.delete(url);
+    for (const [downloadId, downloadInfo] of downloads.entries()) {
+        if (downloadInfo.tabId === tabId && downloadInfo.status === 'downloading') {
+            logger.debug('Cleaning up download for closed tab:', downloadId);
+            // Currently just logs the event - could add cancellation logic here if desired
+            // downloads.delete(downloadId);
         }
     }
 }
 
 export { 
     startDownload,
-    setupDownloadPort,
     getActiveDownloads,
     getDownloadDetails,
     cleanupDownloadsForTab

@@ -89,8 +89,32 @@ async function handlePortMessage(message, port, portId) {
     }
     
     // Handle download request
-    else if (message.type === 'download' || message.type === 'downloadHLS') {
+    else if (message.type === 'download' || message.type === 'downloadHLS' || message.type === 'downloadDASH') {
         startDownload(message, port);
+    }
+    
+    // Handle download status request
+    else if (message.action === 'getDownloadStatus' && message.downloadId) {
+        const download = getDownloadDetails(message.downloadId);
+        
+        if (download) {
+            port.postMessage({
+                type: download.status === 'completed' ? 'complete' : 'progress',
+                downloadId: message.downloadId,
+                progress: download.progress || 0,
+                filename: download.filename,
+                url: download.url,
+                status: download.status,
+                speed: download.speed,
+                eta: download.eta,
+                error: download.error
+            });
+        } else {
+            port.postMessage({
+                type: 'download_not_found',
+                downloadId: message.downloadId
+            });
+        }
     }
 
     // Handle download details request

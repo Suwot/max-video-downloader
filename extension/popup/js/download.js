@@ -50,26 +50,15 @@ export async function handleDownload(button, url, type, videoData = {}) {
             return;
         }
         
-        // Create a new port connection for download progress
-        downloadPort = chrome.runtime.connect({ name: 'download_progress' });
-        
-        // Immediately register interest in this download URL
-        downloadPort.postMessage({
-            action: 'registerForDownload',
-            downloadUrl: url
-        });
-        
-        // Set up message listener
-        downloadPort.onMessage.addListener((response) => {
+        // Get the existing background port connection
+        const backgroundPort = getBackgroundPort();
+
+        // Define our message handler for both progress updates and completion
+        const handleDownloadMessages = (response) => {
             logger.debug('Download message:', response); // Debug log
             
             // Handle progress updates
-            if (response?.type === 'progress') {
-                // Only process this progress message if it's for the URL we're handling
-                if (response.url !== url) {
-                    return; // Ignore progress for other downloads
-                }
-                
+            if (response?.type === 'progress' && response.downloadId === url) {
                 const progress = response.progress || 0;
                 
                 // Update button progress using CSS variable
@@ -97,41 +86,34 @@ export async function handleDownload(button, url, type, videoData = {}) {
                 
                 button.querySelector('span').textContent = text;
                 
-                // We don't need custom gradient coloring as we're using the CSS variable approach
-                // The progress is already set via buttonWrapper.style.setProperty('--progress', `${progress}%`);
-                
-            } else if (response?.success) {
+            } else if (response?.type === 'complete' && response.downloadId === url) {
                 // Store original content before changing it, if not already stored
                 if (!button._originalContent && button.innerHTML.includes('download-btn-icon')) {
                     button._originalContent = originalContent;
                 }
                 
                 // Use unified state transition logic
-                const updateButtonToComplete = () => {
-                    if (buttonWrapper) {
-                        buttonWrapper.classList.remove('downloading');
-                        buttonWrapper.classList.add('complete');
-                    }
-                    
-                    // Complete cleanup of ALL inline styles to let the CSS classes handle appearance
-                    button.removeAttribute('style'); // Remove entire style attribute
-                    
-                    // Also clear style from menu button to ensure both are handled the same way
-                    const menuBtn = buttonWrapper.querySelector('.download-menu-btn');
-                    if (menuBtn) {
-                        menuBtn.removeAttribute('style');
-                    }
-                    
-                    button.querySelector('span').textContent = 'Complete!';
-                    
-                    // Reset after delay using the same timer for everything
-                    setTimeout(() => resetDownloadState(), 2000);
-                };
+                if (buttonWrapper) {
+                    buttonWrapper.classList.remove('downloading');
+                    buttonWrapper.classList.add('complete');
+                }
                 
-                updateButtonToComplete();
+                // Complete cleanup of ALL inline styles
+                button.removeAttribute('style');
                 
-            } else if (response?.error) {
-                // Store original content before changing it, if not already stored
+                // Also clear style from menu button
+                const menuBtn = buttonWrapper?.querySelector('.download-menu-btn');
+                if (menuBtn) {
+                    menuBtn.removeAttribute('style');
+                }
+                
+                button.querySelector('span').textContent = 'Complete!';
+                
+                // Reset after delay
+                setTimeout(() => resetDownloadState(), 2000);
+                
+            } else if (response?.type === 'error' && response.downloadId === url) {
+                // Store original content before changing it
                 if (!button._originalContent && button.innerHTML.includes('download-btn-icon')) {
                     button._originalContent = originalContent;
                 }
@@ -159,13 +141,12 @@ export async function handleDownload(button, url, type, videoData = {}) {
                 // Use a short delay before resetting to show the error state
                 setTimeout(() => resetDownloadState(), 1500);
             }
-        });
+        };
         
-        downloadPort.onDisconnect.addListener(() => {
-            logger.debug('Port disconnected'); // Debug log
-            downloadPort = null;
-            resetDownloadState();
-        });
+        // Add our message handler to the background port
+        // This will be stored in the button to remove it later
+        button._messageHandler = handleDownloadMessages;
+        backgroundPort.onMessage.addListener(handleDownloadMessages);
         
         // Initiate a new download
         registerNewDownload(url, type, button, videoData);
@@ -177,9 +158,13 @@ export async function handleDownload(button, url, type, videoData = {}) {
     }
     
     function resetDownloadState() {
-        if (downloadPort) {
-            downloadPort.disconnect();
-            downloadPort = null;
+        // Remove our message handler from the background port
+        if (button._messageHandler) {
+            const port = getBackgroundPort();
+            if (port) {
+                port.onMessage.removeListener(button._messageHandler);
+            }
+            button._messageHandler = null;
         }
         
         // Create a unified reset function that handles all elements in one go
@@ -219,16 +204,17 @@ async function registerNewDownload(url, type, button, videoData = {}) {
         // Get the port connection to the background script
         const port = getBackgroundPort();
         
-        // Create message with all needed metadata
+        // Create message with all needed metadata using the simplified approach
         const message = {
-            type: type === 'hls' ? 'downloadHLS' : 'download',
+            type: type === 'hls' ? 'downloadHLS' : (type === 'dash' ? 'downloadDASH' : 'download'),
             url: url,
+            dataUrl: url, // Use data-url as the unique identifier
             manifestUrl: url, // Pass the manifest URL for better segment tracking
             tabId: await getCurrentTabId(), // Pass tabId for proper tracking
             title: videoData.title || videoData.metadata?.title || null, // Pass video title for better filenames
-            originalContainer: videoData.originalContainer || null, // Pass container format
-            originalUrl: videoData.originalUrl || null, // Pass original URL if embedded
-            foundFromQueryParam: videoData.foundFromQueryParam || false // Indicate if extracted
+            container: videoData.container || videoData.originalContainer || null, // Container format
+            quality: videoData.quality || null, // Quality information if available
+            savePath: videoData.savePath || null // Optional save path
         };
         
         // If we have a port connection to background, use it
@@ -365,54 +351,64 @@ function resetDownloadButton(button, originalText) {
 export async function startDownload(video) {
     try {
         let downloadUrl = video.url;
-        let quality = null;
-        // Create port for progress updates
-        const port = chrome.runtime.connect({ name: 'download_progress' });
+        let quality = video.quality || null;
         
-        // Set up progress handling
+        // Set up progress handling using our existing background port
         return new Promise((resolve, reject) => {
-            port.onMessage.addListener((msg) => {
-                if (msg.type === 'progress') {
-                    // Update progress UI
-                    updateDownloadProgress(video, msg.progress, msg);
-                } else if (msg.success) {
-                    resolve(msg);
-                    port.disconnect();
-                } else if (msg.error) {
-                    reject(new Error(msg.error));
-                    port.disconnect();
-                }
-            });
-            
             // Get the port connection to the background script
             const backgroundPort = getBackgroundPort();
             
+            // Message handler for tracking this specific download
+            const messageHandler = (msg) => {
+                // Only process messages for this download
+                if (msg.downloadId !== downloadUrl) return;
+                
+                if (msg.type === 'progress') {
+                    // Update progress UI
+                    updateDownloadProgress(video, msg.progress, msg);
+                } else if (msg.type === 'complete') {
+                    resolve(msg);
+                    backgroundPort.onMessage.removeListener(messageHandler);
+                } else if (msg.type === 'error') {
+                    reject(new Error(msg.error));
+                    backgroundPort.onMessage.removeListener(messageHandler);
+                }
+            };
+            
+            // Add our message handler
+            backgroundPort.onMessage.addListener(messageHandler);
+            
+            // Prepare the download request with all necessary information
+            const downloadRequest = {
+                type: video.type === 'hls' ? 'downloadHLS' : (video.type === 'dash' ? 'downloadDASH' : 'download'),
+                url: downloadUrl,
+                dataUrl: downloadUrl,  // Use data-url as ID
+                manifestUrl: video.manifestUrl || downloadUrl,
+                filename: video.filename,
+                title: video.title,
+                container: video.container || video.originalContainer || null,
+                quality: quality ? {
+                    resolution: quality.resolution,
+                    codecs: quality.codecs,
+                    bitrate: quality.bandwidth || quality.videoBitrate
+                } : null,
+                tabId: video.tabId || -1
+            };
+            
             // Start download using background port if available, otherwise use one-time message
             if (backgroundPort) {
-                backgroundPort.postMessage({
-                    type: video.type === 'hls' ? 'downloadHLS' : 'download',
-                    url: downloadUrl,
-                    filename: video.filename,
-                    quality: quality ? {
-                        resolution: quality.resolution,
-                        codecs: quality.codecs,
-                        bitrate: quality.bandwidth || quality.videoBitrate
-                    } : null,
-                    tabId: getCurrentTabId()
-                });
+                logger.debug('Starting download via port with params:', Object.keys(downloadRequest).join(', '));
+                backgroundPort.postMessage(downloadRequest);
             } else {
-                chrome.runtime.sendMessage({
-                    type: video.type === 'hls' ? 'downloadHLS' : 'download',
-                    url: downloadUrl,
-                    filename: video.filename,
-                    quality: quality ? {
-                        resolution: quality.resolution,
-                        codecs: quality.codecs,
-                        bitrate: quality.bandwidth || quality.videoBitrate
-                    } : null,
-                    tabId: getCurrentTabId()
-                });
+                logger.debug('Starting download via message with params:', Object.keys(downloadRequest).join(', '));
+                chrome.runtime.sendMessage(downloadRequest);
             }
+            
+            // Set up a timeout to clean up if we never get a completion or error message
+            setTimeout(() => {
+                backgroundPort.onMessage.removeListener(messageHandler);
+                reject(new Error('Download timeout: No response received'));
+            }, 60000); // 1 minute timeout
         });
     } catch (error) {
         showError(`Failed to start download: ${error.message}`);
@@ -435,9 +431,7 @@ export async function checkForActiveDownloads() {
         port.postMessage({
             action: 'getActiveDownloads'
         });
-        
-        // Background will respond with activeDownloadsList message
-        // This is handled in the port message listener in index.js
+
     } else {
         logger.error('Failed to get background port for active downloads check');
     }
@@ -452,15 +446,21 @@ export async function checkForActiveDownloads() {
  * @param {Object} progressData - Additional progress data
  */
 export function updateDownloadProgress(video, progress, progressData = {}) {
+    // Use data-url attribute as the primary identifier for finding the button
     const downloadBtn = document.querySelector(`[data-url="${video.url}"]`);
     if (!downloadBtn) {
-        // Try with originalUrl if available
-        if (progressData.originalUrl) {
-            const altBtn = document.querySelector(`[data-url="${progressData.originalUrl}"]`);
+        logger.debug(`Button not found for download URL: ${video.url}`);
+        // If we have a downloadId in progressData that differs from video.url, try that
+        if (progressData.downloadId && progressData.downloadId !== video.url) {
+            const altBtn = document.querySelector(`[data-url="${progressData.downloadId}"]`);
             if (altBtn) {
+                logger.debug(`Found button using downloadId: ${progressData.downloadId}`);
                 updateDownloadButtonProgress(altBtn, progress, progressData);
+                return;
             }
         }
+        
+        logger.debug('No matching download button found for progress update');
         return;
     }
 
