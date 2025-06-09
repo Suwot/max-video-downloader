@@ -11,8 +11,6 @@
  * - Validates host installation and compatibility
  */
 
-// js/native-host-service.js
-
 // NativeHostService - Consolidated native messaging service
 export class NativeHostService {
     constructor() {
