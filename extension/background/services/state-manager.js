@@ -136,7 +136,7 @@ const CLEANUP_INTERVAL = 15 * 60 * 1000;  // 15 minutes
  * Get the current entire state (immutable)
  * @returns {Object} Deep copy of current state
  */
-export function getState() {
+function getState() {
     return cloneData(state);
 }
 
@@ -145,7 +145,7 @@ export function getState() {
  * @param {Function} selector - Function to select portion of state
  * @returns {any} Selected portion of state (deep copied)
  */
-export function select(selector) {
+function select(selector) {
     const selectedData = selector(state);
     return cloneData(selectedData);
 }
@@ -155,7 +155,7 @@ export function select(selector) {
  * @param {Function|Object} updater - Function or object with changes
  * @param {boolean} [immediate=false] - Whether to notify immediately
  */
-export function setState(updater, immediate = false) {
+function setState(updater, immediate = false) {
     // Store reference without cloning
     const prevState = state;
     
@@ -332,7 +332,7 @@ function getDownloadHistory(limit) {
  * Initialize state manager
  * @returns {Promise<boolean>} Success status
  */
-export async function initStateManager() {
+async function initStateManager() {
     logger.info('Initializing state manager');
     
     try {
@@ -656,6 +656,10 @@ function shallowEquals(a, b) {
 }
 
 export {
+    getState,
+    select,
+    setState,
+    initStateManager,
     batch,
     subscribe,
     unsubscribe,
