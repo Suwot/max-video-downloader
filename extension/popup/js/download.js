@@ -11,8 +11,7 @@
  * - Provides download quality selection options
  */
 
-// popup/js/download.js
-import { showError } from './utilities.js';
+import { showError } from './ui.js';
 import  { formatSize } from './video-list/video-utils.js';
 import { getBackgroundPort } from './index.js';
 import { createLogger } from '../../js/utilities/logger.js';

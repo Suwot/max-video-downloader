@@ -15,7 +15,6 @@
 import nativeHostService from '../../js/native-host-service.js';
 import { getRequestHeaders } from '../../js/utilities/headers-utils.js';
 import { createLogger } from '../../js/utilities/logger.js';
-import { getFilenameFromUrl } from '../../popup/js/utilities.js';
 import { broadcastToPopups } from './ui-communication.js';
 
 // Track all downloads in a single map using data-url as key
@@ -83,8 +82,7 @@ function startDownload(request, port) {
     
     // Get filename with proper title and container info
     const filename = request.title ? 
-        `${request.title}.${request.container || 'mp4'}` : 
-        (request.filename || getFilenameFromUrl(request.url));
+        `${request.title}.${request.container || 'mp4'}` : 'video.mp4';
     
     // Show initial notification
     const notificationId = `download-${downloadId}`;
@@ -314,7 +312,7 @@ function getActiveDownloads() {
             originalUrl: info.originalUrl || info.url,
             progress: info.progress || 0,
             status: info.status,
-            filename: info.filename || getFilenameFromUrl(info.url),
+            filename: info.filename || info.title,
             startTime: info.startTime,
             lastUpdated: info.lastUpdated,
             speed: info.speed,

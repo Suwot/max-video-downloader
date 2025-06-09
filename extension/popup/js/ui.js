@@ -63,10 +63,6 @@ export function initializeUI() {
             // Use VideoStateService to clear caches
             await clearCaches();
             
-            // Force a full refresh with forceRefresh=true
-            const { updateVideoList } = await import('./video-fetcher.js');
-            await updateVideoList(true);
-            
             // Update cache stats after clearing
             updateCacheStats(document.querySelector('.cache-stats'));
             
@@ -168,20 +164,28 @@ export function getScrollPosition(tabId, callback) {
 }
 
 /**
- * Show error message in the container
- * @param {HTMLElement} container - Container to show error in
- * @param {string} message - Error message
+ * Show error notification
+ * @param {string} message - Error message to show
  */
-export function showErrorMessage(container, message) {
-    container.innerHTML = `
-        <div class="initial-message error-message">
-            <svg viewBox="0 0 24 24" width="48" height="48">
-                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/>
-            </svg>
-            <p>${message}</p>
-            <p>Try refreshing the page or extension.</p>
-        </div>
-    `;
+export function showError(message) {
+    const notification = document.createElement('div');
+    notification.className = 'error-notification';
+    notification.textContent = message;
+    
+    document.body.appendChild(notification);
+    
+    // Animate in
+    requestAnimationFrame(() => {
+        notification.style.opacity = '1';
+        notification.style.transform = 'translateX(-50%) translateY(0)';
+    });
+    
+    // Remove after 3 seconds
+    setTimeout(() => {
+        notification.style.opacity = '0';
+        notification.style.transform = 'translateX(-50%) translateY(20px)';
+        setTimeout(() => notification.remove(), 300);
+    }, 3000);
 }
 
 /**

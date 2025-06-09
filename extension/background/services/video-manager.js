@@ -16,8 +16,7 @@ import {
 } from '../../js/utilities/headers-utils.js';
 import { createLogger } from '../../js/utilities/logger.js';
 import { getPreview, storePreview } from '../../js/utilities/preview-cache.js';
-import { getFilenameFromUrl } from '../../popup/js/utilities.js';
-import { standardizeResolution } from '../../popup/js/video-list/video-utils.js';
+import { standardizeResolution, getFilenameFromUrl } from '../../popup/js/video-list/video-utils.js';
 
 // Central store for all detected videos, keyed by tab ID, then normalized URL
 // Map<tabId, Map<normalizedUrl, videoInfo>>

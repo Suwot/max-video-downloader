@@ -1,4 +1,3 @@
-// extension/popup/js/video-list/video-utils.js
 // Shared utility functions for video renderers
 
 /**
@@ -58,4 +57,61 @@ export function standardizeResolution(height) {
     if (height >= 240) return '240p';
     if (height >= 144) return '144p';
     return `${height}p`; // Fallback
+}
+
+/**
+ * Format duration in seconds to HH:MM:SS or MM:SS format
+ * @param {number} seconds - Duration in seconds
+ * @returns {string} Formatted duration
+ */
+export function formatDuration(seconds) {
+    if (!seconds) return '';
+    const hrs = Math.floor(seconds / 3600);
+    const mins = Math.floor((seconds % 3600) / 60);
+    const secs = Math.floor(seconds % 60);
+    if (hrs > 0) {
+        return `${hrs}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    }
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+}
+
+/**
+ * Extract filename (without extension) from URL
+ * @param {string} url - URL to extract filename from
+ * @returns {string} Extracted filename without extension
+ */
+export function getFilenameFromUrl(url) {
+    if (url.startsWith('blob:')) {
+            return 'blob_video';
+        }
+
+    try {
+        const urlObj = new URL(url);
+        let filename = urlObj.pathname.split('/').pop() || '';
+
+        // Decode URI components
+        try {
+            filename = decodeURIComponent(filename);
+        } catch (e) {
+            // fallback: keep as-is
+        }
+
+        // Remove query parameters and fragments
+        filename = filename.split(/[?#]/)[0];
+
+        // Only proceed if it looks like a file
+        if (!/\.\w{2,5}$/.test(filename)) {
+            return 'video';
+        }
+
+        // Remove extension if present
+        const dotIndex = filename.lastIndexOf('.');
+        if (dotIndex > 0) {
+            filename = filename.substring(0, dotIndex);
+        }
+
+        return filename || 'video';
+    } catch (e) {
+        return 'video';
+    }
 }

@@ -8,6 +8,7 @@ import { initUICommunication } from './services/ui-communication.js';
 import { createLogger } from '../js/utilities/logger.js';
 import { clearCache, getCacheStats } from '../js/utilities/preview-cache.js';
 import { shouldIgnoreForMediaDetection } from '../js/utilities/url-filters.js';
+import { getFilenameFromUrl } from '../popup/js/video-list/video-utils.js';
 
 // Create a logger instance for the background script
 const logger = createLogger('Background');
@@ -550,30 +551,7 @@ chrome.webRequest.onHeadersReceived.addListener(
 
     // If no filename was found in Content-Disposition, try to extract from URL
     if (!metadata.filename) {
-      try {
-        const urlObj = new URL(details.url);
-        const pathParts = urlObj.pathname.split('/');
-        const lastPart = pathParts[pathParts.length - 1];
-        
-        // Only use the URL part if it looks like a filename with extension
-        if (lastPart && /\.\w{2,5}$/i.test(lastPart)) {
-          // Decode URL encoded characters
-          let filename;
-          try {
-            filename = decodeURIComponent(lastPart);
-          } catch (e) {
-            filename = lastPart;
-          }
-          // Remove extension if present
-          const dotIndex = filename.lastIndexOf('.');
-          if (dotIndex > 0) {
-            filename = filename.substring(0, dotIndex);
-          }
-          metadata.filename = filename;
-        }
-      } catch (e) {
-        // URL parsing failed, no filename will be set
-      }
+      metadata.filename = getFilenameFromUrl(details.url);
     }
 
     // First check if we should ignore this URL
