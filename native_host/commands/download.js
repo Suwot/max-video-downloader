@@ -31,14 +31,35 @@ class DownloadCommand extends BaseCommand {
      * @param {string} params.url Video URL to download
      * @param {string} params.filename Filename to save as
      * @param {string} params.savePath Path to save file to
-     * @param {string} params.quality Video quality to download
-     * @param {string} params.manifestUrl Optional manifest URL for streaming media
+     * @param {string} params.videoType Media type ('hls', 'dash', 'direct')
+     * @param {string} params.preferredContainer User's preferred container format (optional)
+     * @param {string} params.originalContainer Original container from source (optional)
+     * @param {boolean} params.audioOnly Whether to download audio only (optional)
+     * @param {string} params.streamSelection Stream selection spec for DASH (optional)
+     * @param {string} params.manifestUrl Optional master manifest URL (for reporting)
+     * @param {Object} params.headers HTTP headers to use (optional)
      */
     async execute(params) {
-        const { url, filename, savePath, quality = 'best', manifestUrl, headers = {} } = params;
-        logDebug('Starting download:', { url, filename, savePath, quality });
+        const {
+            url,
+            filename,
+            savePath,
+            manifestUrl,
+            headers = {},
+            audioOnly = false,
+            streamSelection,
+            videoType: explicitVideoType,
+            duration = null
+        } = params;
+
+        logDebug('Starting download:', { 
+            url, 
+            filename, 
+            savePath, 
+            audioOnly: audioOnly || false,
+            streamSelection: streamSelection || 'default'
+        });
         
-        // Log received headers
         if (headers && Object.keys(headers).length > 0) {
             logDebug('🔑 Using headers for download request:', Object.keys(headers));
         }
@@ -47,354 +68,338 @@ class DownloadCommand extends BaseCommand {
             // Get required services
             const ffmpegService = this.getService('ffmpeg');
             
-            // Determine video type from URL
-            const videoType = ffmpegService.getVideoTypeFromUrl(url);
+            // Determine video type - use explicit type from extension or detect from URL
+            const videoType = explicitVideoType || ffmpegService.getVideoTypeFromUrl(url);
             
-            // --- Unified output container/extension logic ---
-            // Determine preferred container: user > original > fallback
-            let container = null;
-            if (params.preferredContainer && /^(mp4|webm)$/i.test(params.preferredContainer)) {
-                container = params.preferredContainer.toLowerCase();
-            } else if (params.originalContainer) {
-                if (/^(mp4|mov|m4v|ts|avi|mkv|flv)$/i.test(params.originalContainer)) {
-                    container = 'mp4';
-                } else if (/^webm$/i.test(params.originalContainer)) {
-                    container = 'webm';
-                }
-            }
-            if (!container) container = 'mp4';
-
-            // Clean up filename: remove query params and extension
-            let outputFilename = (filename ? filename.replace(/[?#].*$/, '') : 'video');
-            outputFilename = outputFilename.replace(/\.(mp4|webm|mov|m4v|ts|avi|mkv|flv)$/i, '');
-            // For HLS/DASH, always use mp4
-            if (videoType === 'hls' || videoType === 'dash') {
-                container = 'mp4';
-            }
-            // For direct, if URL is webm and no user override, use webm
-            if (videoType === 'direct' && !params.preferredContainer) {
-                const urlExtMatch = url.match(/\.([^./?#]+)($|\?|#)/i);
-                const urlExt = urlExtMatch ? urlExtMatch[1].toLowerCase() : null;
-                if (urlExt === 'webm') {
-                    container = 'webm';
-                }
-            }
-            outputFilename += `.${container}`;
-            logDebug(`Output container: ${container}, Output filename: ${outputFilename}`);
+            // Determine container format
+            const container = this.determineContainerFormat(params, videoType, url);
             
-            // Set output path - prefer desktop by default
-            const defaultDir = path.join(process.env.HOME || os.homedir(), 'Desktop');
+            // Generate clean output filename
+            const outputFilename = this.generateOutputFilename(filename, container);
             
-            const finalOutput = savePath ? 
-                (savePath === 'Desktop' ? 
-                    path.join(defaultDir, outputFilename) : 
-                    path.join(savePath, outputFilename)) : 
-                path.join(defaultDir, outputFilename);
-
-            // Sanitize filename to avoid encoding issues with non-Latin characters
-            // We keep the original name but ensure it's properly encoded
-            const safeOutput = finalOutput;
-
-            // Check if file exists and append number if needed
-            let counter = 1;
-            let uniqueOutput = safeOutput;
+            // Resolve final output path with uniqueness check
+            const uniqueOutput = this.resolveOutputPath(outputFilename, savePath);
             
-            while (fs.existsSync(uniqueOutput)) {
-                const ext = path.extname(safeOutput);
-                const base = safeOutput.slice(0, -ext.length);
-                uniqueOutput = `${base} (${counter})${ext}`;
-                counter++;
-            }
-
-            logDebug('Output file will be:', uniqueOutput);
-
-            // Build FFmpeg args based on video type
-            let ffmpegArgs = [];
-            
-            // Force progress output format by adding -stats and -progress pipe:2
-            ffmpegArgs.push('-stats', '-progress', 'pipe:2');
-            
-            // Add headers if provided
-            let headerArg = '';
-            if (headers && Object.keys(headers).length > 0) {
-                // Format headers for FFmpeg as "Key: Value\r\n" pairs
-                const headerLines = Object.entries(headers)
-                    .map(([key, value]) => `${key}: ${value}`)
-                    .join('\r\n');
-                
-                if (headerLines) {
-                    headerArg = headerLines + '\r\n';
-                    ffmpegArgs.push('-headers', headerArg);
-                    logDebug('🔑 Added headers to FFmpeg command');
-                }
-            }
-            
-            // Common input parameters for all types
-            if (videoType === 'hls' || videoType === 'dash') {
-                // Streaming protocol support for HLS/DASH
-                ffmpegArgs.push(
-                    '-protocol_whitelist', 'file,http,https,tcp,tls,crypto',
-                    '-i', url
-                );
-            } else {
-                // Direct video
-                ffmpegArgs.push('-i', url);
-            }
-            
-            // Output parameters based on the video type and file extension
-            const outputExt = path.extname(uniqueOutput).toLowerCase();
-            
-            // Default to copy streams without re-encoding for all cases
-            let outputArgs = ['-c', 'copy'];
-            
-            if (videoType === 'hls') {
-                // HLS streams should be remuxed to MP4 (TS to MP4 without re-encoding)
-                // Fix for certain audio streams commonly found in HLS
-                outputArgs.push('-bsf:a', 'aac_adtstoasc');
-                
-                // Optimize for streaming playback
-                outputArgs.push('-movflags', '+faststart');
-            } 
-            else if (videoType === 'dash') {
-                // DASH streams should be muxed (init + segments) without re-encoding
-                // Most DASH streams are already in fragmented MP4 format, so simple copy is sufficient
-                outputArgs.push('-movflags', '+faststart');
-            }
-            else if (videoType === 'direct') {
-                // Extract source format from URL for smarter container decisions
-                const urlExtMatch = url.match(/\.([^./?#]+)($|\?|#)/i);
-                const sourceFormat = urlExtMatch ? urlExtMatch[1].toLowerCase() : '';
-                
-                // Handle direct files based on extension
-                if (outputExt === '.mp4') {
-                    // MP4 output - make sure we're not trying to put WebM codecs in an MP4 container
-                    if (sourceFormat === 'webm') {
-                        // WebM source to MP4 - might need transcoding, but we'll try copy first
-                        // FFmpeg will fail with an error if codecs aren't compatible
-                        logDebug('⚠️ Attempting to convert WebM to MP4 with stream copy (might fail if codecs incompatible)');
-                        
-                        // Adding a fallback mechanism - if stream copy fails, FFmpeg will try to transcode
-                        // This is a safer approach but may be slower
-                        outputArgs = [
-                            '-c:v', 'copy',
-                            '-c:a', 'copy',
-                            '-strict', 'experimental',
-                            '-err_detect', 'ignore_err'
-                        ];
-                    }
-                    // Optimize MP4 files for streaming
-                    outputArgs.push('-movflags', '+faststart');
-                }
-                else if (outputExt === '.mov') {
-                    // MOV container - preserved as is
-                    outputArgs.push('-movflags', '+faststart');
-                }
-                else if (outputExt === '.webm') {
-                    // WebM files - simple copy, no additional processing needed
-                    // VP8/VP9 video and Opus/Vorbis audio will be preserved
-                    logDebug('WebM format detected, copying streams as is');
-                }
-                else {
-                    // For legacy formats or unknown, we're remuxing to MP4
-                    outputArgs.push('-movflags', '+faststart');
-                }
-            }
-            
-            // Add output arguments to ffmpeg command
-            ffmpegArgs = ffmpegArgs.concat(outputArgs);
-            
-            // Add the output file path
-            ffmpegArgs.push(uniqueOutput);
-
-            logDebug('FFmpeg command:', ffmpegService.getFFmpegPath(), ffmpegArgs.join(' '));
-
-            return new Promise((resolve, reject) => {
-                // Create progress tracker for this download
-                const progressTracker = new ProgressTracker({
-                    onProgress: (data) => {
-                        // Add file info to progress updates
-                        this.sendProgress({
-                            ...data,
-                            filename: path.basename(uniqueOutput)
-                        });
-                    },
-                    updateInterval: 200, // Update every 200ms
-                    debug: true // Enable detailed progress logging
-                });
-                
-                // Register default strategies
-                ProgressTracker.registerDefaultStrategies(progressTracker);
-                
-                // Prepare file info for progress tracker
-                const fileInfo = {
-                    url: manifestUrl || url, // Use manifest URL if available for better segment tracking
-                    type: videoType,
-                    outputPath: uniqueOutput
-                };
-                
-                // Initialize progress tracker with file info
-                progressTracker.initialize(fileInfo)
-                    .then(() => {
-                        logDebug('Progress tracker initialized successfully');
-                    })
-                    .catch(error => {
-                        logDebug('Error initializing progress tracker:', error);
-                    });
-
-                // Update FFmpeg spawn to properly handle UTF-8 paths
-                const ffmpeg = spawn(ffmpegService.getFFmpegPath(), ffmpegArgs, { 
-                    env: getFullEnv(),
-                    windowsVerbatimArguments: process.platform === 'win32', // Better handling on Windows
-                    stdio: ['ignore', 'pipe', 'pipe'] // Explicit stdio configuration
-                });
-
-                let errorOutput = '';
-                let hasError = false;
-                let lastBytes = 0;
-                let totalDuration = null;
-
-                // Send initial progress update
-                this.sendProgress({
-                    progress: 0,
-                    speed: 0,
-                    downloaded: 0,
-                    size: 0,
-                    filename: path.basename(uniqueOutput)
-                });
-
-                // Try to get duration first with FFprobe for more accurate initial progress
-                this.probeMediaDuration(ffmpegService, url, headers).then(duration => {
-                    if (duration) {
-                        totalDuration = duration;
-                        logDebug('Got total duration from probe:', totalDuration);
-                        
-                        // Update progress tracker with duration immediately
-                        progressTracker.update({
-                            totalDuration: totalDuration,
-                            currentTime: 0 // Start at beginning
-                        });
-                    }
-                }).catch(error => {
-                    logDebug('Error probing duration:', error);
-                });
-
-                // Process FFmpeg output for progress tracking
-                ffmpeg.stderr.on('data', (data) => {
-                    if (hasError) return;
-                    
-                    const output = data.toString();
-                    errorOutput += output;
-                    
-                    // Feed output to progress tracker
-                    progressTracker.processOutput(output);
-                });
-
-                ffmpeg.on('close', (code) => {
-                    if (code === 0 && !hasError) {
-                        logDebug('Download completed successfully.');
-                        // Send final progress
-                        this.sendProgress({
-                            progress: 100,
-                            downloaded: lastBytes,
-                            speed: 0,
-                            filename: path.basename(uniqueOutput)
-                        });
-                        
-                        // Small delay to ensure progress is received first
-                        setTimeout(() => {
-                            this.sendSuccess({ 
-                                path: uniqueOutput,
-                                filename: path.basename(uniqueOutput) // Ensure we're sending the correct filename
-                            });
-                            resolve({ success: true, path: uniqueOutput });
-                        }, 100);
-                    } else if (!hasError) {
-                        hasError = true;
-                        const error = `FFmpeg exited with code ${code}: ${errorOutput}`;
-                        logDebug('Download failed:', error);
-                        this.sendError(error);
-                        reject(new Error(error));
-                    }
-                });
-
-                ffmpeg.on('error', (err) => {
-                    if (!hasError) {
-                        hasError = true;
-                        logDebug('FFmpeg spawn error:', err);
-                        this.sendError(err.message);
-                        reject(err);
-                    }
-                });
+            // Build FFmpeg command arguments
+            const ffmpegArgs = this.buildFFmpegArgs({
+                url,
+                videoType,
+                outputPath: uniqueOutput,
+                container,
+                audioOnly,
+                streamSelection,
+                headers
             });
+            
+            logDebug('FFmpeg command:', ffmpegService.getFFmpegPath(), ffmpegArgs.join(' '));
+            
+            // Execute FFmpeg with progress tracking
+            return this.executeFFmpegWithProgress({
+                ffmpegService,
+                ffmpegArgs,
+                uniqueOutput,
+                url,
+                videoType,
+                manifestUrl,
+                headers, 
+                duration
+            });
+            
         } catch (err) {
             logDebug('Download error:', err);
             this.sendError(err.message);
             throw err;
         }
     }
-
+    
     /**
-     * Probe media to get duration
-     * @param {Object} ffmpegService FFmpeg service instance
-     * @param {string} url Media URL
-     * @returns {Promise<number|null>} Duration in seconds or null if not available
+     * Determine the appropriate container format based on parameters and video type
+     * @private
      */
-    async probeMediaDuration(ffmpegService, url, headers = {}) {
-        return new Promise(resolve => {
-            try {
-                // Build FFprobe args
-                const ffprobeArgs = [
-                    '-v', 'quiet',
-                    '-print_format', 'json',
-                    '-show_format'
-                ];
-                
-                // Add headers if provided
-                if (headers && Object.keys(headers).length > 0) {
-                    // Format headers for FFprobe as "Key: Value\r\n" pairs
-                    const headerLines = Object.entries(headers)
-                        .map(([key, value]) => `${key}: ${value}`)
-                        .join('\r\n');
-                    
-                    if (headerLines) {
-                        ffprobeArgs.push('-headers', headerLines + '\r\n');
-                    }
-                }
-                
-                // Add URL as the last argument
-                ffprobeArgs.push(url);
-                
-                const ffprobe = spawn(ffmpegService.getFFprobePath(), ffprobeArgs, { env: getFullEnv(), timeout: 10000 });
-                
-                let probeOutput = '';
-                
-                ffprobe.stdout.on('data', data => {
-                    probeOutput += data.toString();
-                });
-                
-                ffprobe.on('close', () => {
-                    try {
-                        const info = JSON.parse(probeOutput);
-                        if (info.format && info.format.duration) {
-                            resolve(parseFloat(info.format.duration));
-                        } else {
-                            resolve(null);
-                        }
-                    } catch (e) {
-                        logDebug('Error parsing ffprobe output:', e);
-                        resolve(null);
-                    }
-                });
-                
-                ffprobe.on('error', () => {
-                    resolve(null);
-                });
-                
-                // Ensure we don't hang waiting for ffprobe
-                setTimeout(() => resolve(null), 10000);
-            } catch (e) {
-                resolve(null);
+    determineContainerFormat(params, videoType, url) {
+        const { preferredContainer, originalContainer } = params;
+        
+        // Explicit preferred container takes priority
+        if (preferredContainer && /^(mp4|webm|mkv)$/i.test(preferredContainer)) {
+            return preferredContainer.toLowerCase();
+        }
+        
+        // Original container if provided (extension handles DASH container selection)
+        if (originalContainer) {
+            if (/^(mp4|webm|mkv|mov|m4v|ts|avi|flv)$/i.test(originalContainer)) {
+                return originalContainer.toLowerCase();
             }
+        }
+        
+        // For direct videos with webm extension, use webm
+        if (videoType === 'direct') {
+            const urlExtMatch = url.match(/\.([^./?#]+)($|\?|#)/i);
+            const urlExt = urlExtMatch ? urlExtMatch[1].toLowerCase() : null;
+            if (urlExt === 'webm') {
+                return 'webm';
+            }
+        }
+        
+        // For HLS, default to MP4
+        if (videoType === 'hls') {
+            return 'mp4';
+        }
+        
+        // Default fallback
+        return 'mp4';
+    }
+    
+    /**
+     * Generate clean output filename
+     * @private
+     */
+    generateOutputFilename(filename, container) {
+        // Clean up filename: remove query params and extension  
+        let outputFilename = (filename ? filename.replace(/[?#].*$/, '') : 'video');
+        
+        // Remove any existing video extensions
+        outputFilename = outputFilename.replace(/\.(mp4|webm|mov|m4v|ts|avi|mkv|flv)$/i, '');
+        
+        return `${outputFilename}.${container}`;
+    }
+    
+    /**
+     * Resolves output path and ensures uniqueness
+     * @private
+     */
+    resolveOutputPath(filename, savePath) {
+        // Default to Desktop if no savePath or if it's "Desktop"
+        const defaultDir = path.join(process.env.HOME || os.homedir(), 'Desktop');
+        const targetDir = (!savePath || savePath === 'Desktop') ? defaultDir : savePath;
+        
+        // Join directory and filename
+        let outputPath = path.join(targetDir, filename);
+        
+        // Ensure uniqueness
+        let counter = 1;
+        let uniqueOutput = outputPath;
+        
+        while (fs.existsSync(uniqueOutput)) {
+            const ext = path.extname(outputPath);
+            const base = outputPath.slice(0, -ext.length);
+            uniqueOutput = `${base} (${counter})${ext}`;
+            counter++;
+        }
+        
+        logDebug('Output file will be:', uniqueOutput);
+        return uniqueOutput;
+    }
+    
+    /**
+     * Builds FFmpeg command arguments based on input parameters
+     * @private
+     */
+    buildFFmpegArgs({
+        url,
+        videoType,
+        outputPath,
+        container,
+        audioOnly = false,
+        streamSelection,
+        headers = {}
+    }) {
+        const args = [];
+        
+        // Progress tracking arguments
+        args.push('-stats', '-progress', 'pipe:2');
+        
+        // Add headers if provided
+        if (headers && Object.keys(headers).length > 0) {
+            const headerLines = Object.entries(headers)
+                .map(([key, value]) => `${key}: ${value}`)
+                .join('\r\n');
+            
+            if (headerLines) {
+                args.push('-headers', headerLines + '\r\n');
+                logDebug('🔑 Added headers to FFmpeg command');
+            }
+        }
+        
+        // Input arguments based on media type
+        if (videoType === 'hls' || videoType === 'dash') {
+            args.push(
+                '-protocol_whitelist', 'file,http,https,tcp,tls,crypto',
+                '-i', url
+            );
+        } else {
+            args.push('-i', url);
+        }
+        
+        // Stream selection
+        if (audioOnly) {
+            args.push('-map', '0:a');
+            logDebug('🎵 Audio-only mode enabled');
+        } 
+        else if (streamSelection && videoType === 'dash') {
+            // Parse stream selection string (e.g., "0:v:0,0:a:3,0:s:1") 
+            streamSelection.split(',').forEach(streamSpec => {
+                args.push('-map', streamSpec);
+            });
+            logDebug('🎯 Using stream selection:', streamSelection);
+        }
+        
+        // Default to copying streams without re-encoding
+        args.push('-c', 'copy');
+        
+        // Format-specific optimizations
+        if (videoType === 'hls') {
+            // Fix for certain audio streams commonly found in HLS
+            args.push('-bsf:a', 'aac_adtstoasc');
+        }
+        
+        // MP4/MOV optimizations
+        if (['mp4', 'mov', 'm4v'].includes(container.toLowerCase())) {
+            args.push('-movflags', '+faststart');
+        }
+        
+        // Output path
+        args.push(outputPath);
+        
+        return args;
+    }
+    
+    /**
+     * Executes FFmpeg with progress tracking
+     * @private
+     */
+    executeFFmpegWithProgress({
+        ffmpegService,
+        ffmpegArgs,
+        uniqueOutput,
+        url,
+        videoType,
+        manifestUrl,
+        headers,
+        duration
+    }) {
+        return new Promise((resolve, reject) => {
+            // Create progress tracker
+            const progressTracker = new ProgressTracker({
+                onProgress: (data) => {
+                    this.sendProgress({
+                        ...data,
+                        filename: path.basename(uniqueOutput)
+                    });
+                },
+                updateInterval: 200,
+                debug: true
+            });
+            
+            // Register tracking strategies
+            ProgressTracker.registerDefaultStrategies(progressTracker);
+            
+            // Initialize with file info
+            const fileInfo = {
+                url: manifestUrl || url, // Use manifest URL if available
+                type: videoType,
+                outputPath: uniqueOutput
+            };
+            
+            progressTracker.initialize(fileInfo)
+                .then(() => {
+                    logDebug('Progress tracker initialized successfully');
+                })
+                .catch(error => {
+                    logDebug('Error initializing progress tracker:', error);
+                });
+            
+            // Send initial progress update
+            this.sendProgress({
+                progress: 0,
+                speed: 0,
+                downloaded: 0,
+                size: 0,
+                filename: path.basename(uniqueOutput)
+            });
+            
+            // If duration is provided and valid, use it directly
+            if (duration && typeof duration === 'number' && duration > 0) {
+                logDebug('Using provided duration from extension:', duration);
+                progressTracker.update({
+                    totalDuration: duration,
+                    currentTime: 0
+                });
+            } else {
+                // Only probe if duration wasn't provided or was invalid
+                logDebug('No valid duration provided, probing media...');
+                this.probeMediaDuration(ffmpegService, url, headers)
+                    .then(probedDuration => {
+                        if (probedDuration) {
+                            logDebug('Got total duration from probe:', probedDuration);
+                            progressTracker.update({
+                                totalDuration: probedDuration,
+                                currentTime: 0
+                            });
+                        }
+                    })
+                    .catch(error => {
+                        logDebug('Error probing duration:', error);
+                    });
+            }
+            
+            // Start FFmpeg process
+            const ffmpeg = spawn(ffmpegService.getFFmpegPath(), ffmpegArgs, { 
+                env: getFullEnv(),
+                windowsVerbatimArguments: process.platform === 'win32',
+                stdio: ['ignore', 'pipe', 'pipe']
+            });
+            
+            let errorOutput = '';
+            let hasError = false;
+            let lastBytes = 0;
+            
+            ffmpeg.stderr.on('data', (data) => {
+                if (hasError) return;
+                
+                const output = data.toString();
+                errorOutput += output;
+                
+                // Feed output to progress tracker
+                progressTracker.processOutput(output);
+            });
+            
+            ffmpeg.on('close', (code) => {
+                if (code === 0 && !hasError) {
+                    logDebug('Download completed successfully.');
+                    
+                    // Send final progress
+                    this.sendProgress({
+                        progress: 100,
+                        downloaded: lastBytes,
+                        speed: 0,
+                        filename: path.basename(uniqueOutput)
+                    });
+                    
+                    // Small delay to ensure progress is received first
+                    setTimeout(() => {
+                        this.sendSuccess({ 
+                            path: uniqueOutput,
+                            filename: path.basename(uniqueOutput)
+                        });
+                        resolve({ success: true, path: uniqueOutput });
+                    }, 100);
+                } else if (!hasError) {
+                    hasError = true;
+                    const error = `FFmpeg exited with code ${code}: ${errorOutput}`;
+                    logDebug('Download failed:', error);
+                    this.sendError(error);
+                    reject(new Error(error));
+                }
+            });
+            
+            ffmpeg.on('error', (err) => {
+                if (!hasError) {
+                    hasError = true;
+                    logDebug('FFmpeg spawn error:', err);
+                    this.sendError(err.message);
+                    reject(err);
+                }
+            });
         });
     }
 }
