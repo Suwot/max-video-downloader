@@ -222,7 +222,7 @@ function createDashOptions(container, tracks, initialSelection, onSelect) {
     applyButton.textContent = 'Apply';
     
     // Function to update button text based on track compatibility
-    const updateButtonText = () => {
+    const updateButtonAndSelectedOption = () => {
         const selectedVideoTrack = videoColumn.querySelector('.track-option.selected');
         if (!selectedVideoTrack) {
             applyButton.textContent = 'Apply';
@@ -245,17 +245,24 @@ function createDashOptions(container, tracks, initialSelection, onSelect) {
             applyButton.textContent = `Apply as .${videoContainer}`;
             applyButton.dataset.container = videoContainer;
         }
+        // Also set the container format on the closest selectedDisplay element
+        const dropdown = columnsContainer.closest('.custom-dropdown');
+        const selectedDisplay = dropdown?.elements?.selectedDisplay;
+        
+        if (selectedDisplay && applyButton.dataset.container) {
+            selectedDisplay.dataset.container = applyButton.dataset.container;
+        }
     };
     
     // Update button text on initial render (after a small delay to ensure compatibility classes are set)
-    setTimeout(updateButtonText, 0);
+    setTimeout(updateButtonAndSelectedOption, 0);
     
     // Listen for click events on the entire columnsContainer to catch any track option clicks
     columnsContainer.addEventListener('click', (e) => {
         const trackOption = e.target.closest('.track-option');
         if (trackOption) {
             // Small delay to ensure classes are updated first
-            setTimeout(updateButtonText, 0);
+            setTimeout(updateButtonAndSelectedOption, 0);
         }
     });
     
