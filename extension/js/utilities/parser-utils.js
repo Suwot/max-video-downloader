@@ -56,7 +56,10 @@ export function parseFrameRate(frameRateStr) {
     // Check if it's a fraction
     if (frameRateStr.includes('/')) {
         const [numerator, denominator] = frameRateStr.split('/');
-        return parseInt(numerator, 10) / parseInt(denominator, 10);
+        const frameRate = parseInt(numerator, 10) / parseInt(denominator, 10);
+        
+        // Round to nearest integer
+        return Math.round(frameRate);
     }
     
     // Otherwise it's a direct number

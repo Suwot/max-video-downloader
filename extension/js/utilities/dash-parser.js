@@ -74,7 +74,7 @@ export function extractAdaptationSets(content) {
  */
 export function extractRepresentations(adaptationSetContent) {
     const representations = [];
-    const regex = /<Representation[^>]*>[\s\S]*?<\/Representation>|<Representation[^\/]*\/>/g;
+    const regex = /<Representation[^>]*(?:>[\s\S]*?<\/Representation>|[\/]?>)/g;
     let match;
     while ((match = regex.exec(adaptationSetContent)) !== null) {
         representations.push(match[0]);
