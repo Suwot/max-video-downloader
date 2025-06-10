@@ -176,6 +176,23 @@ function createSimpleOptions(container, variants, initialSelection, onSelect) {
         option.textContent = formatVariantLabel(variant, mediaType);
         option.dataset.url = variant.url;
         
+        // Add filesize data attribute based on the media type
+        if (mediaType === 'hls') {
+            // For HLS, use metaJS.estimatedFileSizeBytes
+            if (variant.metaJS?.estimatedFileSizeBytes) {
+                option.dataset.filesize = variant.metaJS.estimatedFileSizeBytes;
+            }
+        } else {
+            // For direct/blob, use contentLength with fallback to estimatedFileSizeBytes
+            const filesize = variant.metadata?.contentLength || 
+                            variant.metaFFprobe?.sizeBytes || 
+                            variant.metaFFprobe?.estimatedFileSizeBytes;
+            
+            if (filesize) {
+                option.dataset.filesize = filesize;
+            }
+        }
+        
         option.addEventListener('click', () => {
             container.querySelectorAll('.dropdown-option').forEach(opt => {
                 opt.classList.remove('selected');
@@ -681,6 +698,23 @@ function updateSelectedDisplay(display, selection, type) {
         const parts = formatVariantLabel(selection, type).split(' • ');
         label.textContent = parts.slice(0, 2).join(' • '); // show just the first 2 parts
         display.dataset.url = selection.url || '';
+        
+        // Set filesize attribute based on the media type
+        if (type === 'hls') {
+            if (selection.metaJS?.estimatedFileSizeBytes) {
+                display.dataset.filesize = selection.metaJS.estimatedFileSizeBytes;
+            }
+        } else {
+            // For direct/blob, use contentLength with fallback to estimatedFileSizeBytes
+            const filesize = selection.metadata?.contentLength || 
+                            selection.metaFFprobe?.sizeBytes || 
+                            selection.metaFFprobe?.estimatedFileSizeBytes;
+            
+            if (filesize) {
+                display.dataset.filesize = filesize;
+            }
+        }
+        
         display.prepend(label);
     }
 }
