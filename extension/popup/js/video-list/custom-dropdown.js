@@ -245,12 +245,24 @@ function createDashOptions(container, tracks, initialSelection, onSelect) {
             applyButton.textContent = `Apply as .${videoContainer}`;
             applyButton.dataset.container = videoContainer;
         }
-        // Also set the container format on the closest selectedDisplay element
+        
+        // Calculate total file size from all selected tracks
+        let totalSizeBytes = 0;
+        columnsContainer.querySelectorAll('.track-option.selected').forEach(option => {
+            if (option.dataset.filesize) {
+                totalSizeBytes += parseInt(option.dataset.filesize, 10);
+            }
+        });
+        
+        // Also set the container format and totalfilesize on the closest selectedDisplay element
         const dropdown = columnsContainer.closest('.custom-dropdown');
         const selectedDisplay = dropdown?.elements?.selectedDisplay;
         
-        if (selectedDisplay && applyButton.dataset.container) {
-            selectedDisplay.dataset.container = applyButton.dataset.container;
+        if (selectedDisplay) {
+            if (applyButton.dataset.container) {
+                selectedDisplay.dataset.container = applyButton.dataset.container;
+            }
+            selectedDisplay.dataset.totalfilesize = totalSizeBytes;
         }
     };
     
@@ -303,6 +315,14 @@ function createDashOptions(container, tracks, initialSelection, onSelect) {
             ...selectedSubIndices
         ].join(',');
         
+        // Calculate total file size from all selected tracks
+        let totalSizeBytes = 0;
+        columnsContainer.querySelectorAll('.track-option.selected').forEach(option => {
+            if (option.dataset.filesize) {
+                totalSizeBytes += parseInt(option.dataset.filesize, 10);
+            }
+        });
+        
         // Get container format from button's dataset
         const containerFormat = applyButton.dataset.container || 'mkv';
         
@@ -311,7 +331,8 @@ function createDashOptions(container, tracks, initialSelection, onSelect) {
             selectedAudio: selectedAudioIds,
             selectedSubs: selectedSubIds,
             trackMap,
-            container: containerFormat
+            container: containerFormat,
+            totalfilesize: totalSizeBytes
         };
         
         // Pass to callback
@@ -560,6 +581,11 @@ function updateSelectedDisplay(display, selection, type) {
         // Store the container format for download
         if (selection.container) {
             display.dataset.container = selection.container;
+        }
+        
+        // Store the total file size from selection
+        if (selection.totalfilesize !== undefined) {
+            display.dataset.totalfilesize = selection.totalfilesize;
         }
         
         // Find tracks from selected IDs
