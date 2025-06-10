@@ -44,6 +44,7 @@ async function parseHlsVariant(variantUrl, headers = null, tabId) {
             return { 
                 duration: null, 
                 isLive: true,
+                segmentCount: null,
                 isEncrypted: false,
                 encryptionType: null,
                 retryCount: fetchResult.retryCount || 0
@@ -58,6 +59,7 @@ async function parseHlsVariant(variantUrl, headers = null, tabId) {
             return { 
                 duration: null, 
                 isLive: true,
+                segmentCount: null,
                 isEncrypted: false,
                 encryptionType: null
             };
@@ -78,6 +80,7 @@ async function parseHlsVariant(variantUrl, headers = null, tabId) {
         const result = {
             duration: durationInfo.duration,
             isLive: durationInfo.isLive,
+            segmentCount: durationInfo.segmentCount,
             isEncrypted: encryptionInfo.isEncrypted,
             encryptionType: encryptionInfo.isEncrypted ? encryptionInfo.encryptionType : null,
             version: version
@@ -91,6 +94,7 @@ async function parseHlsVariant(variantUrl, headers = null, tabId) {
         return { 
             duration: null, 
             isLive: true,
+            segmentCount: null,
             isEncrypted: false,
             encryptionType: null
         };
@@ -99,12 +103,14 @@ async function parseHlsVariant(variantUrl, headers = null, tabId) {
 
 /**
  * Calculate the duration of an HLS variant playlist by summing segment durations
+ * Also counts the total number of segments
  * @param {string} content - The playlist content 
- * @returns {Object} - Duration information
+ * @returns {Object} - Duration information and segment count
  */
 function calculateHlsVariantDuration(content) {
     const lines = content.split(/\r?\n/);
     let totalDuration = 0;
+    let segmentCount = 0;
     
     // Parse #EXTINF lines which contain segment durations
     for (let i = 0; i < lines.length; i++) {
@@ -115,6 +121,7 @@ function calculateHlsVariantDuration(content) {
             const segmentDuration = parseFloat(durationStr);
             if (!isNaN(segmentDuration)) {
                 totalDuration += segmentDuration;
+                segmentCount++;
             }
         }
     }
@@ -124,7 +131,8 @@ function calculateHlsVariantDuration(content) {
     
     return {
         duration: Math.round(totalDuration), // Round to full seconds
-        isLive: isLive
+        isLive: isLive,
+        segmentCount: segmentCount
     };
 }
 
@@ -490,6 +498,7 @@ export async function parseHlsManifest(url, headers = null, tabId) {
                     isEncrypted = variantInfo.isEncrypted || false;
                     encryptionType = variantInfo.encryptionType;
                     const isLive = variantInfo.isLive || false;
+                    const segmentCount = variantInfo.segmentCount;
                     
                     // Apply this metadata to all variants
                     variants = variants.map(variant => {
@@ -501,6 +510,7 @@ export async function parseHlsManifest(url, headers = null, tabId) {
                         updatedVariant.metaJS.isLive = isLive;
                         updatedVariant.metaJS.isEncrypted = isEncrypted;
                         updatedVariant.metaJS.encryptionType = encryptionType;
+                        updatedVariant.metaJS.segmentCount = segmentCount;
                         updatedVariant.metaJS.version = variantInfo.version || version;
                         
                         // Distinguish the actually fetched variant
@@ -556,6 +566,7 @@ export async function parseHlsManifest(url, headers = null, tabId) {
                 metaJS: {
                     duration: duration,
                     isLive: isLive,
+                    segmentCount: variantInfo.segmentCount,
                     isEncrypted: isEncrypted,
                     encryptionType: encryptionType,
                     version: version
