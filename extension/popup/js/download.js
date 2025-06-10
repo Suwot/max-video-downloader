@@ -252,43 +252,6 @@ async function getCurrentTabId() {
     }
 }
 
-function updateProgress(button, progress) {
-    // Ensure progress is between 0 and 100
-    progress = Math.max(0, Math.min(100, progress));
-    
-    // Use the CSS variable approach for consistency
-    const buttonWrapper = button.closest('.download-btn-wrapper');
-    if (buttonWrapper) {
-        buttonWrapper.style.setProperty('--progress', `${progress}%`);
-        
-        // Handle completion state through CSS classes
-        if (progress >= 100) {
-            buttonWrapper.classList.remove('downloading');
-            buttonWrapper.classList.add('complete');
-        }
-    }
-}
-
-function resetDownloadState(button, originalText) {
-    if (downloadPort) {
-        downloadPort.disconnect();
-        downloadPort = null;
-    }
-    button.disabled = false;
-    
-    // Use classes instead of inline styles for button appearance
-    const buttonWrapper = button.closest('.download-btn-wrapper');
-    if (buttonWrapper) {
-        buttonWrapper.classList.remove('downloading', 'complete', 'error');
-        buttonWrapper.style.removeProperty('--progress');
-    }
-    
-    // Remove any inline styles
-    button.removeAttribute('style');
-    
-    button.innerHTML = originalText;
-}
-
 // Format speed in human readable form
 function formatSpeed(bytesPerSecond) {
     return `${formatSize(bytesPerSecond)}/s`;
@@ -339,16 +302,6 @@ async function handleBlobDownload(url) {
         showError('Blob download failed - try using the copy URL button');
         throw error; // Re-throw for the caller to reset button state
     }
-}
-
-/**
- * Reset download button state
- * @param {HTMLElement} button - Download button
- * @param {string} originalText - Original button text
- */
-function resetDownloadButton(button, originalText) {
-    button.disabled = false;
-    button.textContent = originalText;
 }
 
 /**

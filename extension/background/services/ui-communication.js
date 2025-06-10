@@ -61,22 +61,6 @@ async function handlePortMessage(message, port, portId) {
                     requestUrl: message.url,
                     previewUrl: matchingVideo.previewUrl
                 });
-            } else {
-                port.postMessage({
-                    command: 'previewPending',
-                    requestUrl: message.url
-                });
-                
-                // Add or update the video in video-manager to trigger preview generation
-                // The background will notify the popup when the preview is ready
-                if (matchingVideo) {
-                    // Force preview generation by requesting it through standard channels
-                    port.postMessage({
-                        command: 'videoPreviewRequested',
-                        url: message.url,
-                        tabId: message.tabId
-                    });
-                }
             }
         } catch (error) {
             logger.debug(`Error handling preview request: ${error.message}`);
@@ -97,12 +81,6 @@ async function handlePortMessage(message, port, portId) {
     else if (message.command === 'clearCaches') {
         // Clear video cache in video manager
         clearVideoCache();
-        
-        port.postMessage({
-            command: 'cacheCleared',
-            success: true
-        });
-        
         logger.debug('Cleared video caches');
     }
 

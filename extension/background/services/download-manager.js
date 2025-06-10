@@ -109,19 +109,6 @@ function startDownload(request, port) {
         duration: request.duration || null
     });
     
-    // Send download ID back to popup
-    if (port) {
-        try {
-            port.postMessage({
-                command: 'downloadInitiated',
-                downloadUrl: request.downloadUrl,
-                filename: request.filename
-            });
-        } catch (e) {
-            logger.error('Error sending download init message to port:', e);
-        }
-    }
-    
     // Create response handler with downloadId context
     let hasError = false;
     const responseHandler = (response) => {
@@ -222,7 +209,7 @@ function startDownload(request, port) {
         
         // Construct native host message with correctly named parameters that match native host expectations
         const nativeHostMessage = {
-            command: 'download',  // Correct command format
+            command: 'download',
             // Core parameters - match exactly with native host execute() method
             downloadUrl: request.downloadUrl,
             filename: request.filename,

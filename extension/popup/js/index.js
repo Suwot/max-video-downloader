@@ -186,7 +186,7 @@ function handlePortMessage(message) {
             message.downloads.forEach(download => {
                 // Update UI for each download
                 downloadModule.updateDownloadProgress(
-                    { url: download.url },
+                    { downloadUrl: download.downloadUrl },
                     download.progress || 0,
                     download
                 );
