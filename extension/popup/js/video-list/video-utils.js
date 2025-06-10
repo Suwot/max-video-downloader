@@ -7,10 +7,11 @@
  */
 export function createVideoMetadata(video) {
     return {
-        title: video.title,
-        originalContainer: video.originalContainer,
-        originalUrl: video.originalUrl,
-        foundFromQueryParam: video.foundFromQueryParam
+        filename: video.title,
+        type: video.type,
+        originalContainer: video.type === 'hls' ? 'mp4' : (video.originalContainer || null),
+        duration: video.duration || null,
+        masterUrl: video.isMaster ? video.url : null
     };
 }
 

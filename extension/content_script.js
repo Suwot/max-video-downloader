@@ -629,7 +629,7 @@ function processVideo(url, type = null, metadata = {}) {
   
   // Send to background with only the necessary fields
   chrome.runtime.sendMessage({
-    action: 'addVideo',
+    command: 'addVideo',
     url: videoInfo.url,
     source: videoInfo.source,
     type: videoInfo.type,

@@ -137,7 +137,7 @@ class MessagingService {
             
             // Only rate limit progress messages
             const now = Date.now();
-            if (responseWithId.type === 'progress' && now - this.lastResponseTime < this.MIN_RESPONSE_INTERVAL) {
+            if (responseWithId.command === 'progress' && now - this.lastResponseTime < this.MIN_RESPONSE_INTERVAL) {
                 // For progress messages, only drop if very recent to avoid flooding
                 // But ensure significant changes always go through
                 const lastProgress = this.lastProgressSent || 0;
@@ -156,7 +156,7 @@ class MessagingService {
             }
             
             // Update last progress sent if this is a progress message
-            if (responseWithId.type === 'progress') {
+            if (responseWithId.command === 'progress') {
                 this.lastProgressSent = responseWithId.progress || 0;
             }
             

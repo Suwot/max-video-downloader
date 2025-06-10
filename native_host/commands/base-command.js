@@ -34,7 +34,7 @@ class BaseCommand {
      */
     sendProgress(progress) {
         this.messaging.sendResponse({
-            type: 'progress',
+            command: 'progress',
             ...progress
         });
     }

@@ -27,7 +27,8 @@ let downloadPort = null;
  * @param {string} type - Video type
  * @param {Object} videoData - Additional video metadata
  */
-export async function handleDownload(button, url, type, videoData = {}) {
+export async function handleDownload(button, videoData = {}) {
+    logger.debug(`Handling download for ${videoData.downloadUrl} with data:`, videoData);
     // Store the complete original HTML content of the button
     const originalContent = button.innerHTML;
     button.disabled = true;
@@ -43,8 +44,8 @@ export async function handleDownload(button, url, type, videoData = {}) {
     
     try {
         // For blob URLs, handle differently
-        if (type === 'blob' && url.startsWith('blob:')) {
-            await handleBlobDownload(url);
+        if (videoData.type === 'blob' && videoData.downloadUrl.startsWith('blob:')) {
+            await handleBlobDownload(videoData.downloadUrl);
             resetDownloadState();
             return;
         }
@@ -57,7 +58,7 @@ export async function handleDownload(button, url, type, videoData = {}) {
             logger.debug('Download message:', response); // Debug log
             
             // Handle progress updates
-            if (response?.type === 'progress' && response.downloadId === url) {
+            if (response?.command === 'progress' && response.downloadUrl === videoData.downloadUrl) {
                 const progress = response.progress || 0;
                 
                 // Update button progress using CSS variable
@@ -85,7 +86,7 @@ export async function handleDownload(button, url, type, videoData = {}) {
                 
                 button.querySelector('span').textContent = text;
                 
-            } else if (response?.type === 'complete' && response.downloadId === url) {
+            } else if (response?.command === 'complete' && response.downloadUrl === videoData.downloadUrl) {
                 // Store original content before changing it, if not already stored
                 if (!button._originalContent && button.innerHTML.includes('download-btn-icon')) {
                     button._originalContent = originalContent;
@@ -110,8 +111,8 @@ export async function handleDownload(button, url, type, videoData = {}) {
                 
                 // Reset after delay
                 setTimeout(() => resetDownloadState(), 2000);
-                
-            } else if (response?.type === 'error' && response.downloadId === url) {
+
+            } else if (response?.command === 'error' && response.downloadUrl === videoData.downloadUrl) {
                 // Store original content before changing it
                 if (!button._originalContent && button.innerHTML.includes('download-btn-icon')) {
                     button._originalContent = originalContent;
@@ -148,11 +149,11 @@ export async function handleDownload(button, url, type, videoData = {}) {
         backgroundPort.onMessage.addListener(handleDownloadMessages);
         
         // Initiate a new download
-        registerNewDownload(url, type, button, videoData);
+        registerNewDownload(button, videoData);
         
     } catch (error) {
         logger.error('Download failed:', error);
-        showError('Failed to start download');
+        showError('Failed to start download from handleDownload');
         resetDownloadState();
     }
     
@@ -197,24 +198,32 @@ export async function handleDownload(button, url, type, videoData = {}) {
 
 /**
  * Register a new download with the background script
+ * @param {HTMLElement} button - The download button
+ * @param {Object} videoData - Video metadata
  */
-async function registerNewDownload(url, type, button, videoData = {}) {
+async function registerNewDownload(button, videoData = {}) {
     try {
         // Get the port connection to the background script
         const port = getBackgroundPort();
         
-        // Create message with all needed metadata using the simplified approach
+        // Create message with all needed metadata aligned with native host expectations
         const message = {
-            type: type === 'hls' ? 'downloadHLS' : (type === 'dash' ? 'downloadDASH' : 'download'),
-            url: url,
-            dataUrl: url, // Use data-url as the unique identifier
-            manifestUrl: url, // Pass the manifest URL for better segment tracking
-            tabId: await getCurrentTabId(), // Pass tabId for proper tracking
-            title: videoData.title || videoData.metadata?.title || null, // Pass video title for better filenames
-            container: videoData.container || videoData.originalContainer || null, // Container format
-            quality: videoData.quality || null, // Quality information if available
-            savePath: videoData.savePath || null // Optional save path
+            command: 'download',
+            downloadUrl: videoData.downloadUrl,
+            filename: videoData.filename,
+            savePath: videoData.savePath || null,
+            type: videoData.type, 
+            preferredContainer: videoData.preferredContainer || null,
+            originalContainer: videoData.originalContainer,
+            audioOnly: videoData.audioOnly || false,
+            streamSelection: videoData.streamSelection || null,
+            masterUrl: videoData.masterUrl,
+            duration: videoData.duration, // Pass duration for progress tracking
+            headers: {}, // Will be filled by background script
+            tabId: await getCurrentTabId()
         };
+        
+        logger.debug('Sending download request with params:', Object.keys(message).join(', '));
         
         // If we have a port connection to background, use it
         if (port) {
@@ -227,7 +236,7 @@ async function registerNewDownload(url, type, button, videoData = {}) {
         }
     } catch (error) {
         logger.error('Failed to register new download:', error);
-        showError('Failed to start download');
+        showError('Failed to start download from registerNewDownload');
         throw error;
     }
 }
@@ -343,79 +352,6 @@ function resetDownloadButton(button, originalText) {
 }
 
 /**
- * Start download with quality selection
- * @param {Object} video - Video object to download
- * @returns {Promise} Download progress
- */
-export async function startDownload(video) {
-    try {
-        let downloadUrl = video.url;
-        let quality = video.quality || null;
-        
-        // Set up progress handling using our existing background port
-        return new Promise((resolve, reject) => {
-            // Get the port connection to the background script
-            const backgroundPort = getBackgroundPort();
-            
-            // Message handler for tracking this specific download
-            const messageHandler = (msg) => {
-                // Only process messages for this download
-                if (msg.downloadId !== downloadUrl) return;
-                
-                if (msg.type === 'progress') {
-                    // Update progress UI
-                    updateDownloadProgress(video, msg.progress, msg);
-                } else if (msg.type === 'complete') {
-                    resolve(msg);
-                    backgroundPort.onMessage.removeListener(messageHandler);
-                } else if (msg.type === 'error') {
-                    reject(new Error(msg.error));
-                    backgroundPort.onMessage.removeListener(messageHandler);
-                }
-            };
-            
-            // Add our message handler
-            backgroundPort.onMessage.addListener(messageHandler);
-            
-            // Prepare the download request with all necessary information
-            const downloadRequest = {
-                type: video.type === 'hls' ? 'downloadHLS' : (video.type === 'dash' ? 'downloadDASH' : 'download'),
-                url: downloadUrl,
-                dataUrl: downloadUrl,  // Use data-url as ID
-                manifestUrl: video.manifestUrl || downloadUrl,
-                filename: video.filename,
-                title: video.title,
-                container: video.container || video.originalContainer || null,
-                quality: quality ? {
-                    resolution: quality.resolution,
-                    codecs: quality.codecs,
-                    bitrate: quality.bandwidth || quality.videoBitrate
-                } : null,
-                tabId: video.tabId || -1
-            };
-            
-            // Start download using background port if available, otherwise use one-time message
-            if (backgroundPort) {
-                logger.debug('Starting download via port with params:', Object.keys(downloadRequest).join(', '));
-                backgroundPort.postMessage(downloadRequest);
-            } else {
-                logger.debug('Starting download via message with params:', Object.keys(downloadRequest).join(', '));
-                chrome.runtime.sendMessage(downloadRequest);
-            }
-            
-            // Set up a timeout to clean up if we never get a completion or error message
-            setTimeout(() => {
-                backgroundPort.onMessage.removeListener(messageHandler);
-                reject(new Error('Download timeout: No response received'));
-            }, 60000); // 1 minute timeout
-        });
-    } catch (error) {
-        showError(`Failed to start download: ${error.message}`);
-        throw error;
-    }
-}
-
-/**
  * Check for active downloads when popup opens
  * Requests active downloads list from background script
  */
@@ -428,7 +364,7 @@ export async function checkForActiveDownloads() {
     if (port) {
         // Request active downloads list
         port.postMessage({
-            action: 'getActiveDownloads'
+            command: 'getActiveDownloads'
         });
 
     } else {

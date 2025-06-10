@@ -569,7 +569,7 @@ chrome.webRequest.onHeadersReceived.addListener(
 // Listen for messages from content scripts and popup
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {    
     // Handle video detection from content script
-    if (request.action === 'addVideo') {
+    if (request.command === 'addVideo') {
         const tabId = sender.tab?.id;
         if (tabId && tabId > 0) {
             addDetectedVideo(tabId, request);
@@ -578,15 +578,15 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     }
     
     // Handle preview cache operations
-    if (request.action === 'clearPreviewCache') {
+    if (request.command === 'clearPreviewCache') {
         logger.debug('Clearing preview cache');
         clearCache().then(success => {
             sendResponse({ success });
         });
         return true; // Keep channel open for async response
     }
-    
-    if (request.action === 'getPreviewCacheStats') {
+
+    if (request.command === 'getPreviewCacheStats') {
         logger.debug('Getting preview cache stats');
         getCacheStats().then(stats => {
             sendResponse(stats);
@@ -595,7 +595,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     }
     
     // Handle DASH segment paths from parser
-    if (request.action === 'registerDashSegmentPaths' && request.paths) {
+    if (request.command === 'registerDashSegmentPaths' && request.paths) {
         let tabId = request.tabId;
         
         // If no tabId was provided but we have a URL, try to find the corresponding tab

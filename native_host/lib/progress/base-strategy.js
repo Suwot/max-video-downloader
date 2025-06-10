@@ -23,7 +23,7 @@ class BaseProgressStrategy {
         this.onProgress = options.onProgress || (() => {});
         this.lastUpdate = Date.now();
         this.updateInterval = options.updateInterval || 250;
-        this.url = options.url;
+        this.downloadUrl = options.downloadUrl;
         this.type = options.type;
         this.debug = options.debug || false;
         

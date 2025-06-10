@@ -28,37 +28,34 @@ class DownloadCommand extends BaseCommand {
     /**
      * Execute the download command
      * @param {Object} params Command parameters
-     * @param {string} params.url Video URL to download
+     * @param {string} params.downloadUrl Video URL to download
      * @param {string} params.filename Filename to save as
      * @param {string} params.savePath Path to save file to
-     * @param {string} params.videoType Media type ('hls', 'dash', 'direct')
+     * @param {string} params.type Media type ('hls', 'dash', 'direct')
      * @param {string} params.preferredContainer User's preferred container format (optional)
      * @param {string} params.originalContainer Original container from source (optional)
      * @param {boolean} params.audioOnly Whether to download audio only (optional)
      * @param {string} params.streamSelection Stream selection spec for DASH (optional)
-     * @param {string} params.manifestUrl Optional master manifest URL (for reporting)
+     * @param {string} params.masterUrl Optional master manifest URL (for reporting)
+     * @param {Object} params.duration Video duration (optional)
      * @param {Object} params.headers HTTP headers to use (optional)
      */
     async execute(params) {
         const {
-            url,
+            downloadUrl,
             filename,
             savePath,
-            manifestUrl,
-            headers = {},
+            type,
+            preferredContainer = null,
+            originalContainer = null,
             audioOnly = false,
             streamSelection,
-            videoType: explicitVideoType,
-            duration = null
+            masterUrl = null,
+            duration = null,
+            headers = {}
         } = params;
 
-        logDebug('Starting download:', { 
-            url, 
-            filename, 
-            savePath, 
-            audioOnly: audioOnly || false,
-            streamSelection: streamSelection || 'default'
-        });
+        logDebug('Starting download:', params);
         
         if (headers && Object.keys(headers).length > 0) {
             logDebug('🔑 Using headers for download request:', Object.keys(headers));
@@ -68,11 +65,8 @@ class DownloadCommand extends BaseCommand {
             // Get required services
             const ffmpegService = this.getService('ffmpeg');
             
-            // Determine video type - use explicit type from extension or detect from URL
-            const videoType = explicitVideoType || ffmpegService.getVideoTypeFromUrl(url);
-            
             // Determine container format
-            const container = this.determineContainerFormat(params, videoType, url);
+            const container = this.determineContainerFormat(params);
             
             // Generate clean output filename
             const outputFilename = this.generateOutputFilename(filename, container);
@@ -82,8 +76,8 @@ class DownloadCommand extends BaseCommand {
             
             // Build FFmpeg command arguments
             const ffmpegArgs = this.buildFFmpegArgs({
-                url,
-                videoType,
+                downloadUrl,
+                type,
                 outputPath: uniqueOutput,
                 container,
                 audioOnly,
@@ -98,9 +92,9 @@ class DownloadCommand extends BaseCommand {
                 ffmpegService,
                 ffmpegArgs,
                 uniqueOutput,
-                url,
-                videoType,
-                manifestUrl,
+                downloadUrl,
+                type,
+                masterUrl,
                 headers, 
                 duration
             });
@@ -116,8 +110,8 @@ class DownloadCommand extends BaseCommand {
      * Determine the appropriate container format based on parameters and video type
      * @private
      */
-    determineContainerFormat(params, videoType, url) {
-        const { preferredContainer, originalContainer } = params;
+    determineContainerFormat(params) {
+        const { preferredContainer, originalContainer, type, downloadUrl } = params;
         
         // Explicit preferred container takes priority
         if (preferredContainer && /^(mp4|webm|mkv)$/i.test(preferredContainer)) {
@@ -132,8 +126,8 @@ class DownloadCommand extends BaseCommand {
         }
         
         // For direct videos with webm extension, use webm
-        if (videoType === 'direct') {
-            const urlExtMatch = url.match(/\.([^./?#]+)($|\?|#)/i);
+        if (type === 'direct') {
+            const urlExtMatch = downloadUrl.match(/\.([^./?#]+)($|\?|#)/i);
             const urlExt = urlExtMatch ? urlExtMatch[1].toLowerCase() : null;
             if (urlExt === 'webm') {
                 return 'webm';
@@ -141,7 +135,7 @@ class DownloadCommand extends BaseCommand {
         }
         
         // For HLS, default to MP4
-        if (videoType === 'hls') {
+        if (type === 'hls') {
             return 'mp4';
         }
         
@@ -195,8 +189,8 @@ class DownloadCommand extends BaseCommand {
      * @private
      */
     buildFFmpegArgs({
-        url,
-        videoType,
+        downloadUrl,
+        type,
         outputPath,
         container,
         audioOnly = false,
@@ -221,13 +215,13 @@ class DownloadCommand extends BaseCommand {
         }
         
         // Input arguments based on media type
-        if (videoType === 'hls' || videoType === 'dash') {
+        if (type === 'hls' || type === 'dash') {
             args.push(
                 '-protocol_whitelist', 'file,http,https,tcp,tls,crypto',
-                '-i', url
+                '-i', downloadUrl
             );
         } else {
-            args.push('-i', url);
+            args.push('-i', downloadUrl);
         }
         
         // Stream selection
@@ -235,7 +229,7 @@ class DownloadCommand extends BaseCommand {
             args.push('-map', '0:a');
             logDebug('🎵 Audio-only mode enabled');
         } 
-        else if (streamSelection && videoType === 'dash') {
+        else if (streamSelection && type === 'dash') {
             // Parse stream selection string (e.g., "0:v:0,0:a:3,0:s:1") 
             streamSelection.split(',').forEach(streamSpec => {
                 args.push('-map', streamSpec);
@@ -247,7 +241,7 @@ class DownloadCommand extends BaseCommand {
         args.push('-c', 'copy');
         
         // Format-specific optimizations
-        if (videoType === 'hls') {
+        if (type === 'hls') {
             // Fix for certain audio streams commonly found in HLS
             args.push('-bsf:a', 'aac_adtstoasc');
         }
@@ -264,6 +258,98 @@ class DownloadCommand extends BaseCommand {
     }
     
     /**
+     * Probe media duration using ffprobe
+     * @param {Object} ffmpegService - FFmpeg service instance
+     * @param {string} url - Media URL to probe
+     * @param {Object} headers - HTTP headers to use for the request
+     * @returns {Promise<number>} - Duration in seconds
+     * @private
+     */
+    async probeMediaDuration(ffmpegService, url, headers = {}) {
+        logDebug('Probing media duration for:', url);
+        
+        try {
+            // Build headers argument if provided
+            let headerArgs = [];
+            if (headers && Object.keys(headers).length > 0) {
+                const headerLines = Object.entries(headers)
+                    .map(([key, value]) => `${key}: ${value}`)
+                    .join('\r\n');
+                
+                if (headerLines) {
+                    headerArgs = ['-headers', headerLines + '\r\n'];
+                    logDebug('🔑 Using headers for probe request');
+                }
+            }
+            
+            // Get path to ffprobe
+            const ffprobePath = ffmpegService.getFFprobePath();
+            if (!ffprobePath) {
+                throw new Error('FFprobe path not available');
+            }
+            
+            logDebug('Using FFprobe path:', ffprobePath);
+            
+            // Build probe command arguments
+            const args = [
+                ...headerArgs,
+                '-v', 'error',
+                '-show_entries', 'format=duration',
+                '-of', 'json',
+                url
+            ];
+            
+            logDebug('FFprobe command:', ffprobePath, args.join(' '));
+            
+            // Execute ffprobe as a child process
+            const { stdout } = await new Promise((resolve, reject) => {
+                const ffprobe = spawn(ffprobePath, args, { 
+                    env: getFullEnv(),
+                    windowsVerbatimArguments: process.platform === 'win32'
+                });
+                
+                let stdout = '';
+                let stderr = '';
+                
+                ffprobe.stdout.on('data', (data) => {
+                    stdout += data.toString();
+                });
+                
+                ffprobe.stderr.on('data', (data) => {
+                    stderr += data.toString();
+                });
+                
+                ffprobe.on('close', (code) => {
+                    if (code === 0) {
+                        resolve({ stdout, stderr });
+                    } else {
+                        reject(new Error(`FFprobe exited with code ${code}: ${stderr}`));
+                    }
+                });
+                
+                ffprobe.on('error', (err) => {
+                    reject(err);
+                });
+            });
+            
+            // Parse the JSON output
+            const result = JSON.parse(stdout);
+            const duration = parseFloat(result?.format?.duration);
+            
+            if (isNaN(duration) || duration <= 0) {
+                logDebug('Invalid duration returned from probe:', result);
+                return null;
+            }
+            
+            logDebug(`Probed duration: ${duration} seconds`);
+            return duration;
+        } catch (error) {
+            logDebug('Error probing media duration:', error);
+            return null;
+        }
+    }
+    
+    /**
      * Executes FFmpeg with progress tracking
      * @private
      */
@@ -271,9 +357,8 @@ class DownloadCommand extends BaseCommand {
         ffmpegService,
         ffmpegArgs,
         uniqueOutput,
-        url,
-        videoType,
-        manifestUrl,
+        downloadUrl,
+        type,
         headers,
         duration
     }) {
@@ -295,8 +380,8 @@ class DownloadCommand extends BaseCommand {
             
             // Initialize with file info
             const fileInfo = {
-                url: manifestUrl || url, // Use manifest URL if available
-                type: videoType,
+                downloadUrl, 
+                type,
                 outputPath: uniqueOutput
             };
             
@@ -327,7 +412,7 @@ class DownloadCommand extends BaseCommand {
             } else {
                 // Only probe if duration wasn't provided or was invalid
                 logDebug('No valid duration provided, probing media...');
-                this.probeMediaDuration(ffmpegService, url, headers)
+                this.probeMediaDuration(ffmpegService, downloadUrl, headers)
                     .then(probedDuration => {
                         if (probedDuration) {
                             logDebug('Got total duration from probe:', probedDuration);

@@ -403,7 +403,7 @@ class VideoProcessingPipeline {
           // Request preview from native host
           const response = await rateLimiter.enqueue(async () => {
               return await nativeHostService.sendMessage({
-                  type: 'generatePreview',
+                  command: 'generatePreview',
                   url: urlToUse,
                   headers: headers,
                   duration: video.duration || null
@@ -452,7 +452,7 @@ class VideoProcessingPipeline {
         
         const streamInfo = await rateLimiter.enqueue(async () => {
             const response = await nativeHostService.sendMessage({
-                type: 'getQualities',
+                command: 'getQualities',
                 url: video.url,
                 mediaType: 'direct',
                 headers: headers
@@ -666,7 +666,7 @@ function sendVideoUpdateToUI(tabId, singleVideoUrl = null, singleVideoObj = null
             if (singleVideoUrl && singleVideoObj) {
                 logger.debug(`Sending single video update via port for: ${singleVideoUrl}`);
                 port.postMessage({
-                    type: 'videoUpdated',
+                    command: 'videoUpdated',
                     url: singleVideoUrl,
                     video: prepareVideoForTransmission(singleVideoObj)
                 });
@@ -680,7 +680,7 @@ function sendVideoUpdateToUI(tabId, singleVideoUrl = null, singleVideoObj = null
                 
                 if (processedVideos.length > 0) {
                     port.postMessage({
-                        action: 'videoStateUpdated',
+                        command: 'videoStateUpdated',
                         tabId: tabId,
                         videos: processedVideos
                     });
@@ -707,7 +707,7 @@ function sendVideoUpdateToUI(tabId, singleVideoUrl = null, singleVideoObj = null
             logger.debug(`Sending full list via runtime message for tab ${tabId} (fallback)`);
             
             chrome.runtime.sendMessage({
-                action: 'videoStateUpdated',
+                command: 'videoStateUpdated',
                 tabId: tabId,
                 videos: processedVideos
             });

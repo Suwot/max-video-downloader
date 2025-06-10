@@ -5,7 +5,7 @@
 
 // Add static imports at the top
 import { getVideosForDisplay, clearVideoCache, sendVideoUpdateToUI } from './video-manager.js';
-import { getActiveDownloads, getDownloadDetails, startDownload } from './download-manager.js';
+import { getActiveDownloads, startDownload } from './download-manager.js';
 import { createLogger } from '../../js/utilities/logger.js';
 
 // Track all popup connections for universal communication
@@ -20,7 +20,7 @@ async function handlePortMessage(message, port, portId) {
     logger.debug('Received port message:', message);
     
     // Handle popup registration with URL and tab ID
-    if (message.action === 'register' && message.tabId) {
+    if (message.command === 'register' && message.tabId) {
         // Store both port information and tab/URL mapping
         popupPorts.set(portId, {
             port: port,
@@ -40,14 +40,14 @@ async function handlePortMessage(message, port, portId) {
     }
     
     // Handle video list request
-    if (message.action === 'getVideos') {
+    if (message.command === 'getVideos') {
         // Use the unified approach from video-manager to send videos
         // This ensures consistency in how videos are sent to the UI
         sendVideoUpdateToUI(message.tabId, null, { _sendFullList: true });
     }
     
     // Handle preview generation request - now handled through enrichWithPreview in video-manager.js
-    else if (message.type === 'generatePreview') {
+    else if (message.command === 'generatePreview') {
         logger.debug(`Preview request received for URL: ${message.url}`);
         try {
             // Just get the videos and check if any have a matching URL
@@ -57,13 +57,13 @@ async function handlePortMessage(message, port, portId) {
             // Return any existing preview or let the popup know we're working on it
             if (matchingVideo && matchingVideo.previewUrl) {
                 port.postMessage({
-                    type: 'previewResponse',
+                    command: 'previewResponse',
                     requestUrl: message.url,
                     previewUrl: matchingVideo.previewUrl
                 });
             } else {
                 port.postMessage({
-                    type: 'previewPending',
+                    command: 'previewPending',
                     requestUrl: message.url
                 });
                 
@@ -72,7 +72,7 @@ async function handlePortMessage(message, port, portId) {
                 if (matchingVideo) {
                     // Force preview generation by requesting it through standard channels
                     port.postMessage({
-                        action: 'videoPreviewRequested',
+                        command: 'videoPreviewRequested',
                         url: message.url,
                         tabId: message.tabId
                     });
@@ -81,7 +81,7 @@ async function handlePortMessage(message, port, portId) {
         } catch (error) {
             logger.debug(`Error handling preview request: ${error.message}`);
             port.postMessage({
-                type: 'previewResponse',
+                command: 'previewResponse',
                 requestUrl: message.url,
                 error: error.message
             });
@@ -89,58 +89,17 @@ async function handlePortMessage(message, port, portId) {
     }
     
     // Handle download request
-    else if (message.type === 'download' || message.type === 'downloadHLS' || message.type === 'downloadDASH') {
+    else if (message.command === 'download') {
         startDownload(message, port);
-    }
-    
-    // Handle download status request
-    else if (message.action === 'getDownloadStatus' && message.downloadId) {
-        const download = getDownloadDetails(message.downloadId);
-        
-        if (download) {
-            port.postMessage({
-                type: download.status === 'completed' ? 'complete' : 'progress',
-                downloadId: message.downloadId,
-                progress: download.progress || 0,
-                filename: download.filename,
-                url: download.url,
-                status: download.status,
-                speed: download.speed,
-                eta: download.eta,
-                error: download.error
-            });
-        } else {
-            port.postMessage({
-                type: 'download_not_found',
-                downloadId: message.downloadId
-            });
-        }
-    }
-
-    // Handle download details request
-    else if (message.action === 'getDownloadDetails' && message.downloadId) {
-        const download = getDownloadDetails(message.downloadId);
-        
-        if (download) {
-            port.postMessage({
-                type: 'downloadDetails',
-                ...download
-            });
-        } else {
-            port.postMessage({
-                type: 'downloadNotFound',
-                downloadId: message.downloadId
-            });
-        }
     }
 
     // Handle clear caches request from popup
-    else if (message.action === 'clearCaches') {
+    else if (message.command === 'clearCaches') {
         // Clear video cache in video manager
         clearVideoCache();
         
         port.postMessage({
-            action: 'cacheCleared',
+            command: 'cacheCleared',
             success: true
         });
         
@@ -148,12 +107,12 @@ async function handlePortMessage(message, port, portId) {
     }
 
     // Handle active downloads list request
-    else if (message.action === 'getActiveDownloads') {
+    else if (message.command === 'getActiveDownloads') {
         const activeDownloadList = getActiveDownloads();
         
         try {
             port.postMessage({
-                action: 'activeDownloadsList',
+                command: 'activeDownloadsList',
                 downloads: activeDownloadList
             });
         } catch (e) {

@@ -37,7 +37,7 @@ class SegmentTrackingStrategy extends BaseProgressStrategy {
      * @returns {Promise<boolean>} True if successful
      */
     async initialize(options = {}) {
-        if (!this.url) {
+        if (!this.downloadUrl) {
             logDebug('SEGMENT-TRACKING ERROR: No URL provided');
             return false;
         }
@@ -53,10 +53,10 @@ class SegmentTrackingStrategy extends BaseProgressStrategy {
         }
         
         try {
-            logDebug(`SEGMENT-TRACKING: Initializing for ${this.type} manifest at ${this.url}`);
+            logDebug(`SEGMENT-TRACKING: Initializing for ${this.type} manifest at ${this.downloadUrl}`);
             
             const parser = new ManifestParser();
-            this.manifestInfo = await parser.parse(this.url, this.type);
+            this.manifestInfo = await parser.parse(this.downloadUrl, this.type);
             
             if (!this.manifestInfo) {
                 logDebug('SEGMENT-TRACKING ERROR: Manifest parser returned null, likely failed to fetch or parse manifest');

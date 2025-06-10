@@ -96,7 +96,7 @@ class VideoStateService {
     
     // Request videos via port message - background script is the source of truth
     sendPortMessage({
-      action: 'getVideos',
+      command: 'getVideos',
       tabId: this.activeTabId,
       forceRefresh: forceRefresh
     });
@@ -263,13 +263,13 @@ class VideoStateService {
       
       // Request background to clear its caches
       sendPortMessage({
-        action: 'clearCaches'
+        command: 'clearCaches'
       });
       
       // Clear preview cache
       try {
         await chrome.runtime.sendMessage({
-          action: 'clearPreviewCache'
+          command: 'clearPreviewCache'
         });
       } catch (e) {
         this.debug('Error clearing preview cache:', e);
@@ -295,7 +295,7 @@ class VideoStateService {
   async getPreviewCacheStats() {
     try {
       return await chrome.runtime.sendMessage({
-        action: 'getPreviewCacheStats'
+        command: 'getPreviewCacheStats'
       });
     } catch (error) {
       this.debug('Error getting preview cache stats:', error);

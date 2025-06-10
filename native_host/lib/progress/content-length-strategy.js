@@ -24,14 +24,14 @@ class ContentLengthStrategy extends BaseProgressStrategy {
      * @returns {Promise<boolean>} True if successful
      */
     async initialize(options = {}) {
-        if (!this.url) {
+        if (!this.downloadUrl) {
             return false;
         }
         
         try {
-            logDebug('Getting Content-Length for:', this.url);
-            const contentLength = await this.getContentLength(this.url);
-            
+            logDebug('Getting Content-Length for:', this.downloadUrl);
+            const contentLength = await this.getContentLength(this.downloadUrl);
+
             if (contentLength) {
                 this.totalSize = contentLength;
                 this.confidenceLevel = 0.9; // Very high confidence
@@ -39,7 +39,7 @@ class ContentLengthStrategy extends BaseProgressStrategy {
                 return true;
             }
             
-            logDebug('Content-Length not available for:', this.url);
+            logDebug('Content-Length not available for:', this.downloadUrl);
             return false;
         } catch (error) {
             logDebug('Content-Length strategy initialization failed:', error.message);
@@ -49,13 +49,13 @@ class ContentLengthStrategy extends BaseProgressStrategy {
     
     /**
      * Get Content-Length header using HEAD request
-     * @param {string} url URL to request
+     * @param {string} downloadUrl URL to request
      * @returns {Promise<number|null>} Content-Length or null
      */
-    getContentLength(url) {
+    getContentLength(downloadUrl) {
         return new Promise((resolve, reject) => {
             try {
-                const urlObj = new URL(url);
+                const urlObj = new URL(downloadUrl);
                 const protocol = urlObj.protocol === 'https:' ? https : http;
                 
                 const options = {

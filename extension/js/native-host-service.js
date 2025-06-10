@@ -1,16 +1,3 @@
-/**
- * @ai-guide-component NativeHostService
- * @ai-guide-description Bridge between extension and native messaging host
- * @ai-guide-responsibilities
- * - Establishes and maintains connection with native host
- * - Handles message passing with installed native application
- * - Manages request/response communication pattern
- * - Implements error handling and recovery mechanisms
- * - Ensures proper initialization of native capabilities
- * - Provides platform-specific functionality to extension
- * - Validates host installation and compatibility
- */
-
 // NativeHostService - Consolidated native messaging service
 export class NativeHostService {
     constructor() {
@@ -86,7 +73,7 @@ export class NativeHostService {
                 if (responseHandler) responseHandler(response);
                 reject(new Error(response.error));
                 this.pendingMessages.delete(response.id);
-            } else if (response.type === 'progress') {
+            } else if (response.command === 'progress') {
                 // For progress updates, don't resolve the promise yet, just notify the handler
                 if (responseHandler) responseHandler(response);
             } else {
@@ -102,8 +89,8 @@ export class NativeHostService {
         console.log('Received message without matching ID:', response);
         
         // If it's a typed message, notify any listeners
-        if (response && response.type) {
-            const listeners = this.listeners.get(response.type) || [];
+        if (response && response.command) {
+            const listeners = this.listeners.get(response.command) || [];
             for (const listener of listeners) {
                 listener(response);
             }
@@ -113,13 +100,13 @@ export class NativeHostService {
     async sendMessage(message, responseHandler = null) {
         // Check if we already have too many pending messages of this type (avoid infinite loops)
         const pendingOfSameType = Array.from(this.pendingMessages.values())
-            .filter(pending => pending.message && pending.message.type === message.type)
+            .filter(pending => pending.message && pending.message.command === message.command)
             .length;
             
         // If there are already too many pending messages of this type, it might be a loop
-        if (pendingOfSameType >= 3 && message.type !== 'heartbeat') {
-            console.warn(`Too many pending ${message.type} messages (${pendingOfSameType}), possible infinite loop`);
-            return Promise.reject(new Error(`Rate limited: too many pending ${message.type} requests`));
+        if (pendingOfSameType >= 3 && message.command !== 'heartbeat') {
+            console.warn(`Too many pending ${message.command} messages (${pendingOfSameType}), possible infinite loop`);
+            return Promise.reject(new Error(`Rate limited: too many pending ${message.command} requests`));
         }
         
         if (!this.port && !this.connect()) {
@@ -136,12 +123,12 @@ export class NativeHostService {
             
             // Set timeout to auto-reject after 60 seconds unless it's a download operation
             // Downloads can take longer
-            const timeout = (message.type === 'download') ? 3600000 : 60000;
+            const timeout = (message.command === 'download') ? 3600000 : 60000;
             setTimeout(() => {
                 if (this.pendingMessages.has(id)) {
                     const { reject } = this.pendingMessages.get(id);
                     this.pendingMessages.delete(id);
-                    reject(new Error(`Message ${message.type} timed out after ${timeout/1000} seconds`));
+                    reject(new Error(`Message ${message.command} timed out after ${timeout/1000} seconds`));
                 }
             }, timeout);
             
@@ -153,7 +140,7 @@ export class NativeHostService {
                 
                 // If it's a DASH manifest fetch that failed, return empty results instead of error
                 // This prevents infinite retry loops with DASH manifests
-                if (message.type === 'getQualities' && 
+                if (message.command === 'getQualities' && 
                     message.url && 
                     message.type === 'dash') {
                     console.warn('DASH manifest fetch failed, returning empty results to avoid retry loop');
@@ -174,7 +161,7 @@ export class NativeHostService {
     // Helper for heartbeat
     async sendHeartbeat() {
         try {
-            const response = await this.sendMessage({ type: 'heartbeat' });
+            const response = await this.sendMessage({ command: 'heartbeat' });
             if (!response?.alive) {
                 console.error('Invalid heartbeat response');
                 if (this.port) {
@@ -188,18 +175,18 @@ export class NativeHostService {
             }
         }
     }
-    
-    // Subscribe to specific message types (like progress updates)
-    subscribe(type, callback) {
-        if (!this.listeners.has(type)) {
-            this.listeners.set(type, []);
+
+    // Subscribe to specific message commands (like progress updates)
+    subscribe(command, callback) {
+        if (!this.listeners.has(command)) {
+            this.listeners.set(command, []);
         }
-        this.listeners.get(type).push(callback);
-        
+        this.listeners.get(command).push(callback);
+
         // Return unsubscribe function
         return () => {
-            const listeners = this.listeners.get(type) || [];
-            this.listeners.set(type, listeners.filter(cb => cb !== callback));
+            const listeners = this.listeners.get(command) || [];
+            this.listeners.set(command, listeners.filter(cb => cb !== callback));
         };
     }
     
@@ -218,15 +205,15 @@ export class NativeHostService {
         
         // For messages that expect streaming responses (like downloads),
         // we need to use a responseHandler
-        const expectsStreaming = ['download', 'downloadHLS'].includes(message.type);
+        const expectsStreaming = ['download', 'downloadHLS'].includes(message.command);
         
         if (expectsStreaming) {
             this.sendMessage(message, callback)
                 .catch(error => callback({ error: error.message }));
         } else {
             this.sendMessage(message)
-                .then(response => callback(response))
-                .catch(error => callback({ error: error.message }));
+            .then(response => callback(response))
+            .catch(error => callback({ error: error.message }));
         }
     }
 }

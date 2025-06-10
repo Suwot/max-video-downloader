@@ -70,7 +70,7 @@ class ProgressTracker {
     /**
      * Initialize the progress tracker
      * @param {Object} fileInfo Information about the file being downloaded
-     * @param {string} fileInfo.url File URL
+     * @param {string} fileInfo.downloadUrl File URL
      * @param {string} fileInfo.type Media type (direct, hls, dash)
      */
     async initialize(fileInfo) {
@@ -88,8 +88,8 @@ class ProgressTracker {
             downloaded: 0,
             size: 0
         });
-        
-        logDebug('Progress tracker initialized for:', fileInfo.url);
+
+        logDebug('Progress tracker initialized for:', fileInfo.downloadUrl);
     }
 
     /**
@@ -97,15 +97,15 @@ class ProgressTracker {
      * @param {Object} fileInfo File information
      */
     async selectBestStrategy(fileInfo) {
-        const { url, type } = fileInfo;
-        
+        const { downloadUrl, type } = fileInfo;
+
         // Choose strategy based on media type
         if (type === 'hls' || type === 'dash') {
             logDebug(`Streaming media (${type}) detected, skipping content-length strategy`);
             
             // Important: Try segment tracking FIRST for streaming media
             logDebug(`STRATEGY: Attempting to use segment tracking strategy first for ${type}`);
-            if (await this.tryStrategy('segment', { url, type })) {
+            if (await this.tryStrategy('segment', { downloadUrl, type })) {
                 logDebug('STRATEGY: Successfully initialized segment tracking strategy');
                 return;
             }
@@ -113,7 +113,7 @@ class ProgressTracker {
             
             // Then try adaptive bitrate as fallback
             logDebug(`STRATEGY: Falling back to adaptive bitrate strategy for ${type}`);
-            if (await this.tryStrategy('adaptive-bitrate', { url, type })) {
+            if (await this.tryStrategy('adaptive-bitrate', { downloadUrl, type })) {
                 logDebug('STRATEGY: Using adaptive bitrate strategy for streaming media');
                 return;
             }
@@ -121,26 +121,26 @@ class ProgressTracker {
             
             // Last resort: time-based
             logDebug(`STRATEGY: Falling back to time-based strategy for ${type}`);
-            if (await this.tryStrategy('time-based', { url, type })) {
+            if (await this.tryStrategy('time-based', { downloadUrl, type })) {
                 logDebug('STRATEGY: Using time-based strategy for streaming media');
                 return;
             }
             logDebug('STRATEGY: All strategies failed for streaming media');
         } else {
             // For non-streaming media, try content-length first
-            if (await this.tryStrategy('content-length', { url, type })) {
+            if (await this.tryStrategy('content-length', { downloadUrl, type })) {
                 logDebug('Using content-length strategy for direct media');
                 return;
             }
             
             // Fall back to adaptive bitrate
-            if (await this.tryStrategy('adaptive-bitrate', { url, type })) {
+            if (await this.tryStrategy('adaptive-bitrate', { downloadUrl, type })) {
                 logDebug('Using adaptive bitrate strategy for direct media');
                 return;
             }
             
             // Last resort: time-based
-            if (await this.tryStrategy('time-based', { url, type })) {
+            if (await this.tryStrategy('time-based', { downloadUrl, type })) {
                 logDebug('Using time-based strategy for direct media');
                 return;
             }
@@ -148,7 +148,7 @@ class ProgressTracker {
         
         logDebug('No suitable progress strategy found, using default');
         // If all else fails, use a dummy strategy
-        this.setStrategy('default', { url, type });
+        this.setStrategy('default', { downloadUrl, type });
     }
 
     /**

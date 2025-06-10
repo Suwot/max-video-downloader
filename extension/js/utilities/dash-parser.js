@@ -395,7 +395,7 @@ export async function parseDashManifest(url, headers = null, tabId) {
                 
                 // Send paths to background
                 chrome.runtime.sendMessage({
-                    action: 'registerDashSegmentPaths',
+                    command: 'registerDashSegmentPaths',
                     tabId: tabId,
                     paths: segmentPaths,
                     url: url

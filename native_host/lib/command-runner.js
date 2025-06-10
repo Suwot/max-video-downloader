@@ -1,15 +1,14 @@
 /**
  * @ai-guide-component CommandRunner
- * @ai-guide-description Implements command pattern for the native host
+ * @ai-guide-description Orchestrates command execution for the native host.
  * @ai-guide-responsibilities
- * - Registers and manages available commands (download, get-qualities, etc.)
- * - Routes incoming messages to appropriate command handlers
- * - Manages service dependency injection for commands
- * - Provides error handling and logging for command execution
- * - Maintains service lifecycle and initialization
+ * - Registers command handler classes keyed by command type.
+ * - Delegates incoming messages to the correct command handler.
+ * - Injects messaging and error handling dependencies into commands.
+ * - Handles unknown commands and propagates errors with logging.
+ * - Ensures all command responses are correlated with request IDs.
  */
 
-// lib/command-runner.js
 const { logDebug } = require('../utils/logger');
 
 /**
@@ -36,12 +35,12 @@ class CommandRunner {
      * @param {string} requestId Optional message ID for tracking responses
      */
     async executeCommand(message, requestId) {
-        const commandType = message.type;
+        const commandType = message.command;
         
         logDebug(`Executing command: ${commandType} (ID: ${requestId || 'none'})`);
         
         if (!this.commandRegistry.has(commandType)) {
-            const error = `Unknown command type: ${commandType}`;
+            const error = `Unknown command: ${commandType}`;
             this.messaging.sendResponse({ error }, requestId);
             return { error };
         }

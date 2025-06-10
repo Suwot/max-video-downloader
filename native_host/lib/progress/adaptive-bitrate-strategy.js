@@ -42,7 +42,7 @@ class AdaptiveBitrateStrategy extends BaseProgressStrategy {
         if (options.duration) {
             this.totalDuration = options.duration;
             this.confidenceLevel = 0.6;
-        } else if (options.url) {
+        } else if (options.downloadUrl) {
             try {
                 // We'll get duration dynamically as FFmpeg processes the media
                 this.confidenceLevel = 0.4;

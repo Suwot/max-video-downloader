@@ -1,4 +1,3 @@
-// extension/popup/js/video-list/video-type-renderers.js
 // Type-specific renderers for different video types
 
 import { createVideoMetadata } from './video-utils.js';
@@ -125,9 +124,11 @@ function renderHlsElements(video) {
         const selectedUrl = dropdown?.dataset.url || video.url;
         
         const videoData = createVideoMetadata(video);
-        handleDownload(downloadBtn, selectedUrl, video.type, videoData);
+        videoData.downloadUrl = selectedUrl;
+
+        handleDownload(downloadBtn, videoData);
     });
-    
+
     return elementsDiv;
 }
 
@@ -174,15 +175,15 @@ function renderDashElements(video) {
     downloadBtn.addEventListener('click', async () => {
         // Get track map from custom dropdown
         const dropdown = elementsDiv.querySelector('.custom-dropdown .selected-option');
-        const trackMap = dropdown?.dataset.trackMap;
+        const streamSelection = dropdown?.dataset.trackMap;
+        const container = dropdown?.dataset.container;
         
         const videoData = createVideoMetadata(video);
-        // Add track map to videoData
-        if (trackMap) {
-            videoData.trackMap = trackMap;
-        }
-        
-        handleDownload(downloadBtn, video.url, video.type, videoData);
+        videoData.streamSelection = streamSelection || null;
+        videoData.originalContainer = container || null;
+        videoData.downloadUrl = video.url; // Use main URL for DASH
+
+        handleDownload(downloadBtn, videoData);
     });
     
     return elementsDiv;
@@ -212,7 +213,9 @@ function renderDirectElements(video) {
     // Set up download functionality
     downloadBtn.addEventListener('click', async () => {
         const videoData = createVideoMetadata(video);
-        handleDownload(downloadBtn, video.url, video.type, videoData);
+        videoData.downloadUrl = video.url; // Use main URL for direct videos
+        
+        handleDownload(downloadBtn, videoData);
     });
     
     return elementsDiv;

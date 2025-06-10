@@ -4,11 +4,11 @@
  * Uses a simplified approach with direct communication to UI through existing popup ports
  * 
  * SIMPLIFIED FLOW:
- * 1. UI sends download request with data-url as ID
- * 2. Download manager tracks download in single Map using data-url as key
+ * 1. UI sends download request with url field used as ID
+ * 2. Download manager tracks download in single Map using url as key
  * 3. Native host downloads and reports progress
  * 4. Download manager broadcasts updates to all UIs via shared communication system
- * 5. UI matches updates to video items by data-url
+ * 5. UI matches updates to video items by url
  */
 
 // Add static import at the top
@@ -17,8 +17,8 @@ import { getRequestHeaders } from '../../js/utilities/headers-utils.js';
 import { createLogger } from '../../js/utilities/logger.js';
 import { broadcastToPopups } from './ui-communication.js';
 
-// Track all downloads in a single map using data-url as key
-const downloads = new Map(); // key = dataUrl (downloadId), value = { url, progress, status, startTime, etc. }
+// Track all downloads in a single map using url as key
+const downloads = new Map(); // key = url (downloadId), value = { url, progress, status, startTime, etc. }
 
 // Create a logger instance for the Download Manager module
 const logger = createLogger('Download Manager');
@@ -55,8 +55,8 @@ function broadcastDownloadUpdate(message) {
  * @returns {string} The download ID (same as data-url)
  */
 function startDownload(request, port) {
-    // Use data-url as the download ID for simple tracking
-    const downloadId = request.dataUrl || request.url;
+    // Use downloadUrl as the download ID for simple tracking
+    const downloadId = request.downloadUrl;
     
     // Check if this download is already in progress
     if (downloads.has(downloadId) && downloads.get(downloadId).status === 'downloading') {
@@ -66,11 +66,11 @@ function startDownload(request, port) {
             try {
                 const download = downloads.get(downloadId);
                 port.postMessage({
-                    type: 'progress',
+                    command: 'progress',
                     downloadId: downloadId,
                     progress: download.progress || 0,
                     filename: download.filename,
-                    url: download.url
+                    downloadUrl: download.downloadUrl
                 });
             } catch (e) {
                 logger.error('Error sending existing download info to port:', e);
@@ -80,43 +80,42 @@ function startDownload(request, port) {
         return downloadId;
     }
     
-    // Get filename with proper title and container info
-    const filename = request.title ? 
-        `${request.title}.${request.container || 'mp4'}` : 'video.mp4';
-    
     // Show initial notification
     const notificationId = `download-${downloadId}`;
     chrome.notifications.create(notificationId, {
       type: 'basic',
-      iconUrl: 'icons/48.png',
+      iconUrl: '../../icons/48.png',
       title: 'Downloading Video',
-      message: `Starting download: ${filename}`
+      message: `Starting download: ${request.filename}`
     });
     
     // Store initial download information in a single map
     downloads.set(downloadId, {
-        url: request.url,
+        downloadUrl: request.downloadUrl,
         progress: 0,
         status: 'downloading',
         startTime: Date.now(),
         lastUpdated: Date.now(),
-        filename: filename,
+        filename: request.filename,
         tabId: request.tabId || -1,
-        type: request.type || 'direct',  // 'hls', 'dash', or 'direct'
-        container: request.container || null,
-        title: request.title || null,
+        type: request.type,  // 'hls', 'dash', or 'direct'
+        originalContainer: request.originalContainer || null,
+        preferredContainer: request.preferredContainer || null,
         notificationId: notificationId,
-        savePath: request.savePath || null
+        savePath: request.savePath || null,
+        audioOnly: request.audioOnly || false,
+        streamSelection: request.streamSelection || null,
+        masterUrl: request.masterUrl || null,
+        duration: request.duration || null
     });
     
     // Send download ID back to popup
     if (port) {
         try {
             port.postMessage({
-                type: 'downloadInitiated',
-                downloadId: downloadId,
-                url: request.url,
-                filename: filename
+                command: 'downloadInitiated',
+                downloadUrl: request.downloadUrl,
+                filename: request.filename
             });
         } catch (e) {
             logger.error('Error sending download init message to port:', e);
@@ -134,7 +133,7 @@ function startDownload(request, port) {
             return;
         }
         
-        if (response.type === 'progress' && !hasError) {
+        if (response.command === 'progress' && !hasError) {
             // Update stored download information
             download.progress = response.progress || 0;
             download.speed = response.speed;
@@ -156,11 +155,10 @@ function startDownload(request, port) {
             
             // Broadcast progress to all connected popups
             broadcastDownloadUpdate({
-                type: 'progress',
-                downloadId: downloadId,
+                command: 'progress',
                 progress: response.progress || 0,
                 filename: download.filename,
-                url: download.url,
+                downloadUrl: download.downloadUrl,
                 speed: response.speed,
                 eta: response.eta,
                 segmentProgress: response.segmentProgress,
@@ -182,11 +180,10 @@ function startDownload(request, port) {
             
             // Broadcast completion to all connected popups
             broadcastDownloadUpdate({
-                type: 'complete',
-                downloadId: downloadId,
+                command: 'complete',
                 path: response.path,
                 filename: download.filename,
-                url: download.url
+                downloadUrl: download.downloadUrl
             });
             
             // Keep completed download info for a while
@@ -209,41 +206,39 @@ function startDownload(request, port) {
             
             // Broadcast error to all connected popups
             broadcastDownloadUpdate({
-                type: 'error',
-                downloadId: downloadId,
+                command: 'error',
                 error: response.error,
-                url: download.url
+                downloadUrl: download.downloadUrl
             });
         }
     };
     
-    // Send to native host using our service with enhanced parameters
-    logger.debug('🔄 Forwarding download request to native host:', request.url);
+    // Send to native host using our service with correct parameters
+    logger.debug('🔄 Forwarding download request to native host:', request.downloadUrl);
     
     try {
-        // Fetch headers for the video first
-        const headers = getRequestHeaders(request.tabId || -1, request.url);
+        // Fetch headers for the video
+        const headers = getRequestHeaders(request.tabId || -1, request.downloadUrl);
         
-        // Construct native host message with all necessary data
+        // Construct native host message with correctly named parameters that match native host expectations
         const nativeHostMessage = {
-            type: 'download',
-            url: request.url,
-            filename: filename,
+            command: 'download',  // Correct command format
+            // Core parameters - match exactly with native host execute() method
+            downloadUrl: request.downloadUrl,
+            filename: request.filename,
             savePath: request.savePath || null,
-            mediaType: request.type || 'direct',  // 'hls', 'dash', or 'direct'
-            container: request.container || null,
-            manifestUrl: request.manifestUrl || request.url,
-            headers: headers
+            type: request.type,
+            preferredContainer: request.preferredContainer || null,
+            originalContainer: request.originalContainer || 'mp4',
+            audioOnly: request.audioOnly || false,
+            streamSelection: request.streamSelection || null,
+            masterUrl: request.masterUrl || null,
+            duration: request.duration || null,
+            headers: headers || {}
         };
-        
-        // If we have quality info, add it
-        if (request.quality) {
-            nativeHostMessage.quality = request.quality;
-        }
-        
-        logger.debug('Sending download request to native host with params:', 
-            Object.keys(nativeHostMessage).join(', '));
-        
+
+        logger.debug('Sending download request to native host with params:', nativeHostMessage);
+
         // Send to native host service
         nativeHostService.sendMessage(nativeHostMessage, responseHandler)
             .catch(error => {
@@ -264,10 +259,9 @@ function startDownload(request, port) {
                 
                 // Broadcast error to UI
                 broadcastDownloadUpdate({
-                    type: 'error',
-                    downloadId: downloadId,
+                    command: 'error',
                     error: error.message,
-                    url: request.url
+                    downloadUrl: request.downloadUrl
                 });
             });
     } catch (error) {
@@ -288,17 +282,14 @@ function startDownload(request, port) {
         
         // Broadcast error to UI
         broadcastDownloadUpdate({
-            type: 'error',
-            downloadId: downloadId,
+            command: 'error',
             error: error.message,
-            url: request.url
+            downloadUrl: request.downloadUrl
         });
-    };
+    }
     
     return downloadId;
 }
-
-/**
 
 /**
  * Gets list of active downloads
@@ -308,8 +299,7 @@ function getActiveDownloads() {
         .filter(([id, info]) => info.status === 'downloading')
         .map(([id, info]) => ({
             downloadId: id,
-            url: info.url,
-            originalUrl: info.originalUrl || info.url,
+            downloadUrl: info.downloadUrl,
             progress: info.progress || 0,
             status: info.status,
             filename: info.filename || info.title,
@@ -318,7 +308,6 @@ function getActiveDownloads() {
             speed: info.speed,
             eta: info.eta,
             segmentProgress: info.segmentProgress,
-            quality: info.quality
         }));
 }
 
@@ -331,11 +320,9 @@ function getDownloadDetails(downloadId) {
     
     return {
         downloadId: downloadId,
-        url: download.url,
-        originalUrl: download.originalUrl || download.url,
+        downloadUrl: download.downloadUrl,
         progress: download.progress || 0,
         status: download.status,
-        quality: download.quality,
         filename: download.filename
     };
 }

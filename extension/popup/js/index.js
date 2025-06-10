@@ -141,7 +141,7 @@ export function getBackgroundPort() {
                     currentTabId = tabs[0].id;
                     
                     backgroundPort.postMessage({
-                        action: 'register',
+                        command: 'register',
                         tabId: tabs[0].id,
                         url: normalizedUrl
                     });
@@ -163,21 +163,21 @@ function handlePortMessage(message) {
     logger.debug('Received port message:', message);
     
     // Handle video updates with a unified approach
-    if ((message.action === 'videoListResponse' || message.action === 'videoStateUpdated') && message.videos) {
+    if ((message.command === 'videoListResponse' || message.command === 'videoStateUpdated') && message.videos) {
         logger.debug(`Received ${message.videos.length} videos via port`);
         updateVideoDisplay(message.videos);
         return;
     }
 
     // Handle metadata updates
-    if (message.type === 'metadataUpdate' && message.url && message.mediaInfo) {
+    if (message.command === 'metadataUpdate' && message.url && message.mediaInfo) {
         logger.debug('Received metadata update for video:', message.url);
         metadataUpdateBatch.add(message.url, message.mediaInfo);
         return;
     }
     
     // Handle active downloads list
-    if (message.action === 'activeDownloadsList' && message.downloads) {
+    if (message.command === 'activeDownloadsList' && message.downloads) {
         logger.debug('Received active downloads list:', message.downloads);
         
         // Import download module to process active downloads
@@ -196,7 +196,7 @@ function handlePortMessage(message) {
     }
     
     // Handle manifest responses
-    if (message.type === 'manifestContent') {
+    if (message.command === 'manifestContent') {
         logger.debug('Received manifest content via port');
         document.dispatchEvent(new CustomEvent('manifest-content', { 
             detail: message 
@@ -205,7 +205,7 @@ function handlePortMessage(message) {
     }
     
     // Handle preview responses
-    if (message.type === 'previewResponse') {
+    if (message.command === 'previewResponse') {
         logger.debug('Received preview data via port');
         document.dispatchEvent(new CustomEvent('preview-generated', { 
             detail: message 
@@ -214,7 +214,7 @@ function handlePortMessage(message) {
     }
     
     // Handle live preview updates for proactively generated previews
-    if (message.type === 'previewReady') {
+    if (message.command === 'previewReady') {
         logger.debug('Received preview update:', message.videoUrl);
         
         // Dispatch an event that VideoStateService listens for
@@ -272,7 +272,7 @@ function handlePortMessage(message) {
     }
 
     // Handle unified video updates - new handler for single video updates
-    if (message.type === 'videoUpdated') {
+    if (message.command === 'videoUpdated') {
         logger.debug('Received unified video update:', message.url);
         
         // Dispatch an event that VideoStateService will handle
@@ -351,7 +351,7 @@ function requestVideos(forceRefresh = false) {
     if (!currentTabId) return;
     
     sendPortMessage({ 
-        action: 'getVideos', 
+        command: 'getVideos', 
         tabId: currentTabId,
         forceRefresh
     });
