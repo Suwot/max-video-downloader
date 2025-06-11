@@ -398,15 +398,6 @@ class DownloadCommand extends BaseCommand {
             progressTracker.initialize(fileInfo)
                 .then((success) => {
                     logDebug(`Progress tracker initialized ${success ? 'successfully' : 'with fallbacks'}`);
-                    
-                    // Send initial progress update
-                    this.sendProgress({
-                        progress: 0,
-                        speed: 0,
-                        downloaded: 0,
-                        size: fileSizeBytes || 0,
-                        filename: path.basename(uniqueOutput)
-                    });
                 })
                 .catch(error => {
                     logDebug('Error initializing progress tracker:', error);
@@ -455,23 +446,11 @@ class DownloadCommand extends BaseCommand {
             ffmpeg.on('close', (code) => {
                 if (code === 0 && !hasError) {
                     logDebug('Download completed successfully.');
-                    
-                    // Send final progress
-                    this.sendProgress({
-                        progress: 100,
-                        downloaded: lastBytes,
-                        speed: 0,
+                    this.sendSuccess({ 
+                        path: uniqueOutput,
                         filename: path.basename(uniqueOutput)
                     });
-                    
-                    // Small delay to ensure progress is received first
-                    setTimeout(() => {
-                        this.sendSuccess({ 
-                            path: uniqueOutput,
-                            filename: path.basename(uniqueOutput)
-                        });
-                        resolve({ success: true, path: uniqueOutput });
-                    }, 100);
+                    resolve({ success: true, path: uniqueOutput });
                 } else if (!hasError) {
                     hasError = true;
                     const error = `FFmpeg exited with code ${code}: ${errorOutput}`;
