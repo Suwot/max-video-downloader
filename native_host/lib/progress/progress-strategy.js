@@ -57,6 +57,7 @@ class ProgressStrategy {
         
         // Track which strategy we're using
         this.primaryStrategy = null;
+        this.lockedCalculationMethod = null; // For dynamic strategy consistency
         
         // For tracking stream information from FFmpeg
         this.ffmpegStats = null;
@@ -70,8 +71,10 @@ class ProgressStrategy {
             ffmpegStats: null
         };
         
-        // For batching updates
+        // For batching updates with strategy-gating
         this.updateTimer = null;
+        this.lastUpdateTime = 0;
+        this.fallbackUpdateTimer = null;
         
         // Parse duration from FFprobe data if available (most reliable)
         if (this.ffprobeData && typeof this.ffprobeData === 'string') {
@@ -217,7 +220,7 @@ class ProgressStrategy {
             this.currentSegment = currentSegment;
         }
         
-        // Calculate progress based on media type using our simplified strategies
+        // Calculate progress using ONLY the primary strategy's data source
         let progress = 0;
         let progressInfo = {};
         
@@ -231,7 +234,8 @@ class ProgressStrategy {
                 break;
                 
             case 'hls':
-                progress = this.calculateHlsProgress(currentTime, currentSegment, effectiveDownloaded);
+                // Use strategy-locked calculation instead of multi-strategy fallback
+                progress = this.calculateStrategyProgress(currentTime, currentSegment, effectiveDownloaded);
                 progressInfo = { 
                     currentTime,
                     totalDuration: this.duration || 0,
@@ -242,7 +246,7 @@ class ProgressStrategy {
                 break;
                 
             case 'dash':
-                progress = this.calculateDashProgress(currentTime, effectiveDownloaded);
+                progress = this.calculateStrategyProgress(currentTime, 0, effectiveDownloaded);
                 progressInfo = { 
                     currentTime, 
                     totalDuration: this.duration || 0,
@@ -296,11 +300,64 @@ class ProgressStrategy {
     }
 
     /**
-     * Calculate progress for direct media
-     * @param {number} downloadedBytes Bytes downloaded
+     * Calculate progress using ONLY the primary strategy's data source
+     * This prevents jumping between different calculation methods
      * @param {number} currentTime Current playback time
+     * @param {number} currentSegment Current segment number  
+     * @param {number} downloadedBytes Bytes downloaded
      * @returns {number} Progress percentage (0-100)
      */
+    calculateStrategyProgress(currentTime, currentSegment, downloadedBytes) {
+        switch (this.primaryStrategy) {
+            case 'duration':
+                // ONLY use time-based calculation, ignore all other data
+                if (this.duration > 0 && currentTime > 0) {
+                    const effectiveTime = Math.min(currentTime, this.duration);
+                    return (effectiveTime / this.duration) * 100;
+                }
+                return 0;
+                
+            case 'size':
+                // ONLY use size-based calculation, ignore all other data
+                if (this.fileSizeBytes > 0 && downloadedBytes > 0) {
+                    return Math.min((downloadedBytes / this.fileSizeBytes) * 100, 100);
+                }
+                return 0;
+                
+            case 'segments':
+                // ONLY use segment-based calculation, ignore all other data
+                if (this.segmentCount > 0 && currentSegment > 0) {
+                    const effectiveSegment = Math.min(currentSegment, this.segmentCount);
+                    return (effectiveSegment / this.segmentCount) * 100;
+                }
+                return 0;
+                
+            case 'dynamic':
+                // For dynamic strategy, use the first available data source in priority order
+                // but once chosen, stick with it for the entire download
+                if (!this.lockedCalculationMethod) {
+                    // Determine calculation method on first use
+                    if (this.duration > 0 && currentTime > 0) {
+                        this.lockedCalculationMethod = 'duration';
+                        this.primaryStrategy = 'duration'; // Update primary strategy for consistency
+                    } else if (this.fileSizeBytes > 0 && downloadedBytes > 0) {
+                        this.lockedCalculationMethod = 'size';
+                        this.primaryStrategy = 'size'; // Update primary strategy for consistency
+                    } else if (this.segmentCount > 0 && currentSegment > 0) {
+                        this.lockedCalculationMethod = 'segments';
+                        this.primaryStrategy = 'segments'; // Update primary strategy for consistency
+                    } else {
+                        return 0; // No data available yet
+                    }
+                }
+                
+                // Use the locked calculation method (recursive call with updated primaryStrategy)
+                return this.calculateStrategyProgress(currentTime, currentSegment, downloadedBytes);
+                
+            default:
+                return 0;
+        }
+    }
     calculateDirectProgress(downloadedBytes, currentTime) {
         // Strategy 1 (Primary): Size-based - most accurate for direct downloads
         if (this.fileSizeBytes > 0 && downloadedBytes > 0) {
@@ -314,55 +371,6 @@ class ProgressStrategy {
         }
         
         // No reliable data available
-        return 0;
-    }
-
-    /**
-     * Calculate progress for HLS media
-     * @param {number} currentTime Current playback time
-     * @param {number} currentSegment Current segment number
-     * @param {number} downloadedBytes Bytes downloaded
-     * @returns {number} Progress percentage (0-100)
-     */
-    calculateHlsProgress(currentTime, currentSegment, downloadedBytes) {
-        // Strategy 1 (Primary): Time-based - duration from manifest is reliable
-        if (this.duration > 0 && currentTime > 0) {
-            const effectiveTime = Math.min(currentTime, this.duration);
-            return (effectiveTime / this.duration) * 100;
-        }
-        
-        // Strategy 2 (Fallback): Size-based - using estimated file size
-        if (this.fileSizeBytes > 0 && downloadedBytes > 0) {
-            return Math.min((downloadedBytes / this.fileSizeBytes) * 100, 100);
-        }
-        
-        // Strategy 3 (Last resort): Segment-based - least reliable due to variable sizes
-        if (this.segmentCount > 0 && currentSegment > 0) {
-            const effectiveSegment = Math.min(currentSegment, this.segmentCount);
-            return (effectiveSegment / this.segmentCount) * 100;
-        }
-        
-        return 0;
-    }
-
-    /**
-     * Calculate progress for DASH media
-     * @param {number} currentTime Current playback time
-     * @param {number} downloadedBytes Bytes downloaded
-     * @returns {number} Progress percentage (0-100)
-     */
-    calculateDashProgress(currentTime, downloadedBytes) {
-        // Strategy 1 (Primary): Time-based - duration from manifest is reliable
-        if (this.duration > 0 && currentTime > 0) {
-            const effectiveTime = Math.min(currentTime, this.duration);
-            return (effectiveTime / this.duration) * 100;
-        }
-        
-        // Strategy 2 (Fallback): Size-based - using estimated file size
-        if (this.fileSizeBytes > 0 && downloadedBytes > 0) {
-            return Math.min((downloadedBytes / this.fileSizeBytes) * 100, 100);
-        }
-        
         return 0;
     }
 
@@ -533,6 +541,7 @@ class ProgressStrategy {
      */
     parseAllData(output) {
         let hasUpdate = false;
+        let hasPrimaryUpdate = false;
         
         // Parse time information - always extract if available
         const outTimeUs = output.match(/out_time_us=(\d+)/);
@@ -544,12 +553,19 @@ class ProgressStrategy {
             if (!isNaN(timeInMicroseconds)) {
                 this.currentState.currentTime = timeInMicroseconds / 1000000;
                 hasUpdate = true;
+                // Check if this is primary data for our strategy
+                if (this.primaryStrategy === 'duration' || this.primaryStrategy === 'dynamic') {
+                    hasPrimaryUpdate = true;
+                }
             }
         } else if (outTimeMs) {
             const timeInMicroseconds = parseInt(outTimeMs[1], 10);
             if (!isNaN(timeInMicroseconds)) {
                 this.currentState.currentTime = timeInMicroseconds / 1000000;
                 hasUpdate = true;
+                if (this.primaryStrategy === 'duration' || this.primaryStrategy === 'dynamic') {
+                    hasPrimaryUpdate = true;
+                }
             }
         } else if (outTimeMatch) {
             const hours = parseInt(outTimeMatch[1], 10);
@@ -557,6 +573,9 @@ class ProgressStrategy {
             const seconds = parseFloat(outTimeMatch[3]);
             this.currentState.currentTime = hours * 3600 + minutes * 60 + seconds;
             hasUpdate = true;
+            if (this.primaryStrategy === 'duration' || this.primaryStrategy === 'dynamic') {
+                hasPrimaryUpdate = true;
+            }
         }
         
         // Parse size information - always extract if available
@@ -567,6 +586,10 @@ class ProgressStrategy {
             if (!isNaN(size)) {
                 this.currentState.downloadedBytes = size;
                 hasUpdate = true;
+                // Check if this is primary data for our strategy
+                if (this.primaryStrategy === 'size' || this.primaryStrategy === 'dynamic') {
+                    hasPrimaryUpdate = true;
+                }
             }
         } else {
             // Fallback to parseSize method
@@ -574,6 +597,9 @@ class ProgressStrategy {
             if (size !== null) {
                 this.currentState.downloadedBytes = size;
                 hasUpdate = true;
+                if (this.primaryStrategy === 'size' || this.primaryStrategy === 'dynamic') {
+                    hasPrimaryUpdate = true;
+                }
             }
         }
         
@@ -583,26 +609,55 @@ class ProgressStrategy {
             if (segment !== null) {
                 this.currentState.currentSegment = segment;
                 hasUpdate = true;
+                // Check if this is primary data for our strategy
+                if (this.primaryStrategy === 'segments' || this.primaryStrategy === 'dynamic') {
+                    hasPrimaryUpdate = true;
+                }
             }
         }
         
-        // Schedule batched update if we have new data
-        if (hasUpdate) {
-            this.scheduleUpdate();
+        // Strategy-gated update scheduling
+        if (hasPrimaryUpdate) {
+            // Primary strategy data changed - schedule immediate update (respecting 250ms minimum)
+            this.scheduleUpdate(true);
+        } else if (hasUpdate) {
+            // Non-primary data changed - schedule lower priority update
+            this.scheduleUpdate(false);
         }
     }
     
     /**
-     * Schedule a batched update
+     * Schedule a batched update with strategy-gating
+     * @param {boolean} isPrimaryUpdate Whether this update contains primary strategy data
      */
-    scheduleUpdate() {
-        if (this.updateTimer) {
-            return; // Update already scheduled
-        }
+    scheduleUpdate(isPrimaryUpdate = false) {
+        const now = Date.now();
         
-        this.updateTimer = setTimeout(() => {
-            this.flushPendingUpdate();
-        }, this.updateInterval);
+        if (isPrimaryUpdate) {
+            // Primary strategy data changed - respect minimum interval but prioritize
+            if (now - this.lastUpdateTime >= this.updateInterval) {
+                // Send immediately if enough time has passed
+                this.flushPendingUpdate();
+                return;
+            } else if (!this.updateTimer) {
+                // Schedule for when minimum interval is reached
+                const remainingTime = this.updateInterval - (now - this.lastUpdateTime);
+                this.updateTimer = setTimeout(() => {
+                    this.flushPendingUpdate();
+                }, remainingTime);
+            }
+        } else {
+            // Non-primary data changed - use fallback timer for UI responsiveness
+            if (!this.fallbackUpdateTimer) {
+                this.fallbackUpdateTimer = setTimeout(() => {
+                    // Only send if we haven't sent a primary update recently
+                    if (Date.now() - this.lastUpdateTime >= this.updateInterval) {
+                        this.flushPendingUpdate();
+                    }
+                    this.fallbackUpdateTimer = null;
+                }, this.updateInterval * 2); // Longer interval for non-primary updates
+            }
+        }
     }
     
     /**
@@ -613,6 +668,12 @@ class ProgressStrategy {
             clearTimeout(this.updateTimer);
             this.updateTimer = null;
         }
+        if (this.fallbackUpdateTimer) {
+            clearTimeout(this.fallbackUpdateTimer);
+            this.fallbackUpdateTimer = null;
+        }
+        
+        this.lastUpdateTime = Date.now();
         
         // Always send complete current state
         this.update({ ...this.currentState });
@@ -758,6 +819,10 @@ class ProgressStrategy {
         if (this.updateTimer) {
             clearTimeout(this.updateTimer);
             this.updateTimer = null;
+        }
+        if (this.fallbackUpdateTimer) {
+            clearTimeout(this.fallbackUpdateTimer);
+            this.fallbackUpdateTimer = null;
         }
         
         // Flush any pending updates before cleanup
