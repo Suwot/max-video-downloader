@@ -160,27 +160,6 @@ class ProgressTracker {
             data.totalBytesFormatted = this.formatBytes(data.totalBytes);
         }
         
-        // Format stream stats for the final message if available
-        if (data.streamInfo) {
-            data.streamStats = {};
-            
-            if (data.streamInfo.videoSize) {
-                data.streamStats.video = this.formatBytes(data.streamInfo.videoSize);
-            }
-            
-            if (data.streamInfo.audioSize) {
-                data.streamStats.audio = this.formatBytes(data.streamInfo.audioSize);
-            }
-            
-            if (data.streamInfo.subtitleSize) {
-                data.streamStats.subtitle = this.formatBytes(data.streamInfo.subtitleSize);
-            }
-            
-            if (data.streamInfo.muxingOverhead) {
-                data.streamStats.muxingOverhead = `${data.streamInfo.muxingOverhead.toFixed(2)}%`;
-            }
-        }
-        
         if (data.currentTime && data.totalDuration) {
             data.timeRemaining = data.totalDuration - data.currentTime;
             data.timeRemainingFormatted = this.formatTime(data.timeRemaining);
@@ -232,6 +211,38 @@ class ProgressTracker {
         return h > 0 
             ? `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`
             : `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+    }
+    
+    /**
+     * Get formatted download statistics
+     * @returns {Object|null} Formatted download statistics or null if not available
+     */
+    getDownloadStats() {
+        if (!this.strategy || !this.strategy.downloadStats) {
+            return null;
+        }
+        
+        const stats = this.strategy.downloadStats;
+        const downloadStats = {};
+        
+        if (stats.videoSize) {
+            downloadStats.video = this.formatBytes(stats.videoSize);
+        }
+        
+        if (stats.audioSize) {
+            downloadStats.audio = this.formatBytes(stats.audioSize);
+        }
+        
+        if (stats.subtitleSize) {
+            downloadStats.subtitle = this.formatBytes(stats.subtitleSize);
+        }
+        
+        if (stats.muxingOverhead) {
+            downloadStats.muxingOverhead = `${stats.muxingOverhead.toFixed(2)}%`;
+        }
+        
+        // Only return if we have at least one valid stat
+        return Object.keys(downloadStats).length ? downloadStats : null;
     }
 }
 

@@ -446,11 +446,22 @@ class DownloadCommand extends BaseCommand {
             ffmpeg.on('close', (code) => {
                 if (code === 0 && !hasError) {
                     logDebug('Download completed successfully.');
+                    
+                    // Get the download stats from the progress tracker
+                    const downloadStats = progressTracker.getDownloadStats();
+                    
+                    // Send success message with path, filename, and download stats
                     this.sendSuccess({ 
                         path: uniqueOutput,
-                        filename: path.basename(uniqueOutput)
+                        filename: path.basename(uniqueOutput),
+                        downloadStats: downloadStats || {} // Include stats if available
                     });
-                    resolve({ success: true, path: uniqueOutput });
+                    
+                    resolve({ 
+                        success: true, 
+                        path: uniqueOutput,
+                        downloadStats
+                    });
                 } else if (!hasError) {
                     hasError = true;
                     const error = `FFmpeg exited with code ${code}: ${errorOutput}`;

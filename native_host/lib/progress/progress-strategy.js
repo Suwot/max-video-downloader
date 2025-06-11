@@ -283,11 +283,6 @@ class ProgressStrategy {
             downloadedBytes: effectiveDownloaded,
             totalBytes: this.fileSizeBytes || null
         };
-
-        // Include stream info in the final update
-        if (data.progress === 100 && this.streamInfo) {
-            progressData.streamInfo = this.streamInfo;
-        }
         
         this.sendProgress({
             ...progressData,
@@ -535,12 +530,15 @@ class ProgressStrategy {
             const subtitleSizeMatch = output.match(/subtitle:(\d+)kB/);
             const overheadMatch = output.match(/muxing overhead:\s*([\d.]+)%/);
             
-            this.ffmpegStats = {
+            this.downloadStats = {
                 videoSize: videoSizeMatch ? parseInt(videoSizeMatch[1], 10) * 1024 : 0,
                 audioSize: audioSizeMatch ? parseInt(audioSizeMatch[1], 10) * 1024 : 0,
                 subtitleSize: subtitleSizeMatch ? parseInt(subtitleSizeMatch[1], 10) * 1024 : 0,
                 muxingOverhead: overheadMatch ? parseFloat(overheadMatch[1]) : 0
             };
+            
+            this.ffmpegStats = this.downloadStats; // Keep for backward compatibility
+            this.streamInfoCaptured = true;
         }
         
         let updateData = {
@@ -549,10 +547,10 @@ class ProgressStrategy {
         
         // Get time information (most reliable method)
         if (outTimeMs) {
-            // Time in milliseconds is most precise
-            const timeInMs = parseInt(outTimeMs[1], 10);
-            if (!isNaN(timeInMs)) {
-                updateData.currentTime = timeInMs / 1000; // convert to seconds
+            // Time in microseconds (despite the name out_time_ms)
+            const timeInMicroseconds = parseInt(outTimeMs[1], 10);
+            if (!isNaN(timeInMicroseconds)) {
+                updateData.currentTime = timeInMicroseconds / 1000000; // convert microseconds to seconds
             }
         } else if (outTimeMatch) {
             // Fallback to HH:MM:SS.MS format
