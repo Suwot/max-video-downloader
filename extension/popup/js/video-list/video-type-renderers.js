@@ -179,7 +179,7 @@ function renderDashElements(video) {
         const dropdown = elementsDiv.querySelector('.custom-dropdown .selected-option');
         const streamSelection = dropdown?.dataset.trackMap;
         const container = dropdown?.dataset.container;
-        const totalFileSizeBytes = dropdown?.dataset.totalFileSize;
+        const totalFileSizeBytes = dropdown?.dataset.totalfilesize;
 
         const videoData = createVideoMetadata(video);
         videoData.streamSelection = streamSelection || null;
