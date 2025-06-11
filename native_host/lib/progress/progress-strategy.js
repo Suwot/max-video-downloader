@@ -49,8 +49,13 @@ class ProgressStrategy {
         this.segmentSizes = [];
         this.lastSegmentTime = Date.now();
         
+        // For cumulative download tracking
+        this.totalDownloaded = 0;
+        this.downloadedPerSegment = {};
+        
         // Track which strategy we're using
         this.primaryStrategy = null;
+        this.fallbackToStrategy = null;
         
         logDebug(`ProgressStrategy: Created for ${this.type} media`);
     }
@@ -136,10 +141,25 @@ class ProgressStrategy {
         const downloaded = data.downloaded || 0;
         const currentSegment = data.currentSegment || this.currentSegment;
         
+        // Track cumulative downloaded bytes for HLS/DASH
+        if (this.type !== 'direct' && downloaded > 0) {
+            // If this is a new segment, add to total
+            if (!this.downloadedPerSegment[currentSegment]) {
+                this.downloadedPerSegment[currentSegment] = downloaded;
+                this.totalDownloaded += downloaded;
+            } else if (downloaded > this.downloadedPerSegment[currentSegment]) {
+                // If we have more data for an existing segment
+                const diff = downloaded - this.downloadedPerSegment[currentSegment];
+                this.downloadedPerSegment[currentSegment] = downloaded;
+                this.totalDownloaded += diff;
+            }
+        }
+        
         // Keep track of segment changes
         const isNewSegment = currentSegment > this.currentSegment;
         if (isNewSegment) {
             this.currentSegment = currentSegment;
+            logDebug(`ProgressStrategy: Detected new segment ${currentSegment}/${this.segmentCount}`);
             
             // For HLS: Record segment change time
             if (this.type === 'hls') {
@@ -149,38 +169,46 @@ class ProgressStrategy {
             }
         }
         
+        // For direct downloads, use the downloaded amount directly
+        const effectiveDownloaded = this.type === 'direct' ? downloaded : this.totalDownloaded;
+        
         // Calculate progress based on media type
         let progress = 0;
         let progressInfo = {};
         
         switch (this.type) {
             case 'direct':
-                progress = this.calculateDirectProgress(downloaded, currentTime);
+                progress = this.calculateDirectProgress(effectiveDownloaded, currentTime);
                 progressInfo = { 
-                    downloaded, 
-                    size: this.fileSizeBytes || null 
+                    downloaded: effectiveDownloaded, 
+                    size: this.fileSizeBytes || null,
+                    totalFileSize: this.fileSizeBytes || null
                 };
                 break;
                 
             case 'hls':
-                progress = this.calculateHlsProgress(currentTime, currentSegment, downloaded);
+                progress = this.calculateHlsProgress(currentTime, currentSegment, effectiveDownloaded);
                 progressInfo = { 
                     currentTime,
                     totalDuration: this.duration || 0,
                     currentSegment,
                     totalSegments: this.segmentCount || 0,
-                    downloaded,
-                    strategy: this.primaryStrategy
+                    downloaded: effectiveDownloaded,
+                    strategy: this.primaryStrategy,
+                    fallbackStrategy: this.fallbackToStrategy,
+                    totalFileSize: this.fileSizeBytes || null
                 };
                 break;
                 
             case 'dash':
-                progress = this.calculateDashProgress(currentTime, downloaded);
+                progress = this.calculateDashProgress(currentTime, effectiveDownloaded);
                 progressInfo = { 
                     currentTime, 
                     totalDuration: this.duration || 0,
-                    downloaded,
-                    strategy: this.primaryStrategy
+                    downloaded: effectiveDownloaded,
+                    strategy: this.primaryStrategy,
+                    fallbackStrategy: this.fallbackToStrategy,
+                    totalFileSize: this.fileSizeBytes || null
                 };
                 break;
         }
@@ -189,7 +217,7 @@ class ProgressStrategy {
         const smoothedProgress = this.smoothProgress(progress);
         
         // Calculate speed
-        const speed = this.calculateSpeed(downloaded);
+        const speed = this.calculateSpeed(effectiveDownloaded);
         
         // Send progress update with additional information useful for the UI
         this.sendProgress({
@@ -199,6 +227,7 @@ class ProgressStrategy {
             elapsedTime: (Date.now() - this.startTime) / 1000, // Elapsed time in seconds
             type: this.type,
             strategy: this.primaryStrategy,
+            fallbackStrategy: this.fallbackToStrategy,
             ...progressInfo
         });
     }
@@ -233,12 +262,20 @@ class ProgressStrategy {
      */
     calculateHlsProgress(currentTime, currentSegment, downloaded) {
         let progress = 0;
+        this.fallbackToStrategy = null;
         
         // Use the primary strategy determined during initialization
         switch (this.primaryStrategy) {
             case 'duration':
                 if (this.duration > 0 && currentTime > 0) {
                     progress = (currentTime / this.duration) * 100;
+                } else if (this.duration > 0 && this.segmentCount > 0 && currentSegment > 0) {
+                    // Duration strategy selected but timestamps aren't parsing correctly
+                    // Fallback to segment-based with time estimation
+                    const estimatedTime = (currentSegment / this.segmentCount) * this.duration;
+                    progress = (estimatedTime / this.duration) * 100;
+                    this.fallbackToStrategy = 'segments-estimated';
+                    logDebug(`ProgressStrategy: Duration strategy with invalid timestamps, falling back to segment estimation. Progress: ${progress.toFixed(2)}%`);
                 }
                 break;
                 
@@ -258,12 +295,18 @@ class ProgressStrategy {
         // When progress is too low or not calculated, try fallback methods
         if (progress <= 0) {
             // Try the other methods in priority order
-            if (this.primaryStrategy !== 'duration' && this.duration > 0 && currentTime > 0) {
-                progress = (currentTime / this.duration) * 100;
-            } else if (this.primaryStrategy !== 'segments' && this.segmentCount > 0 && currentSegment > 0) {
+            if (this.primaryStrategy !== 'segments' && this.segmentCount > 0 && currentSegment > 0) {
                 progress = (currentSegment / this.segmentCount) * 100;
+                this.fallbackToStrategy = 'segments';
+                logDebug(`ProgressStrategy: Falling back to segment-based progress. Progress: ${progress.toFixed(2)}%`);
             } else if (this.primaryStrategy !== 'size' && this.fileSizeBytes > 0 && downloaded > 0) {
                 progress = (downloaded / this.fileSizeBytes) * 100;
+                this.fallbackToStrategy = 'size';
+                logDebug(`ProgressStrategy: Falling back to size-based progress. Progress: ${progress.toFixed(2)}%`);
+            } else if (this.primaryStrategy !== 'duration' && this.duration > 0 && currentTime > 0) {
+                progress = (currentTime / this.duration) * 100;
+                this.fallbackToStrategy = 'duration';
+                logDebug(`ProgressStrategy: Falling back to duration-based progress. Progress: ${progress.toFixed(2)}%`);
             }
         }
         
@@ -413,6 +456,14 @@ class ProgressStrategy {
         const size = this.parseSize(output);
         const segment = this.parseSegment(output);
         
+        // Check for timestamp errors and log them for diagnosis
+        if (output.includes("Invalid timestamps")) {
+            const timestampErrorMatch = output.match(/Invalid timestamps.*pts=(\d+), dts=(\d+), size=(\d+)/);
+            if (timestampErrorMatch && this.primaryStrategy === 'duration') {
+                logDebug(`ProgressStrategy: Detected invalid timestamps (pts=${timestampErrorMatch[1]}, dts=${timestampErrorMatch[2]})`);
+            }
+        }
+        
         let updateData = {};
         
         if (time !== null) {
@@ -425,6 +476,19 @@ class ProgressStrategy {
         
         if (segment !== null) {
             updateData.currentSegment = segment;
+        }
+        
+        // Special handling for HLS with duration strategy when timestamps aren't working
+        if (this.type === 'hls' && this.primaryStrategy === 'duration' && 
+            this.segmentCount > 0 && segment !== null && 
+            (time === null || time === 0)) {
+            
+            // No valid timestamp, but we have segment info - use that to estimate time position
+            if (this.duration > 0) {
+                const estimatedTime = (segment / this.segmentCount) * this.duration;
+                updateData.currentTime = estimatedTime;
+                logDebug(`ProgressStrategy: Using estimated time position: ${estimatedTime.toFixed(2)}s at segment ${segment}/${this.segmentCount}`);
+            }
         }
         
         // Only update if we have new data
@@ -440,7 +504,7 @@ class ProgressStrategy {
      * @returns {number|null} Time in seconds or null if not found
      */
     parseTime(output) {
-        // Look for time=HH:MM:SS.MS pattern
+        // Method 1: Look for standard time=HH:MM:SS.MS pattern
         const timeMatch = output.match(/time=(\d+):(\d+):(\d+\.\d+)/);
         if (timeMatch) {
             const hours = parseInt(timeMatch[1], 10);
@@ -448,6 +512,36 @@ class ProgressStrategy {
             const seconds = parseFloat(timeMatch[3]);
             return hours * 3600 + minutes * 60 + seconds;
         }
+        
+        // Method 2: Look for time in seconds pattern (sometimes used by FFmpeg)
+        const timeSecsMatch = output.match(/time=\s*([\d.]+)/);
+        if (timeSecsMatch) {
+            const timeInSeconds = parseFloat(timeSecsMatch[1]);
+            if (!isNaN(timeInSeconds) && timeInSeconds > 0) {
+                return timeInSeconds;
+            }
+        }
+        
+        // Method 3: Check for PTS time in FFmpeg output
+        const ptsMatch = output.match(/pts=([\d.]+)/);
+        if (ptsMatch) {
+            const pts = parseFloat(ptsMatch[1]);
+            if (!isNaN(pts) && pts > 0) {
+                // PTS is often in a different timescale, might need adjustment
+                // This is a simplistic approach - might need tuning
+                return pts / 90000; // Common timescale for MPEG-TS
+            }
+        }
+        
+        // Method 4: Extract from DTS if available
+        const dtsMatch = output.match(/dts=([\d.]+)/);
+        if (dtsMatch) {
+            const dts = parseFloat(dtsMatch[1]);
+            if (!isNaN(dts) && dts > 0) {
+                return dts / 90000; // Common timescale for MPEG-TS
+            }
+        }
+        
         return null;
     }
 
@@ -496,6 +590,17 @@ class ProgressStrategy {
             const index = parseInt(indexMatch[1], 10);
             if (!isNaN(index) && index > 0) {
                 return index;
+            }
+        }
+        
+        // Method 3: Extract segment number from more complex patterns
+        // Example: Opening 'manifest-audio_0_q7BAv3mA_WbaG9LKN=112000-video_0_q7BAv3mA_Uql258jy=5099752-1.ts'
+        const complexMatch = output.match(/Opening ['"][^'"]*?-(\d+)\.(ts|mp4|m4s)['"] for reading/);
+        if (complexMatch) {
+            const segment = parseInt(complexMatch[1], 10);
+            if (!isNaN(segment) && segment > 0) {
+                logDebug(`ProgressStrategy: Detected segment ${segment} from complex pattern`);
+                return segment;
             }
         }
         
