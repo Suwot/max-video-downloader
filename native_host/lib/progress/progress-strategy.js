@@ -62,6 +62,12 @@ class ProgressStrategy {
         this.ffmpegStats = null;
         this.streamInfoCaptured = false;
         
+        // For batching updates
+        this.pendingUpdate = {
+            ffmpegStats: null
+        };
+        this.updateTimer = null;
+        
         // Parse duration from FFprobe data if available (most reliable)
         if (this.ffprobeData && typeof this.ffprobeData === 'string') {
             // Extract duration from ffprobe output
@@ -482,49 +488,19 @@ class ProgressStrategy {
      * @param {string} output FFmpeg stdout/stderr output
      */
     processOutput(output) {
-        const now = Date.now();
+        // Strategy-based processing - only parse data relevant to our chosen strategy
         
-        // Handle segment detection immediately (no rate limiting for discrete events)
-        if ((this.type === 'hls' || this.type === 'dash') && 
-            output.includes('Opening ') && output.includes(' for reading')) {
-            const segment = this.parseSegment(output);
-            if (segment !== null) {
-                // Send immediate segment-only update
-                this.update({
-                    currentSegment: segment,
-                    ffmpegStats: this.ffmpegStats
-                });
-                logDebug(`ProgressStrategy: Immediate segment update: ${segment}`);
-            }
-        }
-        
-        // Rate-limit only progress metrics (continuous data)
-        const isProgressMetric = output.includes('total_size=') || 
-                                output.includes('out_time_ms=') || 
-                                output.includes('out_time_us=') ||
-                                output.includes('progress=');
-        
-        if (isProgressMetric && (now - this.lastProcessedTime < this.updateInterval)) {
+        // Handle final completion status (always process regardless of strategy)
+        const progressStatus = output.match(/progress=(\w+)/);
+        if (progressStatus && progressStatus[1] === 'end') {
+            this.flushPendingUpdate();
+            this.update({ progress: 100 });
+            logDebug('ProgressStrategy: Detected end of processing');
             return;
         }
         
-        // Extract FFmpeg progress indicators - direct key-value parsing
-        const outTimeUs = output.match(/out_time_us=(\d+)/);
-        const outTimeMs = output.match(/out_time_ms=(\d+)/);
-        const outTimeMatch = output.match(/out_time=(\d+):(\d+):(\d+\.\d+)/);
-        const totalSize = output.match(/total_size=(\d+)/);
-        const progressStatus = output.match(/progress=(\w+)/);
-        const speedMatch = output.match(/speed=\s*([\d.]+)x/);
-        
-        // Debug critical extractions
-        if (outTimeUs) logDebug(`ProgressStrategy: Extracted out_time_us=${outTimeUs[1]}`);
-        if (outTimeMs) logDebug(`ProgressStrategy: Extracted out_time_ms=${outTimeMs[1]}`);
-        if (totalSize) logDebug(`ProgressStrategy: Extracted total_size=${totalSize[1]}`);
-        if (progressStatus) logDebug(`ProgressStrategy: Extracted progress=${progressStatus[1]}`);
-        
-        // Track final summary information
+        // Track final summary information (always process)
         if (output.includes('global headers') || output.includes('muxing overhead')) {
-            // This is the final stats summary from FFmpeg
             const videoSizeMatch = output.match(/video:(\d+)kB/);
             const audioSizeMatch = output.match(/audio:(\d+)kB/);
             const subtitleSizeMatch = output.match(/subtitle:(\d+)kB/);
@@ -539,74 +515,139 @@ class ProgressStrategy {
                 muxingOverhead: overheadMatch ? parseFloat(overheadMatch[1]) : 0
             };
             
-            this.ffmpegStats = this.downloadStats; // Keep for backward compatibility
+            this.ffmpegStats = this.downloadStats;
             this.streamInfoCaptured = true;
+            this.pendingUpdate.ffmpegStats = this.ffmpegStats;
         }
         
-        let updateData = {
-            ffmpegStats: this.ffmpegStats
-        };
+        // Strategy-specific processing
+        switch (this.primaryStrategy) {
+            case 'duration':
+                this.processDurationStrategy(output);
+                break;
+            case 'size':
+                this.processSizeStrategy(output);
+                break;
+            case 'segments':
+                this.processSegmentStrategy(output);
+                break;
+            case 'dynamic':
+                this.processDynamicStrategy(output);
+                break;
+        }
+    }
+    
+    /**
+     * Process output for duration-based strategy
+     * @param {string} output FFmpeg output
+     */
+    processDurationStrategy(output) {
+        // Only parse time information - ignore segments and size
+        const outTimeUs = output.match(/out_time_us=(\d+)/);
+        const outTimeMs = output.match(/out_time_ms=(\d+)/);
+        const outTimeMatch = output.match(/out_time=(\d+):(\d+):(\d+\.\d+)/);
         
-        // Note: Segment detection is handled separately above for immediate processing
-        
-        // Get time information (prioritize out_time_us, then out_time_ms, then formatted time)
         if (outTimeUs) {
-            // Most accurate: time in microseconds
             const timeInMicroseconds = parseInt(outTimeUs[1], 10);
             if (!isNaN(timeInMicroseconds)) {
-                updateData.currentTime = timeInMicroseconds / 1000000; // convert microseconds to seconds
-                logDebug(`ProgressStrategy: Set currentTime to ${updateData.currentTime}s from out_time_us`);
+                this.pendingUpdate.currentTime = timeInMicroseconds / 1000000;
+                this.scheduleUpdate();
             }
         } else if (outTimeMs) {
-            // Second priority: time in microseconds (despite the name out_time_ms)
             const timeInMicroseconds = parseInt(outTimeMs[1], 10);
             if (!isNaN(timeInMicroseconds)) {
-                updateData.currentTime = timeInMicroseconds / 1000000; // convert microseconds to seconds
-                logDebug(`ProgressStrategy: Set currentTime to ${updateData.currentTime}s from out_time_ms`);
+                this.pendingUpdate.currentTime = timeInMicroseconds / 1000000;
+                this.scheduleUpdate();
             }
         } else if (outTimeMatch) {
-            // Fallback to HH:MM:SS.MS format
             const hours = parseInt(outTimeMatch[1], 10);
             const minutes = parseInt(outTimeMatch[2], 10);
             const seconds = parseFloat(outTimeMatch[3]);
-            updateData.currentTime = hours * 3600 + minutes * 60 + seconds;
-            logDebug(`ProgressStrategy: Set currentTime to ${updateData.currentTime}s from out_time format`);
+            this.pendingUpdate.currentTime = hours * 3600 + minutes * 60 + seconds;
+            this.scheduleUpdate();
         }
+    }
+    
+    /**
+     * Process output for size-based strategy
+     * @param {string} output FFmpeg output
+     */
+    processSizeStrategy(output) {
+        // Only parse size information - ignore time and segments
+        const totalSize = output.match(/total_size=(\d+)/);
         
-        // Get total downloaded bytes (prioritize total_size)
         if (totalSize) {
             const size = parseInt(totalSize[1], 10);
             if (!isNaN(size)) {
-                updateData.downloadedBytes = size;
-                logDebug(`ProgressStrategy: Set downloadedBytes to ${size} from total_size`);
+                this.pendingUpdate.downloadedBytes = size;
+                this.scheduleUpdate();
             }
         } else {
-            // Fallback to traditional size parsing if total_size isn't available
+            // Fallback to parseSize only for size strategy
             const size = this.parseSize(output);
             if (size !== null) {
-                updateData.downloadedBytes = size;
-                logDebug(`ProgressStrategy: Set downloadedBytes to ${size} from parseSize fallback`);
+                this.pendingUpdate.downloadedBytes = size;
+                this.scheduleUpdate();
             }
         }
-        
-        // Extract speed information (internal use only)
-        if (speedMatch) {
-            const speedValue = parseFloat(speedMatch[1]);
-            if (!isNaN(speedValue)) {
-                this._ffmpegSpeed = speedValue;
+    }
+    
+    /**
+     * Process output for segment-based strategy
+     * @param {string} output FFmpeg output
+     */
+    processSegmentStrategy(output) {
+        // Only parse segment information - ignore time and size
+        if (output.includes('Opening ') && output.includes(' for reading')) {
+            const segment = this.parseSegment(output);
+            if (segment !== null) {
+                this.pendingUpdate.currentSegment = segment;
+                this.scheduleUpdate();
             }
         }
-        
-        // Check if we've reached the end
-        if (progressStatus && progressStatus[1] === 'end') {
-            updateData.progress = 100;
-            logDebug('ProgressStrategy: Detected end of processing');
+    }
+    
+    /**
+     * Process output for dynamic strategy (fallback)
+     * @param {string} output FFmpeg output
+     */
+    processDynamicStrategy(output) {
+        // Parse all available data when strategy is not determined
+        this.processDurationStrategy(output);
+        this.processSizeStrategy(output);
+        this.processSegmentStrategy(output);
+    }
+    
+    /**
+     * Schedule a batched update
+     */
+    scheduleUpdate() {
+        if (this.updateTimer) {
+            return; // Update already scheduled
         }
         
-        // Send progress update if we have meaningful metrics data
-        if (isProgressMetric && Object.keys(updateData).length > 1) { // More than just ffmpegStats
-            this.lastProcessedTime = now;
-            this.update(updateData);
+        this.updateTimer = setTimeout(() => {
+            this.flushPendingUpdate();
+        }, this.updateInterval);
+    }
+    
+    /**
+     * Send accumulated update data
+     */
+    flushPendingUpdate() {
+        if (this.updateTimer) {
+            clearTimeout(this.updateTimer);
+            this.updateTimer = null;
+        }
+        
+        // Only send if we have meaningful data
+        if (Object.keys(this.pendingUpdate).length > 1 || this.pendingUpdate.ffmpegStats) {
+            this.update({ ...this.pendingUpdate });
+            
+            // Reset pending update but preserve ffmpegStats
+            this.pendingUpdate = {
+                ffmpegStats: this.ffmpegStats
+            };
         }
     }
 
@@ -724,6 +765,36 @@ class ProgressStrategy {
         }
         
         return null;
+    }
+    
+    /**
+     * Get download statistics for final success message
+     * @returns {Object} Formatted download statistics
+     */
+    getDownloadStats() {
+        if (!this.downloadStats) {
+            return null;
+        }
+        
+        return {
+            videoSizeFormatted: `${Math.round(this.downloadStats.videoSize / 1024)} KB`,
+            audioSizeFormatted: `${Math.round(this.downloadStats.audioSize / 1024)} KB`,
+            totalSizeFormatted: `${Math.round(this.downloadStats.totalSize / 1024)} KB`,
+            muxingOverheadFormatted: `${this.downloadStats.muxingOverhead.toFixed(2)}%`
+        };
+    }
+    
+    /**
+     * Clean up timers and resources
+     */
+    cleanup() {
+        if (this.updateTimer) {
+            clearTimeout(this.updateTimer);
+            this.updateTimer = null;
+        }
+        
+        // Flush any pending updates before cleanup
+        this.flushPendingUpdate();
     }
 }
 
