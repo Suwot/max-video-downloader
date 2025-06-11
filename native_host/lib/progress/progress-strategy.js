@@ -33,11 +33,13 @@ class ProgressStrategy {
         this.duration = options.duration || 0;
         this.fileSizeBytes = options.fileSizeBytes || 0;
         this.segmentCount = options.segmentCount || 0;
+        this.bitrate = options.bitrate || 0;
+        this.ffprobeData = options.ffprobeData || null; // Store FFprobe data if provided
         
         // For segment tracking
         this.currentSegment = 0;
         
-        // For progress calculation and smoothing
+        // For progress calculation
         this.startTime = Date.now();
         this.lastBytes = 0;
         this.lastUpdate = 0;
@@ -45,7 +47,7 @@ class ProgressStrategy {
         this.updateInterval = options.updateInterval || 250; // Use parent's update interval
         this.lastProgressValues = [];
         
-        // For HLS segment-based speed calculation
+        // For speed calculation
         this.segmentSizes = [];
         this.lastSegmentTime = Date.now();
         
@@ -55,9 +57,36 @@ class ProgressStrategy {
         
         // Track which strategy we're using
         this.primaryStrategy = null;
-        this.fallbackToStrategy = null;
         
-        logDebug(`ProgressStrategy: Created for ${this.type} media`);
+        // For tracking stream information from FFmpeg
+        this.ffmpegStats = null;
+        this.streamInfoCaptured = false;
+        
+        // Parse duration from FFprobe data if available (most reliable)
+        if (this.ffprobeData && typeof this.ffprobeData === 'string') {
+            // Extract duration from ffprobe output
+            const durationMatch = this.ffprobeData.match(/Duration:\s*(\d+):(\d+):(\d+\.\d+)/);
+            if (durationMatch) {
+                const hours = parseInt(durationMatch[1], 10);
+                const minutes = parseInt(durationMatch[2], 10);
+                const seconds = parseFloat(durationMatch[3]);
+                this.probeDuration = hours * 3600 + minutes * 60 + seconds;
+                
+                // Use probe duration if it's more reliable
+                if (this.probeDuration > 0 && (!this.duration || Math.abs(this.duration - this.probeDuration) > 1)) {
+                    logDebug(`ProgressStrategy: Using FFprobe duration ${this.probeDuration}s instead of provided ${this.duration}s`);
+                    this.duration = this.probeDuration;
+                }
+            }
+            
+            // Extract bitrate information if available
+            const bitrateMatch = this.ffprobeData.match(/bitrate:\s*(\d+)\s*kb\/s/);
+            if (bitrateMatch && !this.bitrate) {
+                this.bitrate = parseInt(bitrateMatch[1], 10) * 1000; // Convert to bits/sec
+            }
+        }
+        
+        logDebug(`ProgressStrategy: Created for ${this.type} media with duration: ${this.duration}s, size: ${this.fileSizeBytes} bytes`);
     }
 
     /**
@@ -69,7 +98,8 @@ class ProgressStrategy {
             downloadUrl: this.downloadUrl,
             duration: this.duration,
             fileSizeBytes: this.fileSizeBytes,
-            segmentCount: this.segmentCount
+            segmentCount: this.segmentCount,
+            bitrate: this.bitrate
         });
         
         // Validate we have the minimum required data
@@ -77,51 +107,62 @@ class ProgressStrategy {
             logDebug('ProgressStrategy: No download URL provided');
             return false;
         }
+        
+        // If we have both duration and bitrate but no file size, we can estimate file size
+        if (this.duration > 0 && this.bitrate > 0 && this.fileSizeBytes <= 0) {
+            // Estimate file size from duration and bitrate (bits/sec * seconds / 8 = bytes)
+            const estimatedSize = Math.ceil((this.bitrate * this.duration) / 8);
+            logDebug(`ProgressStrategy: Estimating file size as ${estimatedSize} bytes based on duration and bitrate`);
+            this.fileSizeBytes = estimatedSize;
+        }
 
-        // Check type-specific requirements
+        // Check type-specific requirements and choose optimal strategy
         switch (this.type) {
             case 'direct':
-                // For direct, we either need file size or duration
+                // For direct downloads, size is always the most accurate if available
                 if (this.fileSizeBytes > 0) {
-                    logDebug('ProgressStrategy: Using FILE SIZE strategy for direct media');
+                    logDebug(`ProgressStrategy: Using FILE SIZE strategy (${this.fileSizeBytes} bytes) for direct media`);
                     this.primaryStrategy = 'size';
                 } else if (this.duration > 0) {
-                    logDebug('ProgressStrategy: Using DURATION strategy for direct media');
+                    logDebug(`ProgressStrategy: Using DURATION strategy (${this.duration}s) for direct media`);
                     this.primaryStrategy = 'duration';
                 } else {
-                    logDebug('ProgressStrategy: Insufficient data for direct media tracking');
-                    return false;
+                    logDebug('ProgressStrategy: Insufficient data for direct media tracking - will use dynamic strategy');
+                    this.primaryStrategy = 'dynamic'; // Will determine based on FFmpeg output
+                    return true; // Still return true as FFmpeg will provide progress data
                 }
                 return true;
 
             case 'hls':
-                // For HLS, determine and log the primary strategy
+                // For HLS, prioritize strategies based on reliability
                 if (this.duration > 0) {
-                    logDebug('ProgressStrategy: Using DURATION strategy for HLS');
+                    logDebug(`ProgressStrategy: Using DURATION strategy (${this.duration}s) for HLS`);
                     this.primaryStrategy = 'duration';
                 } else if (this.segmentCount > 0) {
-                    logDebug('ProgressStrategy: Using SEGMENT COUNT strategy for HLS');
+                    logDebug(`ProgressStrategy: Using SEGMENT COUNT strategy (${this.segmentCount} segments) for HLS`);
                     this.primaryStrategy = 'segments';
                 } else if (this.fileSizeBytes > 0) {
-                    logDebug('ProgressStrategy: Using FILE SIZE strategy for HLS');
+                    logDebug(`ProgressStrategy: Using FILE SIZE strategy (${this.fileSizeBytes} bytes) for HLS`);
                     this.primaryStrategy = 'size';
                 } else {
-                    logDebug('ProgressStrategy: Insufficient data for HLS tracking');
-                    return false;
+                    logDebug('ProgressStrategy: Insufficient data for HLS tracking - will attempt to use FFmpeg output');
+                    this.primaryStrategy = 'dynamic';
+                    return true;
                 }
                 return true;
 
             case 'dash':
-                // For DASH, determine and log the primary strategy
+                // For DASH, choose optimal strategy
                 if (this.duration > 0) {
-                    logDebug('ProgressStrategy: Using DURATION strategy for DASH');
+                    logDebug(`ProgressStrategy: Using DURATION strategy (${this.duration}s) for DASH`);
                     this.primaryStrategy = 'duration';
                 } else if (this.fileSizeBytes > 0) {
-                    logDebug('ProgressStrategy: Using FILE SIZE strategy for DASH');
+                    logDebug(`ProgressStrategy: Using FILE SIZE strategy (${this.fileSizeBytes} bytes) for DASH`);
                     this.primaryStrategy = 'size';
                 } else {
-                    logDebug('ProgressStrategy: Insufficient data for DASH tracking');
-                    return false;
+                    logDebug('ProgressStrategy: Insufficient data for DASH tracking - will attempt to use FFmpeg output');
+                    this.primaryStrategy = 'dynamic';
+                    return true;
                 }
                 return true;
 
@@ -141,38 +182,43 @@ class ProgressStrategy {
         const downloaded = data.downloaded || 0;
         const currentSegment = data.currentSegment || this.currentSegment;
         
-        // Track cumulative downloaded bytes for HLS/DASH
-        if (this.type !== 'direct' && downloaded > 0) {
-            // If this is a new segment, add to total
-            if (!this.downloadedPerSegment[currentSegment]) {
-                this.downloadedPerSegment[currentSegment] = downloaded;
-                this.totalDownloaded += downloaded;
-            } else if (downloaded > this.downloadedPerSegment[currentSegment]) {
-                // If we have more data for an existing segment
-                const diff = downloaded - this.downloadedPerSegment[currentSegment];
-                this.downloadedPerSegment[currentSegment] = downloaded;
-                this.totalDownloaded += diff;
+        // Handle direct vs. incremental downloaded bytes reporting from FFmpeg
+        let effectiveDownloaded = downloaded;
+        
+        // If progress=end is received, use the final downloaded value directly
+        if (data.progress === 100) {
+            this.totalDownloaded = downloaded;
+            effectiveDownloaded = downloaded;
+        }
+        // Otherwise for HLS/DASH, ensure we track cumulative bytes since FFmpeg reports per-segment
+        else if (this.type !== 'direct' && downloaded > 0) {
+            // Check if this is a direct "total_size" value (already cumulative)
+            if (data.isTotalSize) {
+                this.totalDownloaded = downloaded;
+            } 
+            // Normal incremental tracking
+            else {
+                // If this is a new segment, add to total
+                if (!this.downloadedPerSegment[currentSegment]) {
+                    this.downloadedPerSegment[currentSegment] = downloaded;
+                    this.totalDownloaded += downloaded;
+                } else if (downloaded > this.downloadedPerSegment[currentSegment]) {
+                    // If we have more data for an existing segment
+                    const diff = downloaded - this.downloadedPerSegment[currentSegment];
+                    this.downloadedPerSegment[currentSegment] = downloaded;
+                    this.totalDownloaded += diff;
+                }
             }
+            effectiveDownloaded = this.totalDownloaded;
         }
         
-        // Keep track of segment changes
+        // Keep track of segment changes (useful for HLS)
         const isNewSegment = currentSegment > this.currentSegment;
         if (isNewSegment) {
             this.currentSegment = currentSegment;
-            logDebug(`ProgressStrategy: Detected new segment ${currentSegment}/${this.segmentCount}`);
-            
-            // For HLS: Record segment change time
-            if (this.type === 'hls') {
-                const now = Date.now();
-                const segmentTime = (now - this.lastSegmentTime) / 1000;
-                this.lastSegmentTime = now;
-            }
         }
         
-        // For direct downloads, use the downloaded amount directly
-        const effectiveDownloaded = this.type === 'direct' ? downloaded : this.totalDownloaded;
-        
-        // Calculate progress based on media type
+        // Calculate progress based on media type using our simplified strategies
         let progress = 0;
         let progressInfo = {};
         
@@ -195,7 +241,6 @@ class ProgressStrategy {
                     totalSegments: this.segmentCount || 0,
                     downloaded: effectiveDownloaded,
                     strategy: this.primaryStrategy,
-                    fallbackStrategy: this.fallbackToStrategy,
                     totalFileSize: this.fileSizeBytes || null
                 };
                 break;
@@ -207,7 +252,6 @@ class ProgressStrategy {
                     totalDuration: this.duration || 0,
                     downloaded: effectiveDownloaded,
                     strategy: this.primaryStrategy,
-                    fallbackStrategy: this.fallbackToStrategy,
                     totalFileSize: this.fileSizeBytes || null
                 };
                 break;
@@ -219,15 +263,39 @@ class ProgressStrategy {
         // Calculate speed
         const speed = this.calculateSpeed(effectiveDownloaded);
         
-        // Send progress update with additional information useful for the UI
+        // Simple, direct progress calculation - no unnecessary complexities
+        let finalProgress;
+        
+        if (data.progress === 100) {
+            // Explicit completion signal from FFmpeg
+            finalProgress = 100;
+        } else if (this.primaryStrategy === 'size' && this.fileSizeBytes > 0 && effectiveDownloaded > 0) {
+            // Direct size-based calculation for size strategy - most reliable method
+            const exactProgress = (effectiveDownloaded / this.fileSizeBytes) * 100;
+            finalProgress = Math.min(99.9, exactProgress); // Cap at 99.9% until we get an explicit end marker
+        } else {
+            // Apply minimal smoothing for streaming formats or when no size available
+            finalProgress = Math.min(99.9, smoothedProgress); 
+        }
+        
+        // Capture stream information for final summary once we're past 90%
+        if ((finalProgress > 90 || data.progress === 100) && !this.streamInfoCaptured && data.ffmpegStats) {
+            this.streamInfoCaptured = true;
+            this.streamInfo = data.ffmpegStats;
+        }
+        
+        // Send progress update with all relevant information useful for the UI
         this.sendProgress({
             ...data,
-            progress: Math.min(99.9, Math.round(smoothedProgress)), // Cap at 99.9% until complete
+            progress: finalProgress,
             speed,
-            elapsedTime: (Date.now() - this.startTime) / 1000, // Elapsed time in seconds
+            elapsedTime: (Date.now() - this.startTime) / 1000,
             type: this.type,
             strategy: this.primaryStrategy,
-            fallbackStrategy: this.fallbackToStrategy,
+            downloadedBytes: effectiveDownloaded,
+            totalBytes: this.fileSizeBytes || null,
+            // Include stream info in the final update
+            ...(data.progress === 100 && this.streamInfo ? { streamInfo: this.streamInfo } : {}),
             ...progressInfo
         });
     }
@@ -239,17 +307,21 @@ class ProgressStrategy {
      * @returns {number} Progress percentage (0-100)
      */
     calculateDirectProgress(downloaded, currentTime) {
-        // Priority 1: Use file size and downloaded bytes (most accurate)
+        // For direct media downloads, the calculation should be simple and reliable:
+        
+        // Strategy 1 (Most accurate): Use file size and downloaded bytes
         if (this.fileSizeBytes > 0 && downloaded > 0) {
             return (downloaded / this.fileSizeBytes) * 100;
         }
         
-        // Priority 2: Use duration and current time
+        // Strategy 2: Use duration and current time
         if (this.duration > 0 && currentTime > 0) {
-            return (currentTime / this.duration) * 100;
+            const effectiveTime = Math.min(currentTime, this.duration); // Cap at duration
+            return (effectiveTime / this.duration) * 100;
         }
         
-        // No reliable progress data
+        // Strategy 3: If we have neither size nor duration, just return 0
+        // FFmpeg will eventually send progress=end when completed
         return 0;
     }
 
@@ -261,56 +333,33 @@ class ProgressStrategy {
      * @returns {number} Progress percentage (0-100)
      */
     calculateHlsProgress(currentTime, currentSegment, downloaded) {
-        let progress = 0;
-        this.fallbackToStrategy = null;
+        // Simple, prioritized approach without excessive fallbacks
         
-        // Use the primary strategy determined during initialization
-        switch (this.primaryStrategy) {
-            case 'duration':
-                if (this.duration > 0 && currentTime > 0) {
-                    progress = (currentTime / this.duration) * 100;
-                } else if (this.duration > 0 && this.segmentCount > 0 && currentSegment > 0) {
-                    // Duration strategy selected but timestamps aren't parsing correctly
-                    // Fallback to segment-based with time estimation
-                    const estimatedTime = (currentSegment / this.segmentCount) * this.duration;
-                    progress = (estimatedTime / this.duration) * 100;
-                    this.fallbackToStrategy = 'segments-estimated';
-                    logDebug(`ProgressStrategy: Duration strategy with invalid timestamps, falling back to segment estimation. Progress: ${progress.toFixed(2)}%`);
-                }
-                break;
-                
-            case 'segments':
-                if (this.segmentCount > 0 && currentSegment > 0) {
-                    progress = (currentSegment / this.segmentCount) * 100;
-                }
-                break;
-                
-            case 'size':
-                if (this.fileSizeBytes > 0 && downloaded > 0) {
-                    progress = (downloaded / this.fileSizeBytes) * 100;
-                }
-                break;
+        // Strategy 1: Use time-based progress if we have valid time and duration
+        if (this.primaryStrategy === 'duration' && this.duration > 0 && currentTime > 0) {
+            const effectiveTime = Math.min(currentTime, this.duration);
+            return (effectiveTime / this.duration) * 100;
         }
         
-        // When progress is too low or not calculated, try fallback methods
-        if (progress <= 0) {
-            // Try the other methods in priority order
-            if (this.primaryStrategy !== 'segments' && this.segmentCount > 0 && currentSegment > 0) {
-                progress = (currentSegment / this.segmentCount) * 100;
-                this.fallbackToStrategy = 'segments';
-                logDebug(`ProgressStrategy: Falling back to segment-based progress. Progress: ${progress.toFixed(2)}%`);
-            } else if (this.primaryStrategy !== 'size' && this.fileSizeBytes > 0 && downloaded > 0) {
-                progress = (downloaded / this.fileSizeBytes) * 100;
-                this.fallbackToStrategy = 'size';
-                logDebug(`ProgressStrategy: Falling back to size-based progress. Progress: ${progress.toFixed(2)}%`);
-            } else if (this.primaryStrategy !== 'duration' && this.duration > 0 && currentTime > 0) {
-                progress = (currentTime / this.duration) * 100;
-                this.fallbackToStrategy = 'duration';
-                logDebug(`ProgressStrategy: Falling back to duration-based progress. Progress: ${progress.toFixed(2)}%`);
-            }
+        // Strategy 2: Use segment-based progress if we have valid segment info
+        if ((this.primaryStrategy === 'segments' || currentTime <= 0) && this.segmentCount > 0 && currentSegment > 0) {
+            const effectiveSegment = Math.min(currentSegment, this.segmentCount);
+            return (effectiveSegment / this.segmentCount) * 100;
         }
         
-        return progress;
+        // Strategy 3: Use size-based progress if we have file size info
+        if ((this.primaryStrategy === 'size' || (currentTime <= 0 && currentSegment <= 0)) && 
+            this.fileSizeBytes > 0 && downloaded > 0) {
+            return Math.min((downloaded / this.fileSizeBytes) * 100, 100);
+        }
+        
+        // If all else fails, calculate a reasonable estimate
+        // For HLS, segment count is often the most reliable indicator
+        if (this.segmentCount > 0 && currentSegment > 0) {
+            return (currentSegment / this.segmentCount) * 100;
+        }
+        
+        return 0;
     }
 
     /**
@@ -320,14 +369,21 @@ class ProgressStrategy {
      * @returns {number} Progress percentage (0-100)
      */
     calculateDashProgress(currentTime, downloaded) {
+        // Log when current time exceeds duration for debugging
+        if (this.duration > 0 && currentTime > this.duration) {
+            logDebug(`ProgressStrategy: DASH - Current time (${currentTime.toFixed(2)}s) exceeds total duration (${this.duration}s)`);
+        }
+        
         // Priority 1: Time-based calculation (as per your request)
         if (this.duration > 0 && currentTime > 0) {
-            return (currentTime / this.duration) * 100;
+            // Cap current time at duration to prevent progress > 100%
+            const effectiveTime = Math.min(currentTime, this.duration);
+            return (effectiveTime / this.duration) * 100;
         }
         
         // Priority 2: Size-based estimation
         if (this.fileSizeBytes > 0 && downloaded > 0) {
-            return (downloaded / this.fileSizeBytes) * 100;
+            return Math.min((downloaded / this.fileSizeBytes) * 100, 100);
         }
         
         // No reliable progress data
@@ -408,24 +464,42 @@ class ProgressStrategy {
      * @returns {number} Smoothed progress value
      */
     smoothProgress(progress) {
-        // Add to history, keep last 5 values
+        // For direct downloads with size strategy, use exact progress with no smoothing
+        // Size-based progress from FFmpeg's total_size is already reliable and accurate
+        if (this.type === 'direct' && this.primaryStrategy === 'size' && this.fileSizeBytes > 0) {
+            // No smoothing needed - FFmpeg provides consistent size updates
+            return progress;
+        }
+        
+        // For streaming media (HLS/DASH) where progress can be jumpy, apply minimal smoothing
+        // Use exponential moving average with bias toward recent values
+        if (this.type === 'hls' || this.type === 'dash') {
+            // Only keep last 3 values for streaming formats
+            this.lastProgressValues.push(progress);
+            if (this.lastProgressValues.length > 3) {
+                this.lastProgressValues.shift();
+            }
+            
+            // Return raw value if we only have one sample
+            if (this.lastProgressValues.length === 1) {
+                return progress;
+            }
+            
+            // Apply exponential weighting: 70% current, 30% previous average
+            const previousAvg = this.lastProgressValues.slice(0, -1).reduce((sum, val) => sum + val, 0) / 
+                               (this.lastProgressValues.length - 1);
+            return progress * 0.7 + previousAvg * 0.3;
+        }
+        
+        // Fallback smoothing for other cases (minimal, only 3 values)
         this.lastProgressValues.push(progress);
-        if (this.lastProgressValues.length > 5) {
+        if (this.lastProgressValues.length > 3) {
             this.lastProgressValues.shift();
         }
         
-        // Calculate weighted average - give more weight to newer values
-        let totalWeight = 0;
-        let weightedSum = 0;
-        
-        for (let i = 0; i < this.lastProgressValues.length; i++) {
-            // Weight increases with index (newer values get higher weight)
-            const weight = i + 1;
-            weightedSum += this.lastProgressValues[i] * weight;
-            totalWeight += weight;
-        }
-        
-        return totalWeight > 0 ? weightedSum / totalWeight : progress;
+        // Simple average for fallback
+        const sum = this.lastProgressValues.reduce((acc, val) => acc + val, 0);
+        return sum / this.lastProgressValues.length;
     }
 
     /**
@@ -446,53 +520,106 @@ class ProgressStrategy {
         const now = Date.now();
         
         // Rate-limit updates based on updateInterval
-        // This ensures we respect the parent's update interval
         if (now - this.lastProcessedTime < this.updateInterval) {
             return;
         }
         
-        // Extract relevant data from FFmpeg output
-        const time = this.parseTime(output);
-        const size = this.parseSize(output);
-        const segment = this.parseSegment(output);
+        // Extract FFmpeg progress indicators - direct key-value parsing
+        const outTimeMs = output.match(/out_time_ms=(\d+)/);
+        const outTimeMatch = output.match(/out_time=(\d+):(\d+):(\d+\.\d+)/);
+        const totalSize = output.match(/total_size=(\d+)/);
+        const progressStatus = output.match(/progress=(\w+)/);
+        const speedMatch = output.match(/speed=\s*([\d.]+)x/);
+        const bitrateMatch = output.match(/bitrate=\s*([\d.]+)(kbit|kbits|mbit|mbits)\/s/i);
         
-        // Check for timestamp errors and log them for diagnosis
-        if (output.includes("Invalid timestamps")) {
-            const timestampErrorMatch = output.match(/Invalid timestamps.*pts=(\d+), dts=(\d+), size=(\d+)/);
-            if (timestampErrorMatch && this.primaryStrategy === 'duration') {
-                logDebug(`ProgressStrategy: Detected invalid timestamps (pts=${timestampErrorMatch[1]}, dts=${timestampErrorMatch[2]})`);
-            }
-        }
-        
-        let updateData = {};
-        
-        if (time !== null) {
-            updateData.currentTime = time;
-        }
-        
-        if (size !== null) {
-            updateData.downloaded = size;
-        }
-        
-        if (segment !== null) {
-            updateData.currentSegment = segment;
-        }
-        
-        // Special handling for HLS with duration strategy when timestamps aren't working
-        if (this.type === 'hls' && this.primaryStrategy === 'duration' && 
-            this.segmentCount > 0 && segment !== null && 
-            (time === null || time === 0)) {
+        // Track final summary information
+        if (output.includes('global headers') || output.includes('muxing overhead')) {
+            // This is the final stats summary from FFmpeg
+            const videoSizeMatch = output.match(/video:(\d+)kB/);
+            const audioSizeMatch = output.match(/audio:(\d+)kB/);
+            const subtitleSizeMatch = output.match(/subtitle:(\d+)kB/);
+            const overheadMatch = output.match(/muxing overhead:\s*([\d.]+)%/);
             
-            // No valid timestamp, but we have segment info - use that to estimate time position
-            if (this.duration > 0) {
-                const estimatedTime = (segment / this.segmentCount) * this.duration;
-                updateData.currentTime = estimatedTime;
-                logDebug(`ProgressStrategy: Using estimated time position: ${estimatedTime.toFixed(2)}s at segment ${segment}/${this.segmentCount}`);
+            this.ffmpegStats = {
+                videoSize: videoSizeMatch ? parseInt(videoSizeMatch[1], 10) * 1024 : 0,
+                audioSize: audioSizeMatch ? parseInt(audioSizeMatch[1], 10) * 1024 : 0,
+                subtitleSize: subtitleSizeMatch ? parseInt(subtitleSizeMatch[1], 10) * 1024 : 0,
+                muxingOverhead: overheadMatch ? parseFloat(overheadMatch[1]) : 0
+            };
+        }
+        
+        let updateData = {
+            ffmpegStats: this.ffmpegStats
+        };
+        
+        // Get time information (most reliable method)
+        if (outTimeMs) {
+            // Time in milliseconds is most precise
+            const timeInMs = parseInt(outTimeMs[1], 10);
+            if (!isNaN(timeInMs)) {
+                updateData.currentTime = timeInMs / 1000; // convert to seconds
             }
+        } else if (outTimeMatch) {
+            // Fallback to HH:MM:SS.MS format
+            const hours = parseInt(outTimeMatch[1], 10);
+            const minutes = parseInt(outTimeMatch[2], 10);
+            const seconds = parseFloat(outTimeMatch[3]);
+            updateData.currentTime = hours * 3600 + minutes * 60 + seconds;
+        }
+        
+        // Get total downloaded bytes
+        if (totalSize) {
+            const size = parseInt(totalSize[1], 10);
+            if (!isNaN(size)) {
+                updateData.downloaded = size;
+                updateData.isTotalSize = true; // Mark this as coming directly from total_size
+            }
+        } else {
+            // Fallback to traditional size parsing if total_size isn't available
+            const size = this.parseSize(output);
+            if (size !== null) {
+                updateData.downloaded = size;
+            }
+        }
+        
+        // Extract speed information
+        if (speedMatch) {
+            const speedValue = parseFloat(speedMatch[1]);
+            if (!isNaN(speedValue)) {
+                updateData.ffmpegSpeed = speedValue;
+            }
+        }
+        
+        // Extract bitrate information
+        if (bitrateMatch) {
+            let bitrateValue = parseFloat(bitrateMatch[1]);
+            if (!isNaN(bitrateValue)) {
+                // Convert to bits/sec
+                if (bitrateMatch[2].toLowerCase().startsWith('k')) {
+                    bitrateValue *= 1000;
+                } else if (bitrateMatch[2].toLowerCase().startsWith('m')) {
+                    bitrateValue *= 1000000;
+                }
+                updateData.bitrate = bitrateValue;
+            }
+        }
+        
+        // For HLS/DASH, we still need segment tracking
+        if (this.type === 'hls' || this.type === 'dash') {
+            const segment = this.parseSegment(output);
+            if (segment !== null) {
+                updateData.currentSegment = segment;
+            }
+        }
+        
+        // Check if we've reached the end
+        if (progressStatus && progressStatus[1] === 'end') {
+            updateData.progress = 100;
+            logDebug('ProgressStrategy: Detected end of processing');
         }
         
         // Only update if we have new data
-        if (Object.keys(updateData).length > 0) {
+        if (Object.keys(updateData).length > 1) { // More than just ffmpegStats
             this.lastProcessedTime = now;
             this.update(updateData);
         }
@@ -504,41 +631,29 @@ class ProgressStrategy {
      * @returns {number|null} Time in seconds or null if not found
      */
     parseTime(output) {
-        // Method 1: Look for standard time=HH:MM:SS.MS pattern
+        // This is now a fallback method - the primary time extraction happens in processOutput
+        // Look for standard time=HH:MM:SS.MS pattern
         const timeMatch = output.match(/time=(\d+):(\d+):(\d+\.\d+)/);
         if (timeMatch) {
             const hours = parseInt(timeMatch[1], 10);
             const minutes = parseInt(timeMatch[2], 10);
             const seconds = parseFloat(timeMatch[3]);
-            return hours * 3600 + minutes * 60 + seconds;
+            const totalSeconds = hours * 3600 + minutes * 60 + seconds;
+            
+            // Basic sanity check
+            if (this.duration > 0 && totalSeconds > this.duration * 1.05) {
+                return Math.min(totalSeconds, this.duration);
+            }
+            
+            return totalSeconds;
         }
         
-        // Method 2: Look for time in seconds pattern (sometimes used by FFmpeg)
+        // Look for time in seconds pattern
         const timeSecsMatch = output.match(/time=\s*([\d.]+)/);
         if (timeSecsMatch) {
             const timeInSeconds = parseFloat(timeSecsMatch[1]);
             if (!isNaN(timeInSeconds) && timeInSeconds > 0) {
                 return timeInSeconds;
-            }
-        }
-        
-        // Method 3: Check for PTS time in FFmpeg output
-        const ptsMatch = output.match(/pts=([\d.]+)/);
-        if (ptsMatch) {
-            const pts = parseFloat(ptsMatch[1]);
-            if (!isNaN(pts) && pts > 0) {
-                // PTS is often in a different timescale, might need adjustment
-                // This is a simplistic approach - might need tuning
-                return pts / 90000; // Common timescale for MPEG-TS
-            }
-        }
-        
-        // Method 4: Extract from DTS if available
-        const dtsMatch = output.match(/dts=([\d.]+)/);
-        if (dtsMatch) {
-            const dts = parseFloat(dtsMatch[1]);
-            if (!isNaN(dts) && dts > 0) {
-                return dts / 90000; // Common timescale for MPEG-TS
             }
         }
         
@@ -551,19 +666,46 @@ class ProgressStrategy {
      * @returns {number|null} Size in bytes or null if not found
      */
     parseSize(output) {
-        // Look for size=   123kB pattern
+        // Method 1: Look for direct size in bytes (e.g. "size= 186388kB")
         const sizeMatch = output.match(/size=\s*(\d+)(\w+)/);
         if (sizeMatch) {
             const value = parseInt(sizeMatch[1], 10);
-            const unit = sizeMatch[2];
+            const unit = sizeMatch[2].toLowerCase();
             
-            switch (unit.toLowerCase()) {
+            switch (unit) {
                 case 'kb': return value * 1024;
                 case 'mb': return value * 1024 * 1024;
                 case 'gb': return value * 1024 * 1024 * 1024;
                 default: return value;
             }
         }
+        
+        // Method 2: Look for detailed breakdown (e.g. "video:171667kB audio:13874kB")
+        const videoSizeMatch = output.match(/video:(\d+)kB/);
+        const audioSizeMatch = output.match(/audio:(\d+)kB/);
+        const subtitleSizeMatch = output.match(/subtitle:(\d+)kB/);
+        
+        if (videoSizeMatch || audioSizeMatch) {
+            let totalSize = 0;
+            
+            if (videoSizeMatch) {
+                totalSize += parseInt(videoSizeMatch[1], 10) * 1024;
+            }
+            
+            if (audioSizeMatch) {
+                totalSize += parseInt(audioSizeMatch[1], 10) * 1024;
+            }
+            
+            if (subtitleSizeMatch) {
+                totalSize += parseInt(subtitleSizeMatch[1], 10) * 1024;
+            }
+            
+            // Only return if we found at least one valid size
+            if (totalSize > 0) {
+                return totalSize;
+            }
+        }
+        
         return null;
     }
 
