@@ -41,7 +41,16 @@ class ProgressStrategy {
         this.startTime = Date.now();
         this.lastBytes = 0;
         this.lastUpdate = 0;
+        this.lastProcessedTime = 0;
+        this.updateInterval = options.updateInterval || 250; // Use parent's update interval
         this.lastProgressValues = [];
+        
+        // For HLS segment-based speed calculation
+        this.segmentSizes = [];
+        this.lastSegmentTime = Date.now();
+        
+        // Track which strategy we're using
+        this.primaryStrategy = null;
         
         logDebug(`ProgressStrategy: Created for ${this.type} media`);
     }
@@ -68,23 +77,44 @@ class ProgressStrategy {
         switch (this.type) {
             case 'direct':
                 // For direct, we either need file size or duration
-                if (this.fileSizeBytes <= 0 && this.duration <= 0) {
+                if (this.fileSizeBytes > 0) {
+                    logDebug('ProgressStrategy: Using FILE SIZE strategy for direct media');
+                    this.primaryStrategy = 'size';
+                } else if (this.duration > 0) {
+                    logDebug('ProgressStrategy: Using DURATION strategy for direct media');
+                    this.primaryStrategy = 'duration';
+                } else {
                     logDebug('ProgressStrategy: Insufficient data for direct media tracking');
                     return false;
                 }
                 return true;
 
             case 'hls':
-                // For HLS, we prioritize duration and segment info
-                if (this.duration <= 0 && this.segmentCount <= 0) {
+                // For HLS, determine and log the primary strategy
+                if (this.duration > 0) {
+                    logDebug('ProgressStrategy: Using DURATION strategy for HLS');
+                    this.primaryStrategy = 'duration';
+                } else if (this.segmentCount > 0) {
+                    logDebug('ProgressStrategy: Using SEGMENT COUNT strategy for HLS');
+                    this.primaryStrategy = 'segments';
+                } else if (this.fileSizeBytes > 0) {
+                    logDebug('ProgressStrategy: Using FILE SIZE strategy for HLS');
+                    this.primaryStrategy = 'size';
+                } else {
                     logDebug('ProgressStrategy: Insufficient data for HLS tracking');
                     return false;
                 }
                 return true;
 
             case 'dash':
-                // For DASH, we prioritize duration
-                if (this.duration <= 0 && this.fileSizeBytes <= 0) {
+                // For DASH, determine and log the primary strategy
+                if (this.duration > 0) {
+                    logDebug('ProgressStrategy: Using DURATION strategy for DASH');
+                    this.primaryStrategy = 'duration';
+                } else if (this.fileSizeBytes > 0) {
+                    logDebug('ProgressStrategy: Using FILE SIZE strategy for DASH');
+                    this.primaryStrategy = 'size';
+                } else {
                     logDebug('ProgressStrategy: Insufficient data for DASH tracking');
                     return false;
                 }
@@ -106,9 +136,17 @@ class ProgressStrategy {
         const downloaded = data.downloaded || 0;
         const currentSegment = data.currentSegment || this.currentSegment;
         
-        // Update segment tracking
-        if (currentSegment > this.currentSegment) {
+        // Keep track of segment changes
+        const isNewSegment = currentSegment > this.currentSegment;
+        if (isNewSegment) {
             this.currentSegment = currentSegment;
+            
+            // For HLS: Record segment change time
+            if (this.type === 'hls') {
+                const now = Date.now();
+                const segmentTime = (now - this.lastSegmentTime) / 1000;
+                this.lastSegmentTime = now;
+            }
         }
         
         // Calculate progress based on media type
@@ -130,7 +168,9 @@ class ProgressStrategy {
                     currentTime,
                     totalDuration: this.duration || 0,
                     currentSegment,
-                    totalSegments: this.segmentCount || 0
+                    totalSegments: this.segmentCount || 0,
+                    downloaded,
+                    strategy: this.primaryStrategy
                 };
                 break;
                 
@@ -139,7 +179,8 @@ class ProgressStrategy {
                 progressInfo = { 
                     currentTime, 
                     totalDuration: this.duration || 0,
-                    downloaded
+                    downloaded,
+                    strategy: this.primaryStrategy
                 };
                 break;
         }
@@ -157,6 +198,7 @@ class ProgressStrategy {
             speed,
             elapsedTime: (Date.now() - this.startTime) / 1000, // Elapsed time in seconds
             type: this.type,
+            strategy: this.primaryStrategy,
             ...progressInfo
         });
     }
@@ -190,23 +232,42 @@ class ProgressStrategy {
      * @returns {number} Progress percentage (0-100)
      */
     calculateHlsProgress(currentTime, currentSegment, downloaded) {
-        // Priority 1: Time-based tracking (as per your request)
-        if (this.duration > 0 && currentTime > 0) {
-            return (currentTime / this.duration) * 100;
+        let progress = 0;
+        
+        // Use the primary strategy determined during initialization
+        switch (this.primaryStrategy) {
+            case 'duration':
+                if (this.duration > 0 && currentTime > 0) {
+                    progress = (currentTime / this.duration) * 100;
+                }
+                break;
+                
+            case 'segments':
+                if (this.segmentCount > 0 && currentSegment > 0) {
+                    progress = (currentSegment / this.segmentCount) * 100;
+                }
+                break;
+                
+            case 'size':
+                if (this.fileSizeBytes > 0 && downloaded > 0) {
+                    progress = (downloaded / this.fileSizeBytes) * 100;
+                }
+                break;
         }
         
-        // Priority 2: Segment-based tracking
-        if (this.segmentCount > 0 && currentSegment > 0) {
-            return (currentSegment / this.segmentCount) * 100;
+        // When progress is too low or not calculated, try fallback methods
+        if (progress <= 0) {
+            // Try the other methods in priority order
+            if (this.primaryStrategy !== 'duration' && this.duration > 0 && currentTime > 0) {
+                progress = (currentTime / this.duration) * 100;
+            } else if (this.primaryStrategy !== 'segments' && this.segmentCount > 0 && currentSegment > 0) {
+                progress = (currentSegment / this.segmentCount) * 100;
+            } else if (this.primaryStrategy !== 'size' && this.fileSizeBytes > 0 && downloaded > 0) {
+                progress = (downloaded / this.fileSizeBytes) * 100;
+            }
         }
         
-        // Priority 3: Size-based estimation if file size is known
-        if (this.fileSizeBytes > 0 && downloaded > 0) {
-            return (downloaded / this.fileSizeBytes) * 100;
-        }
-        
-        // No reliable progress data
-        return 0;
+        return progress;
     }
 
     /**
@@ -237,17 +298,52 @@ class ProgressStrategy {
      */
     calculateSpeed(downloaded) {
         let speed = 0;
+        const now = Date.now();
         
         if (downloaded > this.lastBytes) {
-            const elapsedSecs = (Date.now() - this.startTime) / 1000;
-            if (elapsedSecs > 0) {
+            // For HLS: Use segment-based speed calculation to avoid wild fluctuations
+            if (this.type === 'hls' && this.currentSegment > 0) {
+                // Store segment size information for averaging
+                const bytesDownloadedSinceLastUpdate = downloaded - this.lastBytes;
+                
+                if (bytesDownloadedSinceLastUpdate > 0) {
+                    this.segmentSizes.push({
+                        bytes: bytesDownloadedSinceLastUpdate,
+                        timestamp: now
+                    });
+                    
+                    // Keep only the last 5 segments for averaging
+                    if (this.segmentSizes.length > 5) {
+                        this.segmentSizes.shift();
+                    }
+                }
+                
+                // Calculate average speed over multiple segments
+                if (this.segmentSizes.length > 0) {
+                    let totalBytes = 0;
+                    const earliestTimestamp = this.segmentSizes[0].timestamp;
+                    
+                    this.segmentSizes.forEach(segment => {
+                        totalBytes += segment.bytes;
+                    });
+                    
+                    const totalTimeSeconds = Math.max(0.1, (now - earliestTimestamp) / 1000);
+                    speed = totalBytes / totalTimeSeconds;
+                } else {
+                    // Fallback to overall average if we don't have segment data yet
+                    const elapsedSecs = Math.max(0.1, (now - this.startTime) / 1000);
+                    speed = downloaded / elapsedSecs;
+                }
+            } else {
+                // For direct and DASH: Calculate using overall and recent speed
                 // Overall average speed
+                const elapsedSecs = Math.max(0.1, (now - this.startTime) / 1000);
                 const avgSpeed = downloaded / elapsedSecs;
                 
                 // Instantaneous speed (for last interval)
                 let instantSpeed = 0;
-                const intervalSecs = (Date.now() - this.lastUpdate) / 1000;
-                if (this.lastBytes > 0 && intervalSecs > 0) {
+                const intervalSecs = Math.max(0.1, (now - this.lastUpdate) / 1000);
+                if (this.lastBytes > 0) {
                     instantSpeed = (downloaded - this.lastBytes) / intervalSecs;
                 }
                 
@@ -256,8 +352,9 @@ class ProgressStrategy {
             }
         }
         
+        // Update state for next calculation
         this.lastBytes = downloaded;
-        this.lastUpdate = Date.now();
+        this.lastUpdate = now;
         
         return speed;
     }
@@ -303,6 +400,14 @@ class ProgressStrategy {
      * @param {string} output FFmpeg stdout/stderr output
      */
     processOutput(output) {
+        const now = Date.now();
+        
+        // Rate-limit updates based on updateInterval
+        // This ensures we respect the parent's update interval
+        if (now - this.lastProcessedTime < this.updateInterval) {
+            return;
+        }
+        
         // Extract relevant data from FFmpeg output
         const time = this.parseTime(output);
         const size = this.parseSize(output);
@@ -324,6 +429,7 @@ class ProgressStrategy {
         
         // Only update if we have new data
         if (Object.keys(updateData).length > 0) {
+            this.lastProcessedTime = now;
             this.update(updateData);
         }
     }

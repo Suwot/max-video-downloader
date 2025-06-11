@@ -52,6 +52,7 @@ class ProgressTracker {
         // Create progress strategy
         this.strategy = new ProgressStrategy({
             onProgress: this.handleProgress.bind(this),
+            updateInterval: this.updateInterval,
             ...fileInfo
         });
         
