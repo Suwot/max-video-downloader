@@ -116,53 +116,47 @@ class ProgressStrategy {
             this.fileSizeBytes = estimatedSize;
         }
 
-        // Check type-specific requirements and choose optimal strategy
+        // Check type-specific requirements and set primary strategy for logging
         switch (this.type) {
             case 'direct':
-                // For direct downloads, size is always the most accurate if available
                 if (this.fileSizeBytes > 0) {
-                    logDebug(`ProgressStrategy: Using FILE SIZE strategy (${this.fileSizeBytes} bytes) for direct media`);
+                    logDebug(`ProgressStrategy: Direct media - size-based primary (${this.fileSizeBytes} bytes)`);
                     this.primaryStrategy = 'size';
                 } else if (this.duration > 0) {
-                    logDebug(`ProgressStrategy: Using DURATION strategy (${this.duration}s) for direct media`);
+                    logDebug(`ProgressStrategy: Direct media - time-based fallback (${this.duration}s)`);
                     this.primaryStrategy = 'duration';
                 } else {
-                    logDebug('ProgressStrategy: Insufficient data for direct media tracking - will use dynamic strategy');
-                    this.primaryStrategy = 'dynamic'; // Will determine based on FFmpeg output
-                    return true; // Still return true as FFmpeg will provide progress data
+                    logDebug('ProgressStrategy: Direct media - dynamic strategy from FFmpeg output');
+                    this.primaryStrategy = 'dynamic';
                 }
                 return true;
 
             case 'hls':
-                // For HLS, prioritize strategies based on reliability
                 if (this.duration > 0) {
-                    logDebug(`ProgressStrategy: Using DURATION strategy (${this.duration}s) for HLS`);
+                    logDebug(`ProgressStrategy: HLS - time-based primary (${this.duration}s)`);
                     this.primaryStrategy = 'duration';
-                } else if (this.segmentCount > 0) {
-                    logDebug(`ProgressStrategy: Using SEGMENT COUNT strategy (${this.segmentCount} segments) for HLS`);
-                    this.primaryStrategy = 'segments';
                 } else if (this.fileSizeBytes > 0) {
-                    logDebug(`ProgressStrategy: Using FILE SIZE strategy (${this.fileSizeBytes} bytes) for HLS`);
+                    logDebug(`ProgressStrategy: HLS - size-based fallback (${this.fileSizeBytes} bytes)`);
                     this.primaryStrategy = 'size';
+                } else if (this.segmentCount > 0) {
+                    logDebug(`ProgressStrategy: HLS - segment-based last resort (${this.segmentCount} segments)`);
+                    this.primaryStrategy = 'segments';
                 } else {
-                    logDebug('ProgressStrategy: Insufficient data for HLS tracking - will attempt to use FFmpeg output');
+                    logDebug('ProgressStrategy: HLS - dynamic strategy from FFmpeg output');
                     this.primaryStrategy = 'dynamic';
-                    return true;
                 }
                 return true;
 
             case 'dash':
-                // For DASH, choose optimal strategy
                 if (this.duration > 0) {
-                    logDebug(`ProgressStrategy: Using DURATION strategy (${this.duration}s) for DASH`);
+                    logDebug(`ProgressStrategy: DASH - time-based primary (${this.duration}s)`);
                     this.primaryStrategy = 'duration';
                 } else if (this.fileSizeBytes > 0) {
-                    logDebug(`ProgressStrategy: Using FILE SIZE strategy (${this.fileSizeBytes} bytes) for DASH`);
+                    logDebug(`ProgressStrategy: DASH - size-based fallback (${this.fileSizeBytes} bytes)`);
                     this.primaryStrategy = 'size';
                 } else {
-                    logDebug('ProgressStrategy: Insufficient data for DASH tracking - will attempt to use FFmpeg output');
+                    logDebug('ProgressStrategy: DASH - dynamic strategy from FFmpeg output');
                     this.primaryStrategy = 'dynamic';
-                    return true;
                 }
                 return true;
 
@@ -297,21 +291,18 @@ class ProgressStrategy {
      * @returns {number} Progress percentage (0-100)
      */
     calculateDirectProgress(downloadedBytes, currentTime) {
-        // For direct media downloads, the calculation should be simple and reliable:
-        
-        // Strategy 1 (Most accurate): Use file size and downloaded bytes
+        // Strategy 1 (Primary): Size-based - most accurate for direct downloads
         if (this.fileSizeBytes > 0 && downloadedBytes > 0) {
             return (downloadedBytes / this.fileSizeBytes) * 100;
         }
         
-        // Strategy 2: Use duration and current time
+        // Strategy 2 (Fallback): Time-based - when no Content-Length available
         if (this.duration > 0 && currentTime > 0) {
-            const effectiveTime = Math.min(currentTime, this.duration); // Cap at duration
+            const effectiveTime = Math.min(currentTime, this.duration);
             return (effectiveTime / this.duration) * 100;
         }
         
-        // Strategy 3: If we have neither size nor duration, just return 0
-        // FFmpeg will eventually send progress=end when completed
+        // No reliable data available
         return 0;
     }
 
@@ -323,30 +314,21 @@ class ProgressStrategy {
      * @returns {number} Progress percentage (0-100)
      */
     calculateHlsProgress(currentTime, currentSegment, downloadedBytes) {
-        // Simple, prioritized approach without excessive fallbacks
-        
-        // Strategy 1: Use time-based progress if we have valid time and duration
-        if (this.primaryStrategy === 'duration' && this.duration > 0 && currentTime > 0) {
+        // Strategy 1 (Primary): Time-based - duration from manifest is reliable
+        if (this.duration > 0 && currentTime > 0) {
             const effectiveTime = Math.min(currentTime, this.duration);
             return (effectiveTime / this.duration) * 100;
         }
         
-        // Strategy 2: Use segment-based progress if we have valid segment info
-        if ((this.primaryStrategy === 'segments' || currentTime <= 0) && this.segmentCount > 0 && currentSegment > 0) {
-            const effectiveSegment = Math.min(currentSegment, this.segmentCount);
-            return (effectiveSegment / this.segmentCount) * 100;
-        }
-        
-        // Strategy 3: Use size-based progress if we have file size info
-        if ((this.primaryStrategy === 'size' || (currentTime <= 0 && currentSegment <= 0)) && 
-            this.fileSizeBytes > 0 && downloadedBytes > 0) {
+        // Strategy 2 (Fallback): Size-based - using estimated file size
+        if (this.fileSizeBytes > 0 && downloadedBytes > 0) {
             return Math.min((downloadedBytes / this.fileSizeBytes) * 100, 100);
         }
         
-        // If all else fails, calculate a reasonable estimate
-        // For HLS, segment count is often the most reliable indicator
+        // Strategy 3 (Last resort): Segment-based - least reliable due to variable sizes
         if (this.segmentCount > 0 && currentSegment > 0) {
-            return (currentSegment / this.segmentCount) * 100;
+            const effectiveSegment = Math.min(currentSegment, this.segmentCount);
+            return (effectiveSegment / this.segmentCount) * 100;
         }
         
         return 0;
@@ -359,24 +341,17 @@ class ProgressStrategy {
      * @returns {number} Progress percentage (0-100)
      */
     calculateDashProgress(currentTime, downloadedBytes) {
-        // Log when current time exceeds duration for debugging
-        if (this.duration > 0 && currentTime > this.duration) {
-            logDebug(`ProgressStrategy: DASH - Current time (${currentTime.toFixed(2)}s) exceeds total duration (${this.duration}s)`);
-        }
-        
-        // Priority 1: Time-based calculation (as per your request)
+        // Strategy 1 (Primary): Time-based - duration from manifest is reliable
         if (this.duration > 0 && currentTime > 0) {
-            // Cap current time at duration to prevent progress > 100%
             const effectiveTime = Math.min(currentTime, this.duration);
             return (effectiveTime / this.duration) * 100;
         }
         
-        // Priority 2: Size-based estimation
+        // Strategy 2 (Fallback): Size-based - using estimated file size
         if (this.fileSizeBytes > 0 && downloadedBytes > 0) {
             return Math.min((downloadedBytes / this.fileSizeBytes) * 100, 100);
         }
         
-        // No reliable progress data
         return 0;
     }
 
@@ -509,18 +484,43 @@ class ProgressStrategy {
     processOutput(output) {
         const now = Date.now();
         
-        // Rate-limit updates based on updateInterval
-        if (now - this.lastProcessedTime < this.updateInterval) {
+        // Handle segment detection immediately (no rate limiting for discrete events)
+        if ((this.type === 'hls' || this.type === 'dash') && 
+            output.includes('Opening ') && output.includes(' for reading')) {
+            const segment = this.parseSegment(output);
+            if (segment !== null) {
+                // Send immediate segment-only update
+                this.update({
+                    currentSegment: segment,
+                    ffmpegStats: this.ffmpegStats
+                });
+                logDebug(`ProgressStrategy: Immediate segment update: ${segment}`);
+            }
+        }
+        
+        // Rate-limit only progress metrics (continuous data)
+        const isProgressMetric = output.includes('total_size=') || 
+                                output.includes('out_time_ms=') || 
+                                output.includes('out_time_us=') ||
+                                output.includes('progress=');
+        
+        if (isProgressMetric && (now - this.lastProcessedTime < this.updateInterval)) {
             return;
         }
         
         // Extract FFmpeg progress indicators - direct key-value parsing
+        const outTimeUs = output.match(/out_time_us=(\d+)/);
         const outTimeMs = output.match(/out_time_ms=(\d+)/);
         const outTimeMatch = output.match(/out_time=(\d+):(\d+):(\d+\.\d+)/);
         const totalSize = output.match(/total_size=(\d+)/);
         const progressStatus = output.match(/progress=(\w+)/);
         const speedMatch = output.match(/speed=\s*([\d.]+)x/);
-        const bitrateMatch = output.match(/bitrate=\s*([\d.]+)(kbit|kbits|mbit|mbits)\/s/i);
+        
+        // Debug critical extractions
+        if (outTimeUs) logDebug(`ProgressStrategy: Extracted out_time_us=${outTimeUs[1]}`);
+        if (outTimeMs) logDebug(`ProgressStrategy: Extracted out_time_ms=${outTimeMs[1]}`);
+        if (totalSize) logDebug(`ProgressStrategy: Extracted total_size=${totalSize[1]}`);
+        if (progressStatus) logDebug(`ProgressStrategy: Extracted progress=${progressStatus[1]}`);
         
         // Track final summary information
         if (output.includes('global headers') || output.includes('muxing overhead')) {
@@ -528,12 +528,14 @@ class ProgressStrategy {
             const videoSizeMatch = output.match(/video:(\d+)kB/);
             const audioSizeMatch = output.match(/audio:(\d+)kB/);
             const subtitleSizeMatch = output.match(/subtitle:(\d+)kB/);
+            const totalSizeMatch = output.match(/size=\s*(\d+)\s*kB/);
             const overheadMatch = output.match(/muxing overhead:\s*([\d.]+)%/);
             
             this.downloadStats = {
                 videoSize: videoSizeMatch ? parseInt(videoSizeMatch[1], 10) * 1024 : 0,
                 audioSize: audioSizeMatch ? parseInt(audioSizeMatch[1], 10) * 1024 : 0,
                 subtitleSize: subtitleSizeMatch ? parseInt(subtitleSizeMatch[1], 10) * 1024 : 0,
+                totalSize: totalSizeMatch ? parseInt(totalSizeMatch[1], 10) * 1024 : 0,
                 muxingOverhead: overheadMatch ? parseFloat(overheadMatch[1]) : 0
             };
             
@@ -545,12 +547,22 @@ class ProgressStrategy {
             ffmpegStats: this.ffmpegStats
         };
         
-        // Get time information (most reliable method)
-        if (outTimeMs) {
-            // Time in microseconds (despite the name out_time_ms)
+        // Note: Segment detection is handled separately above for immediate processing
+        
+        // Get time information (prioritize out_time_us, then out_time_ms, then formatted time)
+        if (outTimeUs) {
+            // Most accurate: time in microseconds
+            const timeInMicroseconds = parseInt(outTimeUs[1], 10);
+            if (!isNaN(timeInMicroseconds)) {
+                updateData.currentTime = timeInMicroseconds / 1000000; // convert microseconds to seconds
+                logDebug(`ProgressStrategy: Set currentTime to ${updateData.currentTime}s from out_time_us`);
+            }
+        } else if (outTimeMs) {
+            // Second priority: time in microseconds (despite the name out_time_ms)
             const timeInMicroseconds = parseInt(outTimeMs[1], 10);
             if (!isNaN(timeInMicroseconds)) {
                 updateData.currentTime = timeInMicroseconds / 1000000; // convert microseconds to seconds
+                logDebug(`ProgressStrategy: Set currentTime to ${updateData.currentTime}s from out_time_ms`);
             }
         } else if (outTimeMatch) {
             // Fallback to HH:MM:SS.MS format
@@ -558,37 +570,30 @@ class ProgressStrategy {
             const minutes = parseInt(outTimeMatch[2], 10);
             const seconds = parseFloat(outTimeMatch[3]);
             updateData.currentTime = hours * 3600 + minutes * 60 + seconds;
+            logDebug(`ProgressStrategy: Set currentTime to ${updateData.currentTime}s from out_time format`);
         }
         
-        // Get total downloaded bytes
+        // Get total downloaded bytes (prioritize total_size)
         if (totalSize) {
             const size = parseInt(totalSize[1], 10);
             if (!isNaN(size)) {
                 updateData.downloadedBytes = size;
+                logDebug(`ProgressStrategy: Set downloadedBytes to ${size} from total_size`);
             }
         } else {
             // Fallback to traditional size parsing if total_size isn't available
             const size = this.parseSize(output);
             if (size !== null) {
                 updateData.downloadedBytes = size;
+                logDebug(`ProgressStrategy: Set downloadedBytes to ${size} from parseSize fallback`);
             }
         }
         
-        // Extract speed information - keeping this as it's useful for progress calculations
-        // but we'll remove it before sending to the UI
+        // Extract speed information (internal use only)
         if (speedMatch) {
             const speedValue = parseFloat(speedMatch[1]);
             if (!isNaN(speedValue)) {
-                // We keep track of this internally but don't expose it in the final progress data
                 this._ffmpegSpeed = speedValue;
-            }
-        }
-        
-        // For HLS/DASH, we still need segment tracking
-        if (this.type === 'hls' || this.type === 'dash') {
-            const segment = this.parseSegment(output);
-            if (segment !== null) {
-                updateData.currentSegment = segment;
             }
         }
         
@@ -598,8 +603,8 @@ class ProgressStrategy {
             logDebug('ProgressStrategy: Detected end of processing');
         }
         
-        // Only update if we have new data
-        if (Object.keys(updateData).length > 1) { // More than just ffmpegStats
+        // Send progress update if we have meaningful metrics data
+        if (isProgressMetric && Object.keys(updateData).length > 1) { // More than just ffmpegStats
             this.lastProcessedTime = now;
             this.update(updateData);
         }
@@ -695,35 +700,27 @@ class ProgressStrategy {
      * @returns {number|null} Segment number or null if not found
      */
     parseSegment(output) {
-        // Method 1: Look for segment pattern in Opening URL messages
-        // Example: Opening 'https://example.com/segment_10.ts' for reading
-        const segmentMatch = output.match(/Opening ['"].*?[_\/](\d+)\.(ts|mp4|m4s)['"] for reading/);
+        // Look for any context + Opening + URL with media extension + for reading
+        // This covers both [hls @ addr] and [https @ addr] contexts
+        const segmentMatch = output.match(/Opening\s+['"]([^'"]*\.(ts|mp4|m4s))['"] for reading/);
+        
         if (segmentMatch) {
-            const segment = parseInt(segmentMatch[1], 10);
-            if (!isNaN(segment) && segment > 0) {
-                return segment;
+            const url = segmentMatch[1];
+            logDebug(`ProgressStrategy: Found segment URL: ${url}`);
+            
+            // Try to extract actual segment number from URL pattern
+            // Pattern: anything ending with -NUMBER.extension
+            const numberMatch = url.match(/-(\d+)\.(ts|mp4|m4s)$/);
+            if (numberMatch) {
+                const segmentNumber = parseInt(numberMatch[1], 10);
+                logDebug(`ProgressStrategy: Extracted segment number ${segmentNumber} from URL`);
+                return segmentNumber;
             }
-        }
-        
-        // Method 2: Look for index patterns in filenames
-        // Example: Opening 'media_b1600000_7.ts'
-        const indexMatch = output.match(/Opening ['"][^'"]*?_(\d+)\.(ts|mp4|m4s)['"] for reading/);
-        if (!segmentMatch && indexMatch) {
-            const index = parseInt(indexMatch[1], 10);
-            if (!isNaN(index) && index > 0) {
-                return index;
-            }
-        }
-        
-        // Method 3: Extract segment number from more complex patterns
-        // Example: Opening 'manifest-audio_0_q7BAv3mA_WbaG9LKN=112000-video_0_q7BAv3mA_Uql258jy=5099752-1.ts'
-        const complexMatch = output.match(/Opening ['"][^'"]*?-(\d+)\.(ts|mp4|m4s)['"] for reading/);
-        if (complexMatch) {
-            const segment = parseInt(complexMatch[1], 10);
-            if (!isNaN(segment) && segment > 0) {
-                logDebug(`ProgressStrategy: Detected segment ${segment} from complex pattern`);
-                return segment;
-            }
+            
+            // Fallback: use incremental counter if no number in URL
+            this.segmentCounter = (this.segmentCounter || 0) + 1;
+            logDebug(`ProgressStrategy: Using fallback counter: ${this.segmentCounter}`);
+            return this.segmentCounter;
         }
         
         return null;
