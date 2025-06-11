@@ -86,8 +86,7 @@ class ProgressTracker {
         this.update({
             progress: 0,
             speed: 0,
-            downloaded: 0,
-            size: fileInfo.fileSizeBytes || 0,
+            downloadedBytes: 0,
             totalBytes: fileInfo.fileSizeBytes || 0,
             totalDuration: fileInfo.duration || 0,
             type: fileInfo.type
@@ -136,22 +135,15 @@ class ProgressTracker {
      */
     handleProgress(data) {
         // Add estimated time remaining if we have enough info
-        if (typeof data.progress === 'number' && data.progress > 0 && data.speed > 0 && data.downloaded > 0) {
-            let totalBytes;
+        if (typeof data.progress === 'number' && data.progress > 0 && data.speed > 0 && data.downloadedBytes > 0) {
+            let totalBytes = data.totalBytes;
             
-            // Direct access to totalBytes when available
-            if (data.totalBytes && data.totalBytes > 0) {
-                totalBytes = data.totalBytes;
-            } else if (data.size && data.size > 0) {
-                totalBytes = data.size;
-            } else if (data.totalFileSize && data.totalFileSize > 0) {
-                totalBytes = data.totalFileSize;
-            } else {
-                // Only use progress-based estimation if we don't have better data
-                totalBytes = data.downloaded / (data.progress / 100);
+            // Only use progress-based estimation if we don't have totalBytes
+            if (!totalBytes || totalBytes <= 0) {
+                totalBytes = data.downloadedBytes / (data.progress / 100);
             }
             
-            const remainingBytes = Math.max(0, totalBytes - data.downloaded);
+            const remainingBytes = Math.max(0, totalBytes - data.downloadedBytes);
             data.eta = remainingBytes / data.speed; // ETA in seconds
         }
         
@@ -160,23 +152,12 @@ class ProgressTracker {
             data.speedFormatted = this.formatSpeed(data.speed);
         }
         
-        if (data.downloaded) {
-            data.downloadedFormatted = this.formatBytes(data.downloaded);
+        if (data.downloadedBytes) {
+            data.downloadedFormatted = this.formatBytes(data.downloadedBytes);
         }
         
         if (data.totalBytes) {
             data.totalBytesFormatted = this.formatBytes(data.totalBytes);
-        } else if (data.size) {
-            data.totalBytesFormatted = this.formatBytes(data.size);
-        }
-        
-        // Add FFmpeg-specific formatted information
-        if (data.ffmpegSpeed) {
-            data.ffmpegSpeedFormatted = `${data.ffmpegSpeed.toFixed(1)}x`;
-        }
-        
-        if (data.bitrate) {
-            data.bitrateFormatted = `${Math.round(data.bitrate / 1000)} kbps`;
         }
         
         // Format stream stats for the final message if available
