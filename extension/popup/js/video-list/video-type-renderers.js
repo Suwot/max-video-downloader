@@ -122,9 +122,11 @@ function renderHlsElements(video) {
         // Get selected URL from custom dropdown
         const dropdown = elementsDiv.querySelector('.custom-dropdown .selected-option');
         const selectedUrl = dropdown?.dataset.url || video.url;
-        
+        const fileSizeBytes = dropdown?.dataset.filesize || null;
+
         const videoData = createVideoMetadata(video);
         videoData.downloadUrl = selectedUrl;
+        videoData.fileSizeBytes = fileSizeBytes;
 
         handleDownload(downloadBtn, videoData);
     });
@@ -177,11 +179,13 @@ function renderDashElements(video) {
         const dropdown = elementsDiv.querySelector('.custom-dropdown .selected-option');
         const streamSelection = dropdown?.dataset.trackMap;
         const container = dropdown?.dataset.container;
-        
+        const totalFileSizeBytes = dropdown?.dataset.totalFileSize;
+
         const videoData = createVideoMetadata(video);
         videoData.streamSelection = streamSelection || null;
         videoData.originalContainer = container || null;
         videoData.downloadUrl = video.url; // Use main URL for DASH
+        videoData.fileSizeBytes = totalFileSizeBytes;
 
         handleDownload(downloadBtn, videoData);
     });
@@ -212,12 +216,16 @@ function renderDirectElements(video) {
     
     // Set up download functionality
     downloadBtn.addEventListener('click', async () => {
+        const dropdown = elementsDiv.querySelector('.custom-dropdown .selected-option');
+        const fileSizeBytes = dropdown?.dataset.filesize || null;
+        
         const videoData = createVideoMetadata(video);
         videoData.downloadUrl = video.url; // Use main URL for direct videos
-        
+        videoData.fileSizeBytes = fileSizeBytes;
+
         handleDownload(downloadBtn, videoData);
     });
-    
+
     return elementsDiv;
 }
 

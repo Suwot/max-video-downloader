@@ -215,6 +215,8 @@ function startDownload(request, port) {
             filename: request.filename,
             savePath: request.savePath || null,
             type: request.type,
+            fileSizeBytes: request.fileSizeBytes || null,
+            segmentCount: request.segmentCount || null,
             preferredContainer: request.preferredContainer || null,
             originalContainer: request.originalContainer || 'mp4',
             audioOnly: request.audioOnly || false,

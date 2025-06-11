@@ -10,8 +10,9 @@ export function createVideoMetadata(video) {
         filename: video.title,
         type: video.type,
         originalContainer: video.type === 'hls' ? 'mp4' : (video.originalContainer || null),
+        segmentCount: video.type === 'hls' ? video.variants?.[0].metaJS?.segmentCount : null,
         duration: video.duration || null,
-        masterUrl: video.isMaster ? video.url : null
+        masterUrl: video.isMaster ? video.url : null,
     };
 }
 

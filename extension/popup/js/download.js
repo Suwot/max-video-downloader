@@ -219,6 +219,8 @@ async function registerNewDownload(button, videoData = {}) {
             streamSelection: videoData.streamSelection || null,
             masterUrl: videoData.masterUrl,
             duration: videoData.duration, // Pass duration for progress tracking
+            fileSizeBytes: videoData.fileSizeBytes || null,
+            segmentCount: videoData.segmentCount || null,
             headers: {}, // Will be filled by background script
             tabId: await getCurrentTabId()
         };

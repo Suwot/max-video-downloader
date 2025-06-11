@@ -274,7 +274,7 @@ function createDashOptions(container, tracks, initialSelection, onSelect) {
         // Also set the container format and totalfilesize on the closest selectedDisplay element
         const dropdown = columnsContainer.closest('.custom-dropdown');
         const selectedDisplay = dropdown?.elements?.selectedDisplay;
-        
+         
         if (selectedDisplay) {
             if (applyButton.dataset.container) {
                 selectedDisplay.dataset.container = applyButton.dataset.container;
