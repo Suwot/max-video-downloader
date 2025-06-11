@@ -9,7 +9,6 @@
  * - Provides simple diagnostics about host process status
  */
 
-// commands/heartbeat.js
 const BaseCommand = require('./base-command');
 const { logDebug } = require('../utils/logger');
 

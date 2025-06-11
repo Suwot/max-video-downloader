@@ -11,7 +11,7 @@
  * - Bridges browser extension with system capabilities
  */
 
-// native_host/index.js - Main entry point for the native host application
+// Main entry point for the native host application
 
 const fs = require('fs');
 const path = require('path');

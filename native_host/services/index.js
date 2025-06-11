@@ -10,7 +10,6 @@
  * - Exports shared services for command usage
  */
 
-// services/index.js
 const ffmpegService = require('./ffmpeg');
 const configService = require('./config');
 const { logDebug } = require('../utils/logger');

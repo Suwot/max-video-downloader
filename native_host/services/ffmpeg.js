@@ -10,7 +10,6 @@
  * - Supports hardware acceleration detection and usage
  */
 
-// services/ffmpeg.js
 const fs = require('fs');
 const path = require('path');
 const os = require('os');

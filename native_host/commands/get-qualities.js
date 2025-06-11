@@ -10,7 +10,6 @@
  * - Handles various streaming protocol formats
  */
 
-// commands/get-qualities.js
 const { spawn } = require('child_process');
 const BaseCommand = require('./base-command');
 const { logDebug } = require('../utils/logger');

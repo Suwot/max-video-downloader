@@ -10,7 +10,6 @@
  * - Ensures consistent error responses across components
  */
 
-// lib/error-handler.js
 const { logDebug } = require('../utils/logger');
 
 /**

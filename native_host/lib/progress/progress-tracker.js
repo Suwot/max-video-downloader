@@ -8,9 +8,8 @@
  * - Uses extension-provided metadata for efficient progress tracking
  */
 
-// lib/progress-tracker.js
-const { logDebug } = require('../utils/logger');
-const ProgressStrategy = require('./progress/progress-strategy');
+const { logDebug } = require('../../utils/logger');
+const ProgressStrategy = require('./progress-strategy');
 
 /**
  * Progress Tracker class - manages tracking download progress

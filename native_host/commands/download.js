@@ -19,7 +19,7 @@ const { spawn } = require('child_process');
 const BaseCommand = require('./base-command');
 const { logDebug } = require('../utils/logger');
 const { getFullEnv } = require('../utils/resources');
-const ProgressTracker = require('../lib/progress-tracker');
+const ProgressTracker = require('../lib/progress/progress-tracker');
 
 /**
  * Command for downloading videos

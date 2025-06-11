@@ -9,7 +9,6 @@
  * - Supports both synchronous and asynchronous communication patterns
  */
 
-// lib/messaging.js
 const { logDebug } = require('../utils/logger');
 
 /**

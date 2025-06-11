@@ -9,7 +9,6 @@
  * - Enforces consistent command execution pattern
  */
 
-// commands/base-command.js
 const { logDebug } = require('../utils/logger');
 const servicesManager = require('../services');
 

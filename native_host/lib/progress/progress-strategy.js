@@ -21,7 +21,7 @@ class ProgressStrategy {
      * @param {string} options.downloadUrl Media URL
      * @param {string} options.type Media type (direct, hls, dash)
      * @param {number} options.duration Media duration in seconds
-     * @param {number} options.fileSizeBytes File size in bytes (from Content-Length or duration*bitrate calculation)
+     * @param {number} options.fileSizeBytes File size in bytes (from Content-Length or fileSizeBytes)
      * @param {number} options.segmentCount Number of segments in the manifest (for HLS/DASH)
      */
     constructor(options = {}) {

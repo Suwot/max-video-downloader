@@ -10,7 +10,6 @@
  * - Allows dynamic command discovery and instantiation
  */
 
-// commands/index.js
 const { logDebug } = require('../utils/logger');
 
 /**
