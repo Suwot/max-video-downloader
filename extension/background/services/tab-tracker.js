@@ -7,6 +7,7 @@
 import { cleanupForTab } from './video-manager.js';
 import { cleanupDownloadsForTab } from './download-manager.js';
 import { createLogger } from '../../js/utilities/logger.js';
+import { clearHeadersForTab } from '../../js/utilities/headers-utils.js'
 import { cleanupMpdContext } from '../index.js';
 
 // Create a logger instance for the Tab Tracker module
