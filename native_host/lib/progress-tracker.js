@@ -1,19 +1,19 @@
 /**
  * @ai-guide-component ProgressTracker
- * @ai-guide-description Tracks download progress using various strategies
+ * @ai-guide-description Tracks download progress using a unified strategy
  * @ai-guide-responsibilities
  * - Calculates download progress percentage for different media types
- * - Implements strategy pattern for different progress tracking methods
  * - Provides accurate progress reporting for the UI
  * - Handles different file types (direct media, HLS/DASH streams)
- * - Falls back gracefully between different calculation methods
+ * - Uses extension-provided metadata for efficient progress tracking
  */
 
 // lib/progress-tracker.js
 const { logDebug } = require('../utils/logger');
+const ProgressStrategy = require('./progress/progress-strategy');
 
 /**
- * Progress Tracker class - manages tracking download progress using different strategies
+ * Progress Tracker class - manages tracking download progress
  */
 class ProgressTracker {
     /**
@@ -28,43 +28,7 @@ class ProgressTracker {
         this.updateInterval = options.updateInterval || 250; // Default 250ms between updates
         this.startTime = Date.now();
         this.lastBytes = 0;
-        this.strategies = {};
         this.debug = options.debug || false;
-    }
-
-    /**
-     * Register a progress calculation strategy
-     * @param {string} name Strategy name
-     * @param {Object} strategyClass Strategy class
-     */
-    registerStrategy(name, strategyClass) {
-        this.strategies[name] = strategyClass;
-    }
-
-    /**
-     * Set the active strategy
-     * @param {string} name Strategy name
-     * @param {Object} options Strategy configuration options
-     * @returns {boolean} Success status
-     */
-    setStrategy(name, options = {}) {
-        if (!this.strategies[name]) {
-            logDebug(`Progress strategy '${name}' not found`);
-            return false;
-        }
-
-        try {
-            this.strategy = new this.strategies[name]({
-                onProgress: this.handleProgress.bind(this),
-                ...options
-            });
-            
-            logDebug(`Set progress tracking strategy to: ${name}`);
-            return true;
-        } catch (error) {
-            logDebug(`Error creating strategy '${name}':`, error);
-            return false;
-        }
     }
 
     /**
@@ -72,127 +36,50 @@ class ProgressTracker {
      * @param {Object} fileInfo Information about the file being downloaded
      * @param {string} fileInfo.downloadUrl File URL
      * @param {string} fileInfo.type Media type (direct, hls, dash)
+     * @param {number} fileInfo.duration Media duration in seconds
+     * @param {number} fileInfo.fileSizeBytes File size in bytes
+     * @param {number} fileInfo.bitrate Media bitrate in bits per second
+     * @param {number} fileInfo.segmentCount Number of segments
+     * @param {number} fileInfo.segmentDuration Average segment duration
      */
     async initialize(fileInfo) {
         this.fileInfo = fileInfo;
         this.startTime = Date.now();
         this.lastBytes = 0;
         
-        // Select best strategy based on media type
-        await this.selectBestStrategy(fileInfo);
+        logDebug('Progress tracker initializing for:', fileInfo.downloadUrl);
+        logDebug('Media type:', fileInfo.type);
+        
+        // Create progress strategy
+        this.strategy = new ProgressStrategy({
+            onProgress: this.handleProgress.bind(this),
+            ...fileInfo
+        });
+        
+        // Initialize strategy
+        const success = await this.strategy.initialize();
+        
+        if (!success) {
+            logDebug('Failed to initialize progress strategy, will use basic tracking');
+        } else {
+            logDebug('Progress strategy initialized successfully');
+        }
         
         // Send initial progress
         this.update({
             progress: 0,
             speed: 0,
             downloaded: 0,
-            size: 0
+            size: fileInfo.fileSizeBytes || 0
         });
 
         logDebug('Progress tracker initialized for:', fileInfo.downloadUrl);
+        return success;
     }
 
     /**
-     * Select the best strategy based on media type and availability
-     * @param {Object} fileInfo File information
-     */
-    async selectBestStrategy(fileInfo) {
-        const { downloadUrl, type } = fileInfo;
-
-        // Choose strategy based on media type
-        if (type === 'hls' || type === 'dash') {
-            logDebug(`Streaming media (${type}) detected, skipping content-length strategy`);
-            
-            // Important: Try segment tracking FIRST for streaming media
-            logDebug(`STRATEGY: Attempting to use segment tracking strategy first for ${type}`);
-            if (await this.tryStrategy('segment', { downloadUrl, type })) {
-                logDebug('STRATEGY: Successfully initialized segment tracking strategy');
-                return;
-            }
-            logDebug('STRATEGY: Segment tracking strategy failed or unavailable');
-            
-            // Then try adaptive bitrate as fallback
-            logDebug(`STRATEGY: Falling back to adaptive bitrate strategy for ${type}`);
-            if (await this.tryStrategy('adaptive-bitrate', { downloadUrl, type })) {
-                logDebug('STRATEGY: Using adaptive bitrate strategy for streaming media');
-                return;
-            }
-            logDebug('STRATEGY: Adaptive bitrate strategy failed or unavailable');
-            
-            // Last resort: time-based
-            logDebug(`STRATEGY: Falling back to time-based strategy for ${type}`);
-            if (await this.tryStrategy('time-based', { downloadUrl, type })) {
-                logDebug('STRATEGY: Using time-based strategy for streaming media');
-                return;
-            }
-            logDebug('STRATEGY: All strategies failed for streaming media');
-        } else {
-            // For non-streaming media, try content-length first
-            if (await this.tryStrategy('content-length', { downloadUrl, type })) {
-                logDebug('Using content-length strategy for direct media');
-                return;
-            }
-            
-            // Fall back to adaptive bitrate
-            if (await this.tryStrategy('adaptive-bitrate', { downloadUrl, type })) {
-                logDebug('Using adaptive bitrate strategy for direct media');
-                return;
-            }
-            
-            // Last resort: time-based
-            if (await this.tryStrategy('time-based', { downloadUrl, type })) {
-                logDebug('Using time-based strategy for direct media');
-                return;
-            }
-        }
-        
-        logDebug('No suitable progress strategy found, using default');
-        // If all else fails, use a dummy strategy
-        this.setStrategy('default', { downloadUrl, type });
-    }
-
-    /**
-     * Try to use a specific strategy
-     * @param {string} name Strategy name
-     * @param {Object} options Options to pass to the strategy
-     * @returns {boolean} Success status
-     */
-    async tryStrategy(name, options) {
-        if (!this.strategies[name]) {
-            logDebug(`STRATEGY: Strategy '${name}' not registered`);
-            return false;
-        }
-        
-        logDebug(`STRATEGY: Attempting to initialize '${name}' strategy`);
-        
-        try {
-            const success = this.setStrategy(name, options);
-            if (!success) {
-                logDebug(`STRATEGY: Failed to set '${name}' strategy`);
-                return false;
-            }
-            
-            if (this.strategy.initialize) {
-                logDebug(`STRATEGY: Calling initialize() for '${name}' strategy`);
-                try {
-                    const initResult = await this.strategy.initialize(options);
-                    logDebug(`STRATEGY: Initialize '${name}' returned: ${initResult}`);
-                    return initResult;
-                } catch (initError) {
-                    logDebug(`STRATEGY: Error during '${name}' initialization:`, initError);
-                    return false;
-                }
-            }
-            return success;
-        } catch (error) {
-            logDebug(`STRATEGY: Error creating '${name}' strategy:`, error);
-            return false;
-        }
-    }
-
-    /**
-     * Update progress based on FFmpeg output
-     * @param {string} output FFmpeg stderr output
+     * Update progress based on current data
+     * @param {Object} progressData Progress data
      */
     update(progressData) {
         const now = Date.now();
@@ -228,28 +115,31 @@ class ProgressTracker {
      * @param {Object} data Progress data
      */
     handleProgress(data) {
-        // Calculate speed if not provided
-        if (!data.speed && data.downloaded > this.lastBytes) {
-            const elapsedSecs = (Date.now() - this.startTime) / 1000;
-            if (elapsedSecs > 0) {
-                // Overall average speed
-                data.speed = data.downloaded / elapsedSecs;
-                
-                // Instantaneous speed (if we have last bytes)
-                if (this.lastBytes > 0 && elapsedSecs > 1) {
-                    const instantSpeed = (data.downloaded - this.lastBytes) * (1000 / (Date.now() - this.lastUpdate));
-                    data.speed = instantSpeed > 0 ? instantSpeed : data.speed;
-                }
-            }
-        }
-        
-        this.lastBytes = data.downloaded || this.lastBytes;
-        
         // Add estimated time remaining if we have enough info
-        if (typeof data.progress === 'number' && data.progress > 0 && data.speed > 0) {
+        if (typeof data.progress === 'number' && data.progress > 0 && data.speed > 0 && data.downloaded > 0) {
             const totalBytes = data.downloaded / (data.progress / 100);
             const remainingBytes = totalBytes - data.downloaded;
             data.eta = remainingBytes / data.speed; // ETA in seconds
+        }
+        
+        // Add useful formatted values for UI display
+        if (data.speed) {
+            data.speedFormatted = this.formatSpeed(data.speed);
+        }
+        
+        if (data.downloaded) {
+            data.downloadedFormatted = this.formatBytes(data.downloaded);
+        }
+        
+        if (data.size) {
+            data.sizeFormatted = this.formatBytes(data.size);
+        }
+        
+        if (data.currentTime && data.totalDuration) {
+            data.timeRemaining = data.totalDuration - data.currentTime;
+            data.timeRemainingFormatted = this.formatTime(data.timeRemaining);
+            data.currentTimeFormatted = this.formatTime(data.currentTime);
+            data.totalDurationFormatted = this.formatTime(data.totalDuration);
         }
         
         if (this.debug) {
@@ -261,46 +151,41 @@ class ProgressTracker {
             this.onProgress(data);
         }
     }
-
+    
     /**
-     * Register the standard progress tracking strategies
+     * Format bytes to human readable string
+     * @param {number} bytes Bytes
+     * @returns {string} Formatted string
      */
-    static registerDefaultStrategies(tracker) {
-        // Import strategies
-        const ContentLengthStrategy = require('./progress/content-length-strategy');
-        const AdaptiveBitrateStrategy = require('./progress/adaptive-bitrate-strategy');
-        const TimeBasedStrategy = require('./progress/time-based-strategy');
-        const SegmentTrackingStrategy = require('./progress/segment-tracking-strategy');
-        
-        // Create a simple default strategy that just passes through progress data
-        class DefaultStrategy {
-            constructor(options = {}) {
-                this.onProgress = options.onProgress || (() => {});
-            }
-            
-            initialize() {
-                return Promise.resolve(true);
-            }
-            
-            update(data) {
-                if (this.onProgress) {
-                    this.onProgress(data);
-                }
-            }
-            
-            processOutput() {
-                // No-op
-            }
-        }
-        
-        // Register strategies
-        tracker.registerStrategy('content-length', ContentLengthStrategy);
-        tracker.registerStrategy('adaptive-bitrate', AdaptiveBitrateStrategy);
-        tracker.registerStrategy('segment', SegmentTrackingStrategy);
-        tracker.registerStrategy('time-based', TimeBasedStrategy);
-        tracker.registerStrategy('default', DefaultStrategy);
-        
-        return tracker;
+    formatBytes(bytes) {
+        if (!bytes || bytes === 0) return '0 B';
+        const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(1024));
+        return `${(bytes / Math.pow(1024, i)).toFixed(2)} ${sizes[i]}`;
+    }
+    
+    /**
+     * Format speed to human readable string
+     * @param {number} bytesPerSecond Bytes per second
+     * @returns {string} Formatted string
+     */
+    formatSpeed(bytesPerSecond) {
+        return `${this.formatBytes(bytesPerSecond)}/s`;
+    }
+    
+    /**
+     * Format time to human readable string
+     * @param {number} seconds Time in seconds
+     * @returns {string} Formatted string
+     */
+    formatTime(seconds) {
+        if (!seconds || isNaN(seconds)) return '00:00';
+        const h = Math.floor(seconds / 3600);
+        const m = Math.floor((seconds % 3600) / 60);
+        const s = Math.floor(seconds % 60);
+        return h > 0 
+            ? `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`
+            : `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
     }
 }
 

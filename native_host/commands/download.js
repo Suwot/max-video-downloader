@@ -51,8 +51,11 @@ class DownloadCommand extends BaseCommand {
             audioOnly = false,
             streamSelection,
             masterUrl = null,
+            headers = {},
+            // Progress tracking fields
+            fileSizeBytes = null,
             duration = null,
-            headers = {}
+            segmentCount = null
         } = params;
 
         logDebug('Starting download:', params);
@@ -96,7 +99,9 @@ class DownloadCommand extends BaseCommand {
                 type,
                 masterUrl,
                 headers, 
-                duration
+                duration,
+                fileSizeBytes,
+                segmentCount
             });
             
         } catch (err) {
@@ -360,7 +365,9 @@ class DownloadCommand extends BaseCommand {
         downloadUrl,
         type,
         headers,
-        duration
+        duration,
+        fileSizeBytes,
+        segmentCount
     }) {
         return new Promise((resolve, reject) => {
             // Create progress tracker
@@ -375,42 +382,38 @@ class DownloadCommand extends BaseCommand {
                 debug: true
             });
             
-            // Register tracking strategies
-            ProgressTracker.registerDefaultStrategies(progressTracker);
-            
-            // Initialize with file info
+            // Initialize with file info and all available metadata
             const fileInfo = {
-                downloadUrl, 
-                type,
-                outputPath: uniqueOutput
+                downloadUrl: downloadUrl, 
+                type: type,
+                outputPath: uniqueOutput,
+                // Progress tracking essentials
+                duration: duration || null,
+                fileSizeBytes: fileSizeBytes || null,
+                segmentCount: segmentCount || null
             };
             
+            logDebug('Initializing progress tracker with:', JSON.stringify(fileInfo, null, 2));
+            
             progressTracker.initialize(fileInfo)
-                .then(() => {
-                    logDebug('Progress tracker initialized successfully');
+                .then((success) => {
+                    logDebug(`Progress tracker initialized ${success ? 'successfully' : 'with fallbacks'}`);
+                    
+                    // Send initial progress update
+                    this.sendProgress({
+                        progress: 0,
+                        speed: 0,
+                        downloaded: 0,
+                        size: fileSizeBytes || 0,
+                        filename: path.basename(uniqueOutput)
+                    });
                 })
                 .catch(error => {
                     logDebug('Error initializing progress tracker:', error);
                 });
             
-            // Send initial progress update
-            this.sendProgress({
-                progress: 0,
-                speed: 0,
-                downloaded: 0,
-                size: 0,
-                filename: path.basename(uniqueOutput)
-            });
-            
-            // If duration is provided and valid, use it directly
-            if (duration && typeof duration === 'number' && duration > 0) {
-                logDebug('Using provided duration from extension:', duration);
-                progressTracker.update({
-                    totalDuration: duration,
-                    currentTime: 0
-                });
-            } else {
-                // Only probe if duration wasn't provided or was invalid
+            // If no duration is provided and valid, try to probe it
+            if (!duration || typeof duration !== 'number' || duration <= 0) {
                 logDebug('No valid duration provided, probing media...');
                 this.probeMediaDuration(ffmpegService, downloadUrl, headers)
                     .then(probedDuration => {
@@ -418,7 +421,8 @@ class DownloadCommand extends BaseCommand {
                             logDebug('Got total duration from probe:', probedDuration);
                             progressTracker.update({
                                 totalDuration: probedDuration,
-                                currentTime: 0
+                                currentTime: 0,
+                                duration: probedDuration
                             });
                         }
                     })
