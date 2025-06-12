@@ -188,18 +188,11 @@ class ProgressStrategy {
             // Final completion - send all available data without recalculation
             const completionData = {
                 progress: 100,
-                speed: 0,
                 elapsedTime: (Date.now() - this.startTime) / 1000,
                 type: this.type,
                 strategy: this.primaryStrategy,
-                downloadedBytes: data.downloadedBytes || this.currentState.downloadedBytes,
-                totalBytes: this.fileSizeBytes || null,
                 downloadStats: data.downloadStats,
                 // Include any accumulated state data
-                currentTime: data.totalDuration,
-                currentSegment: data.currentSegment || this.currentState.currentSegment,
-                totalDuration: this.duration || 0,
-                totalSegments: this.segmentCount || 0
             };
             
             this.sendProgress(completionData);
@@ -687,7 +680,7 @@ class ProgressStrategy {
      */
     parseSegment(output) {
         // Look for FFmpeg opening a segment file for reading
-        const segmentMatch = output.match(/Opening\s+['"]([^'"]*\.(ts|mp4|m4s))['"] for reading/);
+        const segmentMatch = output.match(/Opening\s+['"]([^'"]*\.(ts|mp4|m4s|jpg|png))['"] for reading/);
         
         if (segmentMatch) {
             const url = segmentMatch[1];
