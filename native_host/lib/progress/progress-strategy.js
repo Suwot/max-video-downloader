@@ -501,17 +501,10 @@ class ProgressStrategy {
      * @param {string} output FFmpeg stdout/stderr output
      */
     processOutput(output) {
-        // Handle final completion status (always process regardless of strategy)
+        // Handle final completion status and extract stats
         const progressStatus = output.match(/progress=(\w+)/);
         if (progressStatus && progressStatus[1] === 'end') {
-            this.flushPendingUpdate();
-            this.update({ progress: 100 });
-            logDebug('ProgressStrategy: Detected end of processing');
-            return;
-        }
-        
-        // Track final summary information (always process)
-        if (output.includes('global headers') || output.includes('muxing overhead')) {
+            // Extract final download statistics
             const videoSizeMatch = output.match(/video:(\d+)kB/);
             const audioSizeMatch = output.match(/audio:(\d+)kB/);
             const subtitleSizeMatch = output.match(/subtitle:(\d+)kB/);
@@ -527,8 +520,12 @@ class ProgressStrategy {
             };
             
             this.ffmpegStats = this.downloadStats;
-            this.streamInfoCaptured = true;
             this.currentState.ffmpegStats = this.ffmpegStats;
+            
+            this.flushPendingUpdate();
+            this.update({ progress: 100 });
+            logDebug('ProgressStrategy: Detected end of processing with stats:', this.downloadStats);
+            return;
         }
         
         // Universal data parsing - always extract all available data regardless of strategy
@@ -578,7 +575,7 @@ class ProgressStrategy {
             }
         }
         
-        // Parse size information - always extract if available
+        // Parse size information - only total_size= is available during progress
         const totalSize = output.match(/total_size=(\d+)/);
         
         if (totalSize) {
@@ -591,15 +588,10 @@ class ProgressStrategy {
                     hasPrimaryUpdate = true;
                 }
             }
-        } else {
-            // Fallback to parseSize method
-            const size = this.parseSize(output);
-            if (size !== null) {
-                this.currentState.downloadedBytes = size;
-                hasUpdate = true;
-                if (this.primaryStrategy === 'size' || this.primaryStrategy === 'dynamic') {
-                    hasPrimaryUpdate = true;
-                }
+        } else if (this.primaryStrategy === 'size' || this.primaryStrategy === 'dynamic') {
+            // Only log warning if size is our primary strategy and we expected data
+            if (output.includes('frame=') || output.includes('time=')) {
+                logDebug('ProgressStrategy: Expected total_size= in FFmpeg progress output but not found:', output.substring(0, 100));
             }
         }
         
@@ -680,115 +672,21 @@ class ProgressStrategy {
     }
 
     /**
-     * Parse time information from FFmpeg output
-     * @param {string} output FFmpeg output line
-     * @returns {number|null} Time in seconds or null if not found
-     */
-    parseTime(output) {
-        // This is now a fallback method - the primary time extraction happens in processOutput
-        // Look for standard time=HH:MM:SS.MS pattern
-        const timeMatch = output.match(/time=(\d+):(\d+):(\d+\.\d+)/);
-        if (timeMatch) {
-            const hours = parseInt(timeMatch[1], 10);
-            const minutes = parseInt(timeMatch[2], 10);
-            const seconds = parseFloat(timeMatch[3]);
-            const totalSeconds = hours * 3600 + minutes * 60 + seconds;
-            
-            // Basic sanity check
-            if (this.duration > 0 && totalSeconds > this.duration * 1.05) {
-                return Math.min(totalSeconds, this.duration);
-            }
-            
-            return totalSeconds;
-        }
-        
-        // Look for time in seconds pattern
-        const timeSecsMatch = output.match(/time=\s*([\d.]+)/);
-        if (timeSecsMatch) {
-            const timeInSeconds = parseFloat(timeSecsMatch[1]);
-            if (!isNaN(timeInSeconds) && timeInSeconds > 0) {
-                return timeInSeconds;
-            }
-        }
-        
-        return null;
-    }
-
-    /**
-     * Parse size information from FFmpeg output
-     * @param {string} output FFmpeg output line
-     * @returns {number|null} Size in bytes or null if not found
-     */
-    parseSize(output) {
-        // Method 1: Look for direct size in bytes (e.g. "size= 186388kB")
-        const sizeMatch = output.match(/size=\s*(\d+)(\w+)/);
-        if (sizeMatch) {
-            const value = parseInt(sizeMatch[1], 10);
-            const unit = sizeMatch[2].toLowerCase();
-            
-            switch (unit) {
-                case 'kb': return value * 1024;
-                case 'mb': return value * 1024 * 1024;
-                case 'gb': return value * 1024 * 1024 * 1024;
-                default: return value;
-            }
-        }
-        
-        // Method 2: Look for detailed breakdown (e.g. "video:171667kB audio:13874kB")
-        const videoSizeMatch = output.match(/video:(\d+)kB/);
-        const audioSizeMatch = output.match(/audio:(\d+)kB/);
-        const subtitleSizeMatch = output.match(/subtitle:(\d+)kB/);
-        
-        if (videoSizeMatch || audioSizeMatch) {
-            let totalSize = 0;
-            
-            if (videoSizeMatch) {
-                totalSize += parseInt(videoSizeMatch[1], 10) * 1024;
-            }
-            
-            if (audioSizeMatch) {
-                totalSize += parseInt(audioSizeMatch[1], 10) * 1024;
-            }
-            
-            if (subtitleSizeMatch) {
-                totalSize += parseInt(subtitleSizeMatch[1], 10) * 1024;
-            }
-            
-            // Only return if we found at least one valid size
-            if (totalSize > 0) {
-                return totalSize;
-            }
-        }
-        
-        return null;
-    }
-
-    /**
      * Parse segment information from FFmpeg output
      * @param {string} output FFmpeg output line
      * @returns {number|null} Segment number or null if not found
      */
     parseSegment(output) {
-        // Look for any context + Opening + URL with media extension + for reading
-        // This covers both [hls @ addr] and [https @ addr] contexts
+        // Look for FFmpeg opening a segment file for reading
         const segmentMatch = output.match(/Opening\s+['"]([^'"]*\.(ts|mp4|m4s))['"] for reading/);
         
         if (segmentMatch) {
             const url = segmentMatch[1];
-            logDebug(`ProgressStrategy: Found segment URL: ${url}`);
             
-            // Try to extract actual segment number from URL pattern
-            // Pattern: anything ending with -NUMBER.extension
-            const numberMatch = url.match(/-(\d+)\.(ts|mp4|m4s)$/);
-            if (numberMatch) {
-                const segmentNumber = parseInt(numberMatch[1], 10);
-                logDebug(`ProgressStrategy: Extracted segment number ${segmentNumber} from URL`);
-                return segmentNumber;
-            }
-            
-            // Fallback: use incremental counter if no number in URL
+            // FFmpeg processes segments sequentially, so we count each "Opening" event
             this.segmentCounter = (this.segmentCounter || 0) + 1;
-            logDebug(`ProgressStrategy: Using fallback counter: ${this.segmentCounter}`);
+            
+            logDebug(`ProgressStrategy: Processing segment ${this.segmentCounter}: ${url}`);
             return this.segmentCounter;
         }
         
