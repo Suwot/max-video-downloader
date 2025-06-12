@@ -1,11 +1,8 @@
 /**
- * @ai-guide-component ProgressTracker
- * @ai-guide-description Tracks download progress using a unified strategy
- * @ai-guide-responsibilities
- * - Calculates download progress percentage for different media types
- * - Provides accurate progress reporting for the UI
- * - Handles different file types (direct media, HLS/DASH streams)
- * - Uses extension-provided metadata for efficient progress tracking
+ * - Delegates progress calculation to ProgressStrategy
+ * - Provides UI-friendly formatting for progress data
+ * - Manages initialization and cleanup for progress tracking
+ * - Serves as a clean interface between download manager and progress strategy
  */
 
 const { logDebug } = require('../../utils/logger');
@@ -19,15 +16,14 @@ class ProgressTracker {
      * Create a new progress tracker
      * @param {Object} options Configuration options
      * @param {Function} options.onProgress Callback for progress updates
+     * @param {number} options.updateInterval Update interval in ms (passed to strategy)
+     * @param {boolean} options.debug Enable debug logging
      */
     constructor(options = {}) {
         this.strategy = null;
         this.onProgress = options.onProgress || (() => {});
-        this.lastUpdate = 0;
-        this.updateInterval = options.updateInterval || 250; // Default 250ms between updates
-        this.startTime = Date.now();
-        this.lastBytes = 0;
         this.debug = options.debug || false;
+        this.updateInterval = options.updateInterval || 250;
     }
 
     /**
@@ -39,37 +35,19 @@ class ProgressTracker {
      * @param {number} fileInfo.fileSizeBytes File size in bytes
      * @param {number} fileInfo.bitrate Media bitrate in bits per second
      * @param {number} fileInfo.segmentCount Number of segments
-     * @param {number} fileInfo.segmentDuration Average segment duration
      * @param {string} fileInfo.ffprobeOutput Optional FFprobe output for more accurate metadata
      */
     async initialize(fileInfo) {
         this.fileInfo = fileInfo;
-        this.startTime = Date.now();
-        this.lastBytes = 0;
         
         logDebug('Progress tracker initializing for:', fileInfo.downloadUrl);
         logDebug('Media type:', fileInfo.type);
         
-        // Extract FFprobe output if available
-        let ffprobeData = null;
-        if (fileInfo.ffprobeOutput) {
-            ffprobeData = fileInfo.ffprobeOutput;
-        }
-        // For direct videos, check if we have duration/bitrate from ffprobe but no size
-        else if (fileInfo.type === 'direct' && fileInfo.probeDuration > 0 && !fileInfo.fileSizeBytes) {
-            // If we have a probe duration and bitrate but no size, we can estimate it
-            if (fileInfo.bitrate > 0) {
-                const estimatedSize = Math.ceil((fileInfo.bitrate * fileInfo.probeDuration) / 8);
-                logDebug(`Progress tracker: Estimated file size ${estimatedSize} bytes based on probe duration and bitrate`);
-                fileInfo.fileSizeBytes = estimatedSize;
-            }
-        }
-        
-        // Create progress strategy
+        // Create progress strategy with our callback wrapper
         this.strategy = new ProgressStrategy({
             onProgress: this.handleProgress.bind(this),
             updateInterval: this.updateInterval,
-            ffprobeData,
+            ffprobeData: fileInfo.ffprobeOutput,
             ...fileInfo
         });
         
@@ -78,67 +56,33 @@ class ProgressTracker {
         
         if (!success) {
             logDebug('Failed to initialize progress strategy, will use basic tracking');
-        } else {
-            logDebug('Progress strategy initialized successfully');
+            return false;
         }
         
-        // Send initial progress
-        this.update({
-            progress: 0,
-            speed: 0,
-            downloadedBytes: 0,
-            totalBytes: fileInfo.fileSizeBytes || 0,
-            totalDuration: fileInfo.duration || 0,
-            type: fileInfo.type
-        });
-
-        logDebug('Progress tracker initialized for:', fileInfo.downloadUrl);
-        return success;
+        logDebug('Progress strategy initialized successfully');
+        return true;
     }
 
     /**
-     * Update progress based on current data
-     * @param {Object} progressData Progress data
-     */
-    update(progressData) {
-        const now = Date.now();
-        
-        // Rate limit updates
-        if (now - this.lastUpdate < this.updateInterval) {
-            return;
-        }
-        
-        this.lastUpdate = now;
-        
-        // If we have an active strategy, use it
-        if (this.strategy && this.strategy.update) {
-            this.strategy.update(progressData);
-        } else {
-            // Otherwise pass through data directly
-            this.handleProgress(progressData);
-        }
-    }
-
-    /**
-     * Process FFmpeg output to extract progress information
+     * Process FFmpeg output - delegates directly to strategy
      * @param {string} output FFmpeg stderr output
      */
     processOutput(output) {
-        if (this.strategy && this.strategy.processOutput) {
+        if (this.strategy) {
             this.strategy.processOutput(output);
         }
     }
 
     /**
-     * Handle progress update from strategy
-     * @param {Object} data Progress data
+     * Handle progress update from strategy and add UI formatting
+     * @param {Object} data Progress data from strategy
      */
     handleProgress(data) {
-        // Add estimated time remaining if we have enough info
-        if (typeof data.progress === 'number' && data.progress > 0 && data.speed > 0 && data.downloadedBytes > 0) {
+        // Add ETA calculation if we have sufficient data
+        if (data.progress > 0 && data.speed > 0 && data.downloadedBytes > 0) {
             let totalBytes = data.totalBytes;
             
-            // Only use progress-based estimation if we don't have totalBytes
+            // Estimate total bytes from progress if not available
             if (!totalBytes || totalBytes <= 0) {
                 totalBytes = data.downloadedBytes / (data.progress / 100);
             }
@@ -147,7 +91,7 @@ class ProgressTracker {
             data.eta = remainingBytes / data.speed; // ETA in seconds
         }
         
-        // Add useful formatted values for UI display
+        // Add formatted values for UI display
         if (data.speed) {
             data.speedFormatted = this.formatSpeed(data.speed);
         }
@@ -167,13 +111,59 @@ class ProgressTracker {
             data.totalDurationFormatted = this.formatTime(data.totalDuration);
         }
         
+        if (data.eta) {
+            data.etaFormatted = this.formatTime(data.eta);
+        }
+        
         if (this.debug) {
             logDebug('Progress update:', data);
         }
         
-        // Call the progress callback
-        if (this.onProgress) {
-            this.onProgress(data);
+        // Send formatted data to callback
+        this.onProgress(data);
+    }
+    
+    /**
+     * Get formatted download statistics
+     * @returns {Object|null} Formatted download statistics or null if not available
+     */
+    getDownloadStats() {
+        if (!this.strategy || !this.strategy.downloadStats) {
+            return null;
+        }
+        
+        const stats = this.strategy.downloadStats;
+        const downloadStats = {};
+        
+        if (stats.videoSize) {
+            downloadStats.video = this.formatBytes(stats.videoSize);
+        }
+        
+        if (stats.audioSize) {
+            downloadStats.audio = this.formatBytes(stats.audioSize);
+        }
+        
+        if (stats.subtitleSize) {
+            downloadStats.subtitle = this.formatBytes(stats.subtitleSize);
+        }
+        
+        if (stats.totalSize) {
+            downloadStats.total = this.formatBytes(stats.totalSize);
+        }
+        
+        if (stats.muxingOverhead) {
+            downloadStats.muxingOverhead = `${stats.muxingOverhead.toFixed(2)}%`;
+        }
+        
+        return Object.keys(downloadStats).length ? downloadStats : null;
+    }
+    
+    /**
+     * Clean up resources
+     */
+    cleanup() {
+        if (this.strategy) {
+            this.strategy.cleanup();
         }
     }
     
@@ -204,7 +194,7 @@ class ProgressTracker {
      * @returns {string} Formatted string
      */
     formatTime(seconds) {
-        if (!seconds || isNaN(seconds)) return '00:00';
+        if (!seconds || isNaN(seconds) || seconds < 0) return '00:00';
         const h = Math.floor(seconds / 3600);
         const m = Math.floor((seconds % 3600) / 60);
         const s = Math.floor(seconds % 60);
@@ -212,39 +202,6 @@ class ProgressTracker {
             ? `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`
             : `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
     }
-    
-    /**
-     * Get formatted download statistics
-     * @returns {Object|null} Formatted download statistics or null if not available
-     */
-    getDownloadStats() {
-        if (!this.strategy || !this.strategy.downloadStats) {
-            return null;
-        }
-        
-        const stats = this.strategy.downloadStats;
-        const downloadStats = {};
-        
-        if (stats.videoSize) {
-            downloadStats.video = this.formatBytes(stats.videoSize);
-        }
-        
-        if (stats.audioSize) {
-            downloadStats.audio = this.formatBytes(stats.audioSize);
-        }
-        
-        if (stats.subtitleSize) {
-            downloadStats.subtitle = this.formatBytes(stats.subtitleSize);
-        }
-        
-        if (stats.muxingOverhead) {
-            downloadStats.muxingOverhead = `${stats.muxingOverhead.toFixed(2)}%`;
-        }
-        
-        // Only return if we have at least one valid stat
-        return Object.keys(downloadStats).length ? downloadStats : null;
-    }
 }
 
-// Export the progress tracker
 module.exports = ProgressTracker;
