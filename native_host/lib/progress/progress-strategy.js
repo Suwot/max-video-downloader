@@ -60,15 +60,13 @@ class ProgressStrategy {
         this.lockedCalculationMethod = null; // For dynamic strategy consistency
         
         // For tracking stream information from FFmpeg
-        this.ffmpegStats = null;
-        this.streamInfoCaptured = false;
+        this.downloadStats = null;
         
         // Persistent state - accumulates all data over time
         this.currentState = {
             currentTime: 0,
             downloadedBytes: 0,
-            currentSegment: 0,
-            ffmpegStats: null
+            currentSegment: 0
         };
         
         // For batching updates with strategy-gating
@@ -185,7 +183,30 @@ class ProgressStrategy {
      * @param {Object} data Progress data from FFmpeg output
      */
     update(data) {
-        // Extract relevant data
+        // Handle explicit completion with stats
+        if (data.progress === 100 && data.downloadStats) {
+            // Final completion - send all available data without recalculation
+            const completionData = {
+                progress: 100,
+                speed: 0,
+                elapsedTime: (Date.now() - this.startTime) / 1000,
+                type: this.type,
+                strategy: this.primaryStrategy,
+                downloadedBytes: data.downloadedBytes || this.currentState.downloadedBytes,
+                totalBytes: this.fileSizeBytes || null,
+                downloadStats: data.downloadStats,
+                // Include any accumulated state data
+                currentTime: data.totalDuration,
+                currentSegment: data.currentSegment || this.currentState.currentSegment,
+                totalDuration: this.duration || 0,
+                totalSegments: this.segmentCount || 0
+            };
+            
+            this.sendProgress(completionData);
+            return;
+        }
+        
+        // Extract relevant data for ongoing progress
         const currentTime = data.currentTime || 0;
         const downloaded = data.downloadedBytes || 0;
         const currentSegment = data.currentSegment || this.currentSegment;
@@ -193,13 +214,8 @@ class ProgressStrategy {
         // Handle direct vs. incremental downloaded bytes reporting from FFmpeg
         let effectiveDownloaded = downloaded;
         
-        // If progress=end is received, use the final downloaded value directly
-        if (data.progress === 100) {
-            this.totalDownloaded = downloaded;
-            effectiveDownloaded = downloaded;
-        }
-        // Otherwise for HLS/DASH, ensure we track cumulative bytes since FFmpeg reports per-segment
-        else if (this.type !== 'direct' && downloaded > 0) {
+        // For HLS/DASH, ensure we track cumulative bytes since FFmpeg reports per-segment
+        if (this.type !== 'direct' && downloaded > 0) {
             // Normal incremental tracking
             // If this is a new segment, add to total
             if (!this.downloadedPerSegment[currentSegment]) {
@@ -261,25 +277,16 @@ class ProgressStrategy {
         // Calculate speed
         const speed = this.calculateSpeed(effectiveDownloaded);
         
-        // Simple, direct progress calculation - no unnecessary complexities
+        // Direct progress calculation for ongoing updates
         let finalProgress;
         
-        if (data.progress === 100) {
-            // Explicit completion signal from FFmpeg
-            finalProgress = 100;
-        } else if (this.primaryStrategy === 'size' && this.fileSizeBytes > 0 && effectiveDownloaded > 0) {
+        if (this.primaryStrategy === 'size' && this.fileSizeBytes > 0 && effectiveDownloaded > 0) {
             // Direct size-based calculation for size strategy - most reliable method
             const exactProgress = (effectiveDownloaded / this.fileSizeBytes) * 100;
             finalProgress = Math.min(99.9, exactProgress); // Cap at 99.9% until we get an explicit end marker
         } else {
             // Apply minimal smoothing for streaming formats or when no size available
             finalProgress = Math.min(99.9, smoothedProgress); 
-        }
-        
-        // Capture stream information for final summary once we're past 90%
-        if ((finalProgress > 90 || data.progress === 100) && !this.streamInfoCaptured && data.ffmpegStats) {
-            this.streamInfoCaptured = true;
-            this.streamInfo = data.ffmpegStats;
         }
         
         // Send progress update with all relevant information useful for the UI
@@ -519,11 +526,13 @@ class ProgressStrategy {
                 muxingOverhead: overheadMatch ? parseFloat(overheadMatch[1]) : 0
             };
             
-            this.ffmpegStats = this.downloadStats;
-            this.currentState.ffmpegStats = this.ffmpegStats;
-            
             this.flushPendingUpdate();
-            this.update({ progress: 100 });
+            // Merge final completion with accumulated state and stats
+            this.update({ 
+                ...this.currentState, 
+                progress: 100,
+                downloadStats: this.downloadStats
+            });
             logDebug('ProgressStrategy: Detected end of processing with stats:', this.downloadStats);
             return;
         }
@@ -692,24 +701,7 @@ class ProgressStrategy {
         
         return null;
     }
-    
-    /**
-     * Get download statistics for final success message
-     * @returns {Object} Formatted download statistics
-     */
-    getDownloadStats() {
-        if (!this.downloadStats) {
-            return null;
-        }
-        
-        return {
-            videoSizeFormatted: `${Math.round(this.downloadStats.videoSize / 1024)} KB`,
-            audioSizeFormatted: `${Math.round(this.downloadStats.audioSize / 1024)} KB`,
-            totalSizeFormatted: `${Math.round(this.downloadStats.totalSize / 1024)} KB`,
-            muxingOverheadFormatted: `${this.downloadStats.muxingOverhead.toFixed(2)}%`
-        };
-    }
-    
+
     /**
      * Clean up timers and resources
      */
