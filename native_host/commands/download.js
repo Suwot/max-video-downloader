@@ -369,8 +369,20 @@ class DownloadCommand extends BaseCommand {
         fileSizeBytes,
         segmentCount
     }) {
-        return new Promise((resolve, reject) => {
-            // Create progress tracker
+        return new Promise(async (resolve, reject) => {
+            // Probe duration upfront if not provided to avoid race conditions
+            let finalDuration = duration;
+            if (!duration || typeof duration !== 'number' || duration <= 0) {
+                logDebug('No valid duration provided, probing media...');
+                finalDuration = await this.probeMediaDuration(ffmpegService, downloadUrl, headers);
+                if (finalDuration) {
+                    logDebug('Got duration from probe:', finalDuration);
+                } else {
+                    logDebug('Could not probe duration, will rely on FFmpeg output parsing');
+                }
+            }
+            
+            // Create progress tracker with complete file information
             const progressTracker = new ProgressTracker({
                 onProgress: (data) => {
                     this.sendProgress({
@@ -382,44 +394,26 @@ class DownloadCommand extends BaseCommand {
                 debug: true
             });
             
-            // Initialize with file info and all available metadata
+            // Initialize once with all available metadata
             const fileInfo = {
-                downloadUrl: downloadUrl, 
-                type: type,
+                downloadUrl,
+                type,
                 outputPath: uniqueOutput,
-                // Progress tracking essentials
-                duration: duration || null,
-                fileSizeBytes: fileSizeBytes || null,
-                segmentCount: segmentCount || null
+                duration: finalDuration,
+                fileSizeBytes,
+                segmentCount
             };
             
-            logDebug('Initializing progress tracker with:', JSON.stringify(fileInfo, null, 2));
+            logDebug('Initializing progress tracker with:', fileInfo);
             
-            progressTracker.initialize(fileInfo)
-                .then((success) => {
-                    logDebug(`Progress tracker initialized ${success ? 'successfully' : 'with fallbacks'}`);
-                })
-                .catch(error => {
-                    logDebug('Error initializing progress tracker:', error);
-                });
-            
-            // If no duration is provided and valid, try to probe it
-            if (!duration || typeof duration !== 'number' || duration <= 0) {
-                logDebug('No valid duration provided, probing media...');
-                this.probeMediaDuration(ffmpegService, downloadUrl, headers)
-                    .then(probedDuration => {
-                        if (probedDuration) {
-                            logDebug('Got total duration from probe:', probedDuration);
-                            progressTracker.update({
-                                totalDuration: probedDuration,
-                                currentTime: 0,
-                                duration: probedDuration
-                            });
-                        }
-                    })
-                    .catch(error => {
-                        logDebug('Error probing duration:', error);
-                    });
+            try {
+                const success = await progressTracker.initialize(fileInfo);
+                if (!success) {
+                    logDebug('Progress tracker initialization failed, continuing with basic tracking');
+                }
+            } catch (error) {
+                logDebug('Error initializing progress tracker:', error);
+                // Continue without progress tracking rather than failing
             }
             
             // Start FFmpeg process
@@ -431,30 +425,30 @@ class DownloadCommand extends BaseCommand {
             
             let errorOutput = '';
             let hasError = false;
-            let lastBytes = 0;
             
+            // Simple data flow: FFmpeg output → ProgressTracker → UI
             ffmpeg.stderr.on('data', (data) => {
                 if (hasError) return;
                 
                 const output = data.toString();
                 errorOutput += output;
                 
-                // Feed output to progress tracker
+                // Single responsibility: just pass output to tracker
                 progressTracker.processOutput(output);
             });
             
             ffmpeg.on('close', (code) => {
+                progressTracker.cleanup();
+                
                 if (code === 0 && !hasError) {
                     logDebug('Download completed successfully.');
                     
-                    // Get the download stats from the progress tracker
                     const downloadStats = progressTracker.getDownloadStats();
                     
-                    // Send success message with path, filename, and download stats
                     this.sendSuccess({ 
                         path: uniqueOutput,
                         filename: path.basename(uniqueOutput),
-                        downloadStats: downloadStats || {} // Include stats if available
+                        downloadStats: downloadStats || {}
                     });
                     
                     resolve({ 
@@ -474,6 +468,7 @@ class DownloadCommand extends BaseCommand {
             ffmpeg.on('error', (err) => {
                 if (!hasError) {
                     hasError = true;
+                    progressTracker.cleanup();
                     logDebug('FFmpeg spawn error:', err);
                     this.sendError(err.message);
                     reject(err);

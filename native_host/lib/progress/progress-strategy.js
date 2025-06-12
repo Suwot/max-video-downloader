@@ -715,8 +715,8 @@ class ProgressStrategy {
             this.fallbackUpdateTimer = null;
         }
         
-        // Flush any pending updates before cleanup
-        this.flushPendingUpdate();
+        // Don't flush pending updates during cleanup - 
+        // we've already sent final completion status if download finished successfully
     }
 }
 
