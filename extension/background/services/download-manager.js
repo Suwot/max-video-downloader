@@ -120,37 +120,62 @@ function startDownload(request, port) {
             return;
         }
         
-        if (response.command === 'progress' && !hasError) {
-            // Update stored download information
-            download.progress = response.progress || 0;
+        // Handle progress updates - trust ProgressTracker's formatted data
+        if (response.progress !== undefined && !hasError) {
+            // Update stored download information with formatted data from ProgressTracker
+            download.progress = response.progress;
             download.speed = response.speed;
+            download.speedFormatted = response.speedFormatted;
             download.eta = response.eta;
-            download.segmentProgress = response.segmentProgress;
-            download.downloaded = response.downloaded;
-            download.size = response.size;
+            download.etaFormatted = response.etaFormatted;
+            download.downloadedBytes = response.downloadedBytes;
+            download.downloadedFormatted = response.downloadedFormatted;
+            download.totalBytes = response.totalBytes;
+            download.totalBytesFormatted = response.totalBytesFormatted;
+            download.currentSegment = response.currentSegment;
+            download.totalSegments = response.totalSegments;
+            download.strategy = response.strategy;
             download.lastUpdated = Date.now();
             
-            // Update notification less frequently to avoid flooding
-            if (response.progress % 10 === 0) {
-                let message = `Downloading: ${Math.round(response.progress)}%`;
-                if (response.segmentProgress) {
-                    message += ` (Segment: ${response.segmentProgress})`;
+            // Update notification every 10% to avoid flooding
+            if (Math.floor(response.progress / 10) > Math.floor((download.lastNotificationProgress || 0) / 10)) {
+                download.lastNotificationProgress = response.progress;
+                
+                let message = `Progress: ${Math.round(response.progress)}%`;
+                if (response.speedFormatted) {
+                    message += ` - ${response.speedFormatted}`;
+                }
+                if (response.etaFormatted && response.eta > 0) {
+                    message += ` - ETA: ${response.etaFormatted}`;
                 }
                 
                 chrome.notifications.update(download.notificationId, { message });
             }
             
-            // Broadcast progress to all connected popups
+            // Broadcast progress to all connected popups - pass through formatted data
             broadcastDownloadUpdate({
                 command: 'progress',
-                progress: response.progress || 0,
-                filename: download.filename,
                 downloadUrl: download.downloadUrl,
+                filename: download.filename,
+                // Pass through all formatted data from ProgressTracker
+                progress: response.progress,
                 speed: response.speed,
+                speedFormatted: response.speedFormatted,
                 eta: response.eta,
-                segmentProgress: response.segmentProgress,
-                downloaded: response.downloaded,
-                size: response.size
+                etaFormatted: response.etaFormatted,
+                downloadedBytes: response.downloadedBytes,
+                downloadedFormatted: response.downloadedFormatted,
+                totalBytes: response.totalBytes,
+                totalBytesFormatted: response.totalBytesFormatted,
+                currentSegment: response.currentSegment,
+                totalSegments: response.totalSegments,
+                strategy: response.strategy,
+                currentTime: response.currentTime,
+                currentTimeFormatted: response.currentTimeFormatted,
+                totalDuration: response.totalDuration,
+                totalDurationFormatted: response.totalDurationFormatted,
+                timeRemaining: response.timeRemaining,
+                timeRemainingFormatted: response.timeRemainingFormatted
             });
             
         } else if (response.success && !hasError) {
@@ -158,19 +183,26 @@ function startDownload(request, port) {
             download.status = 'completed';
             download.completeTime = Date.now();
             download.progress = 100;
+            download.downloadStats = response.downloadStats;
             
-            // Show completion notification
+            // Show completion notification with download stats if available
+            let completionMessage = `Saved to: ${response.filename}`;
+            if (response.downloadStats && response.downloadStats.total) {
+                completionMessage += ` (${response.downloadStats.total})`;
+            }
+            
             chrome.notifications.update(download.notificationId, {
                 title: 'Download Complete',
-                message: `Saved to: ${response.path}`
+                message: completionMessage
             });
             
             // Broadcast completion to all connected popups
             broadcastDownloadUpdate({
                 command: 'complete',
-                path: response.path,
+                downloadUrl: download.downloadUrl,
                 filename: download.filename,
-                downloadUrl: download.downloadUrl
+                path: response.path,
+                downloadStats: response.downloadStats
             });
             
             // Keep completed download info for a while
@@ -180,10 +212,12 @@ function startDownload(request, port) {
             }, 30 * 60 * 1000); // 30 minutes
             
         } else if (response.error && !hasError) {
+            hasError = true;
             // Update download status
             download.status = 'error';
             download.error = response.error;
-            hasError = true;
+            
+            logger.error('Download failed:', response.error);
             
             // Show error notification
             chrome.notifications.update(download.notificationId, {
@@ -194,8 +228,8 @@ function startDownload(request, port) {
             // Broadcast error to all connected popups
             broadcastDownloadUpdate({
                 command: 'error',
-                error: response.error,
-                downloadUrl: download.downloadUrl
+                downloadUrl: download.downloadUrl,
+                error: response.error
             });
         }
     };

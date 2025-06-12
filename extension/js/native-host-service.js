@@ -1,4 +1,4 @@
-// NativeHostService - Consolidated native messaging service
+// NativeHostService - Simplified native messaging transport
 export class NativeHostService {
     constructor() {
         this.port = null;
@@ -6,10 +6,9 @@ export class NativeHostService {
         this.pendingMessages = new Map();
         this.reconnectTimer = null;
         this.heartbeatTimer = null;
-        this.listeners = new Map();
         this.hostName = 'com.mycompany.ffmpeg';
-        this.RECONNECT_DELAY = 2000; // 2 seconds
-        this.HEARTBEAT_INTERVAL = 15000; // 15 seconds - match native host
+        this.RECONNECT_DELAY = 2000;
+        this.HEARTBEAT_INTERVAL = 15000;
         
         this.connect();
     }
@@ -27,29 +26,8 @@ export class NativeHostService {
             this.port = chrome.runtime.connectNative(this.hostName);
             console.log('Connected to native host:', this.hostName);
             
-            // Set up message handler
             this.port.onMessage.addListener(this.handleMessage.bind(this));
-            
-            // Set up disconnect handler
-            this.port.onDisconnect.addListener(() => {
-                const error = chrome.runtime.lastError;
-                console.error('Native host disconnected:', error);
-                this.port = null;
-                
-                // Reject all pending promises
-                for (const [id, { reject }] of this.pendingMessages.entries()) {
-                    reject(new Error('Connection to native host lost'));
-                }
-                this.pendingMessages.clear();
-                
-                // Try to reconnect
-                if (!this.reconnectTimer) {
-                    this.reconnectTimer = setTimeout(() => {
-                        this.reconnectTimer = null;
-                        this.connect();
-                    }, this.RECONNECT_DELAY);
-                }
-            });
+            this.port.onDisconnect.addListener(this.handleDisconnect.bind(this));
             
             // Start heartbeat
             this.heartbeatTimer = setInterval(() => this.sendHeartbeat(), this.HEARTBEAT_INTERVAL);
@@ -61,74 +39,80 @@ export class NativeHostService {
         }
     }
     
+    handleDisconnect() {
+        const error = chrome.runtime.lastError;
+        console.error('Native host disconnected:', error);
+        this.port = null;
+        
+        // Reject all pending promises
+        for (const [id, { reject }] of this.pendingMessages.entries()) {
+            reject(new Error('Connection to native host lost'));
+        }
+        this.pendingMessages.clear();
+        
+        // Try to reconnect
+        if (!this.reconnectTimer) {
+            this.reconnectTimer = setTimeout(() => {
+                this.reconnectTimer = null;
+                this.connect();
+            }, this.RECONNECT_DELAY);
+        }
+    }
+    
     handleMessage(response) {
         console.log('Received native message:', response);
         
-        // Check if this is a response to a specific message
-        if (response && response.id && this.pendingMessages.has(response.id)) {
-            const { resolve, reject, responseHandler } = this.pendingMessages.get(response.id);
+        // Route to pending message handler if it exists
+        if (response?.id && this.pendingMessages.has(response.id)) {
+            const { resolve, reject, callback } = this.pendingMessages.get(response.id);
             
             if (response.error) {
-                // For error responses, notify both the promise and the response handler
-                if (responseHandler) responseHandler(response);
+                // Notify callback first, then reject
+                if (callback) callback(response);
                 reject(new Error(response.error));
                 this.pendingMessages.delete(response.id);
-            } else if (response.command === 'progress') {
-                // For progress updates, don't resolve the promise yet, just notify the handler
-                if (responseHandler) responseHandler(response);
-            } else {
-                // For final responses, notify both and resolve
-                if (responseHandler) responseHandler(response);
+            } else if (response.success !== undefined) {
+                // Final response - notify callback and resolve
+                if (callback) callback(response);
                 resolve(response);
                 this.pendingMessages.delete(response.id);
+            } else {
+                // Intermediate response (like progress) - only notify callback
+                if (callback) callback(response);
             }
             return;
         }
         
-        // If it's a message without an ID or unknown ID
-        console.log('Received message without matching ID:', response);
-        
-        // If it's a typed message, notify any listeners
-        if (response && response.command) {
-            const listeners = this.listeners.get(response.command) || [];
-            for (const listener of listeners) {
-                listener(response);
-            }
-        }
+        // Log unhandled messages for debugging
+        console.warn('Received message without matching pending request:', response);
     }
     
-    async sendMessage(message, responseHandler = null) {
-        // Check if we already have too many pending messages of this type (avoid infinite loops)
-        const pendingOfSameType = Array.from(this.pendingMessages.values())
-            .filter(pending => pending.message && pending.message.command === message.command)
-            .length;
-            
-        // If there are already too many pending messages of this type, it might be a loop
-        if (pendingOfSameType >= 3 && message.command !== 'heartbeat') {
-            console.warn(`Too many pending ${message.command} messages (${pendingOfSameType}), possible infinite loop`);
-            return Promise.reject(new Error(`Rate limited: too many pending ${message.command} requests`));
-        }
-        
+    async sendMessage(message, progressCallback = null) {
         if (!this.port && !this.connect()) {
             throw new Error('Could not connect to native host');
         }
         
         return new Promise((resolve, reject) => {
-            // Add message ID to track response
             const id = `msg_${++this.messageId}`;
             const messageWithId = { ...message, id };
             
-            // Store promise callbacks, optional responseHandler, and message for debugging
-            this.pendingMessages.set(id, { resolve, reject, responseHandler, message: messageWithId });
+            // Store promise callbacks and optional progress callback
+            this.pendingMessages.set(id, { 
+                resolve, 
+                reject, 
+                callback: progressCallback,
+                timestamp: Date.now()
+            });
             
-            // Set timeout to auto-reject after 60 seconds unless it's a download operation
-            // Downloads can take longer
-            const timeout = (message.command === 'download') ? 3600000 : 60000;
+            // Set timeout based on command type
+            const isLongRunning = ['download'].includes(message.command);
+            const timeout = isLongRunning ? 3600000 : 30000; // 1 hour vs 30 seconds
+            
             setTimeout(() => {
                 if (this.pendingMessages.has(id)) {
                     const { reject } = this.pendingMessages.get(id);
                     this.pendingMessages.delete(id);
-                    reject(new Error(`Message ${message.command} timed out after ${timeout/1000} seconds`));
+                    reject(new Error(`Message ${message.command} timed out after ${timeout/1000}s`));
                 }
             }, timeout);
             
@@ -137,17 +121,6 @@ export class NativeHostService {
                 this.port.postMessage(messageWithId);
             } catch (error) {
                 this.pendingMessages.delete(id);
-                
-                // If it's a DASH manifest fetch that failed, return empty results instead of error
-                // This prevents infinite retry loops with DASH manifests
-                if (message.command === 'getQualities' && 
-                    message.url && 
-                    message.type === 'dash') {
-                    console.warn('DASH manifest fetch failed, returning empty results to avoid retry loop');
-                    resolve({ streamInfo: { hasVideo: true, hasAudio: true } });
-                    return;
-                }
-                
                 reject(error);
                 
                 // Try to reconnect on send error
@@ -158,63 +131,30 @@ export class NativeHostService {
         });
     }
     
-    // Helper for heartbeat
     async sendHeartbeat() {
         try {
             const response = await this.sendMessage({ command: 'heartbeat' });
             if (!response?.alive) {
-                console.error('Invalid heartbeat response');
-                if (this.port) {
-                    this.port.disconnect();
-                }
+                console.error('Invalid heartbeat response, disconnecting');
+                if (this.port) this.port.disconnect();
             }
         } catch (error) {
             console.error('Heartbeat failed:', error);
-            if (this.port) {
-                this.port.disconnect();
-            }
+            if (this.port) this.port.disconnect();
         }
-    }
-
-    // Subscribe to specific message commands (like progress updates)
-    subscribe(command, callback) {
-        if (!this.listeners.has(command)) {
-            this.listeners.set(command, []);
-        }
-        this.listeners.get(command).push(callback);
-
-        // Return unsubscribe function
-        return () => {
-            const listeners = this.listeners.get(command) || [];
-            this.listeners.set(command, listeners.filter(cb => cb !== callback));
-        };
     }
     
-    /**
-     * Legacy compatibility method mimicking chrome.runtime.sendNativeMessage
-     * @param {string} hostName - Native host name
-     * @param {Object} message - Message to send
-     * @param {Function} callback - Callback for response
-     */
-    sendNativeMessage(hostName, message, callback) {
-        if (hostName !== this.hostName) {
-            console.error(`Attempted to send message to unknown host: ${hostName}`);
-            if (callback) callback({ error: `Unknown host: ${hostName}` });
-            return;
-        }
+    // Clean up resources
+    disconnect() {
+        if (this.heartbeatTimer) clearInterval(this.heartbeatTimer);
+        if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
+        if (this.port) this.port.disconnect();
         
-        // For messages that expect streaming responses (like downloads),
-        // we need to use a responseHandler
-        const expectsStreaming = ['download', 'downloadHLS'].includes(message.command);
-        
-        if (expectsStreaming) {
-            this.sendMessage(message, callback)
-                .catch(error => callback({ error: error.message }));
-        } else {
-            this.sendMessage(message)
-            .then(response => callback(response))
-            .catch(error => callback({ error: error.message }));
+        // Reject any pending messages
+        for (const [id, { reject }] of this.pendingMessages.entries()) {
+            reject(new Error('Service disconnected'));
         }
+        this.pendingMessages.clear();
     }
 }
 
