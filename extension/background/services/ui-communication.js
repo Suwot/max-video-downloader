@@ -8,9 +8,8 @@ import { getVideosForDisplay, clearVideoCache, sendVideoUpdateToUI } from './vid
 import { getActiveDownloads, startDownload } from './download-manager.js';
 import { createLogger } from '../../js/utilities/logger.js';
 
-// Track all popup connections for universal communication
+// Track all popup connections - simplified single map
 const popupPorts = new Map(); // key = portId, value = {port, tabId, url}
-const urlToTabMap = new Map(); // key = normalizedUrl, value = tabId
 
 // Create a logger instance for the UI Communication module
 const logger = createLogger('UI Communication');
@@ -21,81 +20,67 @@ async function handlePortMessage(message, port, portId) {
     
     // Handle popup registration with URL and tab ID
     if (message.command === 'register' && message.tabId) {
-        // Store both port information and tab/URL mapping
+        // Store port information with tab/URL mapping
         popupPorts.set(portId, {
             port: port,
             tabId: message.tabId,
-            url: message.url
+            url: message.url || null
         });
         
-        // Also map URL to tab ID for reverse lookup
-        if (message.url) {
-            urlToTabMap.set(message.url, message.tabId);
-            logger.debug(`Registered popup for tab ${message.tabId} with URL: ${message.url}`);
-        } else {
-            logger.debug(`Registered popup for tab ${message.tabId} (no URL provided)`);
-        }
-        
+        logger.debug(`Registered popup for tab ${message.tabId}${message.url ? ` with URL: ${message.url}` : ''}`);
         return;
     }
     
-    // Handle video list request
-    if (message.command === 'getVideos') {
-        // Use the unified approach from video-manager to send videos
-        // This ensures consistency in how videos are sent to the UI
-        sendVideoUpdateToUI(message.tabId, null, { _sendFullList: true });
+    // Define commands that don't require tab ID (global operations)
+    const globalCommands = ['getActiveDownloads', 'clearCaches'];
+    
+    // Commands that require tab ID validation (tab-specific operations)
+    const tabSpecificCommands = ['getVideos', 'generatePreview', 'download'];
+    
+    // Validate tabId for tab-specific commands only
+    if (tabSpecificCommands.includes(message.command) && !message.tabId) {
+        logger.error(`Tab-specific command '${message.command}' missing required tabId:`, message);
+        return;
     }
     
-    // Handle preview generation request - now handled through enrichWithPreview in video-manager.js
-    else if (message.command === 'generatePreview') {
-        logger.debug(`Preview request received for URL: ${message.url}`);
-        try {
-            // Just get the videos and check if any have a matching URL
-            const videos = getVideosForDisplay(message.tabId);
-            const matchingVideo = videos.find(v => v.url === message.url);
+    // Route commands to appropriate services
+    switch (message.command) {
+        case 'getVideos':
+            // Delegate to video-manager using unified approach
+            sendVideoUpdateToUI(message.tabId, null, { _sendFullList: true });
+            break;
             
-            // Return any existing preview or let the popup know we're working on it
-            if (matchingVideo && matchingVideo.previewUrl) {
+        case 'generatePreview':
+            // Pure delegation - let video-manager handle everything
+            logger.debug(`Preview request for ${message.url} - delegating to video-manager`);
+            // Video-manager will handle preview generation through its processing pipeline
+            // No need to duplicate logic here - just log the request
+            break;
+            
+        case 'download':
+            startDownload(message, port);
+            break;
+            
+        case 'clearCaches':
+            clearVideoCache();
+            logger.debug('Cleared video caches');
+            break;
+            
+        case 'getActiveDownloads':
+            try {
+                const activeDownloadList = getActiveDownloads();
                 port.postMessage({
-                    command: 'previewResponse',
-                    requestUrl: message.url,
-                    previewUrl: matchingVideo.previewUrl
+                    command: 'activeDownloadsList',
+                    downloads: activeDownloadList
                 });
+                logger.debug(`Sent ${activeDownloadList.length} active downloads to popup`);
+            } catch (error) {
+                logger.error('Error sending active downloads list:', error);
             }
-        } catch (error) {
-            logger.debug(`Error handling preview request: ${error.message}`);
-            port.postMessage({
-                command: 'previewResponse',
-                requestUrl: message.url,
-                error: error.message
-            });
-        }
-    }
-    
-    // Handle download request
-    else if (message.command === 'download') {
-        startDownload(message, port);
-    }
-
-    // Handle clear caches request from popup
-    else if (message.command === 'clearCaches') {
-        // Clear video cache in video manager
-        clearVideoCache();
-        logger.debug('Cleared video caches');
-    }
-
-    // Handle active downloads list request
-    else if (message.command === 'getActiveDownloads') {
-        const activeDownloadList = getActiveDownloads();
-        
-        try {
-            port.postMessage({
-                command: 'activeDownloadsList',
-                downloads: activeDownloadList
-            });
-        } catch (e) {
-            console.error('Error sending active downloads list:', e);
-        }
+            break;
+            
+        default:
+            logger.warn('Unknown command received:', message.command);
     }
 }
 
@@ -103,19 +88,20 @@ async function handlePortMessage(message, port, portId) {
  * Sets up port connection for popup communication
  */
 function setupPopupPort(port, portId) {
-    // Store in general popup port collection
-    popupPorts.set(portId, { port });
     logger.debug('Popup connected with port ID:', portId);
     
-    // Set up message listener for general popup communication
+    // Set up message listener
     port.onMessage.addListener((message) => {
         handlePortMessage(message, port, portId);
     });
     
     // Handle port disconnection
     port.onDisconnect.addListener(() => {
+        const portInfo = popupPorts.get(portId);
+        if (portInfo) {
+            logger.debug(`Popup disconnected: tab ${portInfo.tabId}, port ${portId}`);
+        }
         popupPorts.delete(portId);
-        logger.debug('Popup port disconnected and removed:', portId);
     });
 }
 
@@ -123,35 +109,27 @@ function setupPopupPort(port, portId) {
  * Broadcasts a message to all connected popups
  */
 function broadcastToPopups(message) {
-    const portsToRemove = [];
+    const invalidPorts = [];
     
     for (const [portId, portInfo] of popupPorts.entries()) {
         try {
-            // First, check if the port exists and appears valid
-            if (!portInfo || (!portInfo.port && typeof portInfo !== 'object')) {
-                portsToRemove.push(portId);
+            // Validate port structure and connection
+            if (!portInfo?.port?.sender) {
+                invalidPorts.push(portId);
                 continue;
             }
             
-            // Check if the port is still connected by accessing its sender
-            // This is a more reliable way to check if a port is still valid
-            const port = typeof portInfo === 'object' ? portInfo.port : portInfo;
-            
-            if (port && port.sender) {
-                port.postMessage(message);
-            } else {
-                portsToRemove.push(portId);
-            }
-        } catch (e) {
-            console.error('Error broadcasting to popup:', e);
-            portsToRemove.push(portId);
+            portInfo.port.postMessage(message);
+        } catch (error) {
+            logger.error(`Error broadcasting to port ${portId}:`, error);
+            invalidPorts.push(portId);
         }
     }
     
-    // Clean up any invalid ports identified during broadcast
-    if (portsToRemove.length > 0) {
-        portsToRemove.forEach(id => popupPorts.delete(id));
-        logger.debug(`Removed ${portsToRemove.length} invalid port(s)`);
+    // Clean up invalid ports
+    if (invalidPorts.length > 0) {
+        invalidPorts.forEach(id => popupPorts.delete(id));
+        logger.debug(`Cleaned up ${invalidPorts.length} invalid port(s)`);
     }
 }
 
@@ -162,21 +140,15 @@ function broadcastToPopups(message) {
  */
 function getActivePopupPortForTab(tabId) {
     for (const [portId, portInfo] of popupPorts.entries()) {
-        try {
-            // Check if this port is for the requested tab
-            if (portInfo && portInfo.tabId === tabId) {
-                // Verify the port is still valid by checking its sender property
-                if (portInfo.port && portInfo.port.sender) {
-                    return portInfo.port;
-                } else {
-                    // Port is invalid, clean it up
-                    popupPorts.delete(portId);
-                    logger.debug(`Removed invalid port for tab ${tabId}`);
-                }
+        if (portInfo?.tabId === tabId) {
+            // Verify port is still valid
+            if (portInfo.port?.sender) {
+                return portInfo.port;
+            } else {
+                // Clean up invalid port
+                popupPorts.delete(portId);
+                logger.debug(`Removed invalid port for tab ${tabId}`);
             }
-        } catch (e) {
-            console.error(`Error checking port for tab ${tabId}:`, e);
-            popupPorts.delete(portId);
         }
     }
     return null;
@@ -191,13 +163,11 @@ export async function initUICommunication() {
     
     // Set up listener for port connections
     chrome.runtime.onConnect.addListener(port => {
-        logger.debug('Port connected:', port.name);
-        
-        // Create unique port ID
-        const portId = Date.now().toString();
-        
         if (port.name === 'popup') {
+            const portId = `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
             setupPopupPort(port, portId);
+        } else {
+            logger.warn('Unknown port connection:', port.name);
         }
     });
     
