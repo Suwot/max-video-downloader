@@ -47,13 +47,9 @@ class ProgressStrategy {
         this.updateInterval = options.updateInterval || 250; // Use parent's update interval
         this.lastProgressValues = [];
         
-        // For speed calculation
-        this.segmentSizes = [];
+        // For speed calculation - simplified for all types
+        this.speedSamples = [];
         this.lastSegmentTime = Date.now();
-        
-        // For cumulative download tracking
-        this.totalDownloaded = 0;
-        this.downloadedPerSegment = {};
         
         // Track which strategy we're using
         this.primaryStrategy = null;
@@ -204,25 +200,6 @@ class ProgressStrategy {
         const downloaded = data.downloadedBytes || 0;
         const currentSegment = data.currentSegment || this.currentSegment;
         
-        // Handle direct vs. incremental downloaded bytes reporting from FFmpeg
-        let effectiveDownloaded = downloaded;
-        
-        // For HLS/DASH, ensure we track cumulative bytes since FFmpeg reports per-segment
-        if (this.type !== 'direct' && downloaded > 0) {
-            // Normal incremental tracking
-            // If this is a new segment, add to total
-            if (!this.downloadedPerSegment[currentSegment]) {
-                this.downloadedPerSegment[currentSegment] = downloaded;
-                this.totalDownloaded += downloaded;
-            } else if (downloaded > this.downloadedPerSegment[currentSegment]) {
-                // If we have more data for an existing segment
-                const diff = downloaded - this.downloadedPerSegment[currentSegment];
-                this.downloadedPerSegment[currentSegment] = downloaded;
-                this.totalDownloaded += diff;
-            }
-            effectiveDownloaded = this.totalDownloaded;
-        }
-        
         // Keep track of segment changes (useful for HLS)
         const isNewSegment = currentSegment > this.currentSegment;
         if (isNewSegment) {
@@ -235,7 +212,7 @@ class ProgressStrategy {
         
         switch (this.type) {
             case 'direct':
-                progress = this.calculateDirectProgress(effectiveDownloaded, currentTime);
+                progress = this.calculateDirectProgress(downloaded, currentTime);
                 progressInfo = { 
                     currentTime,
                     totalDuration: this.duration || 0
@@ -244,7 +221,7 @@ class ProgressStrategy {
                 
             case 'hls':
                 // Use strategy-locked calculation instead of multi-strategy fallback
-                progress = this.calculateStrategyProgress(currentTime, currentSegment, effectiveDownloaded);
+                progress = this.calculateStrategyProgress(currentTime, currentSegment, downloaded);
                 progressInfo = { 
                     currentTime,
                     totalDuration: this.duration || 0,
@@ -255,7 +232,7 @@ class ProgressStrategy {
                 break;
                 
             case 'dash':
-                progress = this.calculateStrategyProgress(currentTime, 0, effectiveDownloaded);
+                progress = this.calculateStrategyProgress(currentTime, 0, downloaded);
                 progressInfo = { 
                     currentTime, 
                     totalDuration: this.duration || 0,
@@ -268,14 +245,14 @@ class ProgressStrategy {
         const smoothedProgress = this.smoothProgress(progress);
         
         // Calculate speed
-        const speed = this.calculateSpeed(effectiveDownloaded);
+        const speed = this.calculateSpeed(downloaded);
         
         // Direct progress calculation for ongoing updates
         let finalProgress;
         
-        if (this.primaryStrategy === 'size' && this.fileSizeBytes > 0 && effectiveDownloaded > 0) {
+        if (this.primaryStrategy === 'size' && this.fileSizeBytes > 0 && downloaded > 0) {
             // Direct size-based calculation for size strategy - most reliable method
-            const exactProgress = (effectiveDownloaded / this.fileSizeBytes) * 100;
+            const exactProgress = (downloaded / this.fileSizeBytes) * 100;
             finalProgress = Math.min(99.9, exactProgress); // Cap at 99.9% until we get an explicit end marker
         } else {
             // Apply minimal smoothing for streaming formats or when no size available
@@ -289,7 +266,7 @@ class ProgressStrategy {
             elapsedTime: (Date.now() - this.startTime) / 1000,
             type: this.type,
             strategy: this.primaryStrategy,
-            downloadedBytes: effectiveDownloaded,
+            downloadedBytes: downloaded,
             totalBytes: this.fileSizeBytes || null
         };
         
@@ -376,63 +353,37 @@ class ProgressStrategy {
 
     /**
      * Calculate download speed
-     * @param {number} downloaded Bytes downloaded
+     * @param {number} downloaded Bytes downloaded (cumulative from FFmpeg)
      * @returns {number} Speed in bytes per second
      */
     calculateSpeed(downloaded) {
-        let speed = 0;
         const now = Date.now();
+        let speed = 0;
         
-        if (downloaded > this.lastBytes) {
-            // For HLS: Use segment-based speed calculation to avoid wild fluctuations
-            if (this.type === 'hls' && this.currentSegment > 0) {
-                // Store segment size information for averaging
-                const bytesDownloadedSinceLastUpdate = downloaded - this.lastBytes;
-                
-                if (bytesDownloadedSinceLastUpdate > 0) {
-                    this.segmentSizes.push({
-                        bytes: bytesDownloadedSinceLastUpdate,
-                        timestamp: now
-                    });
-                    
-                    // Keep only the last 5 segments for averaging
-                    if (this.segmentSizes.length > 5) {
-                        this.segmentSizes.shift();
-                    }
-                }
-                
-                // Calculate average speed over multiple segments
-                if (this.segmentSizes.length > 0) {
-                    let totalBytes = 0;
-                    const earliestTimestamp = this.segmentSizes[0].timestamp;
-                    
-                    this.segmentSizes.forEach(segment => {
-                        totalBytes += segment.bytes;
-                    });
-                    
-                    const totalTimeSeconds = Math.max(0.1, (now - earliestTimestamp) / 1000);
-                    speed = totalBytes / totalTimeSeconds;
-                } else {
-                    // Fallback to overall average if we don't have segment data yet
-                    const elapsedSecs = Math.max(0.1, (now - this.startTime) / 1000);
-                    speed = downloaded / elapsedSecs;
-                }
-            } else {
-                // For direct and DASH: Calculate using overall and recent speed
-                // Overall average speed
-                const elapsedSecs = Math.max(0.1, (now - this.startTime) / 1000);
-                const avgSpeed = downloaded / elapsedSecs;
-                
-                // Instantaneous speed (for last interval)
-                let instantSpeed = 0;
-                const intervalSecs = Math.max(0.1, (now - this.lastUpdate) / 1000);
-                if (this.lastBytes > 0) {
-                    instantSpeed = (downloaded - this.lastBytes) / intervalSecs;
-                }
-                
-                // Use instantaneous speed if available, otherwise average
-                speed = instantSpeed > 0 ? instantSpeed : avgSpeed;
+        if (downloaded > this.lastBytes && downloaded > 0) {
+            const bytesDownloadedSinceLastUpdate = downloaded - this.lastBytes;
+            const timeElapsedSeconds = Math.max(0.1, (now - this.lastUpdate) / 1000);
+            
+            // Store speed sample for averaging (prevents wild fluctuations)
+            this.speedSamples.push({
+                bytesPerSecond: bytesDownloadedSinceLastUpdate / timeElapsedSeconds,
+                timestamp: now
+            });
+            
+            // Keep only recent samples (last 5 for smoothing)
+            if (this.speedSamples.length > 5) {
+                this.speedSamples.shift();
             }
+            
+            // Calculate average speed from recent samples
+            if (this.speedSamples.length > 0) {
+                const totalSpeed = this.speedSamples.reduce((sum, sample) => sum + sample.bytesPerSecond, 0);
+                speed = totalSpeed / this.speedSamples.length;
+            }
+        } else if (downloaded > 0) {
+            // Fallback: overall average speed since start
+            const elapsedSeconds = Math.max(0.1, (now - this.startTime) / 1000);
+            speed = downloaded / elapsedSeconds;
         }
         
         // Update state for next calculation
