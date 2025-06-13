@@ -11,7 +11,7 @@ const hostProcess = spawn('node', ['./index.js'], {
 
 // Send a test heartbeat message
 function sendTestMessage() {
-  const message = { type: 'heartbeat' };
+  const message = { command: 'heartbeat' };
   const messageBuffer = Buffer.from(JSON.stringify(message));
   
   // Create header with message length
