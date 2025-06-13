@@ -688,7 +688,7 @@ class ProgressStrategy {
             // FFmpeg processes segments sequentially, so we count each "Opening" event
             this.segmentCounter = (this.segmentCounter || 0) + 1;
             
-            logDebug(`ProgressStrategy: Processing segment ${this.segmentCounter}: ${url}`);
+            // logDebug(`ProgressStrategy: Processing segment ${this.segmentCounter}: ${url}`);
             return this.segmentCounter;
         }
         
