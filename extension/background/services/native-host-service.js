@@ -6,7 +6,7 @@ export class NativeHostService {
         this.pendingMessages = new Map();
         this.reconnectTimer = null;
         this.heartbeatTimer = null;
-        this.lastActivityTime = 0; // Track last response time
+        // this.lastActivityTime = 0; // Track last response time
         this.hostName = 'com.mycompany.ffmpeg';
         this.RECONNECT_DELAY = 2000;
         this.HEARTBEAT_INTERVAL = 15000;
@@ -29,15 +29,16 @@ export class NativeHostService {
             
             this.port.onMessage.addListener(this.handleMessage.bind(this));
             this.port.onDisconnect.addListener(this.handleDisconnect.bind(this));
-            
+
+            this.heartbeatTimer = setInterval(() => this.sendHeartbeat(), this.HEARTBEAT_INTERVAL);
             // Reset activity tracking and start conditional heartbeat
-            this.lastActivityTime = Date.now();
-            this.heartbeatTimer = setInterval(() => {
-                const timeSinceActivity = Date.now() - this.lastActivityTime;
-                if (timeSinceActivity >= this.HEARTBEAT_INTERVAL) {
-                    this.sendHeartbeat();
-                }
-            }, this.HEARTBEAT_INTERVAL);
+            // this.lastActivityTime = Date.now();
+            // this.heartbeatTimer = setInterval(() => {
+            //     const timeSinceActivity = Date.now() - this.lastActivityTime;
+            //     if (timeSinceActivity >= this.HEARTBEAT_INTERVAL) {
+            //         this.sendHeartbeat();
+            //     }
+            // }, this.HEARTBEAT_INTERVAL);
             
             return true;
         } catch (error) {
@@ -68,7 +69,7 @@ export class NativeHostService {
     
     handleMessage(response) {
         console.log('Received native message:', response);
-        this.lastActivityTime = Date.now(); // Track any activity from native host
+        // this.lastActivityTime = Date.now(); // Track any activity from native host
         
         // Route to pending message handler if it exists
         if (response?.id && this.pendingMessages.has(response.id)) {
