@@ -5,7 +5,7 @@
 
 // Add static imports at the top
 import { normalizeUrl } from '../../js/utilities/normalize-url.js';
-import nativeHostService from '../../js/native-host-service.js';
+import nativeHostService from './native-host-service.js';
 import { getActivePopupPortForTab } from './ui-communication.js';
 import { parseHlsManifest } from '../../js/utilities/hls-parser.js';
 import { parseDashManifest } from '../../js/utilities/dash-parser.js';

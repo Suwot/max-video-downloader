@@ -12,7 +12,7 @@
  */
 
 // Add static import at the top
-import nativeHostService from '../../js/native-host-service.js';
+import nativeHostService from './native-host-service.js';
 import { getRequestHeaders } from '../../js/utilities/headers-utils.js';
 import { createLogger } from '../../js/utilities/logger.js';
 import { broadcastToPopups } from './ui-communication.js';
