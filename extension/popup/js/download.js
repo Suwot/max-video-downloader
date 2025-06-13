@@ -1,7 +1,4 @@
 /**
- * @ai-guide-component DownloadHandler
- * @ai-guide-description Manages video download operations
- * @ai-guide-responsibilities
  * - Handles video download requests 
  * - Communicates with native host for downloading
  * - Manages HLS/DASH download processes

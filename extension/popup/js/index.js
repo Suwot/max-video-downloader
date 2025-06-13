@@ -1,7 +1,4 @@
 /**
- * @ai-guide-component PopupController
- * @ai-guide-description Main entry point for popup UI functionality
- * @ai-guide-responsibilities
  * - Initializes the popup UI and components
  * - Coordinates interaction between UI components
  * - Handles message passing with background script
@@ -10,8 +7,6 @@
  * - Handles user interface events and interactions
  * - Implements popup lifecycle management
  */
-
-// extension/popup/js/index.js
 
 // Import ServiceInitializer to coordinate service initialization
 import { initializeServices, getActiveTab } from './services/service-initializer.js';
@@ -29,90 +24,6 @@ let backgroundPort = null;
 let currentTabId = null;
 let refreshInterval = null;
 let isEmptyState = true; // Track if we're currently showing "No videos found"
-
-// Batching for metadata updates
-const metadataUpdateBatch = {
-    updates: new Map(),
-    timeoutId: null,
-    batchTimeMs: 100, // Process updates every 100ms
-
-    /**
-     * Add a metadata update to the batch
-     * @param {string} url - Video URL
-     * @param {Object} mediaInfo - Media information
-     */
-    add(url, mediaInfo) {
-        this.updates.set(url, mediaInfo);
-        
-        // Schedule processing if not already scheduled
-        if (!this.timeoutId) {
-            this.timeoutId = setTimeout(() => this.process(), this.batchTimeMs);
-        }
-    },
-    
-    /**
-     * Process all batched metadata updates
-     */
-    process() {
-        if (this.updates.size === 0) return;
-        
-        logger.debug(`Processing batch of ${this.updates.size} metadata updates`);
-        
-        // Get the module for DOM updates
-        import('./video-list/video-renderer.js').then(module => {
-            // Process all DOM updates in one go
-            this.updates.forEach((mediaInfo, url) => {
-                module.updateVideoElement(url, mediaInfo, true);
-            });
-        });
-        
-        // Update cache for all videos in batch
-        if (currentTabId) {
-            chrome.storage.local.get([`processedVideos_${currentTabId}`], result => {
-                const storageKey = `processedVideos_${currentTabId}`;
-                const videos = result[storageKey] || [];
-                let hasChanges = false;
-                
-                // Update all videos with new metadata
-                this.updates.forEach((mediaInfo, url) => {
-                    const index = videos.findIndex(v => v.url === url);
-                    if (index !== -1) {
-                        videos[index] = {
-                            ...videos[index],
-                            mediaInfo: mediaInfo,
-                            resolution: {
-                                width: mediaInfo.width,
-                                height: mediaInfo.height,
-                                fps: mediaInfo.fps,
-                                bitrate: mediaInfo.videoBitrate || mediaInfo.totalBitrate
-                            }
-                        };
-                        hasChanges = true;
-                    }
-                });
-                
-                // Only update storage if we made changes
-                if (hasChanges) {
-                    chrome.storage.local.set({
-                        [storageKey]: videos,
-                        lastVideoUpdate: Date.now()
-                    });
-                }
-            });
-        }
-        
-        // Notify the VideoStateService about the updates
-        this.updates.forEach((mediaInfo, url) => {
-            document.dispatchEvent(new CustomEvent('metadata-update', {
-                detail: { url, mediaInfo }
-            }));
-        });
-        
-        // Clear the batch
-        this.updates.clear();
-        this.timeoutId = null;
-    }
-};
 
 /**
  * Establish a connection to the background script
@@ -163,16 +74,9 @@ function handlePortMessage(message) {
     logger.debug('Received port message:', message);
     
     // Handle video updates with a unified approach
-    if ((message.command === 'videoListResponse' || message.command === 'videoStateUpdated') && message.videos) {
+    if (message.command === 'videoStateUpdated' && message.videos) {
         logger.debug(`Received ${message.videos.length} videos via port`);
         updateVideoDisplay(message.videos);
-        return;
-    }
-
-    // Handle metadata updates
-    if (message.command === 'metadataUpdate' && message.url && message.mediaInfo) {
-        logger.debug('Received metadata update for video:', message.url);
-        metadataUpdateBatch.add(message.url, message.mediaInfo);
         return;
     }
     
@@ -192,82 +96,6 @@ function handlePortMessage(message) {
                 );
             });
         });
-        return;
-    }
-    
-    // Handle manifest responses
-    if (message.command === 'manifestContent') {
-        logger.debug('Received manifest content via port');
-        document.dispatchEvent(new CustomEvent('manifest-content', { 
-            detail: message 
-        }));
-        return;
-    }
-    
-    // Handle preview responses
-    if (message.command === 'previewResponse') {
-        logger.debug('Received preview data via port');
-        document.dispatchEvent(new CustomEvent('preview-generated', { 
-            detail: message 
-        }));
-        return;
-    }
-    
-    // Handle live preview updates for proactively generated previews
-    if (message.command === 'previewReady') {
-        logger.debug('Received preview update:', message.videoUrl);
-        
-        // Dispatch an event that VideoStateService listens for
-        document.dispatchEvent(new CustomEvent('preview-ready', { 
-            detail: {
-                videoUrl: message.videoUrl,
-                previewUrl: message.previewUrl
-            }
-        }));
-        
-        // Find the video element in the UI
-        const videoElement = document.querySelector(`.video-item[data-url="${message.videoUrl}"]`);
-        if (videoElement) {
-            // Find the preview image
-            const previewImage = videoElement.querySelector('.preview-image');
-            const loader = videoElement.querySelector('.loader');
-            
-            if (previewImage) {
-                // Add load handler before setting src
-                previewImage.onload = () => {
-                    previewImage.classList.remove('placeholder');
-                    previewImage.classList.add('loaded');
-                    if (loader) loader.style.display = 'none';
-                };
-                
-                // Set the preview source
-                previewImage.src = message.previewUrl;
-                
-                // Add hover functionality for the newly loaded preview
-                const previewContainer = videoElement.querySelector('.preview-container');
-                if (previewContainer) {
-                    import('./video-list/video-renderer.js').then(module => {
-                        previewContainer.addEventListener('mouseenter', (event) => {
-                            if (module.showHoverPreview) {
-                                module.showHoverPreview(message.previewUrl, event);
-                            }
-                        });
-                        
-                        previewContainer.addEventListener('mousemove', (event) => {
-                            if (module.showHoverPreview) {
-                                module.showHoverPreview(message.previewUrl, event);
-                            }
-                        });
-                        
-                        previewContainer.addEventListener('mouseleave', () => {
-                            if (module.hideHoverPreview) {
-                                module.hideHoverPreview();
-                            }
-                        });
-                    });
-                }
-            }
-        }
         return;
     }
 
@@ -298,13 +126,6 @@ function handlePortMessage(message) {
  */
 function updateVideoDisplay(videos) {
     logger.debug('Updating video display with', videos.length, 'videos');
-    
-    // Update VideoStateService with the new videos
-    import('./services/video-state-service.js').then(module => {
-        module.updateVideos(videos);
-    }).catch(err => {
-        logger.error('Error importing video-state-service:', err);
-    });
     
     // Update UI state immediately without waiting for import
     if (videos.length > 0) {

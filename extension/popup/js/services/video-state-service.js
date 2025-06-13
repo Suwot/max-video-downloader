@@ -43,12 +43,7 @@ class VideoStateService {
         this.activeTabId = tab.id;
         this.debug('Initialized with active tab ID:', this.activeTabId);
       }
-      
-      // Listen for video updates from background
-      document.addEventListener('video-update', this.handleVideoUpdate.bind(this));
-      document.addEventListener('metadata-update', this.handleMetadataUpdate.bind(this));
-      document.addEventListener('preview-ready', this.handlePreviewReady.bind(this));
-      
+
       // Setup video update listeners
       document.addEventListener('video-updated', (event) => {
         const { url, video } = event.detail;
@@ -103,44 +98,6 @@ class VideoStateService {
     
     // Return existing videos while waiting for update
     return this.currentVideos;
-  }
-
-  /**
-   * Update the current videos list (called when receiving updates from background)
-   * @param {Array} videos - New videos list
-   */
-  updateVideos(videos) {
-    this.currentVideos = videos;
-    this.emit('videosUpdated', videos);
-  }
-
-  /**
-   * Handle video update events from background
-   * @param {CustomEvent} event - Video update event
-   */
-  handleVideoUpdate(event) {
-    const { videos } = event.detail;
-    this.updateVideos(videos);
-  }
-  
-  /**
-   * Handle metadata update events from background
-   * @param {CustomEvent} event - Metadata update event
-   */
-  handleMetadataUpdate(event) {
-    const { url, mediaInfo } = event.detail;
-    // Just pass the event to listeners
-    this.emit('metadata-update', { url, mediaInfo });
-  }
-
-  /**
-   * Handle preview ready events from background
-   * @param {CustomEvent} event - Preview ready event
-   */
-  handlePreviewReady(event) {
-    const { videoUrl, previewUrl } = event.detail;
-    // Just pass the event to listeners
-    this.emit('preview-ready', { videoUrl, previewUrl });
   }
 
   /**
@@ -312,7 +269,6 @@ export { videoStateService };
 
 // Re-export common methods for convenience
 export const fetchVideos = (options) => videoStateService.fetchVideos(options);
-export const updateVideos = (videos) => videoStateService.updateVideos(videos);
 export const refreshVideos = () => videoStateService.refreshVideos();
 export const on = (event, callback) => videoStateService.on(event, callback);
 export const clearCaches = () => videoStateService.clearCaches();
