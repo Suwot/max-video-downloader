@@ -70,7 +70,8 @@ function startDownload(request, port) {
                     downloadId: downloadId,
                     progress: download.progress || 0,
                     filename: download.filename,
-                    downloadUrl: download.downloadUrl
+                    downloadUrl: download.downloadUrl,
+                    masterUrl: download.masterUrl || null,
                 });
             } catch (e) {
                 logger.error('Error sending existing download info to port:', e);
@@ -157,6 +158,7 @@ function startDownload(request, port) {
                 command: 'progress',
                 downloadUrl: download.downloadUrl,
                 filename: download.filename,
+                masterUrl: download.masterUrl || null,
                 // Pass through all formatted data from ProgressTracker
                 progress: response.progress,
                 speed: response.speed,
@@ -200,6 +202,7 @@ function startDownload(request, port) {
             broadcastDownloadUpdate({
                 command: 'complete',
                 downloadUrl: download.downloadUrl,
+                masterUrl: download.masterUrl || null,
                 filename: download.filename,
                 path: response.path,
                 downloadStats: response.downloadStats
@@ -323,6 +326,7 @@ function getActiveDownloads() {
         .map(([id, info]) => ({
             downloadId: id,
             downloadUrl: info.downloadUrl,
+            masterUrl: info.masterUrl || null,
             progress: info.progress || 0,
             status: info.status,
             filename: info.filename || info.title,
@@ -346,7 +350,8 @@ function getDownloadDetails(downloadId) {
         downloadUrl: download.downloadUrl,
         progress: download.progress || 0,
         status: download.status,
-        filename: download.filename
+        filename: download.filename,
+        masterUrl: download.masterUrl || null
     };
 }
 

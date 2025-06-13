@@ -73,7 +73,7 @@ async function handlePortMessage(message, port, portId) {
                     command: 'activeDownloadsList',
                     downloads: activeDownloadList
                 });
-                logger.debug(`Sent ${activeDownloadList.length} active downloads to popup`);
+                logger.debug(`Sent ${activeDownloadList.length} active downloads to popup`, activeDownloadList);
             } catch (error) {
                 logger.error('Error sending active downloads list:', error);
             }

@@ -86,9 +86,11 @@ function handlePortMessage(message) {
         
         // Import download module to process active downloads
         import('./download.js').then(downloadModule => {
-            // Process each active download
+            // Process each active download with proper state restoration
             message.downloads.forEach(download => {
-                // Update UI for each download
+                logger.debug('Restoring download state for:', download.downloadUrl);
+                
+                // The unified updateDownloadProgress will now properly handle state restoration
                 downloadModule.updateDownloadProgress(
                     { downloadUrl: download.downloadUrl },
                     download.progress || 0,
