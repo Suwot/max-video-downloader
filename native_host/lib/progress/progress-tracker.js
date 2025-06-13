@@ -24,12 +24,17 @@ class ProgressTracker {
         this.onProgress = options.onProgress || (() => {});
         this.debug = options.debug || false;
         this.updateInterval = options.updateInterval || 250;
+
+        // Store URLs for progress mapping
+        this.masterUrl = null;
+        this.downloadUrl = null;
     }
 
     /**
      * Initialize the progress tracker
      * @param {Object} fileInfo Information about the file being downloaded
      * @param {string} fileInfo.downloadUrl File URL
+     * @param {string} fileInfo.masterUrl Master playlist URL (for HLS/DASH)
      * @param {string} fileInfo.type Media type (direct, hls, dash)
      * @param {number} fileInfo.duration Media duration in seconds
      * @param {number} fileInfo.fileSizeBytes File size in bytes
@@ -39,6 +44,10 @@ class ProgressTracker {
      */
     async initialize(fileInfo) {
         this.fileInfo = fileInfo;
+        
+        // Store URLs for progress mapping
+        this.masterUrl = fileInfo.masterUrl || null;
+        this.downloadUrl = fileInfo.downloadUrl || null;
         
         logDebug('Progress tracker initializing for:', fileInfo.downloadUrl);
         logDebug('Media type:', fileInfo.type);
@@ -78,6 +87,14 @@ class ProgressTracker {
      * @param {Object} data Progress data from strategy
      */
     handleProgress(data) {
+        // Add URL mapping for UI
+        if (this.masterUrl) {
+            data.masterUrl = this.masterUrl;
+        }
+        if (this.downloadUrl) {
+            data.downloadUrl = this.downloadUrl;
+        }
+        
         // Add ETA calculation if we have sufficient data
         if (data.progress > 0 && data.speed > 0 && data.downloadedBytes > 0) {
             let totalBytes = data.totalBytes;

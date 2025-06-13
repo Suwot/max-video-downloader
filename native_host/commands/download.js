@@ -363,6 +363,7 @@ class DownloadCommand extends BaseCommand {
         ffmpegArgs,
         uniqueOutput,
         downloadUrl,
+        masterUrl,
         type,
         headers,
         duration,
@@ -398,6 +399,7 @@ class DownloadCommand extends BaseCommand {
             const fileInfo = {
                 downloadUrl,
                 type,
+                masterUrl,
                 outputPath: uniqueOutput,
                 duration: finalDuration,
                 fileSizeBytes,
