@@ -334,22 +334,7 @@ export async function checkForActiveDownloads() {
  */
 export function updateDownloadProgress(video, progress, progressData = {}) {
     // Use data-url attribute as the primary identifier for finding the button
-    const downloadBtn = document.querySelector(`[data-url="${video.url}"]`);
-    if (!downloadBtn) {
-        logger.debug(`Button not found for download URL: ${video.url}`);
-        // If we have a downloadId in progressData that differs from video.url, try that
-        if (progressData.downloadId && progressData.downloadId !== video.url) {
-            const altBtn = document.querySelector(`[data-url="${progressData.downloadId}"]`);
-            if (altBtn) {
-                logger.debug(`Found button using downloadId: ${progressData.downloadId}`);
-                updateDownloadButtonProgress(altBtn, progress, progressData);
-                return;
-            }
-        }
-        
-        logger.debug('No matching download button found for progress update');
-        return;
-    }
+    const downloadBtn = document.querySelector(`.video-item[data-url="${progressData.masterUrl || video.url}"]`);
 
     updateDownloadButtonProgress(downloadBtn, progress, progressData);
 }
