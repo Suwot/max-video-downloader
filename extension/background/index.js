@@ -3,7 +3,6 @@ import { initStateManager } from './services/state-manager.js';
 import { initHeaderTracking } from '../js/utilities/headers-utils.js';
 import { addDetectedVideo, getAllDetectedVideos, initVideoManager } from './services/video-manager.js';
 import { initTabTracking } from './services/tab-tracker.js';
-import { initDownloadManager } from './services/download-manager.js';
 import { initUICommunication } from './services/ui-communication.js';
 import { createLogger } from '../js/utilities/logger.js';
 import { clearCache, getCacheStats } from '../js/utilities/preview-cache.js';
@@ -471,7 +470,6 @@ async function initializeServices() {
         await initVideoManager();        // Initialize video manager (add this first since other services may depend on it)
         await initTabTracking();         // Initialize tab tracking
         await initUICommunication();     // Initialize UI communication
-        await initDownloadManager();     // Initialize download manager
         await initHeaderTracking();      // Initialize header tracking 
 
         logger.info('All background services initialized');

@@ -5,7 +5,6 @@
 
 // Add static imports at the top
 import { cleanupForTab } from './video-manager.js';
-import { cleanupDownloadsForTab } from './download-manager.js';
 import { createLogger } from '../../js/utilities/logger.js';
 import { clearHeadersForTab, clearHeaderRulesForTab } from '../../js/utilities/headers-utils.js'
 import { cleanupMpdContext } from '../index.js';
@@ -78,7 +77,6 @@ function initTabTracking() {
             logger.debug('Tab removed:', tabId);
             
             cleanupForTab(tabId); // Cleanup videos and playlists
-            cleanupDownloadsForTab(tabId); // Cleanup downloads
             cleanupScrollPositionForTab(tabId); // Cleanup saved scroll positions
             cleanupMpdContext(tabId); // Cleanup MPD context if applicable
             clearHeadersForTab(tabId); // Clear any init request headers

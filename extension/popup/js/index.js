@@ -80,7 +80,7 @@ function handlePortMessage(message) {
         return;
     }
     
-    // Handle active downloads list
+    // Handle active downloads list for popup restoration
     if (message.command === 'activeDownloadsList' && message.downloads) {
         logger.debug('Received active downloads list:', message.downloads);
         
@@ -90,7 +90,32 @@ function handlePortMessage(message) {
             message.downloads.forEach(download => {
                 logger.debug('Restoring download state for:', download.downloadUrl);
                 
-                // The unified updateDownloadProgress will now properly handle state restoration
+                // Use the updateDownloadProgress function to restore UI state
+                downloadModule.updateDownloadProgress(
+                    { downloadUrl: download.downloadUrl },
+                    download.progress || 0,
+                    {
+                        downloadUrl: download.downloadUrl,
+                        masterUrl: download.masterUrl,
+                        filename: download.filename
+                    }
+                );
+            });
+        });
+        return;
+    }
+    
+    // Handle active downloads list from background
+    if (message.command === 'activeDownloadsList' && message.downloads) {
+        logger.debug('Received active downloads list:', message.downloads);
+        
+        // Import download module to process active downloads
+        import('./download.js').then(downloadModule => {
+            // Process each active download for UI restoration
+            message.downloads.forEach(download => {
+                logger.debug('Restoring download state for:', download.downloadUrl);
+                
+                // Use the updateDownloadProgress function to restore button states
                 downloadModule.updateDownloadProgress(
                     { downloadUrl: download.downloadUrl },
                     download.progress || 0,

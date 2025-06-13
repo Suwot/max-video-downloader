@@ -41,6 +41,18 @@ export async function handleDownload(button, videoData = {}) {
             return;
         }
         
+        // Create Chrome notification (UI responsibility)
+        const notificationId = `download-${Date.now()}`;
+        chrome.notifications.create(notificationId, {
+            type: 'basic',
+            iconUrl: '../../icons/48.png',
+            title: 'Downloading Video',
+            message: `Starting download: ${videoData.filename}`
+        });
+        
+        // Store notification ID for cleanup
+        button._notificationId = notificationId;
+        
         // Get the existing background port connection
         const backgroundPort = getBackgroundPort();
 
@@ -48,16 +60,56 @@ export async function handleDownload(button, videoData = {}) {
         const handleDownloadMessages = (response) => {
             logger.debug('Download message:', response);
             
+            // Match by downloadUrl OR masterUrl for HLS
+            const urlToMatch = response.masterUrl || response.downloadUrl;
+            const videoUrlToMatch = videoData.masterUrl || videoData.downloadUrl;
+            
+            if (urlToMatch !== videoUrlToMatch) return;
+            
             // Handle progress updates
-            if (response?.command === 'progress' && response.downloadUrl === videoData.downloadUrl) {
-                // Use unified progress update function
-                updateDownloadButtonProgress(button, buttonWrapper, response.progress || 0, response);
+            if (response?.command === 'progress') {
+                const progress = response.progress || 0;
                 
-            } else if (response?.command === 'complete' && response.downloadUrl === videoData.downloadUrl) {
+                // Update notification every 10%
+                if (Math.floor(progress / 10) > Math.floor((button._lastNotificationProgress || 0) / 10)) {
+                    button._lastNotificationProgress = progress;
+                    
+                    let message = `Progress: ${Math.round(progress)}%`;
+                    if (response.speedFormatted) {
+                        message += ` - ${response.speedFormatted}`;
+                    }
+                    if (response.etaFormatted && response.eta > 0) {
+                        message += ` - ETA: ${response.etaFormatted}`;
+                    }
+                    
+                    chrome.notifications.update(notificationId, { message });
+                }
+                
+                // Use unified progress update function
+                updateDownloadButtonProgress(button, buttonWrapper, progress, response);
+                
+            } else if (response?.command === 'complete') {
+                // Update notification
+                let completionMessage = `Saved to: ${response.filename}`;
+                if (response.downloadStats?.total) {
+                    completionMessage += ` (${response.downloadStats.total})`;
+                }
+                
+                chrome.notifications.update(notificationId, {
+                    title: 'Download Complete',
+                    message: completionMessage
+                });
+                
                 // Use unified progress update function with completion state
                 updateDownloadButtonProgress(button, buttonWrapper, 100, { state: 'complete' });
                 
-            } else if (response?.command === 'error' && response.downloadUrl === videoData.downloadUrl) {
+            } else if (response?.command === 'error') {
+                // Update notification
+                chrome.notifications.update(notificationId, {
+                    title: 'Download Failed',
+                    message: response.error
+                });
+                
                 // Use unified progress update function with error state
                 updateDownloadButtonProgress(button, buttonWrapper, 0, { state: 'error' });
                 showError(response.error);
@@ -76,20 +128,6 @@ export async function handleDownload(button, videoData = {}) {
         logger.error('Download failed:', error);
         showError('Failed to start download from handleDownload');
         resetDownloadingState(button, buttonWrapper);
-    }
-    
-    function resetDownloadState() {
-        // Remove our message handler from the background port
-        if (button._messageHandler) {
-            const port = getBackgroundPort();
-            if (port) {
-                port.onMessage.removeListener(button._messageHandler);
-            }
-            button._messageHandler = null;
-        }
-        
-        // Use unified reset function with delay
-        setTimeout(() => resetDownloadingState(button, buttonWrapper), 1000);
     }
 }
 
@@ -205,20 +243,20 @@ async function handleBlobDownload(url) {
 
 /**
  * Check for active downloads when popup opens
- * Requests active downloads list from background script
+ * Request active downloads list from background to restore UI state
  */
 export async function checkForActiveDownloads() {
-    logger.debug('Checking for active downloads...');
+    logger.debug('Checking for active downloads to restore UI state...');
     
     // Get the port connection to the background script
     const port = getBackgroundPort();
     
     if (port) {
-        // Request active downloads list
+        // Request active downloads list for UI restoration
         port.postMessage({
             command: 'getActiveDownloads'
         });
-
+        logger.debug('Requested active downloads list from background');
     } else {
         logger.error('Failed to get background port for active downloads check');
     }
