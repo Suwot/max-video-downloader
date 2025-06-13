@@ -43,21 +43,6 @@ export function getBackgroundPort() {
             
             // Set up message handler
             backgroundPort.onMessage.addListener(handlePortMessage);
-            
-            // Register this popup with tab ID and URL
-            chrome.tabs.query({ active: true, currentWindow: true }, tabs => {
-                if (backgroundPort && tabs[0]) {
-                    // Normalize URL by removing query params and fragments
-                    const normalizedUrl = normalizeUrl(tabs[0].url);
-                    currentTabId = tabs[0].id;
-                    
-                    backgroundPort.postMessage({
-                        command: 'register',
-                        tabId: tabs[0].id,
-                        url: normalizedUrl
-                    });
-                }
-            });
         } catch (e) {
             logger.error('Failed to connect to background script:', e);
             return null;
@@ -91,31 +76,6 @@ function handlePortMessage(message) {
                 logger.debug('Restoring download state for:', download.downloadUrl);
                 
                 // Use the updateDownloadProgress function to restore UI state
-                downloadModule.updateDownloadProgress(
-                    { downloadUrl: download.downloadUrl },
-                    download.progress || 0,
-                    {
-                        downloadUrl: download.downloadUrl,
-                        masterUrl: download.masterUrl,
-                        filename: download.filename
-                    }
-                );
-            });
-        });
-        return;
-    }
-    
-    // Handle active downloads list from background
-    if (message.command === 'activeDownloadsList' && message.downloads) {
-        logger.debug('Received active downloads list:', message.downloads);
-        
-        // Import download module to process active downloads
-        import('./download.js').then(downloadModule => {
-            // Process each active download for UI restoration
-            message.downloads.forEach(download => {
-                logger.debug('Restoring download state for:', download.downloadUrl);
-                
-                // Use the updateDownloadProgress function to restore button states
                 downloadModule.updateDownloadProgress(
                     { downloadUrl: download.downloadUrl },
                     download.progress || 0,
@@ -154,20 +114,13 @@ function handlePortMessage(message) {
 function updateVideoDisplay(videos) {
     logger.debug('Updating video display with', videos.length, 'videos');
     
-    // Update UI state immediately without waiting for import
-    if (videos.length > 0) {
-        isEmptyState = false;
-        // Render videos directly
-        renderVideos(videos);
-        hideInitMessage();
-        logger.debug('Updated UI with', videos.length, 'videos');
-    } else if (!isEmptyState) {
-        // Only update if we're not already showing empty state
-        renderVideos(videos);
-        hideInitMessage();
-        isEmptyState = true;
-        logger.debug('No videos to display, showing empty state');
-    }
+    const hasVideos = videos.length > 0;
+    isEmptyState = !hasVideos;
+    
+    renderVideos(videos);
+    hideInitMessage();
+    
+    logger.debug(hasVideos ? `Updated UI with ${videos.length} videos` : 'No videos to display, showing empty state');
 }
 
 /**
@@ -251,9 +204,16 @@ document.addEventListener('DOMContentLoaded', async () => {
         // Connect to background script via port
         getBackgroundPort();
         
-        // Get the active tab ID using our helper
+        // Get the active tab ID and register with background
         const activeTab = await getActiveTab();
         currentTabId = activeTab.id;
+        
+        // Register this popup with the background script
+        sendPortMessage({
+            command: 'register',
+            tabId: currentTabId,
+            url: normalizeUrl(activeTab.url)
+        });
 
         // Request videos directly from background script
         requestVideos(true);
