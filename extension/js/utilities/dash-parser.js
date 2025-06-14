@@ -17,6 +17,7 @@ import {
 import { createLogger } from './logger.js';
 import { getVideoByUrl } from '../../background/services/video-manager.js';
 import { standardizeResolution } from '../../popup/js/video-list/video-utils.js';
+import { registerDashSegmentPaths } from '../../background/video-detection/video-detector.js'
 
 // Create a logger for the DASH parser
 const logger = createLogger('DASH Parser');
@@ -394,13 +395,8 @@ export async function parseDashManifest(url, headers = null, tabId) {
                 }
                 
                 // Send paths to background
-                chrome.runtime.sendMessage({
-                    command: 'registerDashSegmentPaths',
-                    tabId: tabId,
-                    paths: segmentPaths,
-                    url: url
-                }).catch(e => logger.warn('Error sending segment paths:', e));
-                
+                registerDashSegmentPaths(tabId, segmentPaths, url);
+
                 logger.debug(`Sent ${segmentPaths.length} segment paths to background for URL: ${url}`);
             } catch (e) {
                 logger.warn('Error sending segment paths to background:', e);

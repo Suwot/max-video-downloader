@@ -265,18 +265,12 @@ function setupWebRequestListener() {
  */
 function setupMessageListener() {
     chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-        // Handle video detection from content script
+        // Handle video detection from Content Script
         if (request.command === 'addVideo') {
             const tabId = sender.tab?.id;
             if (tabId && tabId > 0) {
                 processContentScriptVideo(tabId, request);
             }
-            return false;
-        }
-        
-        // Handle DASH segment paths from parser
-        if (request.command === 'registerDashSegmentPaths' && request.paths) {
-            registerDashSegmentPaths(request.tabId, request.paths, request.url);
             return false;
         }
         
