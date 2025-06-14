@@ -21,14 +21,7 @@ export async function handleDownload(button, videoData = {}) {
     const buttonWrapper = button.closest('.download-btn-wrapper');
     setDownloadingState(button, buttonWrapper, "Starting...");
     
-    try {
-        // Special handling for blob URLs
-        if (videoData.type === 'blob' && videoData.downloadUrl.startsWith('blob:')) {
-            await handleBlobDownload(videoData.downloadUrl);
-            resetDownloadingState(button, buttonWrapper);
-            return;
-        }
-        
+    try {     
         // Get current tab ID
         const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
         const tabId = tabs[0]?.id || -1;
@@ -111,34 +104,6 @@ export function updateDownloadProgress(video, progress, progressData = {}) {
             updateDownloadButtonProgress(button, buttonWrapper, progress, progressData);
         }
     });
-}
-
-/**
- * Handle blob URL downloads via browser download API
- */
-async function handleBlobDownload(url) {
-    try {
-        const response = await fetch(url);
-        if (!response.ok) throw new Error('Failed to fetch blob');
-        
-        const blob = await response.blob();
-        const blobUrl = URL.createObjectURL(blob);
-        
-        chrome.downloads.download({
-            url: blobUrl,
-            filename: 'video_blob.mp4'
-        }, downloadId => {
-            if (chrome.runtime.lastError) {
-                showError('Failed to download: ' + chrome.runtime.lastError.message);
-            }
-            setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
-        });
-        
-    } catch (error) {
-        logger.error('Blob download failed:', error);
-        showError('Blob download failed - try using the copy URL button');
-        throw error;
-    }
 }
 
 /**

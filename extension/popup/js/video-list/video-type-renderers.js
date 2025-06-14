@@ -213,18 +213,19 @@ function renderDirectElements(video) {
     
     // Create download button with menu
     const [downloadBtn, menuBtn, buttonWrapper] = createDownloadButtonWithMenu(video, elementsDiv);
-    
     // Set up download functionality
-    downloadBtn.addEventListener('click', async () => {
-        const dropdown = elementsDiv.querySelector('.custom-dropdown .selected-option');
-        const fileSizeBytes = dropdown?.dataset.filesize || null;
-        
-        const videoData = createVideoMetadata(video);
-        videoData.downloadUrl = video.url; // Use main URL for direct videos
-        videoData.fileSizeBytes = fileSizeBytes;
+    if (video.type !== 'blob') {
+        downloadBtn.addEventListener('click', async () => {
+            const dropdown = elementsDiv.querySelector('.custom-dropdown .selected-option');
+            const fileSizeBytes = dropdown?.dataset.filesize || null;
+            
+            const videoData = createVideoMetadata(video);
+            videoData.downloadUrl = video.url; // Use main URL for direct videos
+            videoData.fileSizeBytes = fileSizeBytes;
 
-        handleDownload(downloadBtn, videoData);
-    });
+            handleDownload(downloadBtn, videoData);
+        });
+    }
 
     return elementsDiv;
 }
