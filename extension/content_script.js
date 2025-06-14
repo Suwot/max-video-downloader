@@ -418,10 +418,20 @@ function detectVideo(url, contentType = null, metadata = {}) {
   const videoTypeInfo = identifyVideoType(url);
   
   // Handle blob URLs
-  if (url.startsWith('blob:')) {
+  if (videoTypeInfo === 'blob') {
     videoType = 'blob';
     normalizedUrl = url; // Blob URLs are already unique
-  } 
+  }
+  // Handle HLS manifests
+  else if (videoTypeInfo === 'hls') {
+    videoType = 'hls';
+    normalizedUrl = normalizeUrl(url);
+  }
+  // Handle DASH manifests
+  else if (videoTypeInfo === 'dash') {
+    videoType = 'dash';
+    normalizedUrl = normalizeUrl(url);
+  }
   // For embedded URLs from query parameters
   else if (typeof videoTypeInfo === 'object' && videoTypeInfo?.foundFromQueryParam) {
     videoType = videoTypeInfo.type;
@@ -497,19 +507,27 @@ function extractEmbeddedVideoUrl(urlObj) {
 
 /**
  * Ultra-minimal video type identification
- * Only handles blob URLs and embedded query parameters
+ * Handles blob URLs, HLS manifests, DASH manifests, and embedded query parameters
  * Leaves all other URL analysis to the background script
  * 
  * @param {string} url - URL to identify type from
- * @returns {string|Object|null} - 'blob' string, embedded URL object, or null
+ * @returns {string|Object|null} - 'blob'/'hls'/'dash' string, embedded URL object, or null
  */
 function identifyVideoType(url) {
   // Only special case blob URLs that background can't access directly
   if (url.startsWith('blob:')) return 'blob';
   
   try {
-    // Quick check for query parameter embedded videos
     const urlObj = new URL(url);
+    const path = urlObj.pathname.toLowerCase();
+    
+    // Check for HLS manifests (.m3u8)
+    if (path.includes('.m3u8')) return 'hls';
+    
+    // Check for DASH manifests (.mpd)
+    if (path.includes('.mpd')) return 'dash';
+    
+    // Quick check for query parameter embedded videos
     const embedded = extractEmbeddedVideoUrl(urlObj);
     if (embedded) {
       // Extract container format if available in file parameter or path
