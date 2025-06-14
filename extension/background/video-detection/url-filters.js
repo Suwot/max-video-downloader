@@ -3,7 +3,7 @@
  * Provides functions to filter out non-media URLs consistently across the extension
  */
 
-import { createLogger } from './logger.js';
+import { createLogger } from '../../js/utilities/logger.js';
 
 // Create a logger instance for URL filters
 const logger = createLogger('URL Filters');
@@ -29,6 +29,7 @@ const IGNORE_EXTENSIONS = [
 // Common domains that are definitely not media content
 const NON_MEDIA_DOMAINS = [
     // Analytics and tracking
+    'challenges.cloudflare.com',
     'googletagmanager.com',
     'google-analytics.com',
     'analytics.google.com',
