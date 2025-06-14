@@ -218,19 +218,10 @@ class VideoStateService {
       // Clear local cache
       this.currentVideos = [];
       
-      // Request background to clear its caches
+      // Request background to clear all caches (including preview cache) via port
       sendPortMessage({
         command: 'clearCaches'
       });
-      
-      // Clear preview cache
-      try {
-        await chrome.runtime.sendMessage({
-          command: 'clearPreviewCache'
-        });
-      } catch (e) {
-        this.debug('Error clearing preview cache:', e);
-      }
       
       // Reset last fetch time to force refresh next time
       this.lastFetchTime = 0;
@@ -251,8 +242,28 @@ class VideoStateService {
    */
   async getPreviewCacheStats() {
     try {
-      return await chrome.runtime.sendMessage({
-        command: 'getPreviewCacheStats'
+      // Create a promise that will be resolved when we get the response
+      return new Promise((resolve, reject) => {
+        // Set up a one-time listener for the response
+        const responseHandler = (event) => {
+          if (event.detail.command === 'previewCacheStats') {
+            document.removeEventListener('background-response', responseHandler);
+            resolve(event.detail.stats || { count: 0, size: 0 });
+          }
+        };
+        
+        document.addEventListener('background-response', responseHandler);
+        
+        // Send the request via port
+        sendPortMessage({
+          command: 'getPreviewCacheStats'
+        });
+        
+        // Set a timeout in case we don't get a response
+        setTimeout(() => {
+          document.removeEventListener('background-response', responseHandler);
+          resolve({ count: 0, size: 0 });
+        }, 5000);
       });
     } catch (error) {
       this.debug('Error getting preview cache stats:', error);

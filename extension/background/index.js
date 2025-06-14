@@ -3,9 +3,8 @@ import { initStateManager } from './services/state-manager.js';
 import { initHeaderTracking } from '../js/utilities/headers-utils.js';
 import { getAllDetectedVideos, initVideoManager } from './services/video-manager.js';
 import { initTabTracking } from './services/tab-tracker.js';
-import { initUICommunication } from './services/ui-communication.js';
+import { initUICommunication } from './services/popup-communication.js';
 import { createLogger } from '../js/utilities/logger.js';
-import { clearCache, getCacheStats } from '../js/utilities/preview-cache.js';
 
 // Import video detection
 import { 
@@ -114,28 +113,6 @@ startDebugLogger();
 
 // Initialize all services
 initializeServices();
-
-// Listen for messages from popup (non-detection messages)
-chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {    
-    // Handle preview cache operations
-    if (request.command === 'clearPreviewCache') {
-        logger.debug('Clearing preview cache');
-        clearCache().then(success => {
-            sendResponse({ success });
-        });
-        return true; // Keep channel open for async response
-    }
-
-    if (request.command === 'getPreviewCacheStats') {
-        logger.debug('Getting preview cache stats');
-        getCacheStats().then(stats => {
-            sendResponse(stats);
-        });
-        return true; // Keep channel open for async response
-    }
-    
-    return false;
-});
 
 logger.debug('Background script initialized');
 

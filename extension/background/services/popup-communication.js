@@ -8,6 +8,7 @@ import { getVideosForDisplay, clearVideoCache, sendVideoUpdateToUI } from './vid
 import nativeHostService from './native-host-service.js';
 import { getRequestHeaders } from '../../js/utilities/headers-utils.js';
 import { createLogger } from '../../js/utilities/logger.js';
+import { clearCache, getCacheStats } from '../../js/utilities/preview-cache.js';
 
 // Track all popup connections - simplified single map
 const popupPorts = new Map(); // key = portId, value = {port, tabId, url}
@@ -36,7 +37,7 @@ async function handlePortMessage(message, port, portId) {
     }
     
     // Define commands that don't require tab ID (global operations)
-    const globalCommands = ['clearCaches', 'getActiveDownloads'];
+    const globalCommands = ['clearCaches', 'getActiveDownloads', 'getPreviewCacheStats'];
     
     // Commands that require tab ID validation (tab-specific operations)
     const tabSpecificCommands = ['getVideos', 'generatePreview', 'download'];
@@ -66,8 +67,34 @@ async function handlePortMessage(message, port, portId) {
             break;
             
         case 'clearCaches':
+            // Clear both video cache and preview cache
             clearVideoCache();
-            logger.debug('Cleared video caches');
+            await clearCache(); // Clear preview cache
+            logger.debug('Cleared all caches (video + preview)');
+            
+            // Send confirmation back to popup
+            port.postMessage({
+                command: 'cachesCleared',
+                success: true
+            });
+            break;
+            
+        case 'getPreviewCacheStats':
+            try {
+                const stats = await getCacheStats();
+                port.postMessage({
+                    command: 'previewCacheStats',
+                    stats: stats
+                });
+                logger.debug('Sent preview cache stats to popup:', stats);
+            } catch (error) {
+                logger.error('Error getting preview cache stats:', error);
+                port.postMessage({
+                    command: 'previewCacheStats',
+                    stats: { count: 0, size: 0 },
+                    error: error.message
+                });
+            }
             break;
             
         case 'getActiveDownloads':

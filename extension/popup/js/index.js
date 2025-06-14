@@ -132,6 +132,20 @@ function handlePortMessage(message) {
         });
         return;
     }
+
+    // Handle preview cache stats response
+    if (message.command === 'previewCacheStats') {
+        logger.debug('Received preview cache stats:', message.stats);
+        
+        // Dispatch event for VideoStateService to handle
+        document.dispatchEvent(new CustomEvent('background-response', {
+            detail: {
+                command: 'previewCacheStats',
+                stats: message.stats
+            }
+        }));
+        return;
+    }
 }
 
 /**
