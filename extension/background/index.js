@@ -1,7 +1,7 @@
 // Import services
 import { initStateManager } from './services/state-manager.js';
 import { initHeaderTracking } from '../js/utilities/headers-utils.js';
-import { getAllDetectedVideos, initVideoManager } from './services/video-manager.js';
+import { getAllDetectedVideos, initVideoManager } from './video-processing/video-manager.js';
 import { initTabTracking } from './services/tab-tracker.js';
 import { initUICommunication } from './services/popup-communication.js';
 import { createLogger } from '../js/utilities/logger.js';

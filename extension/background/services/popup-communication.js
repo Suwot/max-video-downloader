@@ -4,7 +4,7 @@
  */
 
 // Add static imports at the top
-import { getVideosForDisplay, clearVideoCache, sendVideoUpdateToUI } from './video-manager.js';
+import { clearVideoCache, sendVideoUpdateToUI } from '../video-processing/video-manager.js';
 import nativeHostService from './native-host-service.js';
 import { getRequestHeaders } from '../../js/utilities/headers-utils.js';
 import { createLogger } from '../../js/utilities/logger.js';

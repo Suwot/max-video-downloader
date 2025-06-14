@@ -14,10 +14,10 @@ import {
     fetchManifest,
     validateManifestType
 } from './parser-utils.js';
-import { createLogger } from './logger.js';
-import { getVideoByUrl } from '../../background/services/video-manager.js';
+import { createLogger } from '../../js/utilities/logger.js';
+import { getVideoByUrl } from './video-manager.js';
 import { standardizeResolution } from '../../popup/js/video-list/video-utils.js';
-import { registerDashSegmentPaths } from '../../background/video-detection/video-detector.js'
+import { registerDashSegmentPaths } from '../video-detection/video-detector.js'
 
 // Create a logger for the DASH parser
 const logger = createLogger('DASH Parser');

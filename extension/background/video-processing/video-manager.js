@@ -5,10 +5,10 @@
 
 // Add static imports at the top
 import { normalizeUrl } from '../../js/utilities/normalize-url.js';
-import nativeHostService from './native-host-service.js';
-import { getActivePopupPortForTab } from './popup-communication.js';
-import { parseHlsManifest } from '../../js/utilities/hls-parser.js';
-import { parseDashManifest } from '../../js/utilities/dash-parser.js';
+import nativeHostService from '../services/native-host-service.js';
+import { getActivePopupPortForTab } from '../services/popup-communication.js';
+import { parseHlsManifest } from './hls-parser.js';
+import { parseDashManifest } from './dash-parser.js';
 import { 
     getRequestHeaders, 
     applyHeaderRule,

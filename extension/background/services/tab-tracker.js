@@ -4,7 +4,7 @@
  */
 
 // Add static imports at the top
-import { cleanupForTab } from './video-manager.js';
+import { cleanupForTab } from '../video-processing/video-manager.js';
 import { createLogger } from '../../js/utilities/logger.js';
 import { clearHeadersForTab, clearHeaderRulesForTab } from '../../js/utilities/headers-utils.js'
 import { cleanupMpdContext } from '../index.js';
