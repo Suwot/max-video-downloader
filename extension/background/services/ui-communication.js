@@ -62,110 +62,7 @@ async function handlePortMessage(message, port, portId) {
             break;
             
         case 'download':
-            // Direct NHS communication - no download manager needed
-            try {
-                // Check if this download is already in progress
-                if (activeDownloads.has(message.downloadUrl)) {
-                    logger.debug('Download already in progress for:', message.downloadUrl);
-                    const existingDownload = activeDownloads.get(message.downloadUrl);
-                    
-                    // Send current progress to the requesting popup
-                    port.postMessage({
-                        command: 'progress',
-                        downloadUrl: message.downloadUrl,
-                        masterUrl: message.masterUrl || null,
-                        filename: message.filename,
-                        progress: existingDownload.progress || 0,
-                        status: existingDownload.status
-                    });
-                    return;
-                }
-                
-                const headers = getRequestHeaders(message.tabId || -1, message.downloadUrl);
-                
-                const nativeHostMessage = {
-                    command: 'download',
-                    downloadUrl: message.downloadUrl,
-                    filename: message.filename,
-                    savePath: message.savePath || null,
-                    type: message.type,
-                    fileSizeBytes: message.fileSizeBytes || null,
-                    segmentCount: message.segmentCount || null,
-                    preferredContainer: message.preferredContainer || null,
-                    originalContainer: message.originalContainer || 'mp4',
-                    audioOnly: message.audioOnly || false,
-                    streamSelection: message.streamSelection || null,
-                    masterUrl: message.masterUrl || null,
-                    duration: message.duration || null,
-                    headers: headers || {}
-                };
-                
-                // Track active download for popup restoration
-                activeDownloads.set(message.downloadUrl, {
-                    downloadUrl: message.downloadUrl,
-                    masterUrl: message.masterUrl || null,
-                    filename: message.filename,
-                    progress: 0,
-                    status: 'downloading',
-                    startTime: Date.now()
-                });
-                
-                // Create progress callback that broadcasts to UI
-                const progressCallback = (response) => {
-                    // Update active download state
-                    if (activeDownloads.has(message.downloadUrl)) {
-                        const download = activeDownloads.get(message.downloadUrl);
-                        download.progress = response.progress || 0;
-                        download.status = response.success !== undefined ? 'complete' : 'downloading';
-                        
-                        // Remove completed/failed downloads after broadcasting
-                        if (response.success !== undefined || response.error) {
-                            setTimeout(() => {
-                                activeDownloads.delete(message.downloadUrl);
-                                logger.debug('Removed completed download from tracking:', message.downloadUrl);
-                            }, 30000); // Keep for 30 seconds for popup restoration
-                        }
-                    }
-                    
-                    // Add downloadUrl and masterUrl for UI mapping
-                    const uiResponse = {
-                        ...response,
-                        downloadUrl: message.downloadUrl,
-                        masterUrl: message.masterUrl || null,
-                        filename: message.filename
-                    };
-                    
-                    // Broadcast to all connected popups
-                    broadcastToPopups(uiResponse);
-                };
-                
-                logger.debug('🔄 Sending download request to native host:', message.downloadUrl);
-                
-                // Direct NHS communication with progress callback
-                nativeHostService.sendMessage(nativeHostMessage, progressCallback)
-                    .catch(error => {
-                        logger.error('❌ Native host download error:', error);
-                        
-                        // Remove from active downloads on error
-                        activeDownloads.delete(message.downloadUrl);
-                        
-                        broadcastToPopups({
-                            command: 'error',
-                            downloadUrl: message.downloadUrl,
-                            masterUrl: message.masterUrl || null,
-                            error: error.message
-                        });
-                    });
-                
-            } catch (error) {
-                logger.error('Download failed:', error);
-                broadcastToPopups({
-                    command: 'error',
-                    downloadUrl: message.downloadUrl,
-                    masterUrl: message.masterUrl || null,
-                    error: error.message
-                });
-            }
+            handleDownloadRequest(message, port);
             break;
             
         case 'clearCaches':
@@ -259,6 +156,116 @@ function getActivePopupPortForTab(tabId) {
         }
     }
     return null;
+}
+
+/**
+ * Streamlined download handler - core of simplified flow
+ * @param {Object} message - Download request message
+ * @param {Port} port - Port connection for immediate response
+ */
+async function handleDownloadRequest(message, port) {
+    // Check for duplicate download (duplicate prevention)
+    if (activeDownloads.has(message.downloadUrl)) {
+        logger.debug('Download already active:', message.downloadUrl);
+        const existingDownload = activeDownloads.get(message.downloadUrl);
+        
+        // Send current state to requesting popup
+        port.postMessage({
+            command: 'progress',
+            downloadUrl: message.downloadUrl,
+            masterUrl: message.masterUrl || null,
+            filename: message.filename,
+            progress: existingDownload.progress || 0,
+            status: existingDownload.status
+        });
+        return;
+    }
+    
+    try {
+        // Prepare native host message
+        const nativeHostMessage = {
+            command: 'download',
+            downloadUrl: message.downloadUrl,
+            filename: message.filename,
+            savePath: message.savePath || null,
+            type: message.type,
+            fileSizeBytes: message.fileSizeBytes || null,
+            segmentCount: message.segmentCount || null,
+            preferredContainer: message.preferredContainer || null,
+            originalContainer: message.originalContainer || 'mp4',
+            audioOnly: message.audioOnly || false,
+            streamSelection: message.streamSelection || null,
+            masterUrl: message.masterUrl || null,
+            duration: message.duration || null,
+            headers: getRequestHeaders(message.tabId || -1, message.downloadUrl) || {}
+        };
+        
+        // Add to active downloads map (single source of truth)
+        activeDownloads.set(message.downloadUrl, {
+            downloadUrl: message.downloadUrl,
+            masterUrl: message.masterUrl || null,
+            filename: message.filename,
+            progress: 0,
+            status: 'downloading',
+            startTime: Date.now()
+        });
+        
+        // Create notification immediately
+        const notificationId = `download-${Date.now()}`;
+        chrome.notifications.create(notificationId, {
+            type: 'basic',
+            iconUrl: '../../icons/48.png',
+            title: 'Downloading Video',
+            message: `Starting download: ${message.filename}`
+        });
+        
+        // Start download with progress stream
+        nativeHostService.sendMessage(nativeHostMessage, (response) => {
+            // Update active downloads state
+            if (activeDownloads.has(message.downloadUrl)) {
+                const download = activeDownloads.get(message.downloadUrl);
+                download.progress = response.progress || 0;
+                download.status = response.success !== undefined ? 'complete' : 'downloading';
+                
+                // Clean up completed downloads
+                if (response.success !== undefined || response.error) {
+                    activeDownloads.delete(message.downloadUrl);
+                }
+            }
+            
+            // Broadcast progress to all popups (they will map if needed)
+            broadcastToPopups({
+                command: 'progress',
+                downloadUrl: message.downloadUrl,
+                masterUrl: message.masterUrl || null,
+                filename: message.filename,
+                ...response
+            });
+        }).catch(error => {
+            logger.error('Download failed:', error);
+            activeDownloads.delete(message.downloadUrl);
+            
+            broadcastToPopups({
+                command: 'error',
+                downloadUrl: message.downloadUrl,
+                masterUrl: message.masterUrl || null,
+                error: error.message
+            });
+        });
+        
+        logger.debug('🔄 Download initiated:', message.downloadUrl);
+        
+    } catch (error) {
+        logger.error('Download setup failed:', error);
+        activeDownloads.delete(message.downloadUrl);
+        
+        broadcastToPopups({
+            command: 'error',
+            downloadUrl: message.downloadUrl,
+            masterUrl: message.masterUrl || null,
+            error: error.message
+        });
+    }
 }
 
 /**

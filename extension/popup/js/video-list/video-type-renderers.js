@@ -1,7 +1,7 @@
 // Type-specific renderers for different video types
 
 import { createVideoMetadata } from './video-utils.js';
-import { handleDownload } from '../download.js';
+import { handleDownload } from '../download-streamlined.js';
 import { createCustomDropdown } from './custom-dropdown.js';
 
 /**

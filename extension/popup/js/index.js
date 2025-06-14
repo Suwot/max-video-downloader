@@ -65,23 +65,31 @@ function handlePortMessage(message) {
         return;
     }
     
-    // Handle active downloads list for popup restoration
-    if (message.command === 'activeDownloadsList' && message.downloads) {
-        logger.debug('Received active downloads list:', message.downloads);
+    // Handle download progress messages - simple mapping to UI
+    if (message.command === 'progress') {
+        logger.debug('Received download progress:', message.downloadUrl, message.progress + '%');
         
-        // Import download module to process active downloads
-        import('./download.js').then(downloadModule => {
-            // Process each active download with proper state restoration
-            message.downloads.forEach(download => {
-                logger.debug('Restoring download state for:', download.downloadUrl);
-                
-                // Use the updateDownloadProgress function to restore UI state
-                downloadModule.updateDownloadProgress(
-                    { downloadUrl: download.downloadUrl },
-                    download.progress || 0,
-                    download
-                );
-            });
+        // Import download module and map progress to UI
+        import('./download-streamlined.js').then(downloadModule => {
+            downloadModule.updateDownloadProgress(
+                null, // video object not needed
+                message.progress || 0,
+                message
+            );
+        });
+        return;
+    }
+    
+    // Handle download errors
+    if (message.command === 'error') {
+        logger.debug('Received download error:', message.downloadUrl);
+        
+        import('./download-streamlined.js').then(downloadModule => {
+            downloadModule.updateDownloadProgress(
+                null,
+                0,
+                { ...message, error: true }
+            );
         });
         return;
     }
@@ -103,6 +111,25 @@ function handlePortMessage(message) {
             module.updateVideoElement(message.url, message.video);
         });
         
+        return;
+    }
+
+    // Handle active downloads list for popup restoration
+    if (message.command === 'activeDownloadsList' && message.downloads) {
+        logger.debug('Received active downloads list:', message.downloads);
+        
+        // Import download module to process active downloads
+        import('./download-streamlined.js').then(downloadModule => {
+            message.downloads.forEach(download => {
+                logger.debug('Restoring download state for:', download.downloadUrl);
+                
+                downloadModule.updateDownloadProgress(
+                    null,
+                    download.progress || 0,
+                    download
+                );
+            });
+        });
         return;
     }
 }
@@ -222,7 +249,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         setupPeriodicRefresh();
         
         // Check for active downloads from previous popup sessions
-        import('./download.js').then(downloadModule => {
+        import('./download-streamlined.js').then(downloadModule => {
             downloadModule.checkForActiveDownloads().catch(err => {
                 logger.error('Error checking for active downloads:', err);
             });
