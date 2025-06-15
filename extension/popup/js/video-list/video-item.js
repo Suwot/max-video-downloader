@@ -1,4 +1,4 @@
-import { formatDuration } from './video-utils.js';
+import { formatDuration } from '../../../shared/utilities/video-utils.js';
 import { showHoverPreview, hideHoverPreview } from './preview-hover.js';
 import { renderTypeSpecificElements } from './video-type-renderers.js';
 

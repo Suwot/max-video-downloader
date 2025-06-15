@@ -1,6 +1,6 @@
 // Type-specific renderers for different video types
 
-import { createVideoMetadata } from './video-utils.js';
+import { createVideoMetadata } from '../../../shared/utilities/video-utils.js';
 import { handleDownload } from '../download-streamlined.js';
 import { createCustomDropdown } from './custom-dropdown.js';
 
@@ -20,7 +20,7 @@ export function renderTypeSpecificElements(video) {
         case 'blob':
             return renderBlobElements(video);
         default:
-            return renderGenericElements(video);
+            return renderUnknownElements(video);
     }
 }
 
@@ -38,8 +38,6 @@ function createDownloadButtonWithMenu(video, elementsDiv) {
     // Create main download button
     const downloadBtn = document.createElement('button');
     downloadBtn.className = 'download-btn';
-    downloadBtn.dataset.url = video.url;
-    downloadBtn.dataset.type = video.type;
     
     // Add download icon and text
     const iconSpan = document.createElement('span');
@@ -245,7 +243,7 @@ function renderBlobElements(video) {
  * @param {Object} video - Video data
  * @returns {HTMLElement} Actions group element
  */
-function renderGenericElements(video) {
+function renderUnknownElements(video) {
     // We'll use the same approach as direct videos
     return renderDirectElements(video);
 }

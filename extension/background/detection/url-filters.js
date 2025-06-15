@@ -3,7 +3,7 @@
  * Provides functions to filter out non-media URLs consistently across the extension
  */
 
-import { createLogger } from '../../js/utilities/logger.js';
+import { createLogger } from '../../shared/utilities/logger.js';
 
 // Create a logger instance for URL filters
 const logger = createLogger('URL Filters');

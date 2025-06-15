@@ -1,6 +1,6 @@
-import { createLogger } from '../../js/utilities/logger.js';
+import { createLogger } from '../../shared/utilities/logger.js';
 import { shouldIgnoreForMediaDetection } from './url-filters.js';
-import { addDetectedVideo } from '../video-processing/video-manager.js';
+import { addDetectedVideo } from '../processing/video-manager.js';
 import { identifyVideoType, identifyVideoTypeFromMime, extractExpiryInfo, isMediaSegment } from './video-type-identifier.js';
 
 // Create a logger instance for video detection

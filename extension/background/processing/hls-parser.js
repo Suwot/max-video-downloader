@@ -13,10 +13,10 @@ import {
     fetchManifest,
     validateManifestType
 } from './parser-utils.js';
-import { createLogger } from '../../js/utilities/logger.js';
+import { createLogger } from '../../shared/utilities/logger.js';
 import { getVideoByUrl } from './video-manager.js';
-import { standardizeResolution } from '../../popup/js/video-list/video-utils.js';
-import { propagateHeaders } from '../../js/utilities/headers-utils.js';
+import { standardizeResolution } from '../../shared/utilities/video-utils.js';
+import { propagateHeaders } from '../../shared/utilities/headers-utils.js';
 
 // Create a logger for the HLS parser
 const logger = createLogger('HLS Parser');

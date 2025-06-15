@@ -1,16 +1,16 @@
 // Import services
-import { initStateManager } from './services/state-manager.js';
-import { initHeaderTracking } from '../js/utilities/headers-utils.js';
-import { getAllDetectedVideos, initVideoManager } from './video-processing/video-manager.js';
-import { initTabTracking } from './services/tab-tracker.js';
-import { initUICommunication } from './services/popup-communication.js';
-import { createLogger } from '../js/utilities/logger.js';
+import { initStateManager } from './state/state-manager.js';
+import { initHeaderTracking } from '../shared/utilities/headers-utils.js';
+import { getAllDetectedVideos, initVideoManager } from './processing/video-manager.js';
+import { initTabTracking } from './state/tab-tracker.js';
+import { initUICommunication } from './messaging/popup-communication.js';
+import { createLogger } from '../shared/utilities/logger.js';
 
 // Import video detection
 import { 
     cleanupDetectionContext,
     initVideoDetector 
-} from './video-detection/video-detector.js';
+} from './detection/video-detector.js';
 
 // Create a logger instance for the background script
 const logger = createLogger('Background');

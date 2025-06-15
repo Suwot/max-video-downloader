@@ -13,8 +13,8 @@ import { initializeServices, getActiveTab } from './services/service-initializer
 import { themeService, applyTheme } from './services/theme-service.js';
 import { initializeUI, setScrollPosition, getScrollPosition, hideInitMessage } from './ui.js';
 import { renderVideos } from './video-list/video-renderer.js';
-import { createLogger } from '../../js/utilities/logger.js';
-import { normalizeUrl } from '../../js/utilities/normalize-url.js';
+import { createLogger } from '../../shared/utilities/logger.js';
+import { normalizeUrl } from '../../shared/utilities/normalize-url.js';
 
 
 const logger = createLogger('Popup');

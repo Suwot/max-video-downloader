@@ -4,7 +4,7 @@
  */
 
 import { createLogger } from './logger.js';
-import { shouldIgnoreForHeaderCapture } from '../../background/video-detection/url-filters.js';
+import { shouldIgnoreForHeaderCapture } from '../../background/detection/url-filters.js';
 
 // Create a logger instance for the headers utilities
 const logger = createLogger('Headers Utils');

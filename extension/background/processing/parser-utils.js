@@ -3,9 +3,9 @@
  * Common utilities for HLS and DASH parsing operations
  */
 
-import { normalizeUrl, getBaseDirectory } from '../../js/utilities/normalize-url.js';
-import { getRequestHeaders, applyHeaderRule } from '../../js/utilities/headers-utils.js';
-import { createLogger } from '../../js/utilities/logger.js';
+import { normalizeUrl, getBaseDirectory } from '../../shared/utilities/normalize-url.js';
+import { getRequestHeaders, applyHeaderRule } from '../../shared/utilities/headers-utils.js';
+import { createLogger } from '../../shared/utilities/logger.js';
 
 const logger = createLogger('Parser Utils');
 

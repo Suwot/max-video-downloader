@@ -3,10 +3,10 @@
  * Sends download requests and maps progress to UI elements
  */
 
-import { createLogger } from '../../js/utilities/logger.js';
+import { createLogger } from '../../shared/utilities/logger.js';
 import { getBackgroundPort } from './index.js';
 import { showError } from './ui.js';
-import { formatSize } from './video-list/video-utils.js';
+import { formatSize } from '../../shared/utilities/video-utils.js';
 
 const logger = createLogger('Download');
 
