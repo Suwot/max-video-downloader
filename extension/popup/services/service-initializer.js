@@ -1,14 +1,9 @@
 /**
- * @ai-guide-component ServiceInitializer
- * @ai-guide-description Initializes and coordinates all services
- * @ai-guide-responsibilities
  * - Provides centralized service initialization
  * - Ensures proper initialization order
  * - Manages state migration from old state.js to new services
  * - Coordinates initial data loading across services
  */
-
-// popup/js/services/service-initializer.js
 
 import { themeService } from './theme-service.js';
 import { groupStateService } from './group-state-service.js';

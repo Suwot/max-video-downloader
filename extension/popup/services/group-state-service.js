@@ -1,13 +1,8 @@
 /**
- * @ai-guide-component GroupStateService
- * @ai-guide-description Manages UI group expansion states
- * @ai-guide-responsibilities
  * - Provides centralized group state management
  * - Persists group expansion/collapse states in storage
  * - Coordinates group state changes across UI components
  */
-
-// popup/js/services/group-state-service.js
 
 // Default group states (collapsed or expanded)
 const DEFAULT_GROUP_STATES = {

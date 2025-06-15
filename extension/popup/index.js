@@ -12,9 +12,9 @@
 import { initializeServices, getActiveTab } from './services/service-initializer.js';
 import { themeService, applyTheme } from './services/theme-service.js';
 import { initializeUI, setScrollPosition, getScrollPosition, hideInitMessage } from './ui.js';
-import { renderVideos } from './video-list/video-renderer.js';
-import { createLogger } from '../../shared/utilities/logger.js';
-import { normalizeUrl } from '../../shared/utilities/normalize-url.js';
+import { renderVideos } from './video/video-renderer.js';
+import { createLogger } from '../shared/utilities/logger.js';
+import { normalizeUrl } from '../shared/utilities/normalize-url.js';
 
 
 const logger = createLogger('Popup');
@@ -70,7 +70,7 @@ function handlePortMessage(message) {
         logger.debug('Received download progress:', message.downloadUrl, message.progress + '%');
         
         // Import download module and map progress to UI
-        import('./download-streamlined.js').then(downloadModule => {
+        import('./video/download-handler.js').then(downloadModule => {
             downloadModule.updateDownloadProgress(
                 null, // video object not needed
                 message.progress || 0,
@@ -84,7 +84,7 @@ function handlePortMessage(message) {
     if (message.command === 'error') {
         logger.debug('Received download error:', message.downloadUrl);
         
-        import('./download-streamlined.js').then(downloadModule => {
+        import('./download-handler.js').then(downloadModule => {
             downloadModule.updateDownloadProgress(
                 null,
                 0,
@@ -107,7 +107,7 @@ function handlePortMessage(message) {
         }));
         
         // Also update the UI element directly for faster response
-        import('./video-list/video-renderer.js').then(module => {
+        import('./video/video-renderer.js').then(module => {
             module.updateVideoElement(message.url, message.video);
         });
         
@@ -119,7 +119,7 @@ function handlePortMessage(message) {
         logger.debug('Received active downloads list:', message.downloads);
         
         // Import download module to process active downloads
-        import('./download-streamlined.js').then(downloadModule => {
+        import('./download-handler.js').then(downloadModule => {
             message.downloads.forEach(download => {
                 logger.debug('Restoring download state for:', download.downloadUrl);
                 
@@ -263,7 +263,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         setupPeriodicRefresh();
         
         // Check for active downloads from previous popup sessions
-        import('./download-streamlined.js').then(downloadModule => {
+        import('./download-handler.js').then(downloadModule => {
             downloadModule.checkForActiveDownloads().catch(err => {
                 logger.error('Error checking for active downloads:', err);
             });

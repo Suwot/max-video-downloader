@@ -4,8 +4,8 @@
  */
 
 import { createLogger } from '../../shared/utilities/logger.js';
-import { getBackgroundPort } from './index.js';
-import { showError } from './ui.js';
+import { getBackgroundPort } from '../index.js';
+import { showError } from '../ui.js';
 import { formatSize } from '../../shared/utilities/video-utils.js';
 
 const logger = createLogger('Download');

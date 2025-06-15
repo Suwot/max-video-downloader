@@ -1,14 +1,9 @@
 /**
- * @ai-guide-component ThemeService
- * @ai-guide-description Manages theme preferences
- * @ai-guide-responsibilities
  * - Provides centralized theme management
  * - Persists theme preferences in chrome.storage.sync
  * - Handles system theme detection and application
  * - Coordinates theme changes across UI components
  */
-
-// popup/js/services/theme-service.js
 
 // Default theme values
 const LIGHT_THEME = 'light';

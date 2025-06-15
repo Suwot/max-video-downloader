@@ -1,8 +1,8 @@
 // Type-specific renderers for different video types
 
-import { createVideoMetadata } from '../../../shared/utilities/video-utils.js';
-import { handleDownload } from '../download-streamlined.js';
-import { createCustomDropdown } from './custom-dropdown.js';
+import { createVideoMetadata } from '../../shared/utilities/video-utils.js';
+import { handleDownload } from './download-handler.js';
+import { createCustomDropdown } from './dropdown.js';
 
 /**
  * Create type-specific video actions based on video type

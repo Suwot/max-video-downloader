@@ -1,16 +1,11 @@
 /**
- * @ai-guide-component VideoStateService
- * @ai-guide-description Simple state management bridge between background and popup
- * @ai-guide-responsibilities
  * - Provides a unified interface to access video state
  * - Handles communication with background script
  * - Manages local UI state for the current popup session
  */
 
-// popup/js/services/video-state-service.js
-
 import { sendPortMessage } from '../index.js';
-import { updateVideoElement } from '../video-list/video-renderer.js';
+import { updateVideoElement } from '../video/video-renderer.js';
 
 // Singleton service that manages state
 class VideoStateService {
