@@ -3,7 +3,7 @@
  * Creates download buttons with direct data binding during UI creation
  */
 
-import { createVideoMetadata } from '../../shared/utilities/video-utils.js';
+import { createVideoMetadata } from '../../shared/utils/video-utils.js';
 import { handleDownload } from './download-handler.js';
 
 /**

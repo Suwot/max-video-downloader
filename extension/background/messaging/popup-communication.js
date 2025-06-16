@@ -6,9 +6,9 @@
 // Add static imports at the top
 import { clearVideoCache, sendVideoUpdateToUI } from '../processing/video-manager.js';
 import nativeHostService from './native-host-service.js';
-import { getRequestHeaders } from '../../shared/utilities/headers-utils.js';
-import { createLogger } from '../../shared/utilities/logger.js';
-import { clearCache, getCacheStats } from '../../shared/utilities/preview-cache.js';
+import { getRequestHeaders } from '../../shared/utils/headers-utils.js';
+import { createLogger } from '../../shared/utils/logger.js';
+import { clearCache, getCacheStats } from '../../shared/utils/preview-cache.js';
 
 // Track all popup connections - simplified single map
 const popupPorts = new Map(); // key = portId, value = {port, tabId, url}

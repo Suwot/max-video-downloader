@@ -3,7 +3,7 @@
  * Supports both simple selection (HLS/Direct) and multi-track selection (DASH)
  */
 
-import { formatSize } from '../../shared/utilities/video-utils.js';
+import { formatSize } from '../../shared/utils/video-utils.js';
 
 /**
  * Creates all dropdown elements at once with proper structure

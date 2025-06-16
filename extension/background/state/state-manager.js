@@ -3,7 +3,7 @@
  * Centralized state management for the extension with performance optimizations
  */
 
-import { createLogger } from '../../shared/utilities/logger.js';
+import { createLogger } from '../../shared/utils/logger.js';
 
 const logger = createLogger('State Manager');
 

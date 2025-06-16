@@ -5,8 +5,8 @@
 
 // Add static imports at the top
 import { cleanupForTab } from '../processing/video-manager.js';
-import { createLogger } from '../../shared/utilities/logger.js';
-import { clearHeadersForTab, clearHeaderRulesForTab } from '../../shared/utilities/headers-utils.js'
+import { createLogger } from '../../shared/utils/logger.js';
+import { clearHeadersForTab, clearHeaderRulesForTab } from '../../shared/utils/headers-utils.js'
 import { cleanupMpdContext } from '../index.js';
 
 // Create a logger instance for the Tab Tracker module

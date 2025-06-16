@@ -14,8 +14,8 @@ import { themeService, applyTheme } from './services/theme-service.js';
 import { initializeUI, setScrollPosition, getScrollPosition, hideInitMessage } from './ui.js';
 import { renderVideos } from './video/video-renderer.js';
 import { updateDownloadProgress, checkForActiveDownloads } from './video/download-handler.js';
-import { createLogger } from '../shared/utilities/logger.js';
-import { normalizeUrl } from '../shared/utilities/normalize-url.js';
+import { createLogger } from '../shared/utils/logger.js';
+import { normalizeUrl } from '../shared/utils/normalize-url.js';
 
 
 const logger = createLogger('Popup');

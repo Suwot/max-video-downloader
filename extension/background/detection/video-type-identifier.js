@@ -1,4 +1,4 @@
-import { createLogger } from '../../shared/utilities/logger.js';
+import { createLogger } from '../../shared/utils/logger.js';
 
 // Create a logger instance for video type identification
 const logger = createLogger('VideoTypeIdentifier');

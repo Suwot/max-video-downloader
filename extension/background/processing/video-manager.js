@@ -4,7 +4,7 @@
  */
 
 // Add static imports at the top
-import { normalizeUrl } from '../../shared/utilities/normalize-url.js';
+import { normalizeUrl } from '../../shared/utils/normalize-url.js';
 import nativeHostService from '../messaging/native-host-service.js';
 import { getActivePopupPortForTab } from '../messaging/popup-communication.js';
 import { parseHlsManifest } from './hls-parser.js';
@@ -13,10 +13,10 @@ import {
     getRequestHeaders, 
     applyHeaderRule,
     clearAllHeaderCaches 
-} from '../../shared/utilities/headers-utils.js';
-import { createLogger } from '../../shared/utilities/logger.js';
-import { getPreview, storePreview } from '../../shared/utilities/preview-cache.js';
-import { standardizeResolution, getFilenameFromUrl } from '../../shared/utilities/video-utils.js';
+} from '../../shared/utils/headers-utils.js';
+import { createLogger } from '../../shared/utils/logger.js';
+import { getPreview, storePreview } from '../../shared/utils/preview-cache.js';
+import { standardizeResolution, getFilenameFromUrl } from '../../shared/utils/video-utils.js';
 
 // Central store for all detected videos, keyed by tab ID, then normalized URL
 // Map<tabId, Map<normalizedUrl, videoInfo>>
