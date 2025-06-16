@@ -13,6 +13,7 @@ import { initializeServices, getActiveTab } from './services/service-initializer
 import { themeService, applyTheme } from './services/theme-service.js';
 import { initializeUI, setScrollPosition, getScrollPosition, hideInitMessage } from './ui.js';
 import { renderVideos } from './video/video-renderer.js';
+import { updateDownloadProgress, checkForActiveDownloads } from './video/download-handler.js';
 import { createLogger } from '../shared/utilities/logger.js';
 import { normalizeUrl } from '../shared/utilities/normalize-url.js';
 
@@ -69,14 +70,11 @@ function handlePortMessage(message) {
     if (message.command === 'progress') {
         logger.debug('Received download progress:', message.downloadUrl, message.progress + '%');
         
-        // Import download module and map progress to UI
-        import('./video/download-handler.js').then(downloadModule => {
-            downloadModule.updateDownloadProgress(
-                null, // video object not needed
-                message.progress || 0,
-                message
-            );
-        });
+        updateDownloadProgress(
+            null, // video object not needed
+            message.progress || 0,
+            message
+        );
         return;
     }
     
@@ -84,13 +82,11 @@ function handlePortMessage(message) {
     if (message.command === 'error') {
         logger.debug('Received download error:', message.downloadUrl);
         
-        import('./download-handler.js').then(downloadModule => {
-            downloadModule.updateDownloadProgress(
-                null,
-                0,
-                { ...message, error: true }
-            );
-        });
+        updateDownloadProgress(
+            null,
+            0,
+            { ...message, error: true }
+        );
         return;
     }
 
@@ -118,17 +114,14 @@ function handlePortMessage(message) {
     if (message.command === 'activeDownloadsList' && message.downloads) {
         logger.debug('Received active downloads list:', message.downloads);
         
-        // Import download module to process active downloads
-        import('./download-handler.js').then(downloadModule => {
-            message.downloads.forEach(download => {
-                logger.debug('Restoring download state for:', download.downloadUrl);
-                
-                downloadModule.updateDownloadProgress(
-                    null,
-                    download.progress || 0,
-                    download
-                );
-            });
+        message.downloads.forEach(download => {
+            logger.debug('Restoring download state for:', download.downloadUrl);
+            
+            updateDownloadProgress(
+                null,
+                download.progress || 0,
+                download
+            );
         });
         return;
     }
@@ -263,10 +256,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         setupPeriodicRefresh();
         
         // Check for active downloads from previous popup sessions
-        import('./download-handler.js').then(downloadModule => {
-            downloadModule.checkForActiveDownloads().catch(err => {
-                logger.error('Error checking for active downloads:', err);
-            });
+        checkForActiveDownloads().catch(err => {
+            logger.error('Error checking for active downloads:', err);
         });
         
         // Add Clear Cache button handler - simplified for in-memory approach
