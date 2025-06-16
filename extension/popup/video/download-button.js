@@ -1,19 +1,20 @@
 /**
- * Download Button Component
- * Handles download button creation and type-specific click handlers
+ * Streamlined Download Button Component
+ * Creates download buttons with direct data binding during UI creation
  */
 
 import { createVideoMetadata } from '../../shared/utilities/video-utils.js';
 import { handleDownload } from './download-handler.js';
 
 /**
- * Creates a download button with menu for any video type
- * Handles type-specific data extraction and click behavior
+ * Creates a download button with integrated data extraction
+ * Optimized for UI creation flow where all components are available
  * @param {Object} video - Video object
  * @param {HTMLElement} elementsDiv - Parent container for the button
+ * @param {HTMLElement} dropdown - Dropdown element reference (required during UI creation)
  * @returns {Array} - Array containing [downloadBtn, menuBtn, buttonWrapper]
  */
-export function createDownloadButton(video, elementsDiv) {
+export function createDownloadButton(video, elementsDiv, dropdown) {
     // Create button wrapper
     const buttonWrapper = document.createElement('div');
     buttonWrapper.className = 'download-btn-wrapper';
@@ -63,93 +64,50 @@ export function createDownloadButton(video, elementsDiv) {
     // Add wrapper to parent
     elementsDiv.appendChild(buttonWrapper);
     
-    // Set up type-specific click handler
-    setupDownloadHandler(downloadBtn, video, elementsDiv);
+    // Skip blob videos (no download capability)
+    if (video.type === 'blob') {
+        return [downloadBtn, menuBtn, buttonWrapper];
+    }
     
-    // TODO: Set up menu button click handler for future options
-    // menuBtn.addEventListener('click', () => showDownloadMenu(video, menuBtn));
+    // Set up streamlined click handler with direct data binding
+    downloadBtn.addEventListener('click', async () => {
+        const videoData = createVideoMetadata(video);
+        extractDownloadData(videoData, video, dropdown);
+        handleDownload(downloadBtn, videoData);
+    });
     
     return [downloadBtn, menuBtn, buttonWrapper];
 }
 
 /**
- * Set up download click handler based on video type
- * @param {HTMLElement} downloadBtn - Download button element
- * @param {Object} video - Video object
- * @param {HTMLElement} elementsDiv - Parent container
+ * Unified data extraction for all video types
+ * Uses dropdown reference directly since it's available during UI creation
+ * @param {Object} videoData - Video metadata object to populate
+ * @param {Object} video - Original video object
+ * @param {HTMLElement} dropdown - Dropdown element reference
  */
-function setupDownloadHandler(downloadBtn, video, elementsDiv) {
-    // Skip blob videos (no download capability)
-    if (video.type === 'blob') {
-        return;
-    }
+function extractDownloadData(videoData, video, dropdown) {
+    const selectedOption = dropdown.querySelector('.selected-option');
     
-    downloadBtn.addEventListener('click', async () => {
-        const videoData = createVideoMetadata(video);
-        
-        // Type-specific data extraction
-        switch (video.type) {
-            case 'hls':
-                extractHlsData(videoData, video, elementsDiv);
-                break;
-            case 'dash':
-                extractDashData(videoData, video, elementsDiv);
-                break;
-            case 'direct':
-            default:
-                extractDirectData(videoData, video, elementsDiv);
-                break;
+    // Data extraction mapping by video type
+    const dataExtractors = {
+        hls: () => {
+            videoData.downloadUrl = selectedOption?.dataset.url || video.url;
+            videoData.fileSizeBytes = selectedOption?.dataset.filesize || null;
+        },
+        dash: () => {
+            videoData.downloadUrl = video.url; // Use main URL for DASH
+            videoData.streamSelection = selectedOption?.dataset.trackMap || null;
+            videoData.originalContainer = selectedOption?.dataset.container || null;
+            videoData.fileSizeBytes = selectedOption?.dataset.totalfilesize || null;
+        },
+        direct: () => {
+            videoData.downloadUrl = video.url; // Use main URL for direct videos
+            videoData.fileSizeBytes = selectedOption?.dataset.filesize || null;
         }
-        
-        handleDownload(downloadBtn, videoData);
-    });
-}
-
-/**
- * Extract HLS-specific download data
- * @param {Object} videoData - Video metadata object to populate
- * @param {Object} video - Original video object
- * @param {HTMLElement} elementsDiv - Parent container
- */
-function extractHlsData(videoData, video, elementsDiv) {
-    // Get selected URL from custom dropdown
-    const dropdown = elementsDiv.querySelector('.custom-dropdown .selected-option');
-    const selectedUrl = dropdown?.dataset.url || video.url;
-    const fileSizeBytes = dropdown?.dataset.filesize || null;
-
-    videoData.downloadUrl = selectedUrl;
-    videoData.fileSizeBytes = fileSizeBytes;
-}
-
-/**
- * Extract DASH-specific download data
- * @param {Object} videoData - Video metadata object to populate
- * @param {Object} video - Original video object
- * @param {HTMLElement} elementsDiv - Parent container
- */
-function extractDashData(videoData, video, elementsDiv) {
-    // Get track map from custom dropdown
-    const dropdown = elementsDiv.querySelector('.custom-dropdown .selected-option');
-    const streamSelection = dropdown?.dataset.trackMap;
-    const container = dropdown?.dataset.container;
-    const totalFileSizeBytes = dropdown?.dataset.totalfilesize;
-
-    videoData.streamSelection = streamSelection || null;
-    videoData.originalContainer = container || null;
-    videoData.downloadUrl = video.url; // Use main URL for DASH
-    videoData.fileSizeBytes = totalFileSizeBytes;
-}
-
-/**
- * Extract direct video download data
- * @param {Object} videoData - Video metadata object to populate
- * @param {Object} video - Original video object
- * @param {HTMLElement} elementsDiv - Parent container
- */
-function extractDirectData(videoData, video, elementsDiv) {
-    const dropdown = elementsDiv.querySelector('.custom-dropdown .selected-option');
-    const fileSizeBytes = dropdown?.dataset.filesize || null;
+    };
     
-    videoData.downloadUrl = video.url; // Use main URL for direct videos
-    videoData.fileSizeBytes = fileSizeBytes;
+    // Execute type-specific extraction or default to direct
+    const extractor = dataExtractors[video.type] || dataExtractors.direct;
+    extractor();
 }

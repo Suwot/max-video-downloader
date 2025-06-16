@@ -30,10 +30,9 @@ export function createVideoElement(video) {
 
     // Add duration display if available
     if (video.duration) {
-        const duration = video.duration;
         const durationElement = document.createElement('div');
         durationElement.className = 'video-duration';
-        durationElement.textContent = formatDuration(duration);
+        durationElement.textContent = formatDuration(video.duration);
         previewContainer.appendChild(durationElement);
     }
 
@@ -42,11 +41,11 @@ export function createVideoElement(video) {
         const statusBadge = document.createElement('div');
         statusBadge.className = 'status-badge';
         
-        // Add tooltip with encryption type if available
-        if (video.isEncrypted && video.encryptionType) {
-            statusBadge.title = `Encryption: ${video.encryptionType}`;
-        } else if (video.isEncrypted) {
-            statusBadge.title = 'Encrypted content';
+        // Set tooltip for encrypted content
+        if (video.isEncrypted) {
+            statusBadge.title = video.encryptionType ? 
+                `Encryption: ${video.encryptionType}` : 
+                'Encrypted content';
         }
         
         // Add Live text if applicable
@@ -92,7 +91,7 @@ export function createVideoElement(video) {
         };
         previewImage.src = previewUrl;
 
-        // Add hover functionality for preview if available
+        // Add hover functionality for preview
         previewContainer.addEventListener('mouseenter', (event) => {
             showHoverPreview(previewUrl, event);
         });
@@ -107,12 +106,6 @@ export function createVideoElement(video) {
             loader.style.display = 'none';
         }
     }
-
-    // Add hover preview fallback for image (in case previewUrl is set later)
-    previewImage.addEventListener('mouseenter', (event) => {
-        showHoverPreview(previewUrl, event);
-    });
-    previewImage.addEventListener('mouseleave', hideHoverPreview);
     
     // Create info column
     const infoColumn = document.createElement('div');
@@ -172,151 +165,31 @@ export function createVideoElement(video) {
     }
     
     // Create type specific interactive elements
-    const typeSpecificElements = renderTypeSpecificElements(video);
-    infoColumn.appendChild(typeSpecificElements);
-    
+    const downloadActions = createDownloadActions(video);
+    infoColumn.appendChild(downloadActions);
+
     element.append(previewColumn, infoColumn);
     
     return element;
 }
 
 /**
- * Create type-specific video actions based on video type
+ * Create download actions for any video type
+ * Universal function that handles all video types identically
  * @param {Object} video - Video data
  * @returns {HTMLElement} Actions group element
  */
-function renderTypeSpecificElements(video) {
-    switch (video.type) {
-        case 'hls':
-            return renderHlsElements(video);
-        case 'dash':
-            return renderDashElements(video);
-        case 'direct':
-            return renderDirectElements(video);
-        case 'blob':
-            return renderBlobElements(video);
-        default:
-            return renderUnknownElements(video);
-    }
-}
-
-/**
- * Render actions for HLS video type
- * @param {Object} video - HLS video data
- * @returns {HTMLElement} Actions group element
- */
-function renderHlsElements(video) {
+function createDownloadActions(video) {
     const elementsDiv = document.createElement('div');
     elementsDiv.className = 'download-group';
     
-    // Create quality dropdown if variants are available
-    if (video.variants && video.variants.length > 0) {
-        // Create custom dropdown instead of standard select
-        const dropdown = createCustomDropdown({
-            type: 'hls',
-            variants: video.variants,
-            initialSelection: video.variants[0],
-            onChange: (selected) => {
-                // Update download button with selected URL
-                const downloadBtn = elementsDiv.querySelector('.download-btn');
-                if (downloadBtn && selected.url) {
-                    downloadBtn.dataset.selectedUrl = selected.url;
-                }
-            }
-        });
-        
-        elementsDiv.appendChild(dropdown);
-    }
-    
-    // Create download button with menu
-    createDownloadButton(video, elementsDiv);
-
-    return elementsDiv;
-}
-
-/**
- * Render actions for DASH video type
- * @param {Object} video - DASH video data
- * @returns {HTMLElement} Actions group element
- */
-function renderDashElements(video) {
-    const elementsDiv = document.createElement('div');
-    elementsDiv.className = 'download-group';
-    
-    // Prepare tracks data for DASH
-    const tracks = {
-        videoTracks: video.videoTracks || [],
-        audioTracks: video.audioTracks || [],
-        subtitleTracks: video.subtitleTracks || []
-    };
-    
-    // Create dropdown with track selection
-    const dropdown = createCustomDropdown({
-        type: 'dash',
-        tracks: tracks,
-        initialSelection: {
-            selectedVideo: tracks.videoTracks?.[0]?.id,
-            selectedAudio: tracks.audioTracks?.[0]?.id,
-            selectedSubs: tracks.subtitleTracks?.[0]?.id
-        },
-        onChange: (selection) => {
-            // Update download button with track map
-            const downloadBtn = elementsDiv.querySelector('.download-btn');
-            if (downloadBtn && selection.trackMap) {
-                downloadBtn.dataset.trackMap = selection.trackMap;
-            }
-        }
-    });
+    // Create dropdown (handles all video types: HLS, DASH, Direct, Blob)
+    const dropdown = createCustomDropdown(video);
     
     elementsDiv.appendChild(dropdown);
     
-    // Create download button with menu
-    createDownloadButton(video, elementsDiv);
-    
-    return elementsDiv;
-}
-
-/**
- * Render actions for direct video type
- * @param {Object} video - Direct video data
- * @returns {HTMLElement} Actions group element
- */
-function renderDirectElements(video) {
-    const elementsDiv = document.createElement('div');
-    elementsDiv.className = 'download-group';
-    
-    // Create custom dropdown with just one option
-    const dropdown = createCustomDropdown({
-        type: 'direct',
-        variants: [video],
-        initialSelection: video
-    });
-    
-    elementsDiv.appendChild(dropdown);
-    
-    // Create download button with menu
-    createDownloadButton(video, elementsDiv);
+    // Create download button with dropdown reference
+    createDownloadButton(video, elementsDiv, dropdown);
 
     return elementsDiv;
 }
-
-/**
- * Render actions for blob video type
- * @param {Object} video - Blob video data
- * @returns {HTMLElement} Actions group element
- */
-function renderBlobElements(video) {
-    // We'll use the same approach as direct videos
-    return renderDirectElements(video);
-}
-
-/**
- * Render actions for generic/unknown video type
- * @param {Object} video - Video data
- * @returns {HTMLElement} Actions group element
- */
-function renderUnknownElements(video) {
-    // We'll use the same approach as direct videos
-    return renderDirectElements(video);
-}
-

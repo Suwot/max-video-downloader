@@ -39,58 +39,65 @@ function createDropdownElements(type) {
 
 /**
  * Creates a custom dropdown component
- * @param {Object} options - Configuration options
- * @param {string} options.type - Video type ('hls', 'dash', 'direct', 'blob')
- * @param {Array} options.variants - Available quality variants
- * @param {Function} options.onChange - Callback when selection changes
- * @param {Object} [options.initialSelection] - Initially selected variant/tracks
- * @param {Object} [options.tracks] - For DASH: {videoTracks, audioTracks, subtitleTracks}
+ * @param {Object} video - Complete video object with all data
+ * @param {Function} [onChange] - Optional callback when selection changes
  * @returns {HTMLElement} The custom dropdown component
  */
-export function createCustomDropdown(options) {
-    const { type, variants, onChange, initialSelection, tracks } = options;
+export function createCustomDropdown(video, onChange = null) {
+    const { type } = video;
     
     // Create all dropdown elements at once
     const container = createDropdownElements(type);
     const { selectedDisplay, optionsContainer } = container.elements;
-    
-    // For DASH videos, set initial trackMap on the selected display
-    if (type === 'dash' && tracks) {
-        // Get ffmpegStreamIndex from first track of each type
-        const indices = [
-            tracks.videoTracks?.[0]?.ffmpegStreamIndex,
-            tracks.audioTracks?.[0]?.ffmpegStreamIndex,
-            tracks.subtitleTracks?.[0]?.ffmpegStreamIndex
-        ].filter(Boolean);
-        
-        // Create track map string
-        const trackMap = indices.join(',');
-        
-        // Set on selected display element
-        selectedDisplay.dataset.trackMap = trackMap;
-    }
     
     // Setup event handlers for dropdown interactions
     setupDropdownEvents(container, type);
     
     // Fill with content based on video type
     if (type === 'dash') {
+        const tracks = {
+            videoTracks: video.videoTracks || [],
+            audioTracks: video.audioTracks || [],
+            subtitleTracks: video.subtitleTracks || []
+        };
+        
+        const initialSelection = {
+            selectedVideo: tracks.videoTracks?.[0]?.id,
+            selectedAudio: tracks.audioTracks?.[0]?.id,
+            selectedSubs: tracks.subtitleTracks?.[0]?.id
+        };
+        
+        // Set initial trackMap on the selected display
+        const indices = [
+            tracks.videoTracks?.[0]?.ffmpegStreamIndex,
+            tracks.audioTracks?.[0]?.ffmpegStreamIndex,
+            tracks.subtitleTracks?.[0]?.ffmpegStreamIndex
+        ].filter(Boolean);
+        
+        selectedDisplay.dataset.trackMap = indices.join(',');
+        
         createDashOptions(optionsContainer, tracks, initialSelection, (selection) => {
             updateSelectedDisplay(selectedDisplay, selection, type);
             if (onChange) onChange(selection);
             container.classList.remove('open');
         });
+        
+        // Initialize selected display
+        updateSelectedDisplay(selectedDisplay, initialSelection, type);
     } else {
-        // HLS, Direct, Blob use the same simple options list
+        // HLS, Direct, Blob use simple options
+        const variants = video.variants && video.variants.length > 0 ? video.variants : [video];
+        const initialSelection = variants[0];
+        
         createSimpleOptions(optionsContainer, variants, initialSelection, (selection) => {
             updateSelectedDisplay(selectedDisplay, selection, type);
             if (onChange) onChange(selection);
             container.classList.remove('open');
         });
+        
+        // Initialize selected display
+        updateSelectedDisplay(selectedDisplay, initialSelection, type);
     }
-    
-    // Initialize selected display
-    updateSelectedDisplay(selectedDisplay, initialSelection || (variants?.[0]), type);
     
     return container;
 }
