@@ -516,15 +516,9 @@ function updateVideo(functionName, tabId, normalizedUrl, updates, replace = fals
         updatedVideo = { ...currentVideo, ...updates };
     }
     
-    // Log the update
-    logger.group(functionName,
-        `TabID: ${tabId}, URL: ${normalizedUrl}`,
-        `HasKnownMaster: ${updatedVideo.hasKnownMaster}, IsVariant: ${updatedVideo.isVariant}`,
-        ...(updatedVideo.masterUrl ? [`Master URL: ${updatedVideo.masterUrl}`] : [])
-    );
-    
     // Set the value in the map
     tabMap.set(normalizedUrl, updatedVideo);
+    logger.debug(`Video updated by ${functionName}: ${normalizedUrl}`, updatedVideo);
     
     return updatedVideo;
 }
