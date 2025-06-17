@@ -17,21 +17,7 @@ const initialState = {
         lastUpdated: Date.now()
     },
     videos: {
-        byTab: {},      // Mapped by tabId -> url -> videoInfo
-        byUrl: {},      // Quick lookup by normalized URL
-        processing: {}, // Videos being processed
-        masterVariantRelationships: {},   // Master-variant relationships tracking
-        stats: {
-            detected: 0,
-            processed: 0,
-            byType: { hls: 0, dash: 0, direct: 0, blob: 0 },
-            lastDetection: null
-        },
-        extraction: {
-            dashSegments: {}, // tabId -> segment paths
-            mpdContexts: {},  // tabId -> timestamp
-            headers: {}       // tabId -> url -> headers
-        }
+        byTab: {}      // Mapped by tabId -> url -> videoInfo
     },
     downloads: {
         active: [],     // List of active download ids
@@ -44,10 +30,7 @@ const initialState = {
             lastDownload: null // timestamp of last download
         }
     },
-    tabs: {
-        active: null,   // Currently active tab
-        tracked: {}     // All tabs being tracked
-    },
+    tabs: {},
     nativeHost: {
         connected: false,
         connectionTime: null,
