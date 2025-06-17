@@ -17,7 +17,7 @@ const initialState = {
         lastUpdated: Date.now()
     },
     videos: {
-        byTab: {}      // Mapped by tabId -> url -> videoInfo
+        byTab: {}      // Mapped by tabId -> url -> videoInfo, only valid videos for display
     },
     downloads: {
         active: [],     // List of active download ids
@@ -30,7 +30,7 @@ const initialState = {
             lastDownload: null // timestamp of last download
         }
     },
-    tabs: {},
+    tabsWithVideos: {}, // simple set of tabIds that have videos
     nativeHost: {
         connected: false,
         connectionTime: null,
