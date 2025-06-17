@@ -89,18 +89,13 @@ const initialState = {
 // Persistence configuration - what gets stored and where
 const persistenceConfig = {
     settings: {
-        storage: 'sync', // Use sync for settings
+        storage: 'local', // Use sync for settings
         ttl: null  // Never expires
     },
     downloads: {
         storage: 'local',
         subset: ['history', 'stats'],  // Only store history and stats (no items)
         ttl: 30 * 24 * 60 * 60 * 1000  // 30 days
-    },
-    nativeHost: {
-        storage: 'local',
-        subset: ['capabilities'], // Only store capabilities
-        ttl: 7 * 24 * 60 * 60 * 1000  // 7 days
     },
     ui: {
         storage: 'local',
