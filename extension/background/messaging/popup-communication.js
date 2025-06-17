@@ -95,12 +95,12 @@ async function handlePortMessage(message, port, portId) {
             
         case 'getActiveDownloads':
             try {
-                const activeDownloadList = getActiveDownloads();
+                const activeDownloads = getActiveDownloads();
                 port.postMessage({
                     command: 'activeDownloadsList',
-                    downloads: activeDownloadList
+                    downloads: activeDownloads
                 });
-                logger.debug(`Sent ${activeDownloadList.length} active downloads to popup`, activeDownloadList);
+                logger.debug(`Sent ${activeDownloads.length} active downloads with progress to popup`, activeDownloads);
             } catch (error) {
                 logger.error('Error sending active downloads list:', error);
             }

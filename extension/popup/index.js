@@ -125,21 +125,29 @@ function handlePortMessage(message) {
     if (message.command === 'activeDownloadsList' && message.downloads) {
         logger.debug('Received active downloads list:', message.downloads);
         
-        // Active downloads are now just URLs - show them as downloading state
-        message.downloads.forEach(downloadUrl => {
-            logger.debug('Restoring download state for URL:', downloadUrl);
+        // Enhanced active downloads now include progress data
+        message.downloads.forEach(download => {
+            const downloadUrl = download.url;
+            const progressData = download.progress;
             
-            // Find matching video items and set to downloading state
+            logger.debug('Restoring download state for URL:', downloadUrl, progressData ? 'with progress' : 'without progress');
+            
+            // Find matching video items and restore download state
             const videoItems = document.querySelectorAll(`.video-item[data-url="${downloadUrl}"]`);
             videoItems.forEach(videoItem => {
                 const button = videoItem.querySelector('.download-btn');
                 const buttonWrapper = videoItem.querySelector('.download-btn-wrapper');
                 
                 if (button && buttonWrapper) {
-                    // Set to downloading state without progress (since we don't store it)
-                    if (!buttonWrapper.classList.contains('downloading')) {
-                        buttonWrapper.classList.add('downloading');
-                        button.innerHTML = `<span>Downloading...</span>`;
+                    if (progressData) {
+                        // Restore with last known progress
+                        updateDownloadProgress(null, progressData.progress || 0, progressData);
+                    } else {
+                        // Fallback to generic downloading state
+                        if (!buttonWrapper.classList.contains('downloading')) {
+                            buttonWrapper.classList.add('downloading');
+                            button.innerHTML = `<span>Downloading...</span>`;
+                        }
                     }
                 }
             });

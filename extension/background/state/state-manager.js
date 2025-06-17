@@ -37,6 +37,7 @@ const initialState = {
         active: [],     // List of active download ids
         queue: [],      // Ordered queue of pending downloads
         history: [],    // List of completed download ids (limited size)
+        lastProgress: {}, // URL -> last progress data mapping (for UI restoration)
         stats: {
             completed: 0, // total
             failed: 0, // total

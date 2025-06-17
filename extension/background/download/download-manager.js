@@ -84,10 +84,14 @@ export async function startDownload(downloadRequest) {
     } catch (error) {
         logger.error('Failed to start download:', error);
         
-        // Clean up failed download from active list
+        // Clean up failed download from active list and progress data
         setState(state => ({
             downloads: {
-                active: state.downloads.active.filter(id => id !== downloadId)
+                active: state.downloads.active.filter(id => id !== downloadId),
+                // Clean up any progress data for failed start
+                lastProgress: Object.fromEntries(
+                    Object.entries(state.downloads.lastProgress).filter(([id]) => id !== downloadId)
+                )
             }
         }));
         
@@ -105,11 +109,18 @@ export async function startDownload(downloadRequest) {
 }
 
 /**
- * Get list of active downloads (just the URLs)
- * @returns {Array} Active download URLs
+ * Get list of active downloads with their last known progress
+ * @returns {Array} Active download objects with progress data
  */
 export function getActiveDownloads() {
-    return select(state => state.downloads.active);
+    const activeUrls = select(state => state.downloads.active);
+    const lastProgress = select(state => state.downloads.lastProgress);
+    
+    // Return enhanced download objects with last progress
+    return activeUrls.map(url => ({
+        url,
+        progress: lastProgress[url] || null
+    }));
 }
 
 /**
@@ -120,6 +131,24 @@ function handleDownloadProgress(downloadId, downloadRequest, response) {
     // Progress updates flow directly to UI - no state storage needed
     logger.debug('Download progress update:', downloadId, response.progress + '%');
     
+    // Store last progress for UI restoration (minimal state)
+    const progressData = {
+        command: 'progress',
+        downloadUrl: downloadRequest.downloadUrl,
+        masterUrl: downloadRequest.masterUrl || null,
+        filename: downloadRequest.filename,
+        ...response
+    };
+    
+    setState(state => ({
+        downloads: {
+            lastProgress: {
+                ...state.downloads.lastProgress,
+                [downloadId]: progressData
+            }
+        }
+    }));
+    
     // Handle completion/error - update state lists and stats
     if (response.success !== undefined || response.error) {
         setState(state => ({
@@ -128,6 +157,10 @@ function handleDownloadProgress(downloadId, downloadRequest, response) {
                 active: state.downloads.active.filter(id => id !== downloadId),
                 // Add to history
                 history: [downloadId, ...state.downloads.history],
+                // Clean up progress data
+                lastProgress: Object.fromEntries(
+                    Object.entries(state.downloads.lastProgress).filter(([id]) => id !== downloadId)
+                ),
                 // Update stats
                 stats: {
                     ...state.downloads.stats,
@@ -145,13 +178,7 @@ function handleDownloadProgress(downloadId, downloadRequest, response) {
     }
     
     // Always notify UI with progress via direct broadcast
-    broadcastToPopups({
-        command: 'progress',
-        downloadUrl: downloadRequest.downloadUrl,
-        masterUrl: downloadRequest.masterUrl || null,
-        filename: downloadRequest.filename,
-        ...response
-    });
+    broadcastToPopups(progressData);
 }
 
 /**
@@ -161,11 +188,15 @@ function handleDownloadProgress(downloadId, downloadRequest, response) {
 function handleDownloadError(downloadId, downloadRequest, error) {
     logger.error('Download error:', downloadId, error);
     
-    // Update state - remove from active, add to history, update stats
+    // Update state - remove from active, add to history, clean up progress, update stats
     setState(state => ({
         downloads: {
             active: state.downloads.active.filter(id => id !== downloadId),
             history: [downloadId, ...state.downloads.history],
+            // Clean up progress data
+            lastProgress: Object.fromEntries(
+                Object.entries(state.downloads.lastProgress).filter(([id]) => id !== downloadId)
+            ),
             stats: {
                 ...state.downloads.stats,
                 failed: state.downloads.stats.failed + 1,
