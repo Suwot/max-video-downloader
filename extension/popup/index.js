@@ -9,8 +9,6 @@
  */
 
 // Import ServiceInitializer to coordinate service initialization
-import { initializeServices, getActiveTab } from './services/service-initializer.js';
-import { themeService, applyTheme } from './services/theme-service.js';
 import { initializeUI, setScrollPosition, getScrollPosition, hideInitMessage } from './ui.js';
 import { renderVideos } from './video/video-renderer.js';
 import { updateDownloadProgress, checkForActiveDownloads } from './video/download-handler.js';
@@ -25,6 +23,20 @@ let backgroundPort = null;
 let currentTabId = null;
 let refreshInterval = null;
 let isEmptyState = true; // Track if we're currently showing "No videos found"
+let currentVideos = []; // Simple local video cache for current popup session
+let lastFetchTime = 0; // Track last fetch time to prevent excessive requests
+
+// Simple theme management - no service needed
+let currentTheme = null;
+
+// Simple group state cache - no service needed  
+let groupStates = {
+    hls: false,    // expanded by default
+    dash: false,   // expanded by default  
+    direct: false, // expanded by default
+    blob: true,    // collapsed by default
+    unknown: false // expanded by default
+};
 
 /**
  * Establish a connection to the background script
@@ -62,6 +74,7 @@ function handlePortMessage(message) {
     // Handle video updates with a unified approach
     if (message.command === 'videoStateUpdated' && message.videos) {
         logger.debug(`Received ${message.videos.length} videos via port`);
+        currentVideos = message.videos; // Update local cache
         updateVideoDisplay(message.videos);
         return;
     }
@@ -90,19 +103,17 @@ function handlePortMessage(message) {
         return;
     }
 
-    // Handle unified video updates - new handler for single video updates
+    // Handle unified video updates - direct update to local cache and UI
     if (message.command === 'videoUpdated') {
         logger.debug('Received unified video update:', message.url);
         
-        // Dispatch an event that VideoStateService will handle
-        document.dispatchEvent(new CustomEvent('video-updated', { 
-            detail: {
-                url: message.url,
-                video: message.video
-            }
-        }));
+        // Update video in local cache
+        const index = currentVideos.findIndex(v => v.url === message.url);
+        if (index !== -1) {
+            currentVideos[index] = { ...currentVideos[index], ...message.video };
+        }
         
-        // Also update the UI element directly for faster response
+        // Update the UI element directly
         import('./video/video-renderer.js').then(module => {
             module.updateVideoElement(message.url, message.video);
         });
@@ -130,13 +141,11 @@ function handlePortMessage(message) {
     if (message.command === 'previewCacheStats') {
         logger.debug('Received preview cache stats:', message.stats);
         
-        // Dispatch event for VideoStateService to handle
-        document.dispatchEvent(new CustomEvent('background-response', {
-            detail: {
-                command: 'previewCacheStats',
-                stats: message.stats
-            }
-        }));
+        // Trigger cache stats update directly
+        const cacheStatsElement = document.querySelector('.cache-stats');
+        if (cacheStatsElement) {
+            updateCacheStatsDisplay(cacheStatsElement, message.stats);
+        }
         return;
     }
 }
@@ -178,6 +187,9 @@ export function sendPortMessage(message) {
     return false;
 }
 
+// Export functions for use by other modules
+export { currentTabId, clearCaches, getPreviewCacheStats, updateCacheStatsDisplay, getTheme, setTheme, getGroupState, setGroupState };
+
 /**
  * Request videos for the current tab
  * @param {boolean} forceRefresh - Whether to force a refresh from the background
@@ -185,11 +197,178 @@ export function sendPortMessage(message) {
 function requestVideos(forceRefresh = false) {
     if (!currentTabId) return;
     
+    const now = Date.now();
+    
+    // Only fetch if forced or it's been a while since last fetch
+    if (!forceRefresh && now - lastFetchTime < 2000) {
+        logger.debug('Skipping fetch, too soon since last request');
+        return;
+    }
+    
+    lastFetchTime = now;
+    logger.debug('Fetching videos for tab:', currentTabId, forceRefresh ? '(forced)' : '');
+    
     sendPortMessage({ 
         command: 'getVideos', 
         tabId: currentTabId,
         forceRefresh
     });
+}
+
+/**
+ * Clear all caches and video data
+ */
+function clearCaches() {
+    logger.debug('Clearing caches');
+    
+    // Clear local cache
+    currentVideos = [];
+    
+    // Request background to clear all caches
+    sendPortMessage({
+        command: 'clearCaches'
+    });
+    
+    // Reset last fetch time to force refresh next time
+    lastFetchTime = 0;
+    
+    // Update UI to show empty state
+    updateVideoDisplay([]);
+}
+
+/**
+ * Get preview cache statistics
+ */
+function getPreviewCacheStats() {
+    sendPortMessage({
+        command: 'getPreviewCacheStats'
+    });
+}
+
+/**
+ * Update cache stats display element
+ * @param {HTMLElement} statsElement - The stats display element
+ * @param {Object} stats - The cache stats
+ */
+function updateCacheStatsDisplay(statsElement, stats) {
+    if (!statsElement) {
+        logger.warn('No stats element provided to updateCacheStatsDisplay');
+        return;
+    }
+    
+    if (!stats) {
+        statsElement.textContent = 'No cache stats available';
+        return;
+    }
+    
+    const count = stats.count || 0;
+    const sizeInKB = Math.round((stats.size || 0) / 1024);
+    
+    statsElement.textContent = `${count} previews (${sizeInKB} KB)`;
+}
+
+// Simple theme management functions
+/**
+ * Get current theme
+ */
+function getTheme() {
+    return currentTheme || 'dark';
+}
+
+/**
+ * Set theme and apply to document
+ */
+async function setTheme(theme) {
+    if (theme !== 'light' && theme !== 'dark') {
+        logger.error('Invalid theme:', theme);
+        return;
+    }
+    
+    currentTheme = theme;
+    logger.debug('Setting theme to:', theme);
+    
+    // Apply theme classes
+    if (theme === 'dark') {
+        document.body.classList.add('theme-dark');
+        document.body.classList.remove('theme-light');
+    } else {
+        document.body.classList.add('theme-light');
+        document.body.classList.remove('theme-dark');
+    }
+    
+    // Save to storage
+    try {
+        await chrome.storage.sync.set({ theme });
+    } catch (error) {
+        logger.error('Error saving theme:', error);
+    }
+}
+
+/**
+ * Initialize theme from storage
+ */
+async function initializeTheme() {
+    try {
+        const result = await chrome.storage.sync.get(['theme']);
+        const prefersDarkMode = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        const theme = result.theme !== undefined ? result.theme : (prefersDarkMode ? 'dark' : 'light');
+        
+        await setTheme(theme);
+        
+        // Listen for system theme changes
+        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', async (event) => {
+            // Only update if theme was not explicitly set by user
+            const currentResult = await chrome.storage.sync.get(['theme']);
+            if (currentResult.theme === undefined) {
+                await setTheme(event.matches ? 'dark' : 'light');
+            }
+        });
+        
+        return theme;
+    } catch (error) {
+        logger.error('Error initializing theme:', error);
+        await setTheme('dark');
+        return 'dark';
+    }
+}
+
+// Simple group state management functions  
+/**
+ * Get group state for a specific type
+ */
+function getGroupState(type) {
+    return groupStates[type] ?? false;
+}
+
+/**
+ * Set group state for a specific type
+ */
+async function setGroupState(type, isCollapsed) {
+    groupStates[type] = isCollapsed;
+    logger.debug(`Setting group state for ${type} to ${isCollapsed ? 'collapsed' : 'expanded'}`);
+    
+    try {
+        await chrome.storage.local.set({ groupState: groupStates });
+    } catch (error) {
+        logger.error('Error saving group state:', error);
+    }
+}
+
+/**
+ * Initialize group states from storage
+ */
+async function initializeGroupStates() {
+    try {
+        const result = await chrome.storage.local.get(['groupState']);
+        if (result.groupState) {
+            groupStates = { ...groupStates, ...result.groupState };
+        }
+        logger.debug('Initialized group states:', groupStates);
+        return groupStates;
+    } catch (error) {
+        logger.error('Error initializing group states:', error);
+        return groupStates;
+    }
 }
 
 /**
@@ -226,11 +405,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     try {
         logger.debug('Popup initializing...');
         
-        // Initialize all services in the proper order
-        const serviceState = await initializeServices();
-        
-        // Apply theme using ThemeService
-        applyTheme(themeService.getTheme());
+        // Initialize theme and group states directly
+        await initializeTheme();
+        await initializeGroupStates();
         
         // Initialize UI elements
         initializeUI();
@@ -260,15 +437,12 @@ document.addEventListener('DOMContentLoaded', async () => {
             logger.error('Error checking for active downloads:', err);
         });
         
-        // Add Clear Cache button handler - simplified for in-memory approach
+        // Add Clear Cache button handler - direct cache clearing
         document.getElementById('clear-cache-btn')?.addEventListener('click', async () => {
             logger.debug('Clear cache button clicked');
+            clearCaches();
             requestVideos(true);
         });
-        
-        // Watch for system theme changes
-        const darkModeMediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-        darkModeMediaQuery.addEventListener('change', themeService.handleSystemThemeChange.bind(themeService));
 
         // Set up scroll position handling
         const container = document.getElementById('videos');
@@ -322,3 +496,15 @@ window.addEventListener('unload', () => {
         }
     }
 });
+
+/**
+ * Get current active tab
+ * @returns {Promise<Object>} Active tab
+ */
+export async function getActiveTab() {
+    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tabs || !tabs[0]) {
+        throw new Error('Could not determine active tab');
+    }
+    return tabs[0];
+}

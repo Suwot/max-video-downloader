@@ -1,4 +1,4 @@
-import { getAllGroupStates, setGroupState } from '../services/group-state-service.js';
+import { getGroupState, setGroupState } from '../index.js';
 import { createVideoElement } from './video-item.js';
 
 /**
@@ -64,14 +64,14 @@ export function createTypeGroup(type, videos) {
             <path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"/>
         </svg>
     `;
-    if (getAllGroupStates()[type]) {
+    if (getGroupState(type)) {
         toggle.classList.add('collapsed');
     }
     header.append(title, toggle);
     // Create content
     const content = document.createElement('div');
     content.className = 'media-type-content';
-    if (getAllGroupStates()[type]) {
+    if (getGroupState(type)) {
         content.classList.add('collapsed');
     }
     // Add videos to group

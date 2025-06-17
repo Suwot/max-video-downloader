@@ -6,8 +6,7 @@
  * - Manages responsive UI adjustments
  */
 
-import { getTheme, setTheme } from './services/theme-service.js';
-import { clearCaches, getPreviewCacheStats } from './services/video-state-service.js';
+import { clearCaches, getPreviewCacheStats, updateCacheStatsDisplay, getTheme, setTheme } from './index.js';
 
 const logger = console; // Using console directly for UI logging
 
@@ -44,7 +43,7 @@ function createCacheStatsElement() {
     const element = document.createElement('div');
     element.className = 'cache-stats';
     element.textContent = 'Loading cache stats...';
-    updateCacheStats(element);
+    getPreviewCacheStats(); // Request stats via port message
     return element;
 }
 
@@ -79,12 +78,12 @@ async function handleClearCacheClick(event) {
     button.disabled = true;
     
     try {
-        await clearCaches();
+        clearCaches();
         
-        // Update cache stats
+        // Request updated cache stats
         const cacheStats = document.querySelector('.cache-stats');
         if (cacheStats) {
-            updateCacheStats(cacheStats);
+            getPreviewCacheStats(); // This will trigger updateCacheStatsDisplay via port message
         }
         
         // Show success using shared tooltip
@@ -185,31 +184,6 @@ export function initializeUI() {
     };
 }
 
-/**
- * Update cache statistics display
- */
-async function updateCacheStats(statsElement) {
-    if (!statsElement) {
-        logger.warn('No stats element provided to updateCacheStats');
-        return;
-    }
-    
-    try {
-        const stats = await getPreviewCacheStats();
-        if (!stats) {
-            statsElement.textContent = 'No cache stats available';
-            return;
-        }
-        
-        const count = stats.count || 0;
-        const sizeInKB = Math.round((stats.size || 0) / 1024);
-        
-        statsElement.textContent = `${count} previews (${sizeInKB} KB)`;
-    } catch (error) {
-        logger.error('Error getting cache stats:', error);
-        statsElement.textContent = 'Cache stats unavailable';
-    }
-}
 
 // Scroll position management
 export function setScrollPosition(tabId, position) {
@@ -277,8 +251,8 @@ export async function toggleTheme() {
     return newTheme;
 }
 
-export async function clearAllCaches() {
-    await clearCaches();
+export function clearAllCaches() {
+    clearCaches();
     showToast('Caches cleared, reloading data...');
     return true;
 }
