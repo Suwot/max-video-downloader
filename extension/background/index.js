@@ -1,7 +1,7 @@
 // Import services
 import { initStateManager } from './state/state-manager.js';
 import { initHeaderTracking } from '../shared/utils/headers-utils.js';
-import { getAllDetectedVideos, initVideoManager } from './processing/video-manager.js';
+import { initVideoManager } from './processing/video-manager.js';
 import { initTabTracking } from './state/tab-tracker.js';
 import { initUICommunication } from './messaging/popup-communication.js';
 import { initDownloadManager } from './download/download-manager.js';
@@ -52,35 +52,7 @@ function startDebugLogger() {
             console.log(`Tab ${tabId}: (urlMap is not a Map)`, urlMap);
           }
         }
-      } else {
-        // Fallback to using the getAllDetectedVideos function
-        console.log('Using getAllDetectedVideos() - flattened view:');
-        const videos = getAllDetectedVideos();
-        if (videos instanceof Map) {
-          console.log('Total videos across all tabs:', videos.size);
-          
-          // Group by tab ID
-          const byTab = {};
-          try {
-            for (const [url, video] of videos.entries()) {
-              const tabId = video.tabId;
-              if (!byTab[tabId]) byTab[tabId] = [];
-              byTab[tabId].push({ url, ...video });
-            }
-            
-            // Print the grouping
-            for (const tabId in byTab) {
-              console.log(`Tab ${tabId}: (${byTab[tabId].length} videos)`);
-              console.log('  Videos:', byTab[tabId]);
-            }
-          } catch (err) {
-            console.error('  Error processing videos by tab:', err);
-            console.log('  Raw videos object:', videos);
-          }
-        } else {
-          console.log('getAllDetectedVideos() did not return a Map:', videos);
-        }
-      }
+      } 
     } catch (e) {
       console.error('Error in debug logger:', e);
     }
