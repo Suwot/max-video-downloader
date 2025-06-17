@@ -131,7 +131,7 @@ function handleDownloadProgress(downloadId, downloadRequest, response) {
     // Progress updates flow directly to UI - no state storage needed
     logger.debug('Download progress update:', downloadId, response.progress + '%');
     
-    // Store last progress for UI restoration (minimal state)
+    // Create complete progress data for UI broadcast
     const progressData = {
         command: 'progress',
         downloadUrl: downloadRequest.downloadUrl,
@@ -140,11 +140,28 @@ function handleDownloadProgress(downloadId, downloadRequest, response) {
         ...response
     };
     
+    // Store filtered progress data for UI restoration (exclude completion flags)
+    const progressDataForStorage = {
+        command: 'progress',
+        downloadUrl: downloadRequest.downloadUrl,
+        masterUrl: downloadRequest.masterUrl || null,
+        filename: downloadRequest.filename,
+        progress: response.progress,
+        speed: response.speed,
+        eta: response.eta,
+        segmentProgress: response.segmentProgress,
+        currentSegment: response.currentSegment,
+        totalSegments: response.totalSegments,
+        downloadedBytes: response.downloadedBytes,
+        totalBytes: response.totalBytes
+        // Exclude: success, error flags for storage
+    };
+    
     setState(state => ({
         downloads: {
             lastProgress: {
                 ...state.downloads.lastProgress,
-                [downloadId]: progressData
+                [downloadId]: progressDataForStorage
             }
         }
     }));
@@ -177,7 +194,7 @@ function handleDownloadProgress(downloadId, downloadRequest, response) {
         }
     }
     
-    // Always notify UI with progress via direct broadcast
+    // Always notify UI with complete progress data via direct broadcast
     broadcastToPopups(progressData);
 }
 
