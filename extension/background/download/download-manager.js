@@ -7,11 +7,9 @@ import { createLogger } from '../../shared/utils/logger.js';
 import { setState, select } from '../state/state-manager.js';
 import nativeHostService from '../messaging/native-host-service.js';
 import { getRequestHeaders } from '../../shared/utils/headers-utils.js';
+import { broadcastToPopups } from '../messaging/popup-communication.js';
 
 const logger = createLogger('Download Manager');
-
-// Progress update subscribers (UI communication layer)
-const progressSubscribers = new Set();
 
 /**
  * Initialize download manager
@@ -93,8 +91,8 @@ export async function startDownload(downloadRequest) {
             }
         }));
         
-        // Notify error to UI
-        notifyProgressSubscribers({
+        // Notify error to UI via direct broadcast
+        broadcastToPopups({
             command: 'error',
             downloadUrl: downloadRequest.downloadUrl,
             masterUrl: downloadRequest.masterUrl || null,
@@ -112,19 +110,6 @@ export async function startDownload(downloadRequest) {
  */
 export function getActiveDownloads() {
     return select(state => state.downloads.active);
-}
-
-/**
- * Subscribe to download progress updates
- * @param {Function} callback - Progress callback function
- * @returns {Function} Unsubscribe function
- */
-export function subscribeToProgress(callback) {
-    progressSubscribers.add(callback);
-    
-    return () => {
-        progressSubscribers.delete(callback);
-    };
 }
 
 /**
@@ -159,8 +144,8 @@ function handleDownloadProgress(downloadId, downloadRequest, response) {
         }
     }
     
-    // Always notify UI with progress (includes filename from original request)
-    notifyProgressSubscribers({
+    // Always notify UI with progress via direct broadcast
+    broadcastToPopups({
         command: 'progress',
         downloadUrl: downloadRequest.downloadUrl,
         masterUrl: downloadRequest.masterUrl || null,
@@ -189,8 +174,8 @@ function handleDownloadError(downloadId, downloadRequest, error) {
         }
     }));
     
-    // Notify UI of error
-    notifyProgressSubscribers({
+    // Notify UI of error via direct broadcast
+    broadcastToPopups({
         command: 'error',
         downloadUrl: downloadRequest.downloadUrl,
         masterUrl: downloadRequest.masterUrl || null,
@@ -225,19 +210,4 @@ function createCompletionNotification(filename) {
         title: 'Download Complete',
         message: `Finished: ${filename}`
     });
-}
-
-/**
- * Notify all progress subscribers
- * @private
- */
-function notifyProgressSubscribers(message) {
-    for (const callback of progressSubscribers) {
-        try {
-            callback(message);
-        } catch (error) {
-            logger.error('Error in progress subscriber:', error);
-            progressSubscribers.delete(callback);
-        }
-    }
 }

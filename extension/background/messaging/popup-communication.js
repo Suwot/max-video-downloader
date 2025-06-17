@@ -5,7 +5,7 @@
 
 // Add static imports at the top
 import { clearVideoCache, sendVideoUpdateToUI } from '../processing/video-manager.js';
-import { startDownload, getActiveDownloads, subscribeToProgress } from '../download/download-manager.js';
+import { startDownload, getActiveDownloads } from '../download/download-manager.js';
 import { createLogger } from '../../shared/utils/logger.js';
 import { clearCache, getCacheStats } from '../../shared/utils/preview-cache.js';
 
@@ -208,8 +208,8 @@ async function handleDownloadRequest(message, port) {
 
 /**
  * Initialize the UI communication service
- * @returns {Promise<boolean>} Success status
  */
+
 export async function initUICommunication() {
     logger.info('Initializing UI communication service');
     
@@ -221,11 +221,6 @@ export async function initUICommunication() {
         } else {
             logger.warn('Unknown port connection:', port.name);
         }
-    });
-    
-    // Subscribe to download progress updates and forward to UI
-    subscribeToProgress((progressMessage) => {
-        broadcastToPopups(progressMessage);
     });
     
     return true;
