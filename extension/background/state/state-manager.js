@@ -34,17 +34,13 @@ const initialState = {
         }
     },
     downloads: {
-        items: {},      // All downloads indexed by id (data-url)
-        queue: [],      // Ordered queue of pending downloads
         active: [],     // List of active download ids
+        queue: [],      // Ordered queue of pending downloads
         history: [],    // List of completed download ids (limited size)
-        byTabId: {},    // Downloads organized by tab
         stats: {
-            completed: 0,
-            failed: 0,
-            totalBytes: 0,
-            averageSpeed: 0,
-            lastDownload: null
+            completed: 0, // total
+            failed: 0, // total
+            lastDownload: null // timestamp of last download
         }
     },
     tabs: {
@@ -98,7 +94,7 @@ const persistenceConfig = {
     },
     downloads: {
         storage: 'local',
-        subset: ['history', 'items', 'stats'],  // Only store history
+        subset: ['history', 'stats'],  // Only store history and stats (no items)
         ttl: 30 * 24 * 60 * 60 * 1000  // 30 days
     },
     nativeHost: {
@@ -119,6 +115,9 @@ const persistenceConfig = {
 
 // Current state
 let state = structuredClone ? structuredClone(initialState) : JSON.parse(JSON.stringify(initialState));
+
+// State initialization tracking
+let stateInitialized = false;
 
 // Subscribers map: key = subscriberId, value = {callback, selector, lastValue, options}
 const subscribers = new Map();
@@ -299,7 +298,20 @@ function resetState(preserveSettings = true) {
  * @returns {Object|null} Download object or null if not found
  */
 function getDownloadById(downloadId) {
-    return cloneData(state.downloads.items[downloadId] || null);
+    // Downloads are now just URLs in active/history lists
+    // Return basic object if found in any list
+    const isActive = state.downloads.active.includes(downloadId);
+    const isInHistory = state.downloads.history.includes(downloadId);
+    
+    if (isActive || isInHistory) {
+        return {
+            id: downloadId,
+            downloadUrl: downloadId,
+            status: isActive ? 'downloading' : 'completed'
+        };
+    }
+    
+    return null;
 }
 
 /**
@@ -307,9 +319,7 @@ function getDownloadById(downloadId) {
  * @returns {Array} Array of active download objects
  */
 function getActiveDownloads() {
-    return state.downloads.active.map(id => 
-        cloneData(state.downloads.items[id])
-    ).filter(Boolean);
+    return state.downloads.active.slice(); // Return copy of URL array
 }
 
 /**
@@ -323,9 +333,7 @@ function getDownloadHistory(limit) {
         historyIds = historyIds.slice(0, limit);
     }
     
-    return historyIds.map(id => 
-        cloneData(state.downloads.items[id])
-    ).filter(Boolean);
+    return historyIds.slice(); // Return copy of URL array
 }
 
 /**
@@ -336,8 +344,12 @@ async function initStateManager() {
     logger.info('Initializing state manager');
     
     try {
-        // Load persisted state from storage
+        // Load persisted state from storage BEFORE allowing subscriptions
         await loadPersistedState();
+        
+        // Mark as initialized - now subscriptions can receive notifications
+        stateInitialized = true;
+        logger.debug('State fully initialized - subscribers can now receive notifications');
         
         // Set up cleanup interval
         setupCleanupInterval();
@@ -370,24 +382,6 @@ async function loadPersistedState() {
             // Merge with initial state
             state = mergeDeep(state, appState);
         }
-        
-        // Load download history if configured
-        if (state.settings.keepHistory) {
-            const { downloadHistory } = await chrome.storage.local.get('downloadHistory');
-            if (downloadHistory) {
-                logger.debug('Loaded download history');
-                
-                // Apply history but respect the limit
-                const historyLimit = state.settings.historyLimit || 50;
-                
-                setState(state => ({
-                    downloads: {
-                        items: { ...downloadHistory.items },
-                        history: downloadHistory.history.slice(0, historyLimit)
-                    }
-                }));
-            }
-        }
     } catch (error) {
         logger.error('Error loading persisted state:', error);
         // Continue with default state on error
@@ -401,10 +395,8 @@ async function loadPersistedState() {
 function schedulePersistence() {
     if (batchingUpdates) return;
     
-    // Use requestIdleCallback when available, otherwise setTimeout
-    const scheduler = window.requestIdleCallback || setTimeout;
-    
-    scheduler(() => persistState(), { timeout: 2000 });
+    // In Chrome extension background context, use setTimeout instead of requestIdleCallback
+    setTimeout(() => persistState(), 100);
 }
 
 /**
@@ -441,26 +433,6 @@ function persistState() {
     chrome.storage.local.set({ appState: persistData }).catch(error => {
         logger.error('Failed to persist state:', error);
     });
-    
-    // Store download history separately if needed
-    if (state.settings.keepHistory && state.downloads.history.length > 0) {
-        const historyItems = {};
-        state.downloads.history.forEach(id => {
-            if (state.downloads.items[id]) {
-                historyItems[id] = state.downloads.items[id];
-            }
-        });
-        
-        chrome.storage.local.set({ 
-            downloadHistory: {
-                items: historyItems,
-                history: state.downloads.history,
-                timestamp: Date.now()
-            }
-        }).catch(error => {
-            logger.error('Failed to persist download history:', error);
-        });
-    }
 }
 
 /**
@@ -490,18 +462,8 @@ function performStateCleanup() {
         const downloadHistory = state.downloads.history;
         
         if (downloadHistory.length > historyLimit) {
-            // Get IDs to remove
-            const removeIds = downloadHistory.slice(historyLimit);
-            const newItems = { ...state.downloads.items };
-            
-            // Remove old items
-            removeIds.forEach(id => {
-                delete newItems[id];
-            });
-            
             return {
                 downloads: {
-                    items: newItems,
                     history: downloadHistory.slice(0, historyLimit)
                 }
             };
@@ -523,18 +485,15 @@ function performStateCleanup() {
             setState(state => {
                 const newTracked = { ...state.tabs.tracked };
                 const newVideosByTab = { ...state.videos.byTab };
-                const newDownloadsByTab = { ...state.downloads.byTabId };
                 
                 inactiveTabIds.forEach(tabId => {
                     delete newTracked[tabId];
                     delete newVideosByTab[tabId];
-                    delete newDownloadsByTab[tabId];
                 });
                 
                 return {
                     tabs: { tracked: newTracked },
-                    videos: { byTab: newVideosByTab },
-                    downloads: { byTabId: newDownloadsByTab }
+                    videos: { byTab: newVideosByTab }
                 };
             });
         }
@@ -547,6 +506,11 @@ function performStateCleanup() {
  * @private
  */
 function notifySubscribers(prevState) {
+    // Only notify if state is fully initialized
+    if (!stateInitialized) {
+        return;
+    }
+    
     subscribers.forEach((subscriber, id) => {
         try {
             const { callback, selector } = subscriber;

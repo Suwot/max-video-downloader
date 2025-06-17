@@ -5,16 +5,12 @@
 
 // Add static imports at the top
 import { clearVideoCache, sendVideoUpdateToUI } from '../processing/video-manager.js';
-import nativeHostService from './native-host-service.js';
-import { getRequestHeaders } from '../../shared/utils/headers-utils.js';
+import { startDownload, getActiveDownloads, subscribeToProgress } from '../download/download-manager.js';
 import { createLogger } from '../../shared/utils/logger.js';
 import { clearCache, getCacheStats } from '../../shared/utils/preview-cache.js';
 
 // Track all popup connections - simplified single map
 const popupPorts = new Map(); // key = portId, value = {port, tabId, url}
-
-// Track active downloads for popup restoration - minimal state
-const activeDownloads = new Map(); // key = downloadUrl, value = {downloadUrl, masterUrl, filename, progress, status, startTime}
 
 // Create a logger instance for the UI Communication module
 const logger = createLogger('UI Communication');
@@ -99,7 +95,7 @@ async function handlePortMessage(message, port, portId) {
             
         case 'getActiveDownloads':
             try {
-                const activeDownloadList = Array.from(activeDownloads.values());
+                const activeDownloadList = getActiveDownloads();
                 port.postMessage({
                     command: 'activeDownloadsList',
                     downloads: activeDownloadList
@@ -186,107 +182,22 @@ function getActivePopupPortForTab(tabId) {
 }
 
 /**
- * Streamlined download handler - core of simplified flow
+ * Streamlined download handler - delegates to download manager
  * @param {Object} message - Download request message
  * @param {Port} port - Port connection for immediate response
  */
 async function handleDownloadRequest(message, port) {
-    // Check for duplicate download (duplicate prevention)
-    if (activeDownloads.has(message.downloadUrl)) {
-        logger.debug('Download already active:', message.downloadUrl);
-        const existingDownload = activeDownloads.get(message.downloadUrl);
-        
-        // Send current state to requesting popup
-        port.postMessage({
-            command: 'progress',
-            downloadUrl: message.downloadUrl,
-            masterUrl: message.masterUrl || null,
-            filename: message.filename,
-            progress: existingDownload.progress || 0,
-            status: existingDownload.status
-        });
-        return;
-    }
+    logger.debug('Download request received, delegating to download manager:', message.downloadUrl);
+    logger.debug('Full download request message:', message);
     
     try {
-        // Prepare native host message
-        const nativeHostMessage = {
-            command: 'download',
-            downloadUrl: message.downloadUrl,
-            filename: message.filename,
-            savePath: message.savePath || null,
-            type: message.type,
-            fileSizeBytes: message.fileSizeBytes || null,
-            segmentCount: message.segmentCount || null,
-            preferredContainer: message.preferredContainer || null,
-            originalContainer: message.originalContainer || 'mp4',
-            audioOnly: message.audioOnly || false,
-            streamSelection: message.streamSelection || null,
-            masterUrl: message.masterUrl || null,
-            duration: message.duration || null,
-            headers: getRequestHeaders(message.tabId || -1, message.downloadUrl) || {}
-        };
-        
-        // Add to active downloads map (single source of truth)
-        activeDownloads.set(message.downloadUrl, {
-            downloadUrl: message.downloadUrl,
-            masterUrl: message.masterUrl || null,
-            filename: message.filename,
-            progress: 0,
-            status: 'downloading',
-            startTime: Date.now()
-        });
-        
-        // Create notification immediately
-        const notificationId = `download-${Date.now()}`;
-        chrome.notifications.create(notificationId, {
-            type: 'basic',
-            iconUrl: '../../icons/48.png',
-            title: 'Downloading Video',
-            message: `Starting download: ${message.filename}`
-        });
-        
-        // Start download with progress stream
-        nativeHostService.sendMessage(nativeHostMessage, (response) => {
-            // Update active downloads state
-            if (activeDownloads.has(message.downloadUrl)) {
-                const download = activeDownloads.get(message.downloadUrl);
-                download.progress = response.progress || 0;
-                download.status = response.success !== undefined ? 'complete' : 'downloading';
-                
-                // Clean up completed downloads
-                if (response.success !== undefined || response.error) {
-                    activeDownloads.delete(message.downloadUrl);
-                }
-            }
-            
-            // Broadcast progress to all popups (they will map if needed)
-            broadcastToPopups({
-                command: 'progress',
-                downloadUrl: message.downloadUrl,
-                masterUrl: message.masterUrl || null,
-                filename: message.filename,
-                ...response
-            });
-        }).catch(error => {
-            logger.error('Download failed:', error);
-            activeDownloads.delete(message.downloadUrl);
-            
-            broadcastToPopups({
-                command: 'error',
-                downloadUrl: message.downloadUrl,
-                masterUrl: message.masterUrl || null,
-                error: error.message
-            });
-        });
-        
-        logger.debug('🔄 Download initiated:', message.downloadUrl);
-        
+        // Pure delegation - download manager handles all business logic
+        await startDownload(message);
+        logger.debug('Download manager accepted the request successfully');
     } catch (error) {
-        logger.error('Download setup failed:', error);
-        activeDownloads.delete(message.downloadUrl);
-        
-        broadcastToPopups({
+        logger.error('Download delegation failed:', error);
+        // Send error back to UI
+        port.postMessage({
             command: 'error',
             downloadUrl: message.downloadUrl,
             masterUrl: message.masterUrl || null,
@@ -310,6 +221,11 @@ export async function initUICommunication() {
         } else {
             logger.warn('Unknown port connection:', port.name);
         }
+    });
+    
+    // Subscribe to download progress updates and forward to UI
+    subscribeToProgress((progressMessage) => {
+        broadcastToPopups(progressMessage);
     });
     
     return true;
