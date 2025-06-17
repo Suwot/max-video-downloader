@@ -128,20 +128,10 @@ export function getActiveDownloads() {
  * @private
  */
 function handleDownloadProgress(downloadId, downloadRequest, response) {
-    // Progress updates flow directly to UI - no state storage needed
     logger.debug('Download progress update:', downloadId, response.progress + '%');
     
-    // Create complete progress data for UI broadcast
-    const progressData = {
-        command: 'progress',
-        downloadUrl: downloadRequest.downloadUrl,
-        masterUrl: downloadRequest.masterUrl || null,
-        filename: downloadRequest.filename,
-        ...response
-    };
-    
-    // Store filtered progress data for UI restoration (exclude completion flags)
-    const progressDataForStorage = {
+    // Single progress data creation with conditional filtering
+    const baseProgressData = {
         command: 'progress',
         downloadUrl: downloadRequest.downloadUrl,
         masterUrl: downloadRequest.masterUrl || null,
@@ -154,18 +144,23 @@ function handleDownloadProgress(downloadId, downloadRequest, response) {
         totalSegments: response.totalSegments,
         downloadedBytes: response.downloadedBytes,
         totalBytes: response.totalBytes
-        // Exclude: success, error flags for storage
     };
-    
+
+    // Only add completion flags for UI broadcast
+    const broadcastData = (response.success !== undefined || response.error)
+        ? { ...baseProgressData, success: response.success, error: response.error }
+        : baseProgressData;
+
+    // Store base data (without completion flags) for UI restoration
     setState(state => ({
         downloads: {
             lastProgress: {
                 ...state.downloads.lastProgress,
-                [downloadId]: progressDataForStorage
+                [downloadId]: baseProgressData
             }
         }
     }));
-    
+
     // Handle completion/error - update state lists and stats
     if (response.success !== undefined || response.error) {
         setState(state => ({
@@ -194,8 +189,8 @@ function handleDownloadProgress(downloadId, downloadRequest, response) {
         }
     }
     
-    // Always notify UI with complete progress data via direct broadcast
-    broadcastToPopups(progressData);
+    // Always notify UI with appropriate progress data via direct broadcast
+    broadcastToPopups(broadcastData);
 }
 
 /**
