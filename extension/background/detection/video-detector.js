@@ -21,12 +21,12 @@ const dashSegmentPathCache = new Map();
 export function processWebRequest(tabId, url, metadata = null) {
     if (tabId < 0 || !url) return;
 
-    logger.debug(`Processing video URL: ${url} with metadata:`, metadata);
     
     // First check if we should ignore this URL
     if (shouldIgnoreForMediaDetection(url, metadata)) {
         return;
     }
+    logger.debug(`Processing video URL after ShouldIgnoreForMediaDetection: ${url} with metadata:`, metadata);
     
     // If we have a content type from metadata, check it first - this is our primary detection for DASH/HLS
     if (metadata && metadata.contentType) {
@@ -250,14 +250,14 @@ function setupWebRequestListener() {
                 }
             }
 
+            // logger.debug(`Received headers for URL:`, details);
+
             // Call the video detector with the metadata
             processWebRequest(details.tabId, details.url, metadata);
         },
         { urls: ["<all_urls>"], types: ["xmlhttprequest", "other", "media"] },
         ["responseHeaders"]
     );
-    
-    logger.debug('Web request listener set up for video detection');
 }
 
 /**

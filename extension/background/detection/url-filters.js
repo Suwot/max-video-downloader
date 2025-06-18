@@ -20,10 +20,13 @@ const IGNORE_EXTENSIONS = [
     '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.txt',
     
     // Other web assets
-    '.map', '.html', '.htm', '.php', '.asp', '.aspx', '.jsp',
+    '.map', '.html', '.htm', '.asp', '.aspx', '.jsp', '.vtt',
 
     // Media segments (not complete files)
-    '.ts', '.m4s', '.m4v', '.m4a'
+    '.ts', '.m4s', '.m4v', '.m4a',
+
+    // audio formats
+    '.mp3', '.aac', '.ogg', '.opus', '.flac', '.wav', '.m4b', '.m4p', '.wma', '.aiff',
 ];
 
 // Common domains that are definitely not media content
@@ -104,9 +107,27 @@ const IGNORE_PATH_PATTERNS = [
     /\/(checkout|payment|cart|basket)\//i
 ];
 
+// Range request patterns that indicate partial content (not complete media files)
+const RANGE_REQUEST_PATTERNS = [
+    // Byte range parameters
+    /[?&]bytes=\d+-\d+/i,
+    /[?&]range=\d+-\d+/i,
+    
+    // Offset and length parameters
+    /[?&]offset=\d+/i,
+    /[?&]from=\d+[&]to=\d+/i,
+    /[?&]start=\d+[&]end=\d+/i,
+    /[?&]start=\d+[&]length=\d+/i,
+    
+    // Chunk/segment indicators
+    /[?&](partial|chunk|segment)=\d+/i,
+    /[?&]part=\d+/i
+];
+
 // Segment patterns for identifying media segments
 const SEGMENT_PATTERNS = [
     /segment[-_]\d+/i,
+    /segment(\/|\?|$|#)/i, // matches "/segment" as a path segment or at end
     /chunk[-_]\d+/i, 
     /frag[-_]\d+/i,
     /seq[-_]\d+/i,
@@ -201,6 +222,11 @@ function shouldIgnoreForHeaderCapture(url) {
             return true;
         }
         
+        // Check for range request parameters (partial content)
+        if (RANGE_REQUEST_PATTERNS.some(pattern => pattern.test(url))) {
+            return true;
+        }
+        
         // For header capture, be inclusive (don't filter segments)
         return false;
     } catch (err) {
@@ -247,6 +273,11 @@ function shouldIgnoreForMediaDetection(url, metadata = null) {
         
         // Check path patterns
         if (IGNORE_PATH_PATTERNS.some(pattern => pattern.test(analysis.pathname))) {
+            return true;
+        }
+        
+        // Check for range request parameters (partial content)
+        if (RANGE_REQUEST_PATTERNS.some(pattern => pattern.test(url))) {
             return true;
         }
         
