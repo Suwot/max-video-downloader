@@ -30,7 +30,6 @@ const initialState = {
             lastDownload: null // timestamp of last download
         }
     },
-    tabsWithVideos: {}, // simple set of tabIds that have videos
     nativeHost: {
         connected: false,
         connectionTime: null,
@@ -454,24 +453,21 @@ function performStateCleanup() {
     // Check for inactive tabs and clean up if necessary
     chrome.tabs.query({}, tabs => {
         const activeTabIds = new Set(tabs.map(tab => tab.id));
-        const trackedTabIds = Object.keys(state.tabs.tracked).map(Number);
+        const tabsWithVideos = Object.keys(state.videos.byTab).map(Number);
         
-        const inactiveTabIds = trackedTabIds.filter(id => !activeTabIds.has(id));
+        const inactiveTabIds = tabsWithVideos.filter(id => !activeTabIds.has(id));
         
         if (inactiveTabIds.length > 0) {
             logger.debug(`Cleaning up ${inactiveTabIds.length} inactive tabs`);
             
             setState(state => {
-                const newTracked = { ...state.tabs.tracked };
                 const newVideosByTab = { ...state.videos.byTab };
                 
                 inactiveTabIds.forEach(tabId => {
-                    delete newTracked[tabId];
                     delete newVideosByTab[tabId];
                 });
                 
                 return {
-                    tabs: { tracked: newTracked },
                     videos: { byTab: newVideosByTab }
                 };
             });
