@@ -8,10 +8,7 @@ import { initDownloadManager } from './download/download-manager.js';
 import { createLogger } from '../shared/utils/logger.js';
 
 // Import video detection
-import { 
-    cleanupDetectionContext,
-    initVideoDetector 
-} from './detection/video-detector.js';
+import { initVideoDetector } from './detection/video-detector.js';
 
 // Create a logger instance for the background script
 const logger = createLogger('Background');
@@ -89,11 +86,6 @@ startDebugLogger();
 initializeServices();
 
 logger.debug('Background script initialized');
-
-// Add cleanup function to handle tab closure
-export function cleanupMpdContext(tabId) {
-    cleanupDetectionContext(tabId);
-}
 
 // Sleep handler
 chrome.runtime.onSuspend.addListener(() => {

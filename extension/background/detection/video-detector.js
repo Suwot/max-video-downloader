@@ -158,7 +158,7 @@ export function registerDashSegmentPaths(tabId, paths, url = null) {
  * Clean up detection context for a tab
  * @param {number} tabId - Tab ID to clean up
  */
-export function cleanupDetectionContext(tabId) {
+export function cleanupMPDContextForTab(tabId) {
     if (tabsWithMpd.has(tabId)) {
         tabsWithMpd.delete(tabId);
         logger.debug(`Cleaned up MPD context for tab ${tabId}`);

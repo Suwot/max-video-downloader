@@ -9,11 +9,7 @@ import nativeHostService from '../messaging/native-host-service.js';
 import { getActivePopupPortForTab } from '../messaging/popup-communication.js';
 import { parseHlsManifest } from './hls-parser.js';
 import { parseDashManifest } from './dash-parser.js';
-import { 
-    getRequestHeaders, 
-    applyHeaderRule,
-    clearAllHeaderCaches 
-} from '../../shared/utils/headers-utils.js';
+import { getRequestHeaders, applyHeaderRule } from '../../shared/utils/headers-utils.js';
 import { createLogger } from '../../shared/utils/logger.js';
 import { getPreview, storePreview } from '../../shared/utils/preview-cache.js';
 import { standardizeResolution, getFilenameFromUrl } from '../../shared/utils/video-utils.js';
@@ -661,7 +657,7 @@ function sendVideoUpdateToUI(tabId, singleVideoUrl = null, singleVideoObj = null
 }
 
 // Clean up for tab
-function cleanupForTab(tabId) {
+function cleanupVideosForTab(tabId) {
     logger.debug(`Tab removed: ${tabId}`);
 
     if (videoProcessingPipeline.queue.length > 0) {
@@ -703,7 +699,7 @@ async function initVideoManager() {
                 details.transitionQualifiers.indexOf('from_address_bar') !== -1) {
                 
                 logger.debug(`Navigation with transitionType: ${details.transitionType}, clearing tab ${details.tabId}`);
-                cleanupForTab(details.tabId);
+                cleanupVideosForTab(details.tabId);
             }
         });
         
@@ -716,18 +712,6 @@ async function initVideoManager() {
         logger.error('Failed to initialize video manager:', error);
         return false;
     }
-}
-
-/**
- * Clear all video caches for all tabs
- * This is used by the UI to force a complete refresh
- */
-function clearVideoCache() {
-    logger.debug('Clearing all video caches');
-    
-    allDetectedVideos.clear();
-    variantMasterMap.clear();
-    clearAllHeaderCaches();
 }
 
 /**
@@ -868,13 +852,24 @@ function getVideosForDisplay(tabId) {
         .sort((a, b) => b.timestampDetected - a.timestampDetected);
 }
 
+// function to cleanup both video maps: allDetectedVideos variantMasterMap – in global scope
+function cleanupAllVideos() {
+    logger.debug('Cleaning up all detected videos');
+    allDetectedVideos.clear();
+    variantMasterMap.clear();
+    videoProcessingPipeline.queue = [];
+    videoProcessingPipeline.processing.clear();
+    logger.info('All detected videos cleared');
+}
+
+
 export {
     addDetectedVideo,
     sendVideoUpdateToUI,
-    cleanupForTab,
+    cleanupVideosForTab,
+    cleanupAllVideos,
     normalizeUrl,
     getVideosForDisplay,
-    clearVideoCache,
     initVideoManager,
     getVideoByUrl
 };

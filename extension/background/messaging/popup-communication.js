@@ -4,10 +4,11 @@
  */
 
 // Add static imports at the top
-import { clearVideoCache, sendVideoUpdateToUI } from '../processing/video-manager.js';
+import { sendVideoUpdateToUI, cleanupAllVideos } from '../processing/video-manager.js';
 import { startDownload, getActiveDownloads } from '../download/download-manager.js';
 import { createLogger } from '../../shared/utils/logger.js';
-import { clearCache, getCacheStats } from '../../shared/utils/preview-cache.js';
+import { clearPreviewCache, getCacheStats } from '../../shared/utils/preview-cache.js';
+import { clearAllHeaderCaches } from '../../shared/utils/headers-utils.js'
 
 // Track all popup connections - simplified single map
 const popupPorts = new Map(); // key = portId, value = {port, tabId, url}
@@ -51,22 +52,15 @@ async function handlePortMessage(message, port, portId) {
             sendVideoUpdateToUI(message.tabId, null, { _sendFullList: true });
             break;
             
-        case 'generatePreview':
-            // Pure delegation - let video-manager handle everything
-            logger.debug(`Preview request for ${message.url} - delegating to video-manager`);
-            // Video-manager will handle preview generation through its processing pipeline
-            // No need to duplicate logic here - just log the request
-            break;
-            
         case 'download':
             handleDownloadRequest(message, port);
             break;
             
         case 'clearCaches':
-            // Clear both video cache and preview cache
-            clearVideoCache();
-            await clearCache(); // Clear preview cache
-            logger.debug('Cleared all caches (video + preview)');
+            clearAllHeaderCaches(); 
+            cleanupAllVideos(); // everything from video-manager
+            await clearPreviewCache(); // Clear preview cache
+            logger.debug('Cleared all caches (video + headers + preview)');
             
             // Send confirmation back to popup
             port.postMessage({

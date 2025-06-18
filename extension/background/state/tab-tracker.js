@@ -4,10 +4,10 @@
  */
 
 // Add static imports at the top
-import { cleanupForTab } from '../processing/video-manager.js';
+import { cleanupVideosForTab } from '../processing/video-manager.js';
 import { createLogger } from '../../shared/utils/logger.js';
-import { clearHeadersForTab, clearHeaderRulesForTab } from '../../shared/utils/headers-utils.js'
-import { cleanupMpdContext } from '../index.js';
+import { cleanupHeadersForTab, cleanupHeaderRulesForTab } from '../../shared/utils/headers-utils.js'
+import { cleanupMPDContextForTab } from '../detection/video-detector.js'
 
 // Create a logger instance for the Tab Tracker module
 const logger = createLogger('Tab Tracker');
@@ -76,11 +76,11 @@ function initTabTracking() {
         chrome.tabs.onRemoved.addListener((tabId) => {
             logger.debug('Tab removed:', tabId);
             
-            cleanupForTab(tabId); // Cleanup videos and playlists
+            cleanupVideosForTab(tabId); // Cleanup videos and playlists
             cleanupScrollPositionForTab(tabId); // Cleanup saved scroll positions
-            cleanupMpdContext(tabId); // Cleanup MPD context if applicable
-            clearHeadersForTab(tabId); // Clear any init request headers
-            clearHeaderRulesForTab(tabId); // Clear any header rules per tab
+            cleanupMPDContextForTab(tabId); // Cleanup DASH context if applicable
+            cleanupHeadersForTab(tabId); // Clear any init request headers
+            cleanupHeaderRulesForTab(tabId); // Clear any header rules per tab
         });
         
         // Could add additional tab event listeners here

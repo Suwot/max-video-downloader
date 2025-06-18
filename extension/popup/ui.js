@@ -250,9 +250,3 @@ export async function toggleTheme() {
     await setTheme(newTheme);
     return newTheme;
 }
-
-export function clearAllCaches() {
-    clearCaches();
-    showToast('Caches cleared, reloading data...');
-    return true;
-}

@@ -20,40 +20,31 @@ const activeRules = new Map();
 // Maximum rule ID supported by Chrome (2^31 - 1)
 const MAX_RULE_ID = 2147483647;
 
-// Important headers to preserve
-const IMPORTANT_HEADERS = [
+// Essential headers for media access
+const ESSENTIAL_HEADERS = [
     'origin',
     'referer',
-    'user-agent',
-    'cookie',
-    'authorization',
-    'sec-fetch-site',
-    'sec-fetch-mode', 
-    'sec-fetch-dest',
-    'accept',
-    'accept-language'
+    'user-agent'
 ];
 
 /**
- * Extract headers from webRequest details
+ * Extract essential headers from webRequest details
  * @param {Array} requestHeaders - Chrome request headers array
- * @returns {Object|null} Extracted headers or null if no important headers
+ * @returns {Object|null} Extracted headers or null if no essential headers found
  */
 function extractHeaders(requestHeaders) {
-    // Extract important headers into a clean object
     const headers = {};
-    let hasImportantHeaders = false;
+    let hasEssentialHeaders = false;
     
     for (const header of requestHeaders) {
         const headerName = header.name.toLowerCase();
-        if (IMPORTANT_HEADERS.includes(headerName)) {
+        if (ESSENTIAL_HEADERS.includes(headerName)) {
             headers[headerName] = header.value;
-            hasImportantHeaders = true;
+            hasEssentialHeaders = true;
         }
     }
     
-    // Add timestamp for debugging/cleanup
-    if (hasImportantHeaders) {
+    if (hasEssentialHeaders) {
         headers.timestamp = Date.now();
         return headers;
     }
@@ -123,28 +114,18 @@ function getRequestHeaders(tabId, url) {
     }
     
     try {
-        // Direct lookup in tab context
         if (tabHeadersStore.has(tabId)) {
             const tabUrls = tabHeadersStore.get(tabId);
             
-            // Exact match is best case
             if (tabUrls.has(url)) {
                 return formatHeaders(tabUrls.get(url));
             }
             
-            // Log miss for debugging
-            logger.debug(`No exact header match for ${url} in tab ${tabId}`);
-            
-            // Default headers as fallback
-            return {
-                'User-Agent': navigator.userAgent,
-                'Accept': '*/*',
-                'Accept-Language': 'en-US,en;q=0.9'
-            };
+            logger.debug(`No headers found for ${url} in tab ${tabId}`);
+        } else {
+            logger.warn(`No headers data for tab ${tabId}`);
         }
         
-        // No data for this tab
-        logger.warn(`No headers data for tab ${tabId}`);
         return null;
     } catch (e) {
         logger.error(`Error getting headers for ${url}:`, e);
@@ -200,7 +181,7 @@ async function initHeaderTracking() {
  * Clear headers for a specific tab
  * @param {number} tabId - Tab ID to clear headers for
  */
-function clearHeadersForTab(tabId) {
+function cleanupHeadersForTab(tabId) {
     if (tabHeadersStore.has(tabId)) {
         tabHeadersStore.delete(tabId);
         logger.debug(`Cleared headers for tab ${tabId}`);
@@ -212,7 +193,7 @@ function clearHeadersForTab(tabId) {
  * @param {number} tabId - Tab ID to clear rules for
  * @returns {Promise<boolean>} Success status
  */
-async function clearHeaderRulesForTab(tabId) {
+async function cleanupHeaderRulesForTab(tabId) {
     if (!chrome.declarativeNetRequest || !activeRules.has(tabId)) {
         return true;
     }
@@ -239,19 +220,19 @@ async function clearHeaderRulesForTab(tabId) {
 }
 
 /**
- * Clear all stored headers
- */
-function clearAllHeaders() {
-    tabHeadersStore.clear();
-    logger.debug('All headers cleared');
-}
-
-/**
  * Clear all header caches including headers and rules
  */
 function clearAllHeaderCaches() {
     clearAllHeaders();
     clearAllHeaderRules();
+}
+
+/**
+ * Clear all stored headers
+ */
+function clearAllHeaders() {
+    tabHeadersStore.clear();
+    logger.debug('All headers cleared');
 }
 
 /**
@@ -477,8 +458,8 @@ function propagateHeaders(tabId, sourceUrl, targetUrls) {
 export {
     initHeaderTracking,
     getRequestHeaders,
-    clearHeadersForTab,
-    clearHeaderRulesForTab,
+    cleanupHeadersForTab,
+    cleanupHeaderRulesForTab,
     clearAllHeaders,
     clearAllHeaderRules,
     clearAllHeaderCaches,
