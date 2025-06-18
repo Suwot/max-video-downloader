@@ -145,31 +145,31 @@ function handlePortMessage(message) {
             progressData ? 'with progress' : 'without progress'
           );
 
-          // Find matching video items and restore download state
-          const videoItems = document.querySelectorAll(
-            `.video-item[data-url='${downloadUrl}']`
-          );
-          videoItems.forEach((videoItem) => {
-            const button = videoItem.querySelector('.download-btn');
-            const buttonWrapper = videoItem.querySelector('.download-btn-wrapper');
+					// Find the matching video item and restore download state
+					const videoItem = document.querySelector(
+					`.video-item[data-url='${downloadUrl}']`
+					);
+					if (videoItem) {
+						const button = videoItem.querySelector('.download-btn');
+						const buttonWrapper = videoItem.querySelector('.download-btn-wrapper');
 
-            if (button && buttonWrapper) {
-              if (progressData) {
-                // Restore with last known progress
-                updateDownloadProgress(
-                  null,
-                  progressData.progress || 0,
-                  progressData
-                );
-              } else {
-                // Fallback to generic downloading state
-                if (!buttonWrapper.classList.contains('downloading')) {
-                  buttonWrapper.classList.add('downloading');
-                  button.innerHTML = `<span>Downloading...</span>`;
-                }
-              }
-            }
-          });
+						if (button && buttonWrapper) {
+							if (progressData) {
+								// Restore with last known progress
+								updateDownloadProgress(
+									null,
+									progressData.progress || 0,
+									progressData
+								);
+							} else {
+								// Fallback to generic downloading state
+								if (!buttonWrapper.classList.contains('downloading')) {
+									buttonWrapper.classList.add('downloading');
+									button.innerHTML = `<span>Downloading...</span>`;
+								}
+							}
+						}
+					}
         });
       } else {
         logger.warn('activeDownloadsList message missing downloads property:', message);
