@@ -248,7 +248,7 @@ export function identifyVideoTypeFromMime(contentType, url) {
  */
 export function isMediaSegment(url, contentType = null, hasDashContext = false, segmentPaths = null) {
     // Skip TS segments typically used in HLS and M4S segments used in DASH
-    if (url.includes('.ts') || url.includes('.m4s') || url.includes('.m4v') || (url.includes('.mp4') && url.includes('range='))) {
+    if (url.includes('.ts') || url.includes('.m4s') || url.includes('.m4v')) {
         return true;
     }
 
@@ -285,21 +285,6 @@ export function isMediaSegment(url, contentType = null, hasDashContext = false, 
     
     if (segmentPatterns.some(pattern => pattern.test(url))) {
         return true;
-    }
-    
-    // Check byte ranges as the last resort (most expensive check)
-    if (hasDashContext) {
-        // First check if the URL contains "bytes=" or "range=" before expensive URL parsing
-        if (url.includes('bytes=') || url.includes('range=')) {
-            try {
-                const parsedUrl = new URL(url);
-                const byteRangePattern = /(?:bytes|range)=\d+-\d+/i;
-                return byteRangePattern.test(parsedUrl.search);
-            } catch (e) {
-                // Fallback for URL parsing failure
-                return /bytes=\d+-\d+/.test(url) || /range=\d+-\d+/.test(url);
-            }
-        }
     }
     
     return false;
