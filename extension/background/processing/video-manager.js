@@ -177,9 +177,6 @@ class VideoProcessingPipeline {
                 // Generate preview for the master using the first variant as source
                 const firstVariant = hlsResult.variants[0];
                 await this.generateVideoPreview(tabId, normalizedUrl, headers, firstVariant.url);
-            } else {
-                // For variant playlists, generate preview directly
-                await this.generateVideoPreview(tabId, normalizedUrl, headers);
             }
             
             // Notify UI of complete update using unified approach
