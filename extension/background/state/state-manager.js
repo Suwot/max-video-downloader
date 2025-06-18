@@ -16,9 +16,7 @@ const initialState = {
         version: STATE_VERSION,
         lastUpdated: Date.now()
     },
-    videos: {
-        byTab: {}      // Mapped by tabId -> url -> videoInfo, only valid videos for display
-    },
+    videosByTab: {}, // Mapped by tabId -> array of video objects (UI-ready videos only)
     downloads: {
         active: [],     // List of active download ids
         queue: [],      // Ordered queue of pending downloads
@@ -29,18 +27,6 @@ const initialState = {
             failed: 0, // total
             lastDownload: null // timestamp of last download
         }
-    },
-    nativeHost: {
-        connected: false,
-        connectionTime: null,
-        lastHeartbeat: null,
-        stats: {
-            messagesReceived: 0,
-            messagesSent: 0,
-            reconnections: 0,
-            errors: 0
-        },
-        pendingRequests: 0
     },
     settings: {
         notifications: true,
@@ -453,7 +439,7 @@ function performStateCleanup() {
     // Check for inactive tabs and clean up if necessary
     chrome.tabs.query({}, tabs => {
         const activeTabIds = new Set(tabs.map(tab => tab.id));
-        const tabsWithVideos = Object.keys(state.videos.byTab).map(Number);
+        const tabsWithVideos = Object.keys(state.videosByTab).map(Number);
         
         const inactiveTabIds = tabsWithVideos.filter(id => !activeTabIds.has(id));
         
@@ -461,14 +447,14 @@ function performStateCleanup() {
             logger.debug(`Cleaning up ${inactiveTabIds.length} inactive tabs`);
             
             setState(state => {
-                const newVideosByTab = { ...state.videos.byTab };
+                const newVideosByTab = { ...state.videosByTab };
                 
                 inactiveTabIds.forEach(tabId => {
                     delete newVideosByTab[tabId];
                 });
                 
                 return {
-                    videos: { byTab: newVideosByTab }
+                    videosByTab: newVideosByTab
                 };
             });
         }
@@ -594,6 +580,97 @@ function shallowEquals(a, b) {
     return keysA.every(key => key in b && a[key] === b[key]);
 }
 
+/**
+ * Get videos for a specific tab from state
+ * @param {number} tabId - Tab ID
+ * @returns {Array} Array of video objects for the tab
+ */
+function getVideosForTab(tabId) {
+    return state.videosByTab[tabId] || [];
+}
+
+/**
+ * Add/Update video in state (parallel to Video Manager)
+ * Called from Video Manager at defined stages
+ * @param {number} tabId - Tab ID
+ * @param {Object} videoData - Complete video object
+ */
+function updateVideoInState(tabId, videoData) {
+    setState(state => {
+        const currentVideos = state.videosByTab[tabId] || [];
+        const videoIndex = currentVideos.findIndex(v => v.normalizedUrl === videoData.normalizedUrl);
+        
+        let newVideos;
+        if (videoIndex >= 0) {
+            // Update existing video
+            newVideos = [...currentVideos];
+            newVideos[videoIndex] = { ...videoData };
+        } else {
+            // Add new video
+            newVideos = [...currentVideos, { ...videoData }];
+        }
+        
+        // Sort by detection time (newest first)
+        newVideos.sort((a, b) => (b.timestampDetected || 0) - (a.timestampDetected || 0));
+        
+        return {
+            videosByTab: {
+                ...state.videosByTab,
+                [tabId]: newVideos
+            }
+        };
+    });
+    
+    logger.debug(`Video updated in state for tab ${tabId}: ${videoData.normalizedUrl}`);
+}
+
+/**
+ * Remove video from state (parallel to Video Manager)
+ * Called when variant is hidden or video is invalid
+ * @param {number} tabId - Tab ID
+ * @param {string} normalizedUrl - Normalized video URL
+ */
+function removeVideoFromState(tabId, normalizedUrl) {
+    setState(state => {
+        const currentVideos = state.videosByTab[tabId] || [];
+        const filteredVideos = currentVideos.filter(v => v.normalizedUrl !== normalizedUrl);
+        
+        if (filteredVideos.length === currentVideos.length) {
+            return null; // No changes needed
+        }
+        
+        return {
+            videosByTab: {
+                ...state.videosByTab,
+                [tabId]: filteredVideos
+            }
+        };
+    });
+    
+    logger.debug(`Video removed from state for tab ${tabId}: ${normalizedUrl}`);
+}
+
+/**
+ * Clear all videos for a tab (parallel to Video Manager cleanup)
+ * @param {number} tabId - Tab ID
+ */
+function clearVideosForTab(tabId) {
+    setState(state => {
+        if (!state.videosByTab[tabId]) {
+            return null; // No changes needed
+        }
+        
+        const newVideosByTab = { ...state.videosByTab };
+        delete newVideosByTab[tabId];
+        
+        return {
+            videosByTab: newVideosByTab
+        };
+    });
+    
+    logger.debug(`Cleared all videos from state for tab ${tabId}`);
+}
+
 export {
     getState,
     select,
@@ -605,5 +682,9 @@ export {
     resetState,
     getDownloadById,
     getActiveDownloads,
-    getDownloadHistory
+    getDownloadHistory,
+    getVideosForTab,
+    updateVideoInState,
+    removeVideoFromState,
+    clearVideosForTab
 };
