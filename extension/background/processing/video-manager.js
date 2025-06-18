@@ -371,18 +371,18 @@ class VideoProcessingPipeline {
                 logger.debug(`No video found for FFprobe: ${normalizedUrl}`);
                 return;
             }
-            
+
             // Skip if already has metadata
             if (video.isFullyParsed) {
                 logger.debug(`Video ${video.url} is already fully parsed, skipping FFprobe`);
                 return;
             }
-            
+
             logger.debug(`Getting FFprobe metadata for ${video.url}`);
-            
+
             // Apply header rule before sending to native host
             await applyHeaderRule(tabId, video.url);
-            
+
             // Direct call to NHS - no rate limiting wrapper needed
             const response = await nativeHostService.sendMessage({
                 command: 'getQualities',
@@ -390,36 +390,41 @@ class VideoProcessingPipeline {
                 mediaType: 'direct',
                 headers: headers
             });
-            
+
             const streamInfo = response?.streamInfo || null;
-                    
+
             if (streamInfo) {
                 logger.debug(`Got FFprobe metadata for ${normalizedUrl}`);
-                
+
                 // Add standardizedResolution if height is available
                 let standardizedRes = null;
                 if (streamInfo.height) {
                     standardizedRes = standardizeResolution(streamInfo.height);
                 }
-                
+
+                // Only set isValid: false if ffprobe confirms not a video
+                const isValid = streamInfo.hasVideo === false ? false : true;
+
                 const updatedVideo = updateVideo('getFFprobeMetadata', tabId, normalizedUrl, {
-                    isValid: true,
+                    isValid,
                     metaFFprobe: streamInfo,
                     duration: streamInfo.duration,
                     isFullyParsed: true,
-                    standardizedResolution: standardizedRes, 
+                    standardizedResolution: standardizedRes,
                     estimatedFileSizeBytes: streamInfo.estimatedFileSizeBytes || video.fileSize,
                     fileSize: streamInfo.sizeBytes || null
                 });
-                
+
                 if (updatedVideo) {
                     sendVideoUpdateToUI(tabId, normalizedUrl, updatedVideo);
                 }
             } else {
-                logger.debug(`No stream info in response for: ${normalizedUrl}`);
+                logger.warn(`No stream info in ffprobe response for: ${normalizedUrl}`);
+                // Do NOT set isValid: false here, just log
             }
         } catch (error) {
             logger.error(`Error getting FFprobe metadata for ${normalizedUrl}: ${error.message}`);
+            // Do NOT set isValid: false here, just log
         }
     }
 }
@@ -812,7 +817,9 @@ function addDetectedVideo(tabId, videoInfo) {
         normalizedUrl,
         tabId,
         isBeingProcessed: false,
-        title: videoInfo.metadata?.filename || getFilenameFromUrl(videoInfo.url)
+        title: videoInfo.metadata?.filename || getFilenameFromUrl(videoInfo.url),
+        // Set isValid: true for direct videos immediately
+        ...(videoInfo.type === 'direct' ? { isValid: true } : {})
     };
     
     updateVideo('addDetectedVideo', tabId, normalizedUrl, newVideo, true);
