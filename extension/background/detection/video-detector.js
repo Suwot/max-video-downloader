@@ -6,11 +6,43 @@ import { identifyVideoType, identifyVideoTypeFromMime, extractExpiryInfo, isMedi
 // Create a logger instance for video detection
 const logger = createLogger('VideoDetector');
 
+// Detection constants
+const DETECTION_CONSTANTS = {
+    MIN_FILE_SIZE: 100 * 1024, // 100KB minimum for direct video files
+    MPD_CONTEXT_TIMEOUT: 60000 // 1 minute timeout for MPD context
+};
+
 // Detection context tracking (tabId -> timestamp when MPD was detected)
 const tabsWithMpd = new Map();
 
 // tabId -> Set of segment paths
 const dashSegmentPathCache = new Map();
+
+/**
+ * Helper function to add detected video with common processing
+ * @param {number} tabId - Tab ID
+ * @param {string} url - Video URL
+ * @param {Object} videoInfo - Video type information
+ * @param {Object} metadata - Request metadata
+ * @param {string} source - Detection source identifier
+ */
+function addVideoWithCommonProcessing(tabId, url, videoInfo, metadata, source) {
+    // Extract expiry info once
+    const expiryInfo = extractExpiryInfo(url);
+    
+    const videoData = {
+        url,
+        type: videoInfo.type,
+        source,
+        timestampDetected: metadata?.timestampDetected || Date.now(),
+        ...(metadata && { metadata }),
+        ...(videoInfo.mediaType && { mediaType: videoInfo.mediaType }),
+        ...(videoInfo.originalContainer && { originalContainer: videoInfo.originalContainer }),
+        ...(expiryInfo && { expiryInfo })
+    };
+    
+    addDetectedVideo(tabId, videoData);
+}
 
 /**
  * Process a video URL from a web request
@@ -21,77 +53,51 @@ const dashSegmentPathCache = new Map();
 export function processWebRequest(tabId, url, metadata = null) {
     if (tabId < 0 || !url) return;
 
-    
     // First check if we should ignore this URL
     if (shouldIgnoreForMediaDetection(url, metadata)) {
         return;
     }
     logger.debug(`Processing video URL after ShouldIgnoreForMediaDetection: ${url} with metadata:`, metadata);
     
-    // If we have a content type from metadata, check it first - this is our primary detection for DASH/HLS
-    if (metadata && metadata.contentType) {
+    // Try MIME type detection first (most reliable)
+    if (metadata?.contentType) {
         const mimeTypeInfo = identifyVideoTypeFromMime(metadata.contentType, url);
         
         if (mimeTypeInfo) {
-            // For DASH manifests, record the MPD context
+            // Handle DASH manifest detection
             if (mimeTypeInfo.type === 'dash') {
                 tabsWithMpd.set(tabId, Date.now());
+                addVideoWithCommonProcessing(tabId, url, mimeTypeInfo, metadata, `BG_webRequest_mime_${mimeTypeInfo.type}`);
+                return;
             }
             
-            // For direct video/audio files, apply additional filtering
+            // Handle direct video/audio files with additional filtering
             if (mimeTypeInfo.type === 'direct') {
-                // First check file size before anything else
-                if (metadata.contentLength < 100 * 1024) {  // Skip files smaller than 100kb
+                // Skip small files
+                if (metadata.contentLength && metadata.contentLength < DETECTION_CONSTANTS.MIN_FILE_SIZE) {
                     logger.debug(`Skipping small media file (${metadata.contentLength} bytes): ${url}`);
                     return;
-                } 
+                }
                 
-                // Check if this appears to be a media segment
+                // Skip media segments
                 const hasMpdContext = tabsWithMpd.has(tabId);
                 const segmentPaths = dashSegmentPathCache.get(tabId);
                 
-                if (isMediaSegment(url, hasMpdContext, segmentPaths)) {
+                if (isMediaSegment(url, metadata.contentType, hasMpdContext, segmentPaths)) {
                     logger.debug(`Skipping media segment: ${url}`);
                     return;
                 }
             }
             
-            // Check for expiration info before adding the video
-            const expiryInfo = extractExpiryInfo(url);
-
-            addDetectedVideo(tabId, {
-                url,
-                type: mimeTypeInfo.type,
-                source: `BG_webRequest_mime_${mimeTypeInfo.type}`,
-                timestampDetected: metadata.timestampDetected || Date.now(),
-                metadata: metadata,
-                ...(mimeTypeInfo.mediaType ? { mediaType: mimeTypeInfo.mediaType } : {}),
-                ...(mimeTypeInfo.originalContainer ? { originalContainer: mimeTypeInfo.originalContainer } : {}),
-                ...(expiryInfo ? { expiryInfo } : {})
-            });
+            addVideoWithCommonProcessing(tabId, url, mimeTypeInfo, metadata, `BG_webRequest_mime_${mimeTypeInfo.type}`);
             return;
         }
     }
     
-    // For URLs without MIME type information, fall back to URL-based detection
+    // Fallback to URL-based detection
     const videoInfo = identifyVideoType(url);
-    
-    // Skip if not a recognized video type
-    if (!videoInfo) return;
-    
-    // For streaming formats, add directly
-    if (videoInfo.type === 'hls' || videoInfo.type === 'dash' || videoInfo.type === 'direct') {
-        const expiryInfo = extractExpiryInfo(url);
-        
-        addDetectedVideo(tabId, {
-            url,
-            type: videoInfo.type,
-            source: `BG_webRequest_${videoInfo.type}`,
-            ...(videoInfo.container ? {originalContainer: videoInfo.container} : {}),
-            ...(metadata ? {metadata: metadata} : {}), // Still pass metadata even in URL-based detection
-            timestampDetected: Date.now(),
-            ...(expiryInfo ? { expiryInfo } : {})
-        });
+    if (videoInfo) {
+        addVideoWithCommonProcessing(tabId, url, videoInfo, metadata, `BG_webRequest_${videoInfo.type}`);
     }
 }
 
@@ -123,8 +129,8 @@ export function registerDashSegmentPaths(tabId, paths, url = null) {
     if (!tabId && url) {
         // Try to find the tab that loaded this MPD
         for (const [existingTabId, timestamp] of tabsWithMpd.entries()) {
-            // Only check tabs with recent MPD activity (1 minute)
-            if (timestamp > Date.now() - 60000) {
+            // Only check tabs with recent MPD activity
+            if (timestamp > Date.now() - DETECTION_CONSTANTS.MPD_CONTEXT_TIMEOUT) {
                 tabId = existingTabId;
                 logger.debug(`Found matching tab ${tabId} for MPD URL: ${url}`);
                 break;
