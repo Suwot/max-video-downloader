@@ -5,7 +5,7 @@
 
 // Add static imports at the top
 import { sendVideoUpdateToUI, cleanupAllVideos } from '../processing/video-manager.js';
-import { startDownload, getActiveDownloads } from '../download/download-manager.js';
+import { startDownload } from '../download/download-manager.js';
 import { createLogger } from '../../shared/utils/logger.js';
 import { clearPreviewCache, getCacheStats } from '../../shared/utils/preview-cache.js';
 import { clearAllHeaderCaches } from '../../shared/utils/headers-utils.js'
@@ -34,7 +34,7 @@ async function handlePortMessage(message, port, portId) {
     }
     
     // Define commands that don't require tab ID (global operations)
-    const globalCommands = ['clearCaches', 'getActiveDownloads', 'getPreviewCacheStats'];
+    const globalCommands = ['clearCaches', 'getPreviewCacheStats'];
     
     // Commands that require tab ID validation (tab-specific operations)
     const tabSpecificCommands = ['getVideos', 'generatePreview', 'download'];
@@ -53,7 +53,7 @@ async function handlePortMessage(message, port, portId) {
             break;
             
         case 'download':
-            handleDownloadRequest(message, port);
+            startDownload(message);
             break;
             
         case 'clearCaches':
@@ -84,19 +84,6 @@ async function handlePortMessage(message, port, portId) {
                     stats: { count: 0, size: 0 },
                     error: error.message
                 });
-            }
-            break;
-            
-        case 'getActiveDownloads':
-            try {
-                const activeDownloads = getActiveDownloads();
-                port.postMessage({
-                    command: 'activeDownloadsList',
-                    downloads: activeDownloads
-                });
-                logger.debug(`Sent ${activeDownloads.length} active downloads with progress to popup`, activeDownloads);
-            } catch (error) {
-                logger.error('Error sending active downloads list:', error);
             }
             break;
             
@@ -173,33 +160,6 @@ function getActivePopupPortForTab(tabId) {
         }
     }
     return null;
-}
-
-/**
- * Streamlined download handler - delegates to download manager
- * @param {Object} message - Download request message
- * @param {Port} port - Port connection for immediate response
- */
-async function handleDownloadRequest(message, port) {
-    logger.debug('Download request received, delegating to download manager:', message.downloadUrl);
-    logger.debug('Full download request message:', message);
-    
-    try {
-        // Pure delegation - download manager handles all business logic
-        await startDownload(message);
-        logger.debug('Download manager accepted the request successfully');
-    } catch (error) {
-        logger.error('Download delegation failed:', error);
-        // Send error back to UI
-        port.postMessage({
-            command: 'download-error',
-            downloadUrl: message.downloadUrl,
-            masterUrl: message.masterUrl || null,
-            error: error.message,
-            originalDownloadBtnHTML: message.originalDownloadBtnHTML || null,
-            originalSelectedOptionText: message.originalSelectedOptionText || null
-        });
-    }
 }
 
 /**

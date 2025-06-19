@@ -279,14 +279,6 @@ function getDownloadById(downloadId) {
 }
 
 /**
- * Get active downloads
- * @returns {Array} Array of active download objects
- */
-function getActiveDownloads() {
-    return state.downloads.active.slice(); // Return copy of URL array
-}
-
-/**
  * Get download history
  * @param {number} [limit] - Optional limit on number of items
  * @returns {Array} Array of download history objects
@@ -681,7 +673,6 @@ export {
     unsubscribe,
     resetState,
     getDownloadById,
-    getActiveDownloads,
     getDownloadHistory,
     getVideosForTab,
     updateVideoInState,

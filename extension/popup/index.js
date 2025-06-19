@@ -16,10 +16,7 @@ import {
   hideInitMessage,
 } from './ui.js';
 import { renderVideos } from './video/video-renderer.js';
-import {
-  updateDownloadProgress,
-  checkForActiveDownloads,
-} from './video/download-handler.js';
+import { updateDownloadProgress } from './video/download-handler.js';
 import { createLogger } from '../shared/utils/logger.js';
 import { normalizeUrl } from '../shared/utils/normalize-url.js';
 
@@ -101,16 +98,10 @@ function handlePortMessage(message) {
         </div>`;
       break;
 
-    case 'progress':
-      updateDownloadProgress(
-        null, // video object not needed
-        message
-      );
-      break;
-
+    case 'download-progress':
+    case 'download-success':
     case 'download-error':
-      logger.debug('Received download error:', message.downloadUrl);
-      updateDownloadProgress(null, { ...message, error: true });
+      updateDownloadProgress(message);
       break;
 
     case 'videoUpdated':
@@ -124,49 +115,6 @@ function handlePortMessage(message) {
       import('./video/video-renderer.js').then((module) => {
         module.updateVideoElement(message.url, message.video);
       });
-      break;
-
-    case 'activeDownloadsList':
-      if (message.downloads) {
-        logger.debug('Received active downloads list:', message.downloads);
-        message.downloads.forEach((download) => {
-          const downloadUrl = download.url;
-          const progressData = download.progress;
-
-          logger.debug(
-            'Restoring download state for URL:',
-            downloadUrl,
-            progressData ? 'with progress' : 'without progress'
-          );
-
-					// Find the matching video item and restore download state
-					const videoItem = document.querySelector(
-					`.video-item[data-url='${downloadUrl}']`
-					);
-					if (videoItem) {
-						const button = videoItem.querySelector('.download-btn');
-						const buttonWrapper = videoItem.querySelector('.download-btn-wrapper');
-
-						if (button && buttonWrapper) {
-							if (progressData) {
-								// Restore with last known progress
-								updateDownloadProgress(
-									null,
-									progressData
-								);
-							} else {
-								// Fallback to generic downloading state
-								if (!buttonWrapper.classList.contains('downloading')) {
-									buttonWrapper.classList.add('downloading');
-									button.innerHTML = `<span>Downloading...</span>`;
-								}
-							}
-						}
-					}
-        });
-      } else {
-        logger.warn('activeDownloadsList message missing downloads property:', message);
-      }
       break;
 
     case 'previewCacheStats':
@@ -483,11 +431,6 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Set up periodic refresh to check for new videos
     setupPeriodicRefresh();
-
-    // Check for active downloads from previous popup sessions
-    checkForActiveDownloads().catch((err) => {
-      logger.error('Error checking for active downloads:', err);
-    });
 
     // Add Clear Cache button handler - direct cache clearing
     document

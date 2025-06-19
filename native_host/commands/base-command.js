@@ -33,7 +33,7 @@ class BaseCommand {
      */
     sendProgress(progress) {
         this.messaging.sendResponse({
-            command: 'progress',
+            command: 'download-progress',
             ...progress
         });
     }

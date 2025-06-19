@@ -25,13 +25,13 @@ export async function handleDownload(elementsDiv, videoData = {}) {
 
         // save original content of download button and substitute it to "Starting..."
         const downloadButton = elementsDiv.querySelector('.download-btn'); 
-        const originalDownloadBtnHTML = downloadButton?.innerHTML;
+        const downloadBtnOrigHTML = downloadButton?.innerHTML;
 
         if (downloadButton) downloadButton.innerHTML = 'Starting...';
 
         // selected-option original text
         const selectedOption = elementsDiv.querySelector('.selected-option .label');
-        const originalSelectedOptionText = selectedOption ? selectedOption.textContent : ''; 
+        const selectedOptionOrigText = selectedOption ? selectedOption.textContent : ''; 
 
         // Send download request to background (NHS handles everything)
         const port = getBackgroundPort();
@@ -54,8 +54,8 @@ export async function handleDownload(elementsDiv, videoData = {}) {
             masterUrl: videoData.masterUrl || null,
             duration: videoData.duration || null,
             tabId: tabId,
-            originalDownloadBtnHTML,
-            originalSelectedOptionText
+            downloadBtnOrigHTML,
+            selectedOptionOrigText
         });
         
         logger.debug('Download request sent to background');
@@ -67,58 +67,33 @@ export async function handleDownload(elementsDiv, videoData = {}) {
 }
 
 /**
- * Check for active downloads when popup opens
- */
-export async function checkForActiveDownloads() {
-    logger.debug('Requesting active downloads from background...');
-    
-    const port = getBackgroundPort();
-    if (port) {
-        port.postMessage({ command: 'getActiveDownloads' });
-    } else {
-        logger.error('No background connection for active downloads check');
-    }
-}
-
-/**
  * Update download progress UI - maps progress to selected option
  * @param {Object} video - Video being downloaded  
  * @param {number} progress - Download progress (0-100)
  * @param {Object} progressData - Additional progress data
  */
-export function updateDownloadProgress(video, progressData = {}) {
-    const progress = progressData.progress;
+export function updateDownloadProgress(progressData = {}) {
     const lookupUrl = progressData.masterUrl || progressData.downloadUrl;
+
+    // Find the single video item matching this download
+    const videoItem = document.querySelector(`.video-item[data-url="${lookupUrl}"]`);
     
-    if (!lookupUrl) {
-        logger.warn('No lookup URL for progress update:', progressData);
+    if (!videoItem) {
+        logger.debug('No video item found for URL:', lookupUrl);
         return;
     }
-    
-    // Find video items matching this download
-    const videoItems = document.querySelectorAll(`.video-item[data-url="${lookupUrl}"]`);
-    if (videoItems.length === 0) {
-        logger.debug('No video items found for URL:', lookupUrl);
-        return;
-    }
-    
-    logger.debug(`Mapping progress to ${videoItems.length} video item(s)`, progress + '%');
-    
-    // Update each matching video item
-    videoItems.forEach(videoItem => {
-        const selectedOption = videoItem.querySelector('.selected-option');
-        
-        if (selectedOption) {
-            updateSelectedOptionProgress(selectedOption, progressData);
-        }
-    });
+
+    logger.debug('Mapping progress to video item', lookupUrl, progressData.progress + '%');
+
+    updateSelectedOptionProgress(videoItem, progressData);
 }
 
 /**
  * Update selected option progress
  */
-function updateSelectedOptionProgress(selectedOption, progressData = {}) {
-    const progress = Math.max(0, Math.min(100, Math.round(progressData.progress)));
+function updateSelectedOptionProgress(videoItem, progressData = {}) {
+    const progress = progressData.progress;
+    const selectedOption = videoItem.querySelector('.selected-option');
 
     // Set CSS progress variable
     selectedOption.style.setProperty('--progress', `${progress}%`);
@@ -126,8 +101,8 @@ function updateSelectedOptionProgress(selectedOption, progressData = {}) {
 
     let displayText = `${progress}%`;
 
-    if (progressData.segmentProgress) {
-        displayText += ` (${progressData.segmentProgress})`;
+    if (progressData.currentSegment) {
+        displayText += ` (${progressData.currentSegment}/${progressData.totalSegments})`;
     }
     if (progressData.speed) {
         displayText += ` • ${formatSpeed(progressData.speed)}`;
@@ -141,11 +116,11 @@ function updateSelectedOptionProgress(selectedOption, progressData = {}) {
     textSpan.textContent = displayText;
 
     // Handle completion or error
-    if (progressData.success !== undefined || progress >= 100) {
+    if (progressData.command === 'download-success' || progressData.success !== undefined) {
         selectedOption.classList.add('complete');
         textSpan.textContent = 'Completed!';
         setTimeout(() => restoreOriginalOption(selectedOption, progressData), 2000);
-    } else if (progressData.error) {
+    } else if (progressData.command === 'download-error' || progressData.error) {
         selectedOption.classList.add('error');
         textSpan.textContent = 'Error';
         setTimeout(() => restoreOriginalOption(selectedOption, progressData), 3000);
@@ -156,23 +131,14 @@ function updateSelectedOptionProgress(selectedOption, progressData = {}) {
  * Restore original option from dropdown by finding matching data-url
  */
 function restoreOriginalOption(selectedOption, progressData = {}) {
-    const videoItem = selectedOption.closest('.video-item');
-    if (!videoItem) return;
-
-    const downloadUrl = progressData.downloadUrl;
-    const originalOption = videoItem.querySelector(`.dropdown-option[data-url="${downloadUrl}"]`);
-    if (!originalOption) return;
-
-    // Restore the original text and remove progress classes
-    const originalText = originalOption.textContent || originalOption.innerText;
     const textSpan = selectedOption.querySelector('span:first-child') || selectedOption;
-    textSpan.textContent = originalText;
+    textSpan.textContent = progressData.selectedOptionOrigText;
 
     // Clean up progress styling
     selectedOption.classList.remove('downloading', 'complete', 'error');
     selectedOption.style.removeProperty('--progress');
     
-    logger.debug('Restored original option:', originalText);
+    logger.debug('Restored original option:', progressData.selectedOptionOrigText);
 }
 
 // Helper functions

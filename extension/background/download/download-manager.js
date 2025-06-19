@@ -75,8 +75,6 @@ export async function startDownload(downloadRequest) {
         // Start download with progress tracking
         nativeHostService.sendMessage(nativeHostMessage, (response) => {
             handleDownloadProgress(downloadId, downloadRequest, response);
-        }).catch(error => {
-            handleDownloadError(downloadId, downloadRequest, error);
         });
         
         logger.debug('🔄 Download initiated successfully:', downloadId);
@@ -102,8 +100,8 @@ export async function startDownload(downloadRequest) {
             masterUrl: downloadRequest.masterUrl || null,
             filename: downloadRequest.filename,
             error: error.message,
-            originalDownloadBtnHTML: downloadRequest.originalDownloadBtnHTML || null,
-            originalSelectedOptionText: downloadRequest.originalSelectedOptionText || null
+            downloadBtnOrigHTML: downloadRequest.downloadBtnOrigHTML || null,
+            selectedOptionOrigText: downloadRequest.selectedOptionOrigText || null
         });
         
         throw error;
@@ -111,58 +109,28 @@ export async function startDownload(downloadRequest) {
 }
 
 /**
- * Get list of active downloads with their last known progress
- * @returns {Array} Active download objects with progress data
- */
-export function getActiveDownloads() {
-    const activeUrls = select(state => state.downloads.active);
-    const lastProgress = select(state => state.downloads.lastProgress);
-    
-    // Return enhanced download objects with last progress
-    return activeUrls.map(url => ({
-        url,
-        progress: lastProgress[url] || null
-    }));
-}
-
-/**
- * Handle download progress updates from native host
+ * Handle download progress updates and errors from native host
  * @private
  */
 function handleDownloadProgress(downloadId, downloadRequest, response) {
-    
-    // Single progress data creation with conditional filtering
-    const baseProgressData = {
-        command: 'progress',
-        downloadUrl: downloadRequest.downloadUrl,
-        masterUrl: downloadRequest.masterUrl || null,
-        filename: downloadRequest.filename,
-        progress: response.progress,
-        speed: response.speed,
-        eta: response.eta,
-        segmentProgress: response.segmentProgress,
-        currentSegment: response.currentSegment,
-        totalSegments: response.totalSegments,
-        downloadedBytes: response.downloadedBytes,
-        totalBytes: response.totalBytes
-    };
+    // response can have one of 3 commands: download-progress, download-success, download-error
 
     // Only add completion flags for UI broadcast
     const broadcastData = (response.success !== undefined || response.error)
-        ? { ...baseProgressData, 
+        ? { ...response, 
             success: response.success, 
             error: response.error,
-            originalDownloadBtnHTML: downloadRequest.originalDownloadBtnHTML || null,
-            originalSelectedOptionText: downloadRequest.originalSelectedOptionText || null
+            downloadBtnOrigHTML: downloadRequest.downloadBtnOrigHTML || null,
+            selectedOptionOrigText: downloadRequest.selectedOptionOrigText || null
         }
-        : baseProgressData;
+        : response;
 
-    // Store base data (without completion flags) for UI restoration
+    // Store response data for UI restoration 
     setState(state => ({
         downloads: {
             lastProgress: {
                 ...state.downloads.lastProgress,
-                [downloadId]: baseProgressData
+                [downloadId]: response
             }
         }
     }));
@@ -188,51 +156,28 @@ function handleDownloadProgress(downloadId, downloadRequest, response) {
                 }
             }
         }));
-        
+
+        if (response.error) {
+            logger.error('Download error:', downloadId, response.error);
+            broadcastToPopups({
+                command: 'download-error',
+                downloadUrl: downloadRequest.downloadUrl,
+                masterUrl: downloadRequest.masterUrl || null,
+                filename: downloadRequest.filename,
+                error: response.error,
+                downloadBtnOrigHTML: downloadRequest.downloadBtnOrigHTML || null,
+                selectedOptionOrigText: downloadRequest.selectedOptionOrigText || null
+            });
+            return
+        }
         // Create completion notification
         if (response.success) {
             createCompletionNotification(downloadRequest.filename);
         }
+
     }
-    
     // Always notify UI with appropriate progress data via direct broadcast
     broadcastToPopups(broadcastData);
-}
-
-/**
- * Handle download errors
- * @private
- */
-function handleDownloadError(downloadId, downloadRequest, error) {
-    logger.error('Download error:', downloadId, error);
-    
-    // Update state - remove from active, add to history, clean up progress, update stats
-    setState(state => ({
-        downloads: {
-            active: state.downloads.active.filter(id => id !== downloadId),
-            history: [downloadId, ...state.downloads.history],
-            // Clean up progress data
-            lastProgress: Object.fromEntries(
-                Object.entries(state.downloads.lastProgress).filter(([id]) => id !== downloadId)
-            ),
-            stats: {
-                ...state.downloads.stats,
-                failed: state.downloads.stats.failed + 1,
-                lastDownload: Date.now()
-            }
-        }
-    }));
-    
-    // Notify UI of error via direct broadcast
-    broadcastToPopups({
-        command: 'download-error',
-        downloadUrl: downloadRequest.downloadUrl,
-        masterUrl: downloadRequest.masterUrl || null,
-        filename: downloadRequest.filename,
-        error: error.message,
-        originalDownloadBtnHTML: downloadRequest.originalDownloadBtnHTML || null,
-        originalSelectedOptionText: downloadRequest.originalSelectedOptionText || null
-    });
 }
 
 /**
