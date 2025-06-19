@@ -27,7 +27,10 @@ export async function handleDownload(elementsDiv, videoData = {}) {
         const downloadButton = elementsDiv.querySelector('.download-btn'); 
         const downloadBtnOrigHTML = downloadButton?.innerHTML;
 
-        if (downloadButton) downloadButton.innerHTML = 'Starting...';
+        if (downloadButton) {
+            downloadButton.innerHTML = 'Starting...';
+            logger.debug('Download button set to Starting...');
+        }
 
         // selected-option original text
         const selectedOption = elementsDiv.querySelector('.selected-option .label');
@@ -67,35 +70,116 @@ export async function handleDownload(elementsDiv, videoData = {}) {
 }
 
 /**
+ * Update download button state based on progress
+ * @param {Object} progressData - Progress data from background
+ */
+function updateDownloadButton(progressData = {}) {
+    const lookupUrl = progressData.masterUrl || progressData.downloadUrl;
+    const downloadBtn = document.querySelector(`.video-item[data-url="${lookupUrl}"] .download-btn`);
+    
+    if (!downloadBtn) {
+        logger.warn('Download button not found for URL:', lookupUrl);
+        return;
+    }
+
+    switch (progressData.command) {
+        case 'download-progress':
+            if (!downloadBtn.classList.contains('downloading')) {
+                downloadBtn.innerHTML = 'Stop';
+                downloadBtn.classList.add('downloading', 'stop-mode');
+                downloadBtn.style.backgroundColor = '#d32f2f';
+                
+                // Add stop handler (empty for now)
+                downloadBtn.onclick = () => {
+                    logger.debug('Stop button clicked - handler not implemented yet');
+                    // TODO: Implement stop functionality
+                };
+                
+                logger.debug('Download button switched to Stop mode');
+            }
+            break;
+            
+        case 'download-success':
+        case 'download-error':
+            // Restore original button state
+            downloadBtn.innerHTML = progressData.downloadBtnOrigHTML || 'Download';
+            downloadBtn.classList.remove('downloading', 'stop-mode');
+            downloadBtn.style.removeProperty('background-color');
+            downloadBtn.onclick = null; // Remove stop handler
+            logger.debug('Download button restored to original state');
+            break;
+    }
+}
+
+/**
+ * Update dropdown option background during download
+ * @param {Object} progressData - Progress data
+ */
+function updateDropdownOption(progressData = {}) {
+    const lookupUrl = progressData.downloadUrl;
+    const dropdownOption = document.querySelector(`.dropdown-option[data-url="${lookupUrl}"]`);
+    
+    if (!dropdownOption) {
+        logger.warn('Dropdown option not found for URL:', lookupUrl);
+        return;
+    }
+
+    switch (progressData.command) {
+        case 'download-progress':
+            // Set progress background without changing text
+            dropdownOption.style.setProperty('--progress', `${progressData.progress}%`);
+            dropdownOption.classList.add('downloading');
+            logger.debug('Dropdown option progress updated:', progressData.progress + '%');
+            break;
+            
+        case 'download-success':
+            dropdownOption.classList.add('complete');
+            setTimeout(() => {
+                dropdownOption.classList.remove('downloading', 'complete');
+                dropdownOption.style.removeProperty('--progress');
+            }, 2000);
+            break;
+            
+        case 'download-error':
+            dropdownOption.classList.add('error');
+            setTimeout(() => {
+                dropdownOption.classList.remove('downloading', 'error');
+                dropdownOption.style.removeProperty('--progress');
+            }, 3000);
+            break;
+    }
+}
+
+/**
  * Update download progress UI - maps progress to selected option
  * @param {Object} video - Video being downloaded  
  * @param {number} progress - Download progress (0-100)
  * @param {Object} progressData - Additional progress data
  */
 export function updateDownloadProgress(progressData = {}) {
-    const lookupUrl = progressData.masterUrl || progressData.downloadUrl;
-
-    // Find the single video item matching this download
-    const videoItem = document.querySelector(`.video-item[data-url="${lookupUrl}"]`);
+    logger.debug('Progress update received:', progressData.command, progressData.progress + '%');
     
-    if (!videoItem) {
-        logger.debug('No video item found for URL:', lookupUrl);
+    const lookupUrl = progressData.masterUrl || progressData.downloadUrl;
+    const progress = progressData.progress;
+
+    const downloadGroup = document.querySelector(`.video-item[data-url="${lookupUrl}"] .download-group`);
+    if (!downloadGroup) {
+        logger.warn('Download group not found for URL:', lookupUrl);
         return;
     }
 
-    logger.debug('Mapping progress to video item', lookupUrl, progressData.progress + '%');
+    const selectedOption = downloadGroup.querySelector('.selected-option');
 
-    updateSelectedOptionProgress(videoItem, progressData);
-}
+    // Update all UI elements
+    updateDownloadButton(progressData);
+    updateDropdownOption(progressData);
 
-/**
- * Update selected option progress
- */
-function updateSelectedOptionProgress(videoItem, progressData = {}) {
-    const progress = progressData.progress;
-    const selectedOption = videoItem.querySelector('.selected-option');
+    if (!selectedOption) {
+        logger.warn('Selected option not found');
+        return;
+    }
 
-    // Set CSS progress variable
+    // Update selected option (existing logic)
     selectedOption.style.setProperty('--progress', `${progress}%`);
     selectedOption.classList.add('downloading');
 

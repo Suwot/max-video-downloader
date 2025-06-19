@@ -186,6 +186,15 @@
     background-color: #1565C0;
 }
 
+/* Download button states */
+.download-btn.downloading.stop-mode {
+    background-color: #d32f2f !important;
+}
+
+.download-btn.downloading.stop-mode:hover {
+    background-color: #b71c1c !important;
+}
+
 /* Menu button (three dots) */
 .download-menu-btn {
     display: flex;
