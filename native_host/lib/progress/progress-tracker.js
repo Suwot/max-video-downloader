@@ -83,8 +83,8 @@ class ProgressTracker {
     }
 
     /**
-     * Handle progress update from strategy and add UI formatting
-     * @param {Object} data Progress data from strategy
+     * Handle progress update from strategy and add URL mapping
+     * @param {Object} data Progress data from strategy (already rounded)
      */
     handleProgress(data) {
         // Add URL mapping for UI
@@ -105,44 +105,25 @@ class ProgressTracker {
             }
             
             const remainingBytes = Math.max(0, totalBytes - data.downloadedBytes);
-            data.eta = remainingBytes / data.speed; // ETA in seconds
+            data.eta = Math.round(remainingBytes / data.speed); // Round ETA calculation
         }
         
-        // Add formatted values for UI display
-        if (data.speed) {
-            data.speedFormatted = this.formatSpeed(data.speed);
-        }
-        
-        if (data.downloadedBytes) {
-            data.downloadedFormatted = this.formatBytes(data.downloadedBytes);
-        }
-        
-        if (data.totalBytes) {
-            data.totalBytesFormatted = this.formatBytes(data.totalBytes);
-        }
-        
+        // Add rounded timeRemaining if we have duration data
         if (data.currentTime && data.totalDuration) {
-            data.timeRemaining = data.totalDuration - data.currentTime;
-            data.timeRemainingFormatted = this.formatTime(data.timeRemaining);
-            data.currentTimeFormatted = this.formatTime(data.currentTime);
-            data.totalDurationFormatted = this.formatTime(data.totalDuration);
-        }
-        
-        if (data.eta) {
-            data.etaFormatted = this.formatTime(data.eta);
+            data.timeRemaining = Math.round(data.totalDuration - data.currentTime);
         }
         
         if (this.debug) {
             logDebug('Progress update:', data);
         }
         
-        // Send formatted data to callback
+        // Send data to callback (no additional rounding needed)
         this.onProgress(data);
     }
     
     /**
-     * Get formatted download statistics
-     * @returns {Object|null} Formatted download statistics or null if not available
+     * Get download statistics without formatting
+     * @returns {Object|null} Raw download statistics or null if not available
      */
     getDownloadStats() {
         if (!this.strategy || !this.strategy.downloadStats) {
@@ -153,26 +134,38 @@ class ProgressTracker {
         const downloadStats = {};
         
         if (stats.videoSize) {
-            downloadStats.video = this.formatBytes(stats.videoSize);
+            downloadStats.videoSize = stats.videoSize;
         }
         
         if (stats.audioSize) {
-            downloadStats.audio = this.formatBytes(stats.audioSize);
+            downloadStats.audioSize = stats.audioSize;
         }
         
         if (stats.subtitleSize) {
-            downloadStats.subtitle = this.formatBytes(stats.subtitleSize);
+            downloadStats.subtitleSize = stats.subtitleSize;
         }
         
         if (stats.totalSize) {
-            downloadStats.total = this.formatBytes(stats.totalSize);
+            downloadStats.totalSize = stats.totalSize;
         }
         
         if (stats.muxingOverhead) {
-            downloadStats.muxingOverhead = `${stats.muxingOverhead.toFixed(2)}%`;
+            downloadStats.muxingOverhead = stats.muxingOverhead;
         }
         
         return Object.keys(downloadStats).length ? downloadStats : null;
+    }
+    
+    /**
+     * Get FFmpeg error information if available
+     * @returns {string|null} FFmpeg error output or null if not available
+     */
+    getFFmpegError() {
+        if (!this.strategy || !this.strategy.ffmpegError) {
+            return null;
+        }
+        
+        return this.strategy.ffmpegError.trim();
     }
     
     /**
@@ -182,42 +175,6 @@ class ProgressTracker {
         if (this.strategy) {
             this.strategy.cleanup();
         }
-    }
-    
-    /**
-     * Format bytes to human readable string
-     * @param {number} bytes Bytes
-     * @returns {string} Formatted string
-     */
-    formatBytes(bytes) {
-        if (!bytes || bytes === 0) return '0 B';
-        const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
-        const i = Math.floor(Math.log(bytes) / Math.log(1024));
-        return `${(bytes / Math.pow(1024, i)).toFixed(2)} ${sizes[i]}`;
-    }
-    
-    /**
-     * Format speed to human readable string
-     * @param {number} bytesPerSecond Bytes per second
-     * @returns {string} Formatted string
-     */
-    formatSpeed(bytesPerSecond) {
-        return `${this.formatBytes(bytesPerSecond)}/s`;
-    }
-    
-    /**
-     * Format time to human readable string
-     * @param {number} seconds Time in seconds
-     * @returns {string} Formatted string
-     */
-    formatTime(seconds) {
-        if (!seconds || isNaN(seconds) || seconds < 0) return '00:00';
-        const h = Math.floor(seconds / 3600);
-        const m = Math.floor((seconds % 3600) / 60);
-        const s = Math.floor(seconds % 60);
-        return h > 0 
-            ? `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`
-            : `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
     }
 }
 

@@ -51,11 +51,21 @@ class BaseCommand {
     /**
      * Send error response
      */
-    sendError(message, details = null) {
-        logDebug(`Command error: ${message}`, details);
-        this.messaging.sendResponse({
-            error: message
-        });
+    sendError(error, details = null) {
+        // Handle both string and object error formats
+        if (typeof error === 'string') {
+            logDebug(`Command error: ${error}`, details);
+            this.messaging.sendResponse({
+                error: error
+            });
+        } else {
+            // Object format with detailed error information
+            logDebug(`Command error: ${error.message || error}`, error);
+            this.messaging.sendResponse({
+                error: error.message || error,
+                ...error
+            });
+        }
     }
     
     /**

@@ -57,6 +57,8 @@ class ProgressStrategy {
         
         // For tracking stream information from FFmpeg
         this.downloadStats = null;
+        this.ffmpegError = null; // Store FFmpeg error information after progress=end
+        this.progressEndSeen = false; // Track if we've seen progress=end
         
         // Persistent state - accumulates all data over time
         this.currentState = {
@@ -179,22 +181,6 @@ class ProgressStrategy {
      * @param {Object} data Progress data from FFmpeg output
      */
     update(data) {
-        // Handle explicit completion with stats
-        if (data.progress === 100 && data.downloadStats) {
-            // Final completion - send all available data without recalculation
-            const completionData = {
-                progress: 100,
-                elapsedTime: (Date.now() - this.startTime) / 1000,
-                type: this.type,
-                strategy: this.primaryStrategy,
-                downloadStats: data.downloadStats,
-                // Include any accumulated state data
-            };
-            
-            this.sendProgress(completionData);
-            return;
-        }
-        
         // Extract relevant data for ongoing progress
         const currentTime = data.currentTime || 0;
         const downloaded = data.downloadedBytes || 0;
@@ -259,10 +245,10 @@ class ProgressStrategy {
             finalProgress = Math.min(99.9, smoothedProgress); 
         }
         
-        // Send progress update with all relevant information useful for the UI
+        // Round values immediately at source to avoid unnecessary precision
         const progressData = {
-            progress: finalProgress,
-            speed,
+            progress: Math.round(finalProgress * 10) / 10, // Round to 1 decimal place
+            speed: Math.round(speed),
             elapsedTime: (Date.now() - this.startTime) / 1000,
             type: this.type,
             strategy: this.primaryStrategy,
@@ -270,9 +256,27 @@ class ProgressStrategy {
             totalBytes: this.fileSizeBytes || null
         };
         
+        // Round progressInfo values as well
+        const roundedProgressInfo = {};
+        if (progressInfo.currentTime) {
+            roundedProgressInfo.currentTime = Math.round(progressInfo.currentTime);
+        }
+        if (progressInfo.totalDuration) {
+            roundedProgressInfo.totalDuration = Math.round(progressInfo.totalDuration);
+        }
+        if (progressInfo.currentSegment) {
+            roundedProgressInfo.currentSegment = progressInfo.currentSegment; // Keep as integer
+        }
+        if (progressInfo.totalSegments) {
+            roundedProgressInfo.totalSegments = progressInfo.totalSegments; // Keep as integer
+        }
+        if (progressInfo.strategy) {
+            roundedProgressInfo.strategy = progressInfo.strategy; // Keep as string
+        }
+        
         this.sendProgress({
             ...progressData,
-            ...progressInfo
+            ...roundedProgressInfo
         });
     }
 
@@ -455,6 +459,8 @@ class ProgressStrategy {
         // Handle final completion status and extract stats
         const progressStatus = output.match(/progress=(\w+)/);
         if (progressStatus && progressStatus[1] === 'end') {
+            this.progressEndSeen = true;
+            
             // Extract final download statistics
             const videoSizeMatch = output.match(/video:(\d+)kB/);
             const audioSizeMatch = output.match(/audio:(\d+)kB/);
@@ -470,19 +476,45 @@ class ProgressStrategy {
                 muxingOverhead: overheadMatch ? parseFloat(overheadMatch[1]) : 0
             };
             
-            this.flushPendingUpdate();
-            // Merge final completion with accumulated state and stats
-            this.update({ 
-                ...this.currentState, 
-                progress: 100,
-                downloadStats: this.downloadStats
-            });
             logDebug('ProgressStrategy: Detected end of processing with stats:', this.downloadStats);
+            // Do not send progress: 100 - let the FFmpeg close event handle completion
             return;
         }
         
-        // Universal data parsing - always extract all available data regardless of strategy
-        this.parseAllData(output);
+        // Capture FFmpeg error information that appears after progress=end
+        if (this.progressEndSeen && output.trim()) {
+            // Only capture lines that look like actual errors, not normal FFmpeg output
+            const trimmedOutput = output.trim();
+            
+            // Error patterns to capture
+            const errorPatterns = [
+                /Error writing/i,
+                /Conversion failed/i,
+                /Unable to/i,
+                /No such file/i,
+                /Permission denied/i,
+                /Cannot/i,
+                /Failed to/i,
+                /Invalid/i,
+                /does not exist/i
+            ];
+            
+            // Check if this line contains error information
+            const isErrorLine = errorPatterns.some(pattern => pattern.test(trimmedOutput));
+            
+            if (isErrorLine) {
+                if (!this.ffmpegError) {
+                    this.ffmpegError = '';
+                }
+                this.ffmpegError += (this.ffmpegError ? '\n' : '') + trimmedOutput;
+                logDebug('ProgressStrategy: Captured FFmpeg error:', trimmedOutput);
+            }
+        }
+        
+        // Universal data parsing - only parse if we haven't seen progress=end yet
+        if (!this.progressEndSeen) {
+            this.parseAllData(output);
+        }
     }
     
     /**

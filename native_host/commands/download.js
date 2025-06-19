@@ -106,7 +106,15 @@ class DownloadCommand extends BaseCommand {
             
         } catch (err) {
             logDebug('Download error:', err);
-            this.sendError(err.message);
+            this.sendError({
+                command: 'download-error',
+                message: err.message,
+                downloadUrl,
+                masterUrl,
+                type,
+                ffmpegError: null,
+                downloadStats: {} // No stats available for early errors
+            });
             throw err;
         }
     }
@@ -448,8 +456,12 @@ class DownloadCommand extends BaseCommand {
                     const downloadStats = progressTracker.getDownloadStats();
                     
                     this.sendSuccess({ 
+                        command: 'download-success',
                         path: uniqueOutput,
                         filename: path.basename(uniqueOutput),
+                        downloadUrl,
+                        masterUrl,
+                        type,
                         downloadStats: downloadStats || {}
                     });
                     
@@ -460,9 +472,25 @@ class DownloadCommand extends BaseCommand {
                     });
                 } else if (!hasError) {
                     hasError = true;
+                    const ffmpegError = progressTracker.getFFmpegError();
+                    const downloadStats = progressTracker.getDownloadStats(); // Get stats even on error
                     const error = `FFmpeg exited with code ${code}: ${errorOutput}`;
+                    
                     logDebug('Download failed:', error);
-                    this.sendError(error);
+                    if (ffmpegError) {
+                        logDebug('FFmpeg error details:', ffmpegError);
+                    }
+                    
+                    this.sendError({
+                        command: 'download-error',
+                        message: error,
+                        downloadUrl,
+                        masterUrl,
+                        type,
+                        ffmpegError: ffmpegError || null,
+                        downloadStats: downloadStats || {} // Include stats in error message too
+                    });
+                    
                     reject(new Error(error));
                 }
             });
@@ -471,8 +499,24 @@ class DownloadCommand extends BaseCommand {
                 if (!hasError) {
                     hasError = true;
                     progressTracker.cleanup();
+                    const ffmpegError = progressTracker.getFFmpegError();
+                    const downloadStats = progressTracker.getDownloadStats(); // Get stats even on spawn error
+                    
                     logDebug('FFmpeg spawn error:', err);
-                    this.sendError(err.message);
+                    if (ffmpegError) {
+                        logDebug('FFmpeg error details:', ffmpegError);
+                    }
+                    
+                    this.sendError({
+                        command: 'download-error',
+                        message: err.message,
+                        downloadUrl,
+                        masterUrl,
+                        type,
+                        ffmpegError: ffmpegError || null,
+                        downloadStats: downloadStats || {} // Include stats in spawn error too
+                    });
+                    
                     reject(err);
                 }
             });
