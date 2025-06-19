@@ -1,22 +1,6 @@
 // Shared utility functions for video renderers
 
 /**
- * Create standard video metadata object for downloads
- * @param {Object} video - Video data
- * @returns {Object} - Video metadata
- */
-export function createVideoMetadata(video) {
-    return {
-        filename: video.title,
-        type: video.type,
-        originalContainer: video.type === 'hls' ? 'mp4' : (video.originalContainer || null),
-        segmentCount: video.type === 'hls' ? video.variants?.[0].metaJS?.segmentCount : null,
-        duration: video.duration || null,
-        masterUrl: video.isMaster ? video.url : null,
-    };
-}
-
-/**
  * Format file size bytes to human readable format
  * @param {number} bytes - Size in bytes
  * @returns {string} Formatted size string

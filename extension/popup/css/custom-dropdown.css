@@ -202,3 +202,39 @@
 .options-container::-webkit-scrollbar-thumb:hover {
     background: #666;
 }
+
+/* Progress styling for selected option during download */
+.selected-option.downloading {
+    position: relative;
+    overflow: hidden;
+}
+
+.selected-option.downloading::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+    width: var(--progress, 0%);
+    background-color: #43A047;
+    opacity: 0.9;
+    transition: width 0.1s ease;
+    z-index: 0;
+}
+
+.selected-option.downloading span {
+    position: relative;
+    z-index: 1;
+}
+
+/* Complete state styling */
+.selected-option.complete {
+    background-color: #43A047 !important;
+    color: white !important;
+}
+
+/* Error state styling */
+.selected-option.error {
+    background-color: #d32f2f !important;
+    color: white !important;
+}

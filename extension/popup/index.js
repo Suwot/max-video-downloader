@@ -102,21 +102,15 @@ function handlePortMessage(message) {
       break;
 
     case 'progress':
-      logger.debug(
-        'Received download progress:',
-        message.downloadUrl,
-        message.progress + '%'
-      );
       updateDownloadProgress(
         null, // video object not needed
-        message.progress || 0,
         message
       );
       break;
 
     case 'error':
       logger.debug('Received download error:', message.downloadUrl);
-      updateDownloadProgress(null, 0, { ...message, error: true });
+      updateDownloadProgress(null, { ...message, error: true });
       break;
 
     case 'videoUpdated':
@@ -158,7 +152,6 @@ function handlePortMessage(message) {
 								// Restore with last known progress
 								updateDownloadProgress(
 									null,
-									progressData.progress || 0,
 									progressData
 								);
 							} else {

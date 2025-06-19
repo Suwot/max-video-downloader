@@ -3,7 +3,6 @@
  * Creates download buttons with direct data binding during UI creation
  */
 
-import { createVideoMetadata } from '../../shared/utils/video-utils.js';
 import { handleDownload } from './download-handler.js';
 
 /**
@@ -72,8 +71,8 @@ export function createDownloadButton(video, elementsDiv, dropdown) {
     // Set up streamlined click handler with direct data binding
     downloadBtn.addEventListener('click', async () => {
         const videoData = createVideoMetadata(video);
-        extractDownloadData(videoData, video, dropdown);
-        handleDownload(downloadBtn, videoData);
+        extractDownloadData(videoData, dropdown);
+        handleDownload(dropdown, videoData);
     });
     
     return [downloadBtn, menuBtn, buttonWrapper];
@@ -86,28 +85,44 @@ export function createDownloadButton(video, elementsDiv, dropdown) {
  * @param {Object} video - Original video object
  * @param {HTMLElement} dropdown - Dropdown element reference
  */
-function extractDownloadData(videoData, video, dropdown) {
+function extractDownloadData(videoData, dropdown) {
     const selectedOption = dropdown.querySelector('.selected-option');
     
     // Data extraction mapping by video type
     const dataExtractors = {
         hls: () => {
-            videoData.downloadUrl = selectedOption?.dataset.url || video.url;
+            videoData.downloadUrl = selectedOption?.dataset.url;
             videoData.fileSizeBytes = selectedOption?.dataset.filesize || null;
         },
         dash: () => {
-            videoData.downloadUrl = video.url; // Use main URL for DASH
+            videoData.downloadUrl = selectedOption?.dataset.url; // it's always dash manifest url
             videoData.streamSelection = selectedOption?.dataset.trackMap || null;
             videoData.originalContainer = selectedOption?.dataset.container || null;
             videoData.fileSizeBytes = selectedOption?.dataset.totalfilesize || null;
         },
         direct: () => {
-            videoData.downloadUrl = video.url; // Use main URL for direct videos
+            videoData.downloadUrl = selectedOption?.dataset.url; // it's always direct URL
             videoData.fileSizeBytes = selectedOption?.dataset.filesize || null;
         }
     };
     
     // Execute type-specific extraction or default to direct
-    const extractor = dataExtractors[video.type] || dataExtractors.direct;
+    const extractor = dataExtractors[videoData.type] || dataExtractors.direct;
     extractor();
+}
+
+/**
+ * Create standard video metadata object for downloads
+ * @param {Object} video - Video data
+ * @returns {Object} - Video metadata
+ */
+function createVideoMetadata(video) {
+    return {
+        filename: video.title,
+        type: video.type,
+        originalContainer: video.type === 'hls' ? 'mp4' : (video.originalContainer || null),
+        segmentCount: video.type === 'hls' ? video.variants?.[0].metaJS?.segmentCount : null,
+        duration: video.duration || null,
+        masterUrl: video.isMaster ? video.url : null,
+    };
 }

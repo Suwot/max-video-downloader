@@ -186,19 +186,6 @@
     background-color: #1565C0;
 }
 
-/* Downloading state */
-.download-btn-wrapper.downloading .download-btn {
-    background-image: linear-gradient(to right, #1565C0 0%, #1976D2 0%);
-    background-size: 200% 100%;
-    transition: background-position 0.3s ease;
-}
-
-.download-btn-wrapper.downloading .download-btn span {
-    position: relative;
-    z-index: 1;
-    mix-blend-mode: screen;
-}
-
 /* Menu button (three dots) */
 .download-menu-btn {
     display: flex;
@@ -219,46 +206,8 @@
     background-color: #1565C0;
 }
 
-/* Menu button in downloading state */
-.download-btn-wrapper.downloading .download-menu-btn {
-    background-color: #1976D2;
-}
-
 .download-menu-btn svg {
     width: 10px;
     height: 16px;
     display: block;
-}
-
-.theme-dark .download-btn:disabled,
-.theme-light .download-btn:disabled {
-    cursor: default;
-    opacity: 1;
-}
-
-/* Complete state - overrides all other styles */
-.download-btn-wrapper.complete .download-btn,
-.download-btn-wrapper.complete .download-menu-btn {
-    background-color: #43A047;
-    background-image: none;
-}
-
-/* Button progress styling */
-.download-btn-wrapper.downloading .download-btn::after {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    height: 100%;
-    width: var(--progress, 0%);
-    background-color: rgba(255, 255, 255, 0.2); /* Slightly more visible */
-    transition: width 0.3s ease;
-    z-index: 0; /* Ensure it's behind text */
-}
-
-/* Error state styling */
-.download-btn-wrapper.error .download-btn,
-.download-btn-wrapper.error .download-menu-btn {
-    background-color: #d32f2f;
-    background-image: none;
 }

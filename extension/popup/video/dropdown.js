@@ -44,7 +44,7 @@ function createDropdownElements(type) {
  * @returns {HTMLElement} The custom dropdown component
  */
 export function createCustomDropdown(video, onChange = null) {
-    const { type } = video;
+    const { type, url } = video;
     
     // Create all dropdown elements at once
     const container = createDropdownElements(type);
@@ -75,6 +75,7 @@ export function createCustomDropdown(video, onChange = null) {
         ].filter(Boolean);
         
         selectedDisplay.dataset.trackMap = indices.join(',');
+        selectedDisplay.dataset.url = url;
         
         createDashOptions(optionsContainer, tracks, initialSelection, (selection) => {
             updateSelectedDisplay(selectedDisplay, selection, type);
