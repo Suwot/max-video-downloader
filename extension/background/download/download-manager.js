@@ -97,11 +97,13 @@ export async function startDownload(downloadRequest) {
         
         // Notify error to UI via direct broadcast
         broadcastToPopups({
-            command: 'error',
+            command: 'download-error',
             downloadUrl: downloadRequest.downloadUrl,
             masterUrl: downloadRequest.masterUrl || null,
             filename: downloadRequest.filename,
-            error: error.message
+            error: error.message,
+            originalDownloadBtnHTML: downloadRequest.originalDownloadBtnHTML || null,
+            originalSelectedOptionText: downloadRequest.originalSelectedOptionText || null
         });
         
         throw error;
@@ -128,7 +130,6 @@ export function getActiveDownloads() {
  * @private
  */
 function handleDownloadProgress(downloadId, downloadRequest, response) {
-    logger.debug('Download progress update:', downloadId, response.progress + '%');
     
     // Single progress data creation with conditional filtering
     const baseProgressData = {
@@ -148,7 +149,12 @@ function handleDownloadProgress(downloadId, downloadRequest, response) {
 
     // Only add completion flags for UI broadcast
     const broadcastData = (response.success !== undefined || response.error)
-        ? { ...baseProgressData, success: response.success, error: response.error }
+        ? { ...baseProgressData, 
+            success: response.success, 
+            error: response.error,
+            originalDownloadBtnHTML: downloadRequest.originalDownloadBtnHTML || null,
+            originalSelectedOptionText: downloadRequest.originalSelectedOptionText || null
+        }
         : baseProgressData;
 
     // Store base data (without completion flags) for UI restoration
@@ -219,11 +225,13 @@ function handleDownloadError(downloadId, downloadRequest, error) {
     
     // Notify UI of error via direct broadcast
     broadcastToPopups({
-        command: 'error',
+        command: 'download-error',
         downloadUrl: downloadRequest.downloadUrl,
         masterUrl: downloadRequest.masterUrl || null,
         filename: downloadRequest.filename,
-        error: error.message
+        error: error.message,
+        originalDownloadBtnHTML: downloadRequest.originalDownloadBtnHTML || null,
+        originalSelectedOptionText: downloadRequest.originalSelectedOptionText || null
     });
 }
 

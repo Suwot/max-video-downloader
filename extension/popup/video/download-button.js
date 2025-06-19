@@ -71,8 +71,8 @@ export function createDownloadButton(video, elementsDiv, dropdown) {
     // Set up streamlined click handler with direct data binding
     downloadBtn.addEventListener('click', async () => {
         const videoData = createVideoMetadata(video);
-        extractDownloadData(videoData, dropdown);
-        handleDownload(dropdown, videoData);
+        extractDownloadData(videoData, elementsDiv);
+        handleDownload(elementsDiv, videoData);
     });
     
     return [downloadBtn, menuBtn, buttonWrapper];
@@ -85,9 +85,9 @@ export function createDownloadButton(video, elementsDiv, dropdown) {
  * @param {Object} video - Original video object
  * @param {HTMLElement} dropdown - Dropdown element reference
  */
-function extractDownloadData(videoData, dropdown) {
-    const selectedOption = dropdown.querySelector('.selected-option');
-    
+function extractDownloadData(videoData, elementsDiv) {
+    const selectedOption = elementsDiv.querySelector('.selected-option');
+
     // Data extraction mapping by video type
     const dataExtractors = {
         hls: () => {

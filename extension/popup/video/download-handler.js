@@ -15,14 +15,24 @@ const logger = createLogger('Download');
  * @param {HTMLElement} button - Download button
  * @param {Object} videoData - Video metadata
  */
-export async function handleDownload(dropdown, videoData = {}) {
+export async function handleDownload(elementsDiv, videoData = {}) {
     logger.debug('Initiating download for:', videoData.downloadUrl);
     
     try {     
         // Get current tab ID
         const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
         const tabId = tabs[0]?.id || -1;
-        
+
+        // save original content of download button and substitute it to "Starting..."
+        const downloadButton = elementsDiv.querySelector('.download-btn'); 
+        const originalDownloadBtnHTML = downloadButton?.innerHTML;
+
+        if (downloadButton) downloadButton.innerHTML = 'Starting...';
+
+        // selected-option original text
+        const selectedOption = elementsDiv.querySelector('.selected-option .label');
+        const originalSelectedOptionText = selectedOption ? selectedOption.textContent : ''; 
+
         // Send download request to background (NHS handles everything)
         const port = getBackgroundPort();
         if (!port) {
@@ -43,7 +53,9 @@ export async function handleDownload(dropdown, videoData = {}) {
             streamSelection: videoData.streamSelection || null,
             masterUrl: videoData.masterUrl || null,
             duration: videoData.duration || null,
-            tabId: tabId
+            tabId: tabId,
+            originalDownloadBtnHTML,
+            originalSelectedOptionText
         });
         
         logger.debug('Download request sent to background');

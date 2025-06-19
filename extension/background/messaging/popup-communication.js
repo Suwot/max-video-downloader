@@ -192,10 +192,12 @@ async function handleDownloadRequest(message, port) {
         logger.error('Download delegation failed:', error);
         // Send error back to UI
         port.postMessage({
-            command: 'error',
+            command: 'download-error',
             downloadUrl: message.downloadUrl,
             masterUrl: message.masterUrl || null,
-            error: error.message
+            error: error.message,
+            originalDownloadBtnHTML: message.originalDownloadBtnHTML || null,
+            originalSelectedOptionText: message.originalSelectedOptionText || null
         });
     }
 }

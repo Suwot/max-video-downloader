@@ -108,7 +108,7 @@ function handlePortMessage(message) {
       );
       break;
 
-    case 'error':
+    case 'download-error':
       logger.debug('Received download error:', message.downloadUrl);
       updateDownloadProgress(null, { ...message, error: true });
       break;
