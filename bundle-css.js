@@ -15,6 +15,7 @@ const HEADER_COMMENT = '/* Auto-generated bundle from css/*.css files - DO NOT E
 
 // File order for predictable output
 const FILE_ORDER = [
+  'variables.css',   // Load variables first
   'base.css',
   'layout.css',
   'header.css',

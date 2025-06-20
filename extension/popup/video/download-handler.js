@@ -75,19 +75,21 @@ export async function handleDownload(elementsDiv, videoData = {}) {
  */
 function updateDownloadButton(progressData = {}) {
     const lookupUrl = progressData.masterUrl || progressData.downloadUrl;
-    const downloadBtn = document.querySelector(`.video-item[data-url="${lookupUrl}"] .download-btn`);
+    const downloadBtnWrapper = document.querySelector(`.video-item[data-url="${lookupUrl}"] .download-btn-wrapper`);
+    const downloadBtn = downloadBtnWrapper?.querySelector('.download-btn');
+    const menuBtn = downloadBtnWrapper?.querySelector('.download-menu-btn');
     
-    if (!downloadBtn) {
-        logger.warn('Download button not found for URL:', lookupUrl);
+    if (!downloadBtn || !menuBtn) {
+        logger.warn('Download button elements not found for URL:', lookupUrl);
         return;
     }
 
     switch (progressData.command) {
         case 'download-progress':
-            if (!downloadBtn.classList.contains('downloading')) {
+            if (!downloadBtnWrapper.classList.contains('downloading')) {
+                // Update button text and state
                 downloadBtn.innerHTML = 'Stop';
-                downloadBtn.classList.add('downloading', 'stop-mode');
-                downloadBtn.style.backgroundColor = '#d32f2f';
+                downloadBtnWrapper.classList.add('downloading', 'stop-mode');
                 
                 // Add stop handler (empty for now)
                 downloadBtn.onclick = () => {
@@ -103,9 +105,9 @@ function updateDownloadButton(progressData = {}) {
         case 'download-error':
             // Restore original button state
             downloadBtn.innerHTML = progressData.downloadBtnOrigHTML || 'Download';
-            downloadBtn.classList.remove('downloading', 'stop-mode');
-            downloadBtn.style.removeProperty('background-color');
+            downloadBtnWrapper.classList.remove('downloading', 'stop-mode');
             downloadBtn.onclick = null; // Remove stop handler
+            
             logger.debug('Download button restored to original state');
             break;
     }

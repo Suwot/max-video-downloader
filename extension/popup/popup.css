@@ -1,5 +1,113 @@
 /* Auto-generated bundle from css/*.css files - DO NOT EDIT DIRECTLY */
 
+/* From variables.css */
+/* Color Variables - Central color scheme management */
+
+/* Primary Colors */
+:root {
+    /* Primary Blue Scheme */
+    --color-primary: #1976D2;
+    --color-primary-hover: #1565C0;
+    --color-primary-dark: #0D47A1;
+    
+    /* Error/Stop Red Scheme */
+    --color-error: #d32f2f;
+    --color-error-hover: #b71c1c;
+    --color-error-light: #ef5350;
+    
+    /* Success Green Scheme */
+    --color-success: #43A047;
+    --color-success-hover: #388E3C;
+    --color-success-light: #4CAF50;
+    
+    /* Warning Orange Scheme */
+    --color-warning: #FF5722;
+    --color-warning-hover: #E64A19;
+    
+    /* Background Colors - Dark Theme */
+    --bg-primary-dark: #121212;
+    --bg-secondary-dark: #1e1e1e;
+    --bg-tertiary-dark: #252525;
+    --bg-quaternary-dark: #2d2d2d;
+    --bg-dropdown-dark: #242424;
+    --bg-dropdown-hover-dark: #2c2c2c;
+    --bg-option-dark: #3a3a3a;
+    
+    /* Background Colors - Light Theme */
+    --bg-primary-light: #f5f5f5;
+    --bg-secondary-light: #f9f9f9;
+    --bg-tertiary-light: #ffffff;
+    --bg-quaternary-light: #f0f0f0;
+    
+    /* Text Colors - Dark Theme */
+    --text-primary-dark: #FAFAFA;
+    --text-secondary-dark: #aaa;
+    --text-tertiary-dark: #999;
+    --text-muted-dark: #666;
+    
+    /* Text Colors - Light Theme */
+    --text-primary-light: #333;
+    --text-secondary-light: #666;
+    --text-tertiary-light: #757575;
+    --text-title-light: #1a73e8;
+    
+    /* Border Colors */
+    --border-primary-dark: #333;
+    --border-secondary-dark: #444;
+    --border-primary-light: #e0e0e0;
+    --border-secondary-light: #ddd;
+    
+    /* Download Button States */
+    --btn-download-bg: var(--color-primary);
+    --btn-download-hover: var(--color-primary-hover);
+    --btn-download-border: var(--color-primary-hover);
+    
+    --btn-stop-bg: var(--color-error);
+    --btn-stop-hover: var(--color-error-hover);
+    --btn-stop-border: var(--color-error-hover);
+    
+    /* Progress Colors */
+    --progress-bg: var(--color-success);
+    --progress-bg-opacity: rgba(67, 160, 71, 0.3);
+    --progress-complete: var(--color-success);
+    --progress-error: var(--color-error);
+    
+    /* Media Type Colors - Dark Theme */
+    --media-hls-dark: #ff5f5f;
+    --media-dash-dark: #5f9fff;
+    --media-direct-dark: #5fff7f;
+    --media-blob-dark: #ff5fff;
+    --media-unknown-dark: #7f7f7f;
+    
+    /* Media Type Colors - Light Theme */
+    --media-hls-light-bg: #ffebeb;
+    --media-hls-light-text: #c83737;
+    --media-dash-light-bg: #e5f0ff;
+    --media-dash-light-text: #2a65b3;
+    --media-direct-light-bg: #e5ffe5;
+    --media-direct-light-text: #258f25;
+    --media-blob-light-bg: #ffe5ff;
+    --media-blob-light-text: #b329b3;
+    --media-unknown-light-bg: #e5e5e5;
+    --media-unknown-light-text: #444;
+    
+    /* Opacity Modifiers */
+    --opacity-overlay: 0.5;
+    --opacity-disabled: 0.7;
+    --opacity-hover: 0.8;
+    
+    /* Shadows */
+    --shadow-light: 0 1px 3px rgba(0,0,0,0.1);
+    --shadow-medium: 0 2px 4px rgba(0,0,0,0.2);
+    --shadow-heavy: 0 4px 12px rgba(0, 0, 0, 0.2);
+    
+    /* Transition Timings */
+    --transition-fast: 0.1s ease;
+    --transition-normal: 0.2s ease;
+    --transition-slow: 0.3s ease;
+}
+
+
 /* From base.css */
 /* Reset and base styles */
 * {
@@ -277,14 +385,14 @@ body.theme-light {
 .clear-cache-button {
     display: flex;
     align-items: center;
-    background-color: #FF5722;
+    background-color: var(--color-warning);
     color: white;
     border: none;
     border-radius: 3px;
     padding: 3px 10px 3px 8px;
     font-size: 11px;
     cursor: pointer;
-    transition: background-color 0.2s;
+    transition: background-color var(--transition-normal);
     min-width: 105px;  /* Fixed width closer to original size */
     height: 28px;      /* Slightly smaller height */
     position: relative;
@@ -300,7 +408,7 @@ body.theme-light {
 }
 
 .clear-cache-button:hover {
-    background-color: #E64A19;
+    background-color: var(--color-warning-hover);
 }
 
 .clear-cache-button.loading {
@@ -409,7 +517,7 @@ body.theme-light {
     align-items: center;
     justify-content: center;
     padding: 0 8px;
-    background-color: #1976D2;
+    background-color: var(--btn-download-bg);
     color: white;
     border: none;
     font-size: 11px;
@@ -419,7 +527,7 @@ body.theme-light {
     width: 73px;
     height: 100%;
     overflow: hidden;
-    transition: background-color 0.3s ease;
+    transition: background-color var(--transition-slow);
 }
 
 .download-btn-icon {
@@ -447,16 +555,16 @@ body.theme-light {
 
 /* Hover state ONLY when not downloading */
 .download-btn:not(.downloading):hover {
-    background-color: #1565C0;
+    background-color: var(--btn-download-hover);
 }
 
 /* Download button states */
-.download-btn.downloading.stop-mode {
-    background-color: #d32f2f !important;
+.download-btn-wrapper.downloading.stop-mode .download-btn {
+    background-color: var(--btn-stop-bg) !important;
 }
 
-.download-btn.downloading.stop-mode:hover {
-    background-color: #b71c1c !important;
+.download-btn-wrapper.downloading.stop-mode .download-btn:hover {
+    background-color: var(--btn-stop-hover) !important;
 }
 
 /* Menu button (three dots) */
@@ -466,17 +574,27 @@ body.theme-light {
     justify-content: center;
     width: 19px;
     height: 100%;
-    background-color: #1976D2;
+    background-color: var(--btn-download-bg);
     border: none;
     cursor: pointer;
     padding: 0;
-    border-left: 1px solid #1565C0;
-    transition: background-color 0.3s ease;
+    border-left: 1px solid var(--btn-download-border);
+    transition: background-color var(--transition-slow);
 }
 
 /* Menu button hover - only when not downloading */
 .download-btn-wrapper:not(.downloading) .download-menu-btn:hover {
-    background-color: #1565C0;
+    background-color: var(--btn-download-hover);
+}
+
+/* Menu button stop state */
+.download-btn-wrapper.downloading.stop-mode .download-menu-btn {
+    background-color: var(--btn-stop-bg) !important;
+    border-left-color: var(--btn-stop-border) !important;
+}
+
+.download-btn-wrapper.downloading.stop-mode .download-menu-btn:hover {
+    background-color: var(--btn-stop-hover) !important;
 }
 
 .download-menu-btn svg {
@@ -1336,9 +1454,9 @@ body.theme-light {
     left: 0;
     height: 100%;
     width: var(--progress, 0%);
-    background-color: #43A047;
+    background-color: var(--progress-bg);
     opacity: 0.3;
-    transition: width 0.1s ease;
+    transition: width var(--transition-fast);
     z-index: 0;
 }
 
@@ -1350,13 +1468,13 @@ body.theme-light {
 /* Complete and error states for dropdown options */
 .dropdown-option.complete::after {
     width: 100%;
-    background-color: #43A047;
+    background-color: var(--progress-complete);
     opacity: 0.5;
 }
 
 .dropdown-option.error::after {
     width: 100%;
-    background-color: #d32f2f;
+    background-color: var(--progress-error);
     opacity: 0.5;
 }
 
@@ -1475,9 +1593,9 @@ body.theme-light {
     left: 0;
     height: 100%;
     width: var(--progress, 0%);
-    background-color: #43A047;
+    background-color: var(--progress-bg);
     opacity: 0.9;
-    transition: width 0.1s ease;
+    transition: width var(--transition-fast);
     z-index: 0;
 }
 
@@ -1488,13 +1606,13 @@ body.theme-light {
 
 /* Complete state styling */
 .selected-option.complete {
-    background-color: #43A047 !important;
+    background-color: var(--progress-complete) !important;
     color: white !important;
 }
 
 /* Error state styling */
 .selected-option.error {
-    background-color: #d32f2f !important;
+    background-color: var(--progress-error) !important;
     color: white !important;
 }
 

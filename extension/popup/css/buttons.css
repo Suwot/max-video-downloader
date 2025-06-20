@@ -13,14 +13,14 @@
 .clear-cache-button {
     display: flex;
     align-items: center;
-    background-color: #FF5722;
+    background-color: var(--color-warning);
     color: white;
     border: none;
     border-radius: 3px;
     padding: 3px 10px 3px 8px;
     font-size: 11px;
     cursor: pointer;
-    transition: background-color 0.2s;
+    transition: background-color var(--transition-normal);
     min-width: 105px;  /* Fixed width closer to original size */
     height: 28px;      /* Slightly smaller height */
     position: relative;
@@ -36,7 +36,7 @@
 }
 
 .clear-cache-button:hover {
-    background-color: #E64A19;
+    background-color: var(--color-warning-hover);
 }
 
 .clear-cache-button.loading {
@@ -145,7 +145,7 @@
     align-items: center;
     justify-content: center;
     padding: 0 8px;
-    background-color: #1976D2;
+    background-color: var(--btn-download-bg);
     color: white;
     border: none;
     font-size: 11px;
@@ -155,7 +155,7 @@
     width: 73px;
     height: 100%;
     overflow: hidden;
-    transition: background-color 0.3s ease;
+    transition: background-color var(--transition-slow);
 }
 
 .download-btn-icon {
@@ -183,16 +183,16 @@
 
 /* Hover state ONLY when not downloading */
 .download-btn:not(.downloading):hover {
-    background-color: #1565C0;
+    background-color: var(--btn-download-hover);
 }
 
 /* Download button states */
-.download-btn.downloading.stop-mode {
-    background-color: #d32f2f !important;
+.download-btn-wrapper.downloading.stop-mode .download-btn {
+    background-color: var(--btn-stop-bg) !important;
 }
 
-.download-btn.downloading.stop-mode:hover {
-    background-color: #b71c1c !important;
+.download-btn-wrapper.downloading.stop-mode .download-btn:hover {
+    background-color: var(--btn-stop-hover) !important;
 }
 
 /* Menu button (three dots) */
@@ -202,17 +202,27 @@
     justify-content: center;
     width: 19px;
     height: 100%;
-    background-color: #1976D2;
+    background-color: var(--btn-download-bg);
     border: none;
     cursor: pointer;
     padding: 0;
-    border-left: 1px solid #1565C0;
-    transition: background-color 0.3s ease;
+    border-left: 1px solid var(--btn-download-border);
+    transition: background-color var(--transition-slow);
 }
 
 /* Menu button hover - only when not downloading */
 .download-btn-wrapper:not(.downloading) .download-menu-btn:hover {
-    background-color: #1565C0;
+    background-color: var(--btn-download-hover);
+}
+
+/* Menu button stop state */
+.download-btn-wrapper.downloading.stop-mode .download-menu-btn {
+    background-color: var(--btn-stop-bg) !important;
+    border-left-color: var(--btn-stop-border) !important;
+}
+
+.download-btn-wrapper.downloading.stop-mode .download-menu-btn:hover {
+    background-color: var(--btn-stop-hover) !important;
 }
 
 .download-menu-btn svg {
