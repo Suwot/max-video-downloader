@@ -70,6 +70,21 @@ export async function handleDownload(elementsDiv, videoData = {}) {
 }
 
 /**
+ * Pure orchestrator for download progress updates
+ * Delegates to specialized UI update functions
+ * @param {Object} progressData - Progress data from background
+ */
+export function updateDownloadProgress(progressData = {}) {
+    logger.debug('Progress update received:', progressData.command, progressData.progress + '%');
+    
+    // Orchestrate all UI updates
+    updateDownloadButton(progressData);
+    updateDropdown(progressData);
+    
+    logger.debug('All UI elements updated for progress:', progressData.progress + '%');
+}
+
+/**
  * Update download button state based on progress
  * @param {Object} progressData - Progress data from background
  */
@@ -114,56 +129,15 @@ function updateDownloadButton(progressData = {}) {
 }
 
 /**
- * Update dropdown option background during download
+ * Update entire dropdown (selected-option + dropdown-option) during download
+ * Consolidates all dropdown-related UI updates in one place
  * @param {Object} progressData - Progress data
  */
-function updateDropdownOption(progressData = {}) {
-    const lookupUrl = progressData.downloadUrl;
-    const dropdownOption = document.querySelector(`.dropdown-option[data-url="${lookupUrl}"]`);
-    
-    if (!dropdownOption) {
-        logger.warn('Dropdown option not found for URL:', lookupUrl);
-        return;
-    }
-
-    switch (progressData.command) {
-        case 'download-progress':
-            // Set progress background without changing text
-            dropdownOption.style.setProperty('--progress', `${progressData.progress}%`);
-            dropdownOption.classList.add('downloading');
-            logger.debug('Dropdown option progress updated:', progressData.progress + '%');
-            break;
-            
-        case 'download-success':
-            dropdownOption.classList.add('complete');
-            setTimeout(() => {
-                dropdownOption.classList.remove('downloading', 'complete');
-                dropdownOption.style.removeProperty('--progress');
-            }, 2000);
-            break;
-            
-        case 'download-error':
-            dropdownOption.classList.add('error');
-            setTimeout(() => {
-                dropdownOption.classList.remove('downloading', 'error');
-                dropdownOption.style.removeProperty('--progress');
-            }, 3000);
-            break;
-    }
-}
-
-/**
- * Update download progress UI - maps progress to selected option
- * @param {Object} video - Video being downloaded  
- * @param {number} progress - Download progress (0-100)
- * @param {Object} progressData - Additional progress data
- */
-export function updateDownloadProgress(progressData = {}) {
-    logger.debug('Progress update received:', progressData.command, progressData.progress + '%');
-    
+function updateDropdown(progressData = {}) {
     const lookupUrl = progressData.masterUrl || progressData.downloadUrl;
     const progress = progressData.progress;
 
+    // Single DOM query for the dropdown container
     const downloadGroup = document.querySelector(`.video-item[data-url="${lookupUrl}"] .download-group`);
     if (!downloadGroup) {
         logger.warn('Download group not found for URL:', lookupUrl);
@@ -171,45 +145,77 @@ export function updateDownloadProgress(progressData = {}) {
     }
 
     const selectedOption = downloadGroup.querySelector('.selected-option');
+    const dropdownOption = document.querySelector(`.dropdown-option[data-url="${progressData.downloadUrl}"]`);
 
-    // Update all UI elements
-    updateDownloadButton(progressData);
-    updateDropdownOption(progressData);
+    switch (progressData.command) {
+        case 'download-progress':
+            // Update dropdown option background (no text change)
+            if (dropdownOption) {
+                dropdownOption.style.setProperty('--progress', `${progress}%`);
+                dropdownOption.classList.add('downloading');
+            }
 
-    if (!selectedOption) {
-        logger.warn('Selected option not found');
-        return;
-    }
+            // Update selected option (with progress text)
+            if (selectedOption) {
+                selectedOption.style.setProperty('--progress', `${progress}%`);
+                selectedOption.classList.add('downloading');
 
-    // Update selected option (existing logic)
-    selectedOption.style.setProperty('--progress', `${progress}%`);
-    selectedOption.classList.add('downloading');
+                // Build progress display text
+                let displayText = `${progress}%`;
+                if (progressData.currentSegment) {
+                    displayText += ` (${progressData.currentSegment}/${progressData.totalSegments})`;
+                }
+                if (progressData.speed) {
+                    displayText += ` • ${formatSpeed(progressData.speed)}`;
+                }
+                if (progressData.eta && progressData.eta > 0 && progress < 100) {
+                    displayText += ` • ETA: ${formatTime(progressData.eta)}`;
+                }
 
-    let displayText = `${progress}%`;
+                const textSpan = selectedOption.querySelector('span:first-child') || selectedOption;
+                textSpan.textContent = displayText;
+            }
 
-    if (progressData.currentSegment) {
-        displayText += ` (${progressData.currentSegment}/${progressData.totalSegments})`;
-    }
-    if (progressData.speed) {
-        displayText += ` • ${formatSpeed(progressData.speed)}`;
-    }
-    if (progressData.eta && progressData.eta > 0 && progress < 100) {
-        displayText += ` • ETA: ${formatTime(progressData.eta)}`;
-    }
+            logger.debug('Dropdown progress updated:', progress + '%');
+            break;
+            
+        case 'download-success':
+            // Handle dropdown option completion
+            if (dropdownOption) {
+                dropdownOption.classList.add('complete');
+                setTimeout(() => {
+                    dropdownOption.classList.remove('downloading', 'complete');
+                    dropdownOption.style.removeProperty('--progress');
+                }, 2000);
+            }
 
-    // Update the text content
-    const textSpan = selectedOption.querySelector('span:first-child') || selectedOption;
-    textSpan.textContent = displayText;
+            // Handle selected option completion
+            if (selectedOption) {
+                selectedOption.classList.add('complete');
+                const textSpan = selectedOption.querySelector('span:first-child') || selectedOption;
+                textSpan.textContent = 'Completed!';
+                setTimeout(() => restoreOriginalOption(selectedOption, progressData), 2000);
+            }
+            break;
+            
+        case 'download-error':
+            // Handle dropdown option error
+            if (dropdownOption) {
+                dropdownOption.classList.add('error');
+                setTimeout(() => {
+                    dropdownOption.classList.remove('downloading', 'error');
+                    dropdownOption.style.removeProperty('--progress');
+                }, 3000);
+            }
 
-    // Handle completion or error
-    if (progressData.command === 'download-success' || progressData.success !== undefined) {
-        selectedOption.classList.add('complete');
-        textSpan.textContent = 'Completed!';
-        setTimeout(() => restoreOriginalOption(selectedOption, progressData), 2000);
-    } else if (progressData.command === 'download-error' || progressData.error) {
-        selectedOption.classList.add('error');
-        textSpan.textContent = 'Error';
-        setTimeout(() => restoreOriginalOption(selectedOption, progressData), 3000);
+            // Handle selected option error
+            if (selectedOption) {
+                selectedOption.classList.add('error');
+                const textSpan = selectedOption.querySelector('span:first-child') || selectedOption;
+                textSpan.textContent = 'Error';
+                setTimeout(() => restoreOriginalOption(selectedOption, progressData), 3000);
+            }
+            break;
     }
 }
 
