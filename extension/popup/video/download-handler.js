@@ -166,10 +166,10 @@ function updateDropdown(progressData = {}) {
                     displayText += ` (${progressData.currentSegment}/${progressData.totalSegments})`;
                 }
                 if (progressData.speed) {
-                    displayText += ` • ${formatSpeed(progressData.speed)}`;
+                    displayText += ` • ${formatSize(progressData.speed)}/s`;
                 }
                 if (progressData.eta && progressData.eta > 0 && progress < 100) {
-                    displayText += ` • ETA: ${formatTime(progressData.eta)}`;
+                    displayText += ` • ${formatTime(progressData.eta)}`;
                 }
 
                 const textSpan = selectedOption.querySelector('span:first-child') || selectedOption;
@@ -231,11 +231,6 @@ function restoreOriginalOption(selectedOption, progressData = {}) {
     selectedOption.style.removeProperty('--progress');
     
     logger.debug('Restored original option:', progressData.selectedOptionOrigText);
-}
-
-// Helper functions
-function formatSpeed(bytesPerSecond) {
-    return `${formatSize(bytesPerSecond)}/s`;
 }
 
 function formatTime(seconds) {

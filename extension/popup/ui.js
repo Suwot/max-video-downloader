@@ -31,7 +31,6 @@ function createClearCacheButton() {
         <svg viewBox="0 0 24 24" width="16" height="16">
             <path d="M15 16h4v2h-4zm0-8h7v2h-7zm0 4h6v2h-6zM3 18c0 1.1.9 2 2 2h6c1.1 0 2-.9 2-2V8H3v10zm2-8h6v8H5v-8zm5-6H6L5 5H2v2h12V5h-3z"/>
         </svg>
-        <span>Clear Cache</span>
     `;
     return button;
 }
@@ -67,14 +66,6 @@ async function handleClearCacheClick(event) {
         return;
     }
 
-    const svg = button.querySelector('svg');
-    const span = button.querySelector('span');
-    const originalText = span.textContent;
-    
-    // Set loading state
-    svg.classList.add('spinning');
-    span.textContent = 'Clearing';
-    button.classList.add('loading');
     button.disabled = true;
     
     try {
@@ -94,9 +85,6 @@ async function handleClearCacheClick(event) {
         showTooltipOnElement(button, 'Failed to clear cache', 2000);
     } finally {
         // Restore button state
-        svg.classList.remove('spinning');
-        span.textContent = originalText;
-        button.classList.remove('loading');
         button.disabled = false;
     }
 }

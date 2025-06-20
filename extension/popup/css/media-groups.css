@@ -1,10 +1,9 @@
 /* Media Type Groups */
 .media-type-group {
-    margin-bottom: 4px;
-    border-radius: 4px;
+    display: flex;
+    flex-direction: column;
     /* Change from hidden to visible to allow sticky headers to work */
     overflow: visible;
-    transition: box-shadow 0.3s, background-color 0.3s;
     position: relative;
 }
 
@@ -24,7 +23,6 @@
     align-items: center;
     padding: 4px 8px;
     cursor: pointer;
-    transition: background-color 0.3s, border-color 0.3s, color 0.3s;
     position: sticky;
     top: 0;
     /* Increase z-index to make sure headers stay on top */
@@ -35,16 +33,22 @@
 
 /* Theme specific header colors */
 .theme-dark .media-type-header {
-    border-bottom: 1px solid #444;
-    color: white;
+    color: var(--text-primary-dark);
 }
 
 .theme-light .media-type-header {
-    border-bottom: 1px solid #e0e0e0;
-    color: #333;
+    color: var(--text-primary-light);
 }
 
-/* Dark theme headers */
+.theme-dark .media-type-header:hover {
+    background-color: var(--bg-hover-dark);
+}
+
+.theme-light .media-type-header:hover {
+    background-color: var(--bg-hover-light);
+}
+
+/* 
 .theme-dark .media-type-header.hls {
     background-color: #ff5f5f;
 }
@@ -66,7 +70,6 @@
     background-color: #7f7f7f;
 }
 
-/* Light theme headers */
 .theme-light .media-type-header.hls {
     background-color: #ffebeb;
     color: #c83737;
@@ -90,7 +93,7 @@
 .theme-light .media-type-header.unknown {
     background-color: #e5e5e5;
     color: #444;
-}
+} */
 
 .media-type-title {
     font-weight: 600;
@@ -104,7 +107,6 @@
     border-radius: 12px;
     padding: 1px 6px;
     font-size: 11px;
-    transition: background-color 0.3s;
 }
 
 .theme-dark .media-type-count {

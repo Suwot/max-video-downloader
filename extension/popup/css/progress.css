@@ -30,12 +30,3 @@
 .theme-dark .progress-info {
     color: #aaa;
 }
-
-/* Cache stats styling */
-.cache-stats {
-  font-size: 11px;
-  color: var(--text-secondary);
-  margin-top: 4px;
-  margin-left: 10px;
-  opacity: 0.8;
-}

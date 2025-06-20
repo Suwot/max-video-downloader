@@ -15,7 +15,6 @@ body {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     overflow-y: auto; /* Changed from hidden to auto to allow scrolling when needed */
     overflow-x: hidden; /* Prevent horizontal scrolling */
-    transition: background-color 0.3s, color 0.3s;
 }
 
 body.expanded {
@@ -41,7 +40,6 @@ body.theme-light {
     text-align: center;
     padding-top: 8px;
     padding-bottom: 8px;
-    transition: color 0.3s, border-color 0.3s;
 }
 
 .theme-dark .app-title {
