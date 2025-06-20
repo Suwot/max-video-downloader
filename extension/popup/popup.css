@@ -1498,7 +1498,7 @@ body.theme-light {
     width: calc(100% - 16px);
     margin: 0 8px 8px;
     padding: 6px;
-    background: #2196F3;
+    background: var(--color-primary);
     color: white;
     border: none;
     border-radius: 6px;
@@ -1508,7 +1508,7 @@ body.theme-light {
 }
 
 .apply-button:hover {
-    background: #1976D2;
+    background: var(--color-primary-hover);
 }
 
 /* Scrollbar styling */
