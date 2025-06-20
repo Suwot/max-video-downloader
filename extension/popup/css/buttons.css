@@ -145,7 +145,7 @@
     align-items: center;
     justify-content: center;
     padding: 0 8px;
-    background-color: var(--btn-download-bg);
+    background-color: var(--color-primary);
     color: white;
     border: none;
     font-size: 11px;
@@ -183,16 +183,16 @@
 
 /* Hover state ONLY when not downloading */
 .download-btn:not(.downloading):hover {
-    background-color: var(--btn-download-hover);
+    background-color: var(--color-primary-hover);
 }
 
 /* Download button states */
 .download-btn-wrapper.downloading.stop-mode .download-btn {
-    background-color: var(--btn-stop-bg) !important;
+    background-color: var(--color-error) !important;
 }
 
 .download-btn-wrapper.downloading.stop-mode .download-btn:hover {
-    background-color: var(--btn-stop-hover) !important;
+    background-color: var(--color-error-hover) !important;
 }
 
 /* Menu button (three dots) */
@@ -202,27 +202,27 @@
     justify-content: center;
     width: 19px;
     height: 100%;
-    background-color: var(--btn-download-bg);
+    background-color: var(--color-primary);
     border: none;
     cursor: pointer;
     padding: 0;
-    border-left: 1px solid var(--btn-download-border);
+    border-left: 1px solid var(--color-primary-hover);
     transition: background-color var(--transition-slow);
 }
 
 /* Menu button hover - only when not downloading */
 .download-btn-wrapper:not(.downloading) .download-menu-btn:hover {
-    background-color: var(--btn-download-hover);
+    background-color: var(--color-primary-hover);
 }
 
 /* Menu button stop state */
 .download-btn-wrapper.downloading.stop-mode .download-menu-btn {
-    background-color: var(--btn-stop-bg) !important;
-    border-left-color: var(--btn-stop-border) !important;
+    background-color: var(--color-error) !important;
+    border-left-color: var(--color-error-hover) !important;
 }
 
 .download-btn-wrapper.downloading.stop-mode .download-menu-btn:hover {
-    background-color: var(--btn-stop-hover) !important;
+    background-color: var(--color-error-hover) !important;
 }
 
 .download-menu-btn svg {

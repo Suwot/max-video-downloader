@@ -114,7 +114,7 @@
     left: 0;
     height: 100%;
     width: var(--progress, 0%);
-    background-color: var(--progress-bg);
+    background-color: var(--color-success);
     opacity: 0.3;
     transition: width var(--transition-fast);
     z-index: 0;
@@ -128,13 +128,13 @@
 /* Complete and error states for dropdown options */
 .dropdown-option.complete::after {
     width: 100%;
-    background-color: var(--progress-complete);
+    background-color: var(--color-success);
     opacity: 0.5;
 }
 
 .dropdown-option.error::after {
     width: 100%;
-    background-color: var(--progress-error);
+    background-color: var(--color-error);
     opacity: 0.5;
 }
 
@@ -253,7 +253,7 @@
     left: 0;
     height: 100%;
     width: var(--progress, 0%);
-    background-color: var(--progress-bg);
+    background-color: var(--color-success);
     opacity: 0.9;
     transition: width var(--transition-fast);
     z-index: 0;
@@ -266,12 +266,12 @@
 
 /* Complete state styling */
 .selected-option.complete {
-    background-color: var(--progress-complete) !important;
+    background-color: var(--color-success) !important;
     color: white !important;
 }
 
 /* Error state styling */
 .selected-option.error {
-    background-color: var(--progress-error) !important;
+    background-color: var(--color-error) !important;
     color: white !important;
 }

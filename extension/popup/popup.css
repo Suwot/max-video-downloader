@@ -8,17 +8,13 @@
     /* Primary Blue Scheme */
     --color-primary: #1976D2;
     --color-primary-hover: #1565C0;
-    --color-primary-dark: #0D47A1;
     
     /* Error/Stop Red Scheme */
     --color-error: #d32f2f;
     --color-error-hover: #b71c1c;
-    --color-error-light: #ef5350;
     
     /* Success Green Scheme */
     --color-success: #43A047;
-    --color-success-hover: #388E3C;
-    --color-success-light: #4CAF50;
     
     /* Warning Orange Scheme */
     --color-warning: #FF5722;
@@ -26,80 +22,24 @@
     
     /* Background Colors - Dark Theme */
     --bg-primary-dark: #121212;
-    --bg-secondary-dark: #1e1e1e;
-    --bg-tertiary-dark: #252525;
-    --bg-quaternary-dark: #2d2d2d;
-    --bg-dropdown-dark: #242424;
-    --bg-dropdown-hover-dark: #2c2c2c;
-    --bg-option-dark: #3a3a3a;
+    --bg-hover-dark: #3d3d3d;
     
     /* Background Colors - Light Theme */
     --bg-primary-light: #f5f5f5;
-    --bg-secondary-light: #f9f9f9;
-    --bg-tertiary-light: #ffffff;
-    --bg-quaternary-light: #f0f0f0;
+    --bg-hover-light: #f5f5f5;
     
     /* Text Colors - Dark Theme */
     --text-primary-dark: #FAFAFA;
     --text-secondary-dark: #aaa;
-    --text-tertiary-dark: #999;
-    --text-muted-dark: #666;
     
     /* Text Colors - Light Theme */
     --text-primary-light: #333;
     --text-secondary-light: #666;
-    --text-tertiary-light: #757575;
     --text-title-light: #1a73e8;
     
     /* Border Colors */
     --border-primary-dark: #333;
-    --border-secondary-dark: #444;
     --border-primary-light: #e0e0e0;
-    --border-secondary-light: #ddd;
-    
-    /* Download Button States */
-    --btn-download-bg: var(--color-primary);
-    --btn-download-hover: var(--color-primary-hover);
-    --btn-download-border: var(--color-primary-hover);
-    
-    --btn-stop-bg: var(--color-error);
-    --btn-stop-hover: var(--color-error-hover);
-    --btn-stop-border: var(--color-error-hover);
-    
-    /* Progress Colors */
-    --progress-bg: var(--color-success);
-    --progress-bg-opacity: rgba(67, 160, 71, 0.3);
-    --progress-complete: var(--color-success);
-    --progress-error: var(--color-error);
-    
-    /* Media Type Colors - Dark Theme */
-    --media-hls-dark: #ff5f5f;
-    --media-dash-dark: #5f9fff;
-    --media-direct-dark: #5fff7f;
-    --media-blob-dark: #ff5fff;
-    --media-unknown-dark: #7f7f7f;
-    
-    /* Media Type Colors - Light Theme */
-    --media-hls-light-bg: #ffebeb;
-    --media-hls-light-text: #c83737;
-    --media-dash-light-bg: #e5f0ff;
-    --media-dash-light-text: #2a65b3;
-    --media-direct-light-bg: #e5ffe5;
-    --media-direct-light-text: #258f25;
-    --media-blob-light-bg: #ffe5ff;
-    --media-blob-light-text: #b329b3;
-    --media-unknown-light-bg: #e5e5e5;
-    --media-unknown-light-text: #444;
-    
-    /* Opacity Modifiers */
-    --opacity-overlay: 0.5;
-    --opacity-disabled: 0.7;
-    --opacity-hover: 0.8;
-    
-    /* Shadows */
-    --shadow-light: 0 1px 3px rgba(0,0,0,0.1);
-    --shadow-medium: 0 2px 4px rgba(0,0,0,0.2);
-    --shadow-heavy: 0 4px 12px rgba(0, 0, 0, 0.2);
     
     /* Transition Timings */
     --transition-fast: 0.1s ease;
@@ -135,24 +75,14 @@ body.expanded {
 
 /* Dark theme (default) */
 body.theme-dark {
-    background-color: #121212;
-    color: white;
-    --background: #2d2d2d;
-    --border: #444;
-    --text-secondary: #aaa;
-    --hover: #3d3d3d;
-    --primary: #1976D2;
+    background-color: var(--bg-primary-dark);
+    color: var(--text-primary-dark);
 }
 
 /* Light theme */
 body.theme-light {
-    background-color: #f5f5f5;
-    color: #333;
-    --background: #ffffff;
-    --border: #e0e0e0;
-    --text-secondary: #666;
-    --hover: #f5f5f5;
-    --primary: #1976D2;
+    background-color: var(--bg-primary-light);
+    color: var(--text-primary-light);
 }
 
 /* App title */
@@ -166,13 +96,13 @@ body.theme-light {
 }
 
 .theme-dark .app-title {
-    color: white;
-    border-bottom: 1px solid #333;
+    color: var(--text-primary-dark);
+    border-bottom: 1px solid var(--border-primary-dark);
 }
 
 .theme-light .app-title {
-    color: #1a73e8;
-    border-bottom: 1px solid #e0e0e0;
+    color: var(--text-title-light);
+    border-bottom: 1px solid var(--border-primary-light);
 }
 
 
@@ -517,7 +447,7 @@ body.theme-light {
     align-items: center;
     justify-content: center;
     padding: 0 8px;
-    background-color: var(--btn-download-bg);
+    background-color: var(--color-primary);
     color: white;
     border: none;
     font-size: 11px;
@@ -555,16 +485,16 @@ body.theme-light {
 
 /* Hover state ONLY when not downloading */
 .download-btn:not(.downloading):hover {
-    background-color: var(--btn-download-hover);
+    background-color: var(--color-primary-hover);
 }
 
 /* Download button states */
 .download-btn-wrapper.downloading.stop-mode .download-btn {
-    background-color: var(--btn-stop-bg) !important;
+    background-color: var(--color-error) !important;
 }
 
 .download-btn-wrapper.downloading.stop-mode .download-btn:hover {
-    background-color: var(--btn-stop-hover) !important;
+    background-color: var(--color-error-hover) !important;
 }
 
 /* Menu button (three dots) */
@@ -574,27 +504,27 @@ body.theme-light {
     justify-content: center;
     width: 19px;
     height: 100%;
-    background-color: var(--btn-download-bg);
+    background-color: var(--color-primary);
     border: none;
     cursor: pointer;
     padding: 0;
-    border-left: 1px solid var(--btn-download-border);
+    border-left: 1px solid var(--color-primary-hover);
     transition: background-color var(--transition-slow);
 }
 
 /* Menu button hover - only when not downloading */
 .download-btn-wrapper:not(.downloading) .download-menu-btn:hover {
-    background-color: var(--btn-download-hover);
+    background-color: var(--color-primary-hover);
 }
 
 /* Menu button stop state */
 .download-btn-wrapper.downloading.stop-mode .download-menu-btn {
-    background-color: var(--btn-stop-bg) !important;
-    border-left-color: var(--btn-stop-border) !important;
+    background-color: var(--color-error) !important;
+    border-left-color: var(--color-error-hover) !important;
 }
 
 .download-btn-wrapper.downloading.stop-mode .download-menu-btn:hover {
-    background-color: var(--btn-stop-hover) !important;
+    background-color: var(--color-error-hover) !important;
 }
 
 .download-menu-btn svg {
@@ -1134,8 +1064,8 @@ body.theme-light {
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
-    background: var(--background);
-    border: 1px solid var(--border);
+    background: var(--bg-primary-dark);
+    border: 1px solid var(--border-primary-dark);
     border-radius: 8px;
     padding: 20px;
     width: 340px;
@@ -1144,10 +1074,19 @@ body.theme-light {
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
+.theme-light .quality-dialog {
+    background: var(--bg-primary-light);
+    border: 1px solid var(--border-primary-light);
+}
+
 .quality-dialog h3 {
     margin: 0 0 16px 0;
     font-size: 16px;
-    color: var(--text-primary);
+    color: var(--text-primary-dark);
+}
+
+.theme-light .quality-dialog h3 {
+    color: var(--text-primary-light);
 }
 
 .quality-list {
@@ -1169,11 +1108,15 @@ body.theme-light {
 }
 
 .quality-option:hover {
-    background-color: var(--hover);
+    background-color: var(--bg-hover-dark);
+}
+
+.theme-light .quality-option:hover {
+    background-color: var(--bg-hover-light);
 }
 
 .quality-option.selected {
-    background-color: var(--primary);
+    background-color: var(--color-primary);
     color: white;
 }
 
@@ -1193,7 +1136,11 @@ body.theme-light {
 
 .quality-details {
     font-size: 12px;
-    color: var(--text-secondary);
+    color: var(--text-secondary-dark);
+}
+
+.theme-light .quality-details {
+    color: var(--text-secondary-light);
 }
 
 .quality-dialog-buttons {
@@ -1202,7 +1149,11 @@ body.theme-light {
     gap: 8px;
     margin-top: 16px;
     padding-top: 16px;
-    border-top: 1px solid var(--border);
+    border-top: 1px solid var(--border-primary-dark);
+}
+
+.theme-light .quality-dialog-buttons {
+    border-top: 1px solid var(--border-primary-light);
 }
 
 .quality-dialog button {
@@ -1216,16 +1167,25 @@ body.theme-light {
 
 .quality-dialog .cancel-btn {
     background: transparent;
-    color: var(--text-primary);
-    border: 1px solid var(--border);
+    color: var(--text-primary-dark);
+    border: 1px solid var(--border-primary-dark);
+}
+
+.theme-light .quality-dialog .cancel-btn {
+    color: var(--text-primary-light);
+    border: 1px solid var(--border-primary-light);
 }
 
 .quality-dialog .cancel-btn:hover {
-    background: var(--hover);
+    background: var(--bg-hover-dark);
+}
+
+.theme-light .quality-dialog .cancel-btn:hover {
+    background: var(--bg-hover-light);
 }
 
 .quality-dialog .select-btn {
-    background: var(--primary);
+    background: var(--color-primary);
     color: white;
 }
 
@@ -1239,33 +1199,27 @@ body.theme-light {
     font-size: 11px;
     padding: 0 6px;
     border-radius: 3px;
-    background-color: var(--background);
-    border: 1px solid var(--border);
-    color: var(--text-secondary);
+    background-color: var(--bg-primary-dark);
+    border: 1px solid var(--border-primary-dark);
+    color: var(--text-secondary-dark);
     margin-right: 4px;
     flex: 1;
 }
 
-.theme-dark .quality-selector {
-    background-color: #333;
-    border-color: #444;
-    color: #aaa;
-}
-
 .theme-light .quality-selector {
-    background-color: #f9f9f9;
-    border-color: #ddd;
-    color: #666;
+    background-color: var(--bg-primary-light);
+    border-color: var(--border-primary-light);
+    color: var(--text-secondary-light);
 }
 
 .quality-selector:hover {
-    border-color: var(--primary);
+    border-color: var(--color-primary);
 }
 
 .quality-selector:focus {
     outline: none;
-    border-color: var(--primary);
-    box-shadow: 0 0 0 1px var(--primary);
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 1px var(--color-primary);
 }
 
 /* Tooltip */
@@ -1454,7 +1408,7 @@ body.theme-light {
     left: 0;
     height: 100%;
     width: var(--progress, 0%);
-    background-color: var(--progress-bg);
+    background-color: var(--color-success);
     opacity: 0.3;
     transition: width var(--transition-fast);
     z-index: 0;
@@ -1468,13 +1422,13 @@ body.theme-light {
 /* Complete and error states for dropdown options */
 .dropdown-option.complete::after {
     width: 100%;
-    background-color: var(--progress-complete);
+    background-color: var(--color-success);
     opacity: 0.5;
 }
 
 .dropdown-option.error::after {
     width: 100%;
-    background-color: var(--progress-error);
+    background-color: var(--color-error);
     opacity: 0.5;
 }
 
@@ -1593,7 +1547,7 @@ body.theme-light {
     left: 0;
     height: 100%;
     width: var(--progress, 0%);
-    background-color: var(--progress-bg);
+    background-color: var(--color-success);
     opacity: 0.9;
     transition: width var(--transition-fast);
     z-index: 0;
@@ -1606,13 +1560,13 @@ body.theme-light {
 
 /* Complete state styling */
 .selected-option.complete {
-    background-color: var(--progress-complete) !important;
+    background-color: var(--color-success) !important;
     color: white !important;
 }
 
 /* Error state styling */
 .selected-option.error {
-    background-color: var(--progress-error) !important;
+    background-color: var(--color-error) !important;
     color: white !important;
 }
 
