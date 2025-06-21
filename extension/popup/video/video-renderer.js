@@ -33,7 +33,7 @@ export async function renderVideos(videos) {
                 display: inline-block;
                 background-color: #2196F3;
                 color: white;
-                font-size: 10px;
+                font-size: var(--font-body);
                 padding: 2px 6px;
                 border-radius: 10px;
                 margin-left: 8px;

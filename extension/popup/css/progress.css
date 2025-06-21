@@ -21,7 +21,7 @@
 }
 
 .progress-info {
-    font-size: 11px;
+    font-size: var(--font-body);
     color: #666;
     margin-top: 4px;
     text-align: center;

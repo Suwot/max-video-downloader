@@ -1,6 +1,5 @@
 /* Color Variables - Central color scheme management */
 
-/* Primary Colors */
 :root {
     /* Primary Blue Scheme */
     --color-primary: #037AFB;
@@ -19,15 +18,17 @@
     --color-warning-hover: #E64A19;
     
     /* Dark Theme */
-    --bg-primary-dark: #242424;
-    --bg-hover-dark: #323232;
-    --bg-active-dark: #5E5E5E;
-    --bg-secondary-dark: #1E1E1E;
+    --bg-primary-dark: #252525;
+    --bg-primary-dark-hover: #303030;
+    --bg-selected-dark: #393939;
+    --bg-selected-dark-hover: #5D5D5D;
+
+    --bg-secondary-dark: #1E1E1E; 
     
     --border-primary-dark: #61616133;
 
     --text-primary-dark: #FAFAFA;
-    --text-secondary-dark: #666;
+    --text-secondary-dark: #999;
     --text-secondary-dark-hover: #999;
 
     /* Light Theme */
@@ -48,4 +49,10 @@
     --transition-fast: 0.1s ease;
     --transition-normal: 0.2s ease;
     --transition-slow: 0.3s ease;
+
+    /* Font Sizes */
+    --font-h1: 16px;
+    --font-h2: 13px;
+    --font-body: 11px;
+    --font-badge: 8px;
 }

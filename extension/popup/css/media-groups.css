@@ -41,7 +41,7 @@
 }
 
 .theme-dark .media-type-header:hover {
-    background-color: var(--bg-hover-dark);
+    background-color: var(--bg-primary-dark-hover);
 }
 
 .theme-light .media-type-header:hover {
@@ -97,7 +97,7 @@
 
 .media-type-title {
     font-weight: 600;
-    font-size: 12px;
+    font-size: var(--font-h2);
     display: flex;
     align-items: center;
     gap: 8px;
@@ -106,7 +106,7 @@
 .media-type-count {
     border-radius: 12px;
     padding: 1px 6px;
-    font-size: 11px;
+    font-size: var(--font-body);
 }
 
 .theme-dark .media-type-count {

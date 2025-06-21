@@ -7,7 +7,7 @@
     left: 4px;
     padding: 2px 4px;
     border-radius: 3px;
-    font-size: 8px;
+    font-size: var(--font-badge);
     font-weight: bold;
     color: white;
     background-color: rgba(0, 0, 0, 0.7);
@@ -38,7 +38,7 @@
 }
 
 .status-badge .live-text {
-    font-size: 10px;
+    font-size: var(--font-body);
     font-weight: bold;
     line-height: 10px;
     color: #DB6B67;

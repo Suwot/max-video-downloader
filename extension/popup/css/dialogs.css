@@ -1,178 +1,3 @@
-/* Quality Dialog */
-.quality-dialog-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: rgba(0, 0, 0, 0.5);
-    z-index: 999;
-    backdrop-filter: blur(2px);
-}
-
-.quality-dialog {
-    position: fixed;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    background: var(--bg-primary-dark);
-    border: 1px solid var(--border-primary-dark);
-    border-radius: 8px;
-    padding: 20px;
-    width: 340px;
-    max-width: 90%;
-    z-index: 1000;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-}
-
-.theme-light .quality-dialog {
-    background: var(--bg-primary-light);
-    border: 1px solid var(--border-primary-light);
-}
-
-.quality-dialog h3 {
-    margin: 0 0 16px 0;
-    font-size: 16px;
-    color: var(--text-primary-dark);
-}
-
-.theme-light .quality-dialog h3 {
-    color: var(--text-primary-light);
-}
-
-.quality-list {
-    max-height: 300px;
-    overflow-y: auto;
-    margin: 0 -20px;
-    padding: 0 20px;
-    margin-bottom: 20px;
-}
-
-.quality-option {
-    display: flex;
-    align-items: center;
-    padding: 12px;
-    margin: 4px 0;
-    border-radius: 6px;
-    cursor: pointer;
-    transition: all 0.2s ease;
-}
-
-.quality-option:hover {
-    background-color: var(--bg-hover-dark);
-}
-
-.theme-light .quality-option:hover {
-    background-color: var(--bg-hover-light);
-}
-
-.quality-option.selected {
-    background-color: var(--color-primary);
-    color: white;
-}
-
-.quality-option.selected .quality-details {
-    color: rgba(255, 255, 255, 0.8);
-}
-
-.quality-info {
-    flex-grow: 1;
-}
-
-.quality-resolution {
-    font-weight: 500;
-    font-size: 14px;
-    margin-bottom: 2px;
-}
-
-.quality-details {
-    font-size: 12px;
-    color: var(--text-secondary-dark);
-}
-
-.theme-light .quality-details {
-    color: var(--text-secondary-light);
-}
-
-.quality-dialog-buttons {
-    display: flex;
-    justify-content: flex-end;
-    gap: 8px;
-    margin-top: 16px;
-    padding-top: 16px;
-    border-top: 1px solid var(--border-primary-dark);
-}
-
-.theme-light .quality-dialog-buttons {
-    border-top: 1px solid var(--border-primary-light);
-}
-
-.quality-dialog button {
-    padding: 8px 16px;
-    border-radius: 6px;
-    border: none;
-    font-size: 14px;
-    cursor: pointer;
-    transition: all 0.2s ease;
-}
-
-.quality-dialog .cancel-btn {
-    background: transparent;
-    color: var(--text-primary-dark);
-    border: 1px solid var(--border-primary-dark);
-}
-
-.theme-light .quality-dialog .cancel-btn {
-    color: var(--text-primary-light);
-    border: 1px solid var(--border-primary-light);
-}
-
-.quality-dialog .cancel-btn:hover {
-    background: var(--bg-hover-dark);
-}
-
-.theme-light .quality-dialog .cancel-btn:hover {
-    background: var(--bg-hover-light);
-}
-
-.quality-dialog .select-btn {
-    background: var(--color-primary);
-    color: white;
-}
-
-.quality-dialog .select-btn:hover {
-    filter: brightness(1.1);
-}
-
-/* Quality selector dropdown */
-.quality-selector {
-    height: 24px;
-    font-size: 11px;
-    padding: 0 6px;
-    border-radius: 3px;
-    background-color: var(--bg-primary-dark);
-    border: 1px solid var(--border-primary-dark);
-    color: var(--text-secondary-dark);
-    margin-right: 4px;
-    flex: 1;
-}
-
-.theme-light .quality-selector {
-    background-color: var(--bg-primary-light);
-    border-color: var(--border-primary-light);
-    color: var(--text-secondary-light);
-}
-
-.quality-selector:hover {
-    border-color: var(--color-primary);
-}
-
-.quality-selector:focus {
-    outline: none;
-    border-color: var(--color-primary);
-    box-shadow: 0 0 0 1px var(--color-primary);
-}
-
 /* Tooltip */
 .tooltip {
     position: absolute;
@@ -183,7 +8,7 @@
     color: white;
     padding: 3px 6px;
     border-radius: 3px;
-    font-size: 11px;
+    font-size: var(--font-body);
     white-space: nowrap;
     z-index: 100;
     pointer-events: none;
@@ -199,7 +24,7 @@
     color: white;
     padding: 8px 16px;
     border-radius: 6px;
-    font-size: 14px;
+    font-size: var(--font-h2);
     box-shadow: 0 2px 5px rgba(0,0,0,0.2);
     z-index: 1000;
     opacity: 0;

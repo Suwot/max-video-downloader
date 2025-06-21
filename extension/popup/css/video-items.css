@@ -64,7 +64,7 @@
     border-radius: 3px;
     background-color: rgba(0, 0, 0, 0.75);
     color: white;
-    font-size: 11px;
+    font-size: var(--font-body);
     font-weight: 500;
     z-index: 1;
     pointer-events: none;
@@ -90,7 +90,7 @@
 
 .video-title {
     flex: 1;
-    font-size: 13px;
+    font-size: var(--font-h2);
     font-weight: 500;
     margin: 0;
     overflow: hidden;
@@ -118,7 +118,7 @@
     flex-direction: column;
     gap: 3px;
     margin: 3px 0;
-    font-size: 11px;
+    font-size: var(--font-body);
     width: 100%;
 }
 
@@ -151,7 +151,7 @@
     align-items: center;
     padding: 1px 4px;
     border-radius: 3px;
-    font-size: 11px;
+    font-size: var(--font-body);
     white-space: nowrap;
 }
 
@@ -177,7 +177,7 @@
 
 /* Codec info */
 .codec-info {
-    font-size: 11px;
+    font-size: var(--font-body);
     color: #666;
     margin-left: 8px;
     padding: 1px 4px;
@@ -192,7 +192,7 @@
 
 /* Format info */
 .format-info {
-    font-size: 11px;
+    font-size: var(--font-body);
     color: #666;
     margin-bottom: 4px;
     font-style: italic;
@@ -204,7 +204,7 @@
 
 /* Warning for blob URLs */
 .blob-warning {
-    font-size: 9px;
+    font-size: var(--font-badge);
     margin-bottom: 4px;
 }
 
