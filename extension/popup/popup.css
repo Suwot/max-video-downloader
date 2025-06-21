@@ -617,7 +617,7 @@ body.theme-light {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 4px 8px;
+    padding: 8px;
     cursor: pointer;
     position: sticky;
     top: 0;

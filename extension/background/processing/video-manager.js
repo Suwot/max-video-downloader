@@ -22,6 +22,10 @@ const allDetectedVideos = new Map();
 // Map<tabId, Map<normalizedVariantUrl, masterUrl>>
 const variantMasterMap = new Map();
 
+// Track dismissed videos per tab
+// Map<tabId, Set<normalizedUrl>>
+const dismissedVideos = new Map();
+
 // Expose allDetectedVideos for debugging
 globalThis.allDetectedVideosInternal = allDetectedVideos;
 
@@ -46,6 +50,11 @@ class VideoProcessingPipeline {
      * @param {string} videoType - Type of video (hls, dash, direct, blob)
      */
     enqueue(tabId, normalizedUrl, videoType) {
+        // Skip if dismissed
+        if (isVideoDismissed(tabId, normalizedUrl)) {
+            logger.debug(`Not enqueueing dismissed video: ${normalizedUrl}`);
+            return;
+        }
         // Don't add duplicates to the queue
         if (this.queue.some(item => item.normalizedUrl === normalizedUrl) || 
             this.processing.has(normalizedUrl)) {
@@ -682,6 +691,11 @@ function cleanupVideosForTab(tabId) {
     if (variantMasterMap.has(tabId)) {
         variantMasterMap.delete(tabId);
     }
+    
+    // Clean up dismissed videos
+    if (dismissedVideos.has(tabId)) {
+        dismissedVideos.delete(tabId);
+    }
 }
 
 /**
@@ -834,6 +848,30 @@ function addDetectedVideo(tabId, videoInfo) {
     return true;
 }
 
+// Dismiss a video for a tab (hide from UI, skip processing)
+function dismissVideo(tabId, normalizedUrl) {
+    if (!dismissedVideos.has(tabId)) {
+        dismissedVideos.set(tabId, new Set());
+    }
+    dismissedVideos.get(tabId).add(normalizedUrl);
+    logger.info(`Dismissed video ${normalizedUrl} for tab ${tabId}`);
+    sendVideoUpdateToUI(tabId); // Refresh UI
+}
+
+// Restore a dismissed video for a tab (show in UI, allow processing)
+function restoreVideo(tabId, normalizedUrl) {
+    if (dismissedVideos.has(tabId)) {
+        dismissedVideos.get(tabId).delete(normalizedUrl);
+        logger.info(`Restored video ${normalizedUrl} for tab ${tabId}`);
+        sendVideoUpdateToUI(tabId); // Refresh UI
+    }
+}
+
+// Checks if a video is dismissed for a tab
+function isVideoDismissed(tabId, normalizedUrl) {
+    return dismissedVideos.has(tabId) && dismissedVideos.get(tabId).has(normalizedUrl);
+}
+
 /**
  * Get videos for UI display with efficient filtering
  * @param {number} tabId - Tab ID
@@ -847,7 +885,12 @@ function getVideosForDisplay(tabId) {
     
     // Create array directly from values() instead of entries()
     return Array.from(tabVideosMap.values())
-        .filter(video => !(video.isVariant && video.hasKnownMaster) && video.isValid && video.mediaType !== 'audio')
+        .filter(video =>
+            !(video.isVariant && video.hasKnownMaster) &&
+            video.isValid &&
+            video.mediaType !== 'audio' &&
+            !isVideoDismissed(tabId, video.normalizedUrl)
+        )
         .map(video => ({
             ...video,
             timestampLastProcessed: now,
@@ -863,6 +906,7 @@ function cleanupAllVideos() {
     variantMasterMap.clear();
     videoProcessingPipeline.queue = [];
     videoProcessingPipeline.processing.clear();
+    dismissedVideos.clear();
     logger.info('All detected videos cleared');
 }
 
@@ -875,5 +919,7 @@ export {
     normalizeUrl,
     getVideosForDisplay,
     initVideoManager,
-    getVideoByUrl
+    getVideoByUrl,
+    dismissVideo,
+    restoreVideo
 };
