@@ -74,7 +74,7 @@
 }
 
 /* Copy button */
-.copy-button {
+.dismiss-button {
     background: none;
     border: none;
     padding: 3px;
@@ -83,36 +83,20 @@
     position: relative;
 }
 
-.theme-dark .copy-button {
-    color: #aaa;
+.theme-dark .dismiss-button path {
+    fill: var(--text-secondary-dark);
 }
 
-.theme-light .copy-button {
-    color: #757575;
+.theme-dark .dismiss-button:hover path {
+    fill: var(--text-secondary-dark-hover);
 }
 
-.theme-dark .copy-button:hover {
-    color: white;
+.theme-light .dismiss-button path {
+    fill: var(--text-secondary-light);
 }
 
-.theme-light .copy-button:hover {
-    color: #333;
-}
-
-.theme-dark .copy-button svg {
-    fill: #aaa;
-}
-
-.theme-light .copy-button svg {
-    fill: #757575;
-}
-
-.theme-dark .copy-button:hover svg {
-    fill: white;
-}
-
-.theme-light .copy-button:hover svg {
-    fill: #333;
+.theme-light .dismiss-button:hover path {
+    fill: var(--text-secondary-light-hover);
 }
 
 /* Download button group */

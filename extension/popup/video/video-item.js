@@ -127,32 +127,21 @@ export function createVideoElement(video) {
         title.appendChild(extractedBadge);
     }
     
-    const copyButton = document.createElement('button');
-    copyButton.className = 'copy-button';
-    copyButton.innerHTML = `
-        <svg viewBox="0 0 24 24" width="14" height="14">
-            <path d="M16 1H4C3 1 2 2 2 3v14h2V3h12V1zm3 4H8C7 5 6 6 6 7v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
+    // Dismiss (X) button
+    const dismissButton = document.createElement('button');
+    dismissButton.className = 'dismiss-button';
+    dismissButton.innerHTML = `
+        <svg width="10" height="10" viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M9.70396 1.70624C10.0946 1.31562 10.0946 0.681244 9.70396 0.290619C9.31333 -0.100006 8.67896 -0.100006 8.28833 0.290619L4.9977 3.58437L1.70396 0.293744C1.31333 -0.0968812 0.678955 -0.0968812 0.28833 0.293744C-0.102295 0.684369 -0.102295 1.31874 0.28833 1.70937L3.58208 4.99999L0.291455 8.29374C-0.0991699 8.68437 -0.0991699 9.31874 0.291455 9.70937C0.68208 10.1 1.31646 10.1 1.70708 9.70937L4.9977 6.41562L8.29146 9.70624C8.68208 10.0969 9.31646 10.0969 9.70708 9.70624C10.0977 9.31562 10.0977 8.68124 9.70708 8.29062L6.41333 4.99999L9.70396 1.70624Z"/>
         </svg>
     `;
-    
-    copyButton.addEventListener('click', () => {
-        navigator.clipboard.writeText(video.url);
-        
-        // Create a new tooltip element each time
-        const tooltip = document.createElement('div');
-        tooltip.className = 'tooltip';
-        tooltip.textContent = 'Copied';
-        
-        // Position the tooltip
-        copyButton.appendChild(tooltip);
-        
-        // Remove after 2 seconds
-        setTimeout(() => {
-            tooltip.remove();
-        }, 2000);
+    dismissButton.title = 'Dismiss';
+    dismissButton.addEventListener('click', () => {
+        // Placeholder for dismiss logic
+        console.log('Dismiss button clicked for', video.url);
     });
     
-    titleRow.append(title, copyButton);
+    titleRow.append(title, dismissButton);
 
     // For blob URLs, add warning about potential limitations
     if (video.type === 'blob') {
