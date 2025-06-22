@@ -45,6 +45,8 @@
 body {
   width: 420px;
   min-height: 100px;
+  -webkit-transition: min-height var(--transition-normal);
+  transition: min-height var(--transition-normal);
   max-height: 500px;
   height: auto;
   margin: 0;
@@ -153,10 +155,10 @@ body.theme-light {
           align-items: center;
   padding: 6px;
   z-index: 101;
-  -webkit-transition: -webkit-box-shadow 0.3s;
-  transition: -webkit-box-shadow 0.3s;
-  transition: box-shadow 0.3s;
-  transition: box-shadow 0.3s, -webkit-box-shadow 0.3s;
+  -webkit-transition: -webkit-box-shadow var(--transition-normal);
+  transition: -webkit-box-shadow var(--transition-normal);
+  transition: box-shadow var(--transition-normal);
+  transition: box-shadow var(--transition-normal), -webkit-box-shadow var(--transition-normal);
 }
 .theme-dark .refresh-container {
   background-color: var(--bg-primary-dark);
@@ -399,10 +401,10 @@ body.theme-light {
 }
 
 .media-type-toggle {
-  -webkit-transition: -webkit-transform 0.2s;
-  transition: -webkit-transform 0.2s;
-  transition: transform 0.2s;
-  transition: transform 0.2s, -webkit-transform 0.2s;
+  -webkit-transition: -webkit-transform var(--transition-normal);
+  transition: -webkit-transform var(--transition-normal);
+  transition: transform var(--transition-normal);
+  transition: transform var(--transition-normal), -webkit-transform var(--transition-normal);
 }
 .theme-dark .media-type-toggle {
   color: white;
@@ -414,8 +416,8 @@ body.theme-light {
 }
 
 .media-type-content {
-  -webkit-transition: max-height 0.3s;
-  transition: max-height 0.3s;
+  -webkit-transition: max-height var(--transition-normal);
+  transition: max-height var(--transition-normal);
 }
 .media-type-content.collapsed {
   max-height: 0;
@@ -472,8 +474,8 @@ body.theme-light {
   height: 100%;
   -o-object-fit: cover;
      object-fit: cover;
-  -webkit-transition: opacity 0.2s;
-  transition: opacity 0.2s;
+  -webkit-transition: opacity var(--transition-normal);
+  transition: opacity var(--transition-normal);
   opacity: 0;
 }
 .preview-image.loaded {
@@ -708,8 +710,8 @@ body.theme-light {
   width: 73px;
   height: 100%;
   overflow: hidden;
-  -webkit-transition: background-color var(--transition-slow);
-  transition: background-color var(--transition-slow);
+  -webkit-transition: background-color var(--transition-fast);
+  transition: background-color var(--transition-fast);
 }
 .download-btn:not(.downloading)::before {
   content: "";
@@ -753,8 +755,8 @@ body.theme-light {
   cursor: pointer;
   padding: 0;
   border-left: 1px solid var(--color-primary-hover);
-  -webkit-transition: background-color var(--transition-slow);
-  transition: background-color var(--transition-slow);
+  -webkit-transition: background-color var(--transition-fast);
+  transition: background-color var(--transition-fast);
 }
 .download-menu-btn svg {
   width: 10px;
@@ -790,8 +792,8 @@ body.theme-light {
   background: var(--bg-primary-dark);
   color: #FAFAFA;
   font-size: var(--font-body);
-  -webkit-transition: background-color 0.2s;
-  transition: background-color 0.2s;
+  -webkit-transition: background-color var(--transition-normal);
+  transition: background-color var(--transition-normal);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -828,16 +830,16 @@ body.theme-light {
   -webkit-box-align: center;
       -ms-flex-align: center;
           align-items: center;
-  -webkit-transition: -webkit-transform 0.2s;
-  transition: -webkit-transform 0.2s;
-  transition: transform 0.2s;
-  transition: transform 0.2s, -webkit-transform 0.2s;
+  -webkit-transition: -webkit-transform var(--transition-normal);
+  transition: -webkit-transform var(--transition-normal);
+  transition: transform var(--transition-normal);
+  transition: transform var(--transition-normal), -webkit-transform var(--transition-normal);
 }
 .dropdown-icon svg {
-  -webkit-transition: -webkit-transform 0.2s;
-  transition: -webkit-transform 0.2s;
-  transition: transform 0.2s;
-  transition: transform 0.2s, -webkit-transform 0.2s;
+  -webkit-transition: -webkit-transform var(--transition-normal);
+  transition: -webkit-transform var(--transition-normal);
+  transition: transform var(--transition-normal);
+  transition: transform var(--transition-normal), -webkit-transform var(--transition-normal);
 }
 
 .options-container {
@@ -852,13 +854,17 @@ body.theme-light {
   z-index: 100;
   max-height: 0;
   overflow-y: auto;
-  -webkit-transition: all 0.3s;
-  transition: all 0.3s;
+  -webkit-transition: all var(--transition-normal);
+  transition: all var(--transition-normal);
   opacity: 0;
   visibility: hidden;
   width: 282px;
   -ms-overflow-style: none;
   scrollbar-width: none;
+}
+.custom-dropdown[data-type=dash] .options-container {
+  width: 404px;
+  left: -115px;
 }
 .options-container::-webkit-scrollbar {
   width: 6px;
@@ -874,11 +880,6 @@ body.theme-light {
   background: #666;
 }
 
-.video-item[data-type=dash] .options-container {
-  width: 404px;
-  left: -115px;
-}
-
 .video-item .download-group {
   position: relative;
 }
@@ -887,8 +888,8 @@ body.theme-light {
   padding: 8px;
   color: var(--text-secondary-dark);
   font-size: var(--font-body);
-  -webkit-transition: background-color 0.1s;
-  transition: background-color 0.1s;
+  -webkit-transition: background-color var(--transition-fast);
+  transition: background-color var(--transition-fast);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -972,8 +973,8 @@ body.theme-light {
   font-size: var(--font-body);
   color: var(--text-secondary-dark);
   cursor: pointer;
-  -webkit-transition: background-color 0.1s;
-  transition: background-color 0.1s;
+  -webkit-transition: background-color var(--transition-fast);
+  transition: background-color var(--transition-fast);
   border-radius: 2px;
 }
 .track-option:hover {
@@ -995,15 +996,15 @@ body.theme-light {
   background: var(--bg-selected-dark-hover);
 }
 .track-option.compatible {
-  border-left: 3px solid #4CAF50;
+  border-left: 3px solid var(--color-success);
 }
 .track-option.incompatible {
-  border-left: 3px solid #F44336;
+  border-left: 3px solid var(--color-error);
   opacity: 0.8;
 }
 .track-option input {
   margin-right: 6px;
-  accent-color: #2196F3;
+  accent-color: var(--color-primary);
 }
 
 .track-label {
@@ -1023,8 +1024,8 @@ body.theme-light {
   border-radius: 6px;
   font-size: var(--font-h2);
   cursor: pointer;
-  -webkit-transition: background-color 0.2s;
-  transition: background-color 0.2s;
+  -webkit-transition: background-color var(--transition-normal);
+  transition: background-color var(--transition-normal);
 }
 .apply-button:hover {
   background: var(--color-primary-hover);
@@ -1114,37 +1115,6 @@ body.theme-light {
   width: 9px;
   height: 9px;
   fill: #DB6B67;
-}
-
-.progress-container {
-  display: none;
-  margin-top: 8px;
-  width: 100%;
-  background-color: rgba(0, 0, 0, 0.1);
-  border-radius: 3px;
-  overflow: hidden;
-  height: 4px;
-}
-.theme-dark .progress-container {
-  background-color: rgba(255, 255, 255, 0.1);
-}
-
-.progress-bar {
-  height: 4px;
-  width: 0%;
-  background-color: #1976D2;
-  -webkit-transition: width 0.3s ease;
-  transition: width 0.3s ease;
-}
-
-.progress-info {
-  font-size: var(--font-body);
-  color: #666;
-  margin-top: 4px;
-  text-align: center;
-}
-.theme-dark .progress-info {
-  color: #aaa;
 }
 
 .spinning {
@@ -1242,8 +1212,8 @@ body.theme-light {
   display: none;
   max-width: 80%;
   pointer-events: none;
-  -webkit-transition: opacity 0.2s ease;
-  transition: opacity 0.2s ease;
+  -webkit-transition: opacity var(--transition-normal) ease;
+  transition: opacity var(--transition-normal) ease;
   opacity: 0;
 }
 .preview-hover.visible {
@@ -1295,39 +1265,11 @@ body.theme-light {
           box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
   z-index: 1000;
   opacity: 0;
-  -webkit-transition: opacity 0.3s ease, -webkit-transform 0.3s ease;
-  transition: opacity 0.3s ease, -webkit-transform 0.3s ease;
-  transition: opacity 0.3s ease, transform 0.3s ease;
-  transition: opacity 0.3s ease, transform 0.3s ease, -webkit-transform 0.3s ease;
+  -webkit-transition: opacity var(--transition-normal) ease, -webkit-transform var(--transition-normal) ease;
+  transition: opacity var(--transition-normal) ease, -webkit-transform var(--transition-normal) ease;
+  transition: opacity var(--transition-normal) ease, transform var(--transition-normal) ease;
+  transition: opacity var(--transition-normal) ease, transform var(--transition-normal) ease, -webkit-transform var(--transition-normal) ease;
 }
 .theme-dark .error-notification {
   background-color: #ef5350;
-}
-
-@media (max-width: 380px) {
-  .video-item {
-    -webkit-box-orient: vertical;
-    -webkit-box-direction: normal;
-        -ms-flex-direction: column;
-            flex-direction: column;
-    gap: 8px;
-  }
-  .preview-column {
-    width: 100%;
-    max-width: 180px;
-    margin: 0 auto;
-  }
-  .preview-container {
-    height: 100px;
-  }
-}
-@media (max-width: 420px) {
-  .clear-cache-button {
-    padding: 4px 6px;
-    font-size: var(--font-body);
-  }
-  .clear-cache-button svg {
-    width: 14px;
-    height: 14px;
-  }
 }

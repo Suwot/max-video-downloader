@@ -69,6 +69,7 @@
 body {
     width: 420px;
     min-height: 100px;
+    transition: min-height var(--transition-normal);
     max-height: 500px;
     height: auto;
     margin: 0;
@@ -172,7 +173,7 @@ body {
     align-items: center;
     padding: 6px;
     z-index: 101;
-    transition: box-shadow 0.3s;
+    transition: box-shadow var(--transition-normal);
 
     .theme-dark & {
         background-color: var(--bg-primary-dark);
@@ -433,7 +434,7 @@ body {
 }
 
 .media-type-toggle {
-    transition: transform 0.2s;
+    transition: transform var(--transition-normal);
 
     .theme-dark & {
         color: white;
@@ -446,7 +447,7 @@ body {
 }
 
 .media-type-content {
-    transition: max-height 0.3s;
+    transition: max-height var(--transition-normal);
 
     &.collapsed {
         max-height: 0;
@@ -508,7 +509,7 @@ body {
     width: 100%;
     height: 100%;
     object-fit: cover;
-    transition: opacity 0.2s;
+    transition: opacity var(--transition-normal);
     opacity: 0;
 
     &.loaded {
@@ -730,7 +731,7 @@ body {
     width: 73px;
     height: 100%;
     overflow: hidden;
-    transition: background-color var(--transition-slow);
+    transition: background-color var(--transition-fast);
 
     &:not(.downloading)::before {
         content: '';
@@ -766,7 +767,7 @@ body {
     cursor: pointer;
     padding: 0;
     border-left: 1px solid var(--color-primary-hover);
-    transition: background-color var(--transition-slow);
+    transition: background-color var(--transition-fast);
 
     svg {
         width: 10px;
@@ -798,7 +799,7 @@ body {
         background: var(--bg-primary-dark);
         color: #FAFAFA;
         font-size: var(--font-body);
-        transition: background-color 0.2s;
+        transition: background-color var(--transition-normal);
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
@@ -840,14 +841,20 @@ body {
 .dropdown-icon {
     display: flex;
     align-items: center;
-    transition: transform 0.2s;
+    transition: transform var(--transition-normal);
 
     svg {
-        transition: transform 0.2s;
+        transition: transform var(--transition-normal);
     }
 }
 
 .options-container {
+
+    .custom-dropdown[data-type="dash"] & {
+        width: calc(420px - 16px);
+        left: -115px;
+    }
+    
     position: absolute;
     left: 0;
     margin-top: 1px;
@@ -858,7 +865,7 @@ body {
     z-index: 100;
     max-height: 0;
     overflow-y: auto;
-    transition: all 0.3s;
+    transition: all var(--transition-normal);
     opacity: 0;
     visibility: hidden;
     width: 282px;
@@ -884,12 +891,6 @@ body {
     }
 }
 
-// DASH specific dropdown positioning
-.video-item[data-type="dash"] .options-container {
-    width: calc(420px - 16px);
-    left: -115px;
-}
-
 // Style for positioning wider options container
 .video-item .download-group {
     position: relative;
@@ -899,7 +900,7 @@ body {
     padding: 8px;
     color: var(--text-secondary-dark);
     font-size: var(--font-body);
-    transition: background-color 0.1s;
+    transition: background-color var(--transition-fast);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -985,7 +986,7 @@ body {
     font-size: var(--font-body);
     color: var(--text-secondary-dark);
     cursor: pointer;
-    transition: background-color 0.1s;
+    transition: background-color var(--transition-fast);
     border-radius: 2px;
 
     &:hover {
@@ -1007,17 +1008,17 @@ body {
     }
 
     &.compatible {
-        border-left: 3px solid #4CAF50;
+        border-left: 3px solid var(--color-success);
     }
 
     &.incompatible {
-        border-left: 3px solid #F44336;
+        border-left: 3px solid var(--color-error);
         opacity: 0.8;
     }
 
     input {
         margin-right: 6px;
-        accent-color: #2196F3;
+        accent-color: var(--color-primary);
     }
 }
 
@@ -1038,7 +1039,7 @@ body {
     border-radius: 6px;
     font-size: var(--font-h2);
     cursor: pointer;
-    transition: background-color 0.2s;
+    transition: background-color var(--transition-normal);
 
     &:hover {
         background: var(--color-primary-hover);
@@ -1139,42 +1140,6 @@ body {
 }
 
 // =====================================================
-// PROGRESS
-// =====================================================
-
-.progress-container {
-    display: none;
-    margin-top: 8px;
-    width: 100%;
-    background-color: rgba(0, 0, 0, 0.1);
-    border-radius: 3px;
-    overflow: hidden;
-    height: 4px;
-
-    .theme-dark & {
-        background-color: rgba(255, 255, 255, 0.1);
-    }
-}
-
-.progress-bar {
-    height: 4px;
-    width: 0%;
-    background-color: #1976D2;
-    transition: width 0.3s ease;
-}
-
-.progress-info {
-    font-size: var(--font-body);
-    color: #666;
-    margin-top: 4px;
-    text-align: center;
-
-    .theme-dark & {
-        color: #aaa;
-    }
-}
-
-// =====================================================
 // LOADERS & ANIMATIONS
 // =====================================================
 
@@ -1239,7 +1204,7 @@ body {
     display: none;
     max-width: 80%;
     pointer-events: none;
-    transition: opacity 0.2s ease;
+    transition: opacity var(--transition-normal) ease;
     opacity: 0;
 
     &.visible {
@@ -1296,42 +1261,9 @@ body {
     box-shadow: 0 2px 5px rgba(0,0,0,0.2);
     z-index: 1000;
     opacity: 0;
-    transition: opacity 0.3s ease, transform 0.3s ease;
+    transition: opacity var(--transition-normal) ease, transform var(--transition-normal) ease;
 
     .theme-dark & {
         background-color: #ef5350;
-    }
-}
-
-// =====================================================
-// RESPONSIVE DESIGN
-// =====================================================
-
-@media (max-width: 380px) {
-    .video-item {
-        flex-direction: column;
-        gap: 8px;
-    }
-    
-    .preview-column {
-        width: 100%;
-        max-width: 180px;
-        margin: 0 auto;
-    }
-    
-    .preview-container {
-        height: 100px;
-    }
-}
-
-@media (max-width: 420px) {
-    .clear-cache-button {
-        padding: 4px 6px;
-        font-size: var(--font-body);
-    }
-    
-    .clear-cache-button svg {
-        width: 14px;
-        height: 14px;
     }
 }
