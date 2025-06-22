@@ -51,18 +51,12 @@ async function handlePortMessage(message, port, portId) {
             // Delegate to video-manager using unified approach
             sendVideoUpdateToUI(message.tabId, null, { _sendFullList: true });
             break;
-        case 'dismissVideo': {
-            // Dismiss the video for this tab
-            try {
-                const { tabId, url } = message;
 
-                dismissVideoFromTab(tabId, url);
-                // UI will update via sendVideoUpdateToUI inside dismissVideo
-            } catch (err) {
-                logger.error('Error handling dismissVideo:', err);
-            }
+        case 'dismissVideo':
+            // Dismiss the video for this tab
+            dismissVideoFromTab(message.tabId, message.url);
             break;
-        }
+            
         case 'download':
             startDownload(message);
             break;
