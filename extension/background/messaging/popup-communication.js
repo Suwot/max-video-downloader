@@ -5,7 +5,7 @@
 
 // Add static imports at the top
 import { sendVideoUpdateToUI, cleanupAllVideos, dismissVideoFromTab } from '../processing/video-manager.js';
-import { startDownload } from '../download/download-manager.js';
+import { startDownload, getActiveDownloadProgress } from '../download/download-manager.js';
 import { createLogger } from '../../shared/utils/logger.js';
 import { clearPreviewCache, getCacheStats } from '../../shared/utils/preview-cache.js';
 import { clearAllHeaderCaches } from '../../shared/utils/headers-utils.js'
@@ -50,6 +50,15 @@ async function handlePortMessage(message, port, portId) {
         case 'getVideos':
             // Delegate to video-manager using unified approach
             sendVideoUpdateToUI(message.tabId, null, { _sendFullList: true });
+            
+            // Send active download progress for immediate UI restoration
+            const activeProgress = getActiveDownloadProgress();
+            if (activeProgress.length > 0) {
+                logger.debug(`Sending ${activeProgress.length} active download progress states to popup`);
+                activeProgress.forEach(progressData => {
+                    port.postMessage(progressData);
+                });
+            }
             break;
 
         case 'dismissVideo':

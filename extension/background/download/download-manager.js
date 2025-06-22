@@ -1,15 +1,22 @@
 /**
- * Download Manager - Centralized download orchestration
- * Single responsibility: Manage download lifecycle using state manager as single source of truth
+ * Download Manager - Self-contained download orchestration
+ * Single responsibility: Manage download lifecycle with simple deduplication and progress tracking
+ * No external state dependencies - fully self-contained
  */
 
 import { createLogger } from '../../shared/utils/logger.js';
-import { setState, select } from '../state/state-manager.js';
 import nativeHostService from '../messaging/native-host-service.js';
 import { getRequestHeaders } from '../../shared/utils/headers-utils.js';
 import { broadcastToPopups } from '../messaging/popup-communication.js';
 
 const logger = createLogger('Download Manager');
+
+// Simple Set for active download deduplication
+const activeDownloads = new Set();
+
+// Simple Map for tracking download progress per URL (for UI restoration)
+// Key: downloadUrl, Value: full progress message from NHS
+const activeDownloadProgress = new Map();
 
 /**
  * Initialize download manager
@@ -36,20 +43,15 @@ export async function startDownload(downloadRequest) {
     
     logger.debug('Starting download:', downloadId);
     
-    // Check for duplicate download (simple active list check)
-    const isAlreadyActive = select(state => state.downloads.active.includes(downloadId));
-    if (isAlreadyActive) {
+    // Simple deduplication check using Set
+    if (activeDownloads.has(downloadId)) {
         logger.debug('Download already active:', downloadId);
         return;
     }
     
     try {
-        // Add to active downloads list (simple URL tracking)
-        setState(state => ({
-            downloads: {
-                active: [...state.downloads.active, downloadId]
-            }
-        }));
+        // Add to active downloads Set for deduplication
+        activeDownloads.add(downloadId);
         
         // Create Chrome notification
         createDownloadNotification(downloadRequest.filename);
@@ -82,16 +84,8 @@ export async function startDownload(downloadRequest) {
     } catch (error) {
         logger.error('Failed to start download:', error);
         
-        // Clean up failed download from active list and progress data
-        setState(state => ({
-            downloads: {
-                active: state.downloads.active.filter(id => id !== downloadId),
-                // Clean up any progress data for failed start
-                lastProgress: Object.fromEntries(
-                    Object.entries(state.downloads.lastProgress).filter(([id]) => id !== downloadId)
-                )
-            }
-        }));
+        // Clean up failed download from active set
+        activeDownloads.delete(downloadId);
         
         // Notify error to UI via direct broadcast
         broadcastToPopups({
@@ -108,54 +102,20 @@ export async function startDownload(downloadRequest) {
     }
 }
 
-/**
- * Handle download progress updates and errors from native host
- * @private
- */
+// Handle download progress updates and errors from native host
 function handleDownloadProgress(downloadId, downloadRequest, response) {
     // response can have one of 3 commands: download-progress, download-success, download-error
 
-    // Only add completion flags for UI broadcast
-    const broadcastData = (response.success !== undefined || response.error)
-        ? { ...response, 
-            success: response.success, 
-            error: response.error,
-            downloadBtnOrigHTML: downloadRequest.downloadBtnOrigHTML || null,
-            selectedOptionOrigText: downloadRequest.selectedOptionOrigText || null
-        }
-        : response;
+    // Store progress in local map for UI restoration 
+    activeDownloadProgress.set(downloadId, response);
 
-    // Store response data for UI restoration 
-    setState(state => ({
-        downloads: {
-            lastProgress: {
-                ...state.downloads.lastProgress,
-                [downloadId]: response
-            }
-        }
-    }));
-
-    // Handle completion/error - update state lists and stats
+    // Handle completion/error - clean up active tracking
     if (response.success !== undefined || response.error) {
-        setState(state => ({
-            downloads: {
-                // Remove from active
-                active: state.downloads.active.filter(id => id !== downloadId),
-                // Add to history
-                history: [downloadId, ...state.downloads.history],
-                // Clean up progress data
-                lastProgress: Object.fromEntries(
-                    Object.entries(state.downloads.lastProgress).filter(([id]) => id !== downloadId)
-                ),
-                // Update stats
-                stats: {
-                    ...state.downloads.stats,
-                    completed: response.success ? state.downloads.stats.completed + 1 : state.downloads.stats.completed,
-                    failed: response.error ? state.downloads.stats.failed + 1 : state.downloads.stats.failed,
-                    lastDownload: Date.now()
-                }
-            }
-        }));
+        // Remove from active downloads Set
+        activeDownloads.delete(downloadId);
+        
+        // Clean up progress map on completion/error
+        activeDownloadProgress.delete(downloadId);
 
         if (response.error) {
             logger.error('Download error:', downloadId, response.error);
@@ -168,22 +128,30 @@ function handleDownloadProgress(downloadId, downloadRequest, response) {
                 downloadBtnOrigHTML: downloadRequest.downloadBtnOrigHTML || null,
                 selectedOptionOrigText: downloadRequest.selectedOptionOrigText || null
             });
-            return
+            return;
         }
+        
         // Create completion notification
         if (response.success) {
             createCompletionNotification(downloadRequest.filename);
         }
-
     }
-    // Always notify UI with appropriate progress data via direct broadcast
+
+    // Prepare broadcast data with completion flags for UI
+    const broadcastData = (response.success !== undefined || response.error)
+        ? { ...response, 
+            success: response.success, 
+            error: response.error,
+            downloadBtnOrigHTML: downloadRequest.downloadBtnOrigHTML || null,
+            selectedOptionOrigText: downloadRequest.selectedOptionOrigText || null
+        }
+        : response;
+
+    // Always notify UI with progress data via direct broadcast
     broadcastToPopups(broadcastData);
 }
 
-/**
- * Create download start notification
- * @private
- */
+// Create download start notification
 function createDownloadNotification(filename) {
     const notificationId = `download-${Date.now()}`;
     chrome.notifications.create(notificationId, {
@@ -194,10 +162,7 @@ function createDownloadNotification(filename) {
     });
 }
 
-/**
- * Create download completion notification
- * @private
- */
+// Create download completion notification
 function createCompletionNotification(filename) {
     const notificationId = `complete-${Date.now()}`;
     chrome.notifications.create(notificationId, {
@@ -205,5 +170,52 @@ function createCompletionNotification(filename) {
         iconUrl: '../../icons/48.png',
         title: 'Download Complete',
         message: `Finished: ${filename}`
+    });
+}
+
+/**
+ * Get all active download progress for popup restoration
+ * @returns {Array} Array of progress objects with completion flags
+ */
+export function getActiveDownloadProgress() {
+    const progressArray = [];
+    
+    for (const [downloadId, progressData] of activeDownloadProgress.entries()) {
+        // Add completion flags that UI expects
+        progressArray.push({
+            ...progressData,
+            success: progressData.success,
+            error: progressData.error
+        });
+    }
+    
+    logger.debug(`Returning ${progressArray.length} active download progress states`);
+    return progressArray;
+}
+
+//Get count of active downloads
+export function getActiveDownloadCount() {
+    return activeDownloads.size;
+}
+
+// Check if a specific URL is currently being downloaded
+export function isDownloadActive(downloadUrl) {
+    return activeDownloads.has(downloadUrl);
+}
+
+// Get all active download URLs
+export function getActiveDownloadUrls() {
+    return Array.from(activeDownloads);
+}
+
+// Debug function to log current download manager state
+export function debugDownloadManagerState() {
+    logger.debug('Download Manager State:', {
+        activeDownloads: Array.from(activeDownloads),
+        activeProgress: Array.from(activeDownloadProgress.keys()),
+        counts: {
+            active: activeDownloads.size,
+            withProgress: activeDownloadProgress.size
+        }
     });
 }
