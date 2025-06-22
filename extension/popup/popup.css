@@ -45,8 +45,6 @@
 body {
   width: 420px;
   min-height: 100px;
-  -webkit-transition: min-height var(--transition-normal);
-  transition: min-height var(--transition-normal);
   max-height: 500px;
   height: auto;
   margin: 0;
@@ -909,6 +907,7 @@ body.theme-light {
 .dropdown-option.downloading {
   position: relative;
   overflow: hidden;
+  color: var(--text-primary-dark);
 }
 .dropdown-option.downloading::after {
   content: "";

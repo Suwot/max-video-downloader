@@ -69,7 +69,6 @@
 body {
     width: 420px;
     min-height: 100px;
-    transition: min-height var(--transition-normal);
     max-height: 500px;
     height: auto;
     margin: 0;
@@ -924,6 +923,7 @@ body {
     &.downloading {
         position: relative;
         overflow: hidden;
+        color: var(--text-primary-dark);
 
         &::after {
             content: '';
