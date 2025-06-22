@@ -849,27 +849,26 @@ function addDetectedVideo(tabId, videoInfo) {
 }
 
 // Dismiss a video for a tab (hide from UI, skip processing)
-function dismissVideo(tabId, normalizedUrl) {
+function dismissVideoFromTab(tabId, url) {
     if (!dismissedVideos.has(tabId)) {
         dismissedVideos.set(tabId, new Set());
     }
-    dismissedVideos.get(tabId).add(normalizedUrl);
-    logger.info(`Dismissed video ${normalizedUrl} for tab ${tabId}`);
-    sendVideoUpdateToUI(tabId); // Refresh UI
+    dismissedVideos.get(tabId).add(url);
+    logger.info(`Dismissed video ${url} for tab ${tabId}`);
 }
 
 // Restore a dismissed video for a tab (show in UI, allow processing)
-function restoreVideo(tabId, normalizedUrl) {
+function restoreVideoInTab(tabId, url) {
     if (dismissedVideos.has(tabId)) {
-        dismissedVideos.get(tabId).delete(normalizedUrl);
-        logger.info(`Restored video ${normalizedUrl} for tab ${tabId}`);
+        dismissedVideos.get(tabId).delete(url);
+        logger.info(`Restored video ${url} for tab ${tabId}`);
         sendVideoUpdateToUI(tabId); // Refresh UI
     }
 }
 
 // Checks if a video is dismissed for a tab
-function isVideoDismissed(tabId, normalizedUrl) {
-    return dismissedVideos.has(tabId) && dismissedVideos.get(tabId).has(normalizedUrl);
+function isVideoDismissed(tabId, url) {
+    return dismissedVideos.has(tabId) && dismissedVideos.get(tabId).has(url);
 }
 
 /**
@@ -920,6 +919,6 @@ export {
     getVideosForDisplay,
     initVideoManager,
     getVideoByUrl,
-    dismissVideo,
-    restoreVideo
+    dismissVideoFromTab,
+    restoreVideoInTab
 };

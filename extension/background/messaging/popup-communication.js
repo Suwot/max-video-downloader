@@ -4,7 +4,7 @@
  */
 
 // Add static imports at the top
-import { sendVideoUpdateToUI, cleanupAllVideos } from '../processing/video-manager.js';
+import { sendVideoUpdateToUI, cleanupAllVideos, dismissVideoFromTab } from '../processing/video-manager.js';
 import { startDownload } from '../download/download-manager.js';
 import { createLogger } from '../../shared/utils/logger.js';
 import { clearPreviewCache, getCacheStats } from '../../shared/utils/preview-cache.js';
@@ -51,7 +51,18 @@ async function handlePortMessage(message, port, portId) {
             // Delegate to video-manager using unified approach
             sendVideoUpdateToUI(message.tabId, null, { _sendFullList: true });
             break;
-            
+        case 'dismissVideo': {
+            // Dismiss the video for this tab
+            try {
+                const { tabId, url } = message;
+
+                dismissVideoFromTab(tabId, url);
+                // UI will update via sendVideoUpdateToUI inside dismissVideo
+            } catch (err) {
+                logger.error('Error handling dismissVideo:', err);
+            }
+            break;
+        }
         case 'download':
             startDownload(message);
             break;

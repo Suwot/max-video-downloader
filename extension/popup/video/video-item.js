@@ -2,13 +2,15 @@ import { formatDuration } from '../../shared/utils/video-utils.js';
 import { showHoverPreview, hideHoverPreview } from './preview-hover.js';
 import { createCustomDropdown } from './dropdown.js';
 import { createDownloadButton } from './download-button.js';
+import { sendPortMessage } from '../index.js';
+import { normalizeUrl } from '../../shared/utils/normalize-url.js';
 
 /**
  * Create a video element for the UI
  * @param {Object} video - Video data
  * @returns {HTMLElement} Video element
  */
-export function createVideoElement(video) {
+export function createVideoElement(video, group) {
     const element = document.createElement('div');
     element.className = 'video-item';
     element.dataset.url = video.url;
@@ -137,8 +139,29 @@ export function createVideoElement(video) {
     `;
     dismissButton.title = 'Dismiss';
     dismissButton.addEventListener('click', () => {
-        // Placeholder for dismiss logic
-        console.log('Dismiss button clicked for', video.url);
+        if (video.type === 'blob') {
+            sendPortMessage({
+                command: 'dismissVideo',
+                tabId: video.tabId,
+                url: video.normalizedUrl
+            });
+        } else {
+            sendPortMessage({
+                command: 'dismissVideo',
+                tabId: video.tabId,
+                url: video.url
+            });
+        }
+
+        // find closest media-type-header (down from "group" element, available from args of this function), check if .media-type-count.textContent is >1 ? remove element : remove .media-type-group
+        const mediaTypeCount = group.querySelector('.media-type-count');
+        const count = parseInt(mediaTypeCount.textContent, 10);
+        if (count > 1) {
+            mediaTypeCount.textContent = String(count - 1); // Update the count if needed
+            element.remove(); // Just remove this video item
+        } else {
+            group.remove(); // Remove the entire group if only one left
+        }
     });
     
     titleRow.append(title, dismissButton);

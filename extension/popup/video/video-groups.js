@@ -76,7 +76,7 @@ export function createTypeGroup(type, videos) {
     }
     // Add videos to group
     videos.forEach(video => {
-        const videoElement = createVideoElement(video);
+        const videoElement = createVideoElement(video, group);
         content.appendChild(videoElement);
     });
     // Toggle event
