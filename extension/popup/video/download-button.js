@@ -68,12 +68,15 @@ export function createDownloadButton(video, elementsDiv, dropdown) {
         return [downloadBtn, menuBtn, buttonWrapper];
     }
     
-    // Set up streamlined click handler with direct data binding
-    downloadBtn.addEventListener('click', async () => {
+    // Set up streamlined click handler with direct data binding (use onclick to ensure only one handler)
+    const downloadHandler = async () => {
         const videoData = createVideoMetadata(video);
         extractDownloadData(videoData, elementsDiv);
         handleDownload(elementsDiv, videoData);
-    });
+    };
+    downloadBtn.onclick = downloadHandler;
+    // Store handler for later restoration
+    downloadBtn._downloadHandler = downloadHandler;
     
     return [downloadBtn, menuBtn, buttonWrapper];
 }

@@ -82,12 +82,14 @@ async function bootstrap() {
 function registerCommands(commandRunner, registry) {
     // Register commands with registry
     registry.registerCommand('download', DownloadCommand);
+    registry.registerCommand('cancel-download', DownloadCommand);
     registry.registerCommand('getQualities', GetQualitiesCommand);
     registry.registerCommand('generatePreview', GeneratePreviewCommand);
     registry.registerCommand('heartbeat', HeartbeatCommand);
     
     // Register the same commands with the command runner
     commandRunner.registerCommand('download', DownloadCommand);
+    commandRunner.registerCommand('cancel-download', DownloadCommand);
     commandRunner.registerCommand('getQualities', GetQualitiesCommand);
     commandRunner.registerCommand('generatePreview', GeneratePreviewCommand);
     commandRunner.registerCommand('heartbeat', HeartbeatCommand);

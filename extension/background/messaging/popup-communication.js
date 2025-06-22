@@ -5,7 +5,7 @@
 
 // Add static imports at the top
 import { sendVideoUpdateToUI, cleanupAllVideos, dismissVideoFromTab } from '../processing/video-manager.js';
-import { startDownload, getActiveDownloadProgress } from '../download/download-manager.js';
+import { startDownload, cancelDownload, getActiveDownloadProgress } from '../download/download-manager.js';
 import { createLogger } from '../../shared/utils/logger.js';
 import { clearPreviewCache, getCacheStats } from '../../shared/utils/preview-cache.js';
 import { clearAllHeaderCaches } from '../../shared/utils/headers-utils.js'
@@ -68,6 +68,10 @@ async function handlePortMessage(message, port, portId) {
             
         case 'download':
             startDownload(message);
+            break;
+            
+        case 'cancel-download':
+            cancelDownload(message);
             break;
             
         case 'clearCaches':

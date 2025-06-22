@@ -156,16 +156,13 @@ class ProgressTracker {
         return Object.keys(downloadStats).length ? downloadStats : null;
     }
     
-    /**
-     * Get FFmpeg error information if available
-     * @returns {string|null} FFmpeg error output or null if not available
-     */
-    getFFmpegError() {
-        if (!this.strategy || !this.strategy.ffmpegError) {
+    // FFmpeg final message or null if not available
+    getFFmpegFinalMessage() {
+        if (!this.strategy || !this.strategy.ffmpegFinalMessage) {
             return null;
         }
         
-        return this.strategy.ffmpegError.trim();
+        return this.strategy.ffmpegFinalMessage.trim();
     }
     
     /**

@@ -1,15 +1,15 @@
 /**
- * DownloadCommand
- * Orchestrates video/audio downloads via FFmpeg, supporting HLS, DASH, and direct URLs with progress tracking and error reporting.
- * - Receives and validates download parameters from the extension
- * - Determines media type and optimal container format
- * - Constructs FFmpeg command-line arguments for various stream types
- * - Ensures unique output file naming and resolves save paths
- * - Integrates HTTP headers and stream selection for advanced scenarios
- * - Launches FFmpeg as a child process and tracks progress using ProgressTracker
- * - Probes media duration if not provided, for accurate progress reporting
- * - Sends regular progress updates and handles completion or error events
- * - Logs key actions and errors for debugging and transparency
+ * DownloadCommand – Central command class for orchestrating video/audio downloads using FFmpeg.
+ * Responsibilities:
+ * - Receives download/cancel requests from the extension and validates parameters.
+ * - Determines the correct container format and output filename based on user input, media type, and source data.
+ * - Constructs FFmpeg command-line arguments for HLS, DASH, and direct media, including support for HTTP headers and stream selection.
+ * - Ensures output file uniqueness and resolves save paths, defaulting to Desktop if unspecified.
+ * - Probes media duration with ffprobe if not provided, to enable accurate progress tracking.
+ * - Launches FFmpeg as a child process, tracks progress via ProgressTracker, and relays updates to the UI.
+ * - Handles download cancellation, process cleanup, and partial file removal.
+ * - Logs all key actions, errors, and data flow for transparency and debugging.
+ * - Maintains a static map of active download processes for robust cancellation and status management.
  */
 
 const fs = require('fs');
@@ -25,9 +25,89 @@ const ProgressTracker = require('../lib/progress/progress-tracker');
  * Command for downloading videos
  */
 class DownloadCommand extends BaseCommand {
+    // Static Map shared across all instances for process tracking
+    static activeProcesses = new Map();
+
+    /**
+     * Cancel an ongoing download by downloadUrl
+     * @param {Object} params Command parameters
+     * @param {string} params.downloadUrl The download URL to cancel
+     */
+    async cancelDownload(params) {
+        const { downloadUrl } = params;
+        
+        logDebug('Canceling download for:', downloadUrl);
+        logDebug('Active processes Map has', DownloadCommand.activeProcesses.size, 'entries');
+        logDebug('Active process URLs:', Array.from(DownloadCommand.activeProcesses.keys()));
+        
+        const processInfo = DownloadCommand.activeProcesses.get(downloadUrl);
+        if (!processInfo) {
+            logDebug('No active process found for:', downloadUrl);
+            this.sendError({
+                command: 'download-error',
+                message: 'No active download found for this URL',
+                downloadUrl
+            });
+            return;
+        }
+        
+        const { ffmpegProcess, progressTracker, outputPath } = processInfo;
+        
+        try {
+            // Mark as canceled before terminating FFmpeg process
+            processInfo.wasCanceled = true;
+            // Gracefully terminate FFmpeg process
+            if (ffmpegProcess && !ffmpegProcess.killed) {
+                logDebug('Terminating FFmpeg process with SIGTERM');
+                ffmpegProcess.kill('SIGTERM');
+                
+                // Give it a moment to clean up, then force kill if needed
+                setTimeout(() => {
+                    if (!ffmpegProcess.killed) {
+                        logDebug('Force killing FFmpeg process with SIGKILL');
+                        ffmpegProcess.kill('SIGKILL');
+                    }
+                }, 2000);
+            }
+            
+            // Clean up progress tracker
+            if (progressTracker) {
+                progressTracker.cleanup();
+            }
+            
+            // Remove partial file if it exists
+            if (outputPath && fs.existsSync(outputPath)) {
+                try {
+                    fs.unlinkSync(outputPath);
+                    logDebug('Removed partial download file:', outputPath);
+                } catch (err) {
+                    logDebug('Failed to remove partial file:', err.message);
+                }
+            }
+            
+            logDebug('Download cancellation completed for:', downloadUrl);
+            
+            // Send immediate cancel confirmation
+            this.sendSuccess({
+                command: 'cancel-download',
+                downloadUrl,
+                message: 'Download cancellation initiated successfully'
+            });
+            
+        } catch (error) {
+            logDebug('Error during download cancellation:', error);
+            this.sendError({
+                command: 'download-error',
+                message: `Failed to cancel download: ${error.message}`,
+                downloadUrl
+            });
+        }
+    }
+
     /**
      * Execute the download command
      * @param {Object} params Command parameters
+     * @param {string} params.command The command type ('download' or 'cancel-download')
      * @param {string} params.downloadUrl Video URL to download
      * @param {string} params.filename Filename to save as
      * @param {string} params.savePath Path to save file to
@@ -41,6 +121,21 @@ class DownloadCommand extends BaseCommand {
      * @param {Object} params.headers HTTP headers to use (optional)
      */
     async execute(params) {
+        const { command } = params;
+        
+        // Route to appropriate method based on command
+        if (command === 'cancel-download') {
+            return await this.cancelDownload(params);
+        } else {
+            return await this.executeDownload(params);
+        }
+    }
+
+    /**
+     * Execute the download command
+     * @param {Object} params Command parameters (same as execute above)
+     */
+    async executeDownload(params) {
         const {
             downloadUrl,
             filename,
@@ -432,6 +527,15 @@ class DownloadCommand extends BaseCommand {
                 windowsVerbatimArguments: process.platform === 'win32',
                 stdio: ['ignore', 'pipe', 'pipe']
             });
+            // Track this process as active
+            DownloadCommand.activeProcesses.set(downloadUrl, {
+                ffmpegProcess: ffmpeg,
+                progressTracker,
+                outputPath: uniqueOutput,
+                wasCanceled: false // default
+            });
+            
+            logDebug('Added process to activeProcesses Map. Total processes:', DownloadCommand.activeProcesses.size);
             
             let errorOutput = '';
             let hasError = false;
@@ -449,12 +553,29 @@ class DownloadCommand extends BaseCommand {
             
             ffmpeg.on('close', (code) => {
                 progressTracker.cleanup();
-                
+                const processInfo = DownloadCommand.activeProcesses.get(downloadUrl);
+                const wasCanceled = processInfo?.wasCanceled === true;
+                DownloadCommand.activeProcesses.delete(downloadUrl); // Remove from active processes on close
+                const ffmpegFinalMessage = progressTracker.getFFmpegFinalMessage();
+                const downloadStats = progressTracker.getDownloadStats();
+                if (wasCanceled) {
+                    logDebug('Download was canceled by user.');
+                    this.sendSuccess({
+                        command: 'download-canceled',
+                        downloadUrl,
+                        masterUrl,
+                        type,
+                        message: 'Download was canceled',
+                        downloadStats: downloadStats || {},
+                        ffmpegFinalMessage: ffmpegFinalMessage || null
+                    });
+                    return resolve({ 
+                        success: false, 
+                        downloadStats
+                    });
+                }
                 if (code === 0 && !hasError) {
                     logDebug('Download completed successfully.');
-                    
-                    const downloadStats = progressTracker.getDownloadStats();
-                    
                     this.sendSuccess({ 
                         command: 'download-success',
                         path: uniqueOutput,
@@ -462,35 +583,48 @@ class DownloadCommand extends BaseCommand {
                         downloadUrl,
                         masterUrl,
                         type,
-                        downloadStats: downloadStats || {}
+                        downloadStats: downloadStats || {},
+                        ffmpegFinalMessage: ffmpegFinalMessage || null
                     });
-                    
                     resolve({ 
                         success: true, 
                         path: uniqueOutput,
                         downloadStats
                     });
+                } else if (code === 255 && !hasError) {
+                    // SIGTERM - process was terminated (cancellation)
+                    logDebug('Download was terminated (SIGTERM).');
+                    this.sendSuccess({
+                        command: 'download-canceled',
+                        downloadUrl,
+                        masterUrl,
+                        type,
+                        message: 'Download was canceled',
+                        downloadStats: downloadStats || {},
+                        ffmpegFinalMessage: ffmpegFinalMessage || null
+                    });
+                    // Note: The original download promise resolves as canceled
+                    // The cancel-download command gets its own immediate response in cancelDownload()
+                    resolve({ 
+                        success: false, 
+                        downloadStats
+                    });
                 } else if (!hasError) {
                     hasError = true;
-                    const ffmpegError = progressTracker.getFFmpegError();
-                    const downloadStats = progressTracker.getDownloadStats(); // Get stats even on error
                     const error = `FFmpeg exited with code ${code}: ${errorOutput}`;
-                    
                     logDebug('Download failed:', error);
-                    if (ffmpegError) {
-                        logDebug('FFmpeg error details:', ffmpegError);
+                    if (ffmpegFinalMessage) {
+                        logDebug('FFmpeg final message:', ffmpegFinalMessage);
                     }
-                    
                     this.sendError({
                         command: 'download-error',
                         message: error,
                         downloadUrl,
                         masterUrl,
                         type,
-                        ffmpegError: ffmpegError || null,
+                        ffmpegFinalMessage: ffmpegFinalMessage || null,
                         downloadStats: downloadStats || {} // Include stats in error message too
                     });
-                    
                     reject(new Error(error));
                 }
             });
@@ -498,13 +632,14 @@ class DownloadCommand extends BaseCommand {
             ffmpeg.on('error', (err) => {
                 if (!hasError) {
                     hasError = true;
+                    DownloadCommand.activeProcesses.delete(downloadUrl); // Remove from active processes on error
                     progressTracker.cleanup();
-                    const ffmpegError = progressTracker.getFFmpegError();
+                    const ffmpegFinalMessage = progressTracker.getFFmpegFinalMessage();
                     const downloadStats = progressTracker.getDownloadStats(); // Get stats even on spawn error
                     
                     logDebug('FFmpeg spawn error:', err);
-                    if (ffmpegError) {
-                        logDebug('FFmpeg error details:', ffmpegError);
+                    if (ffmpegFinalMessage) {
+                        logDebug('FFmpeg final message:', ffmpegFinalMessage);
                     }
                     
                     this.sendError({
@@ -513,7 +648,7 @@ class DownloadCommand extends BaseCommand {
                         downloadUrl,
                         masterUrl,
                         type,
-                        ffmpegError: ffmpegError || null,
+                        ffmpegFinalMessage: ffmpegFinalMessage || null,
                         downloadStats: downloadStats || {} // Include stats in spawn error too
                     });
                     

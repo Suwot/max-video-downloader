@@ -104,20 +104,20 @@ export async function startDownload(downloadRequest) {
 
 // Handle download progress updates and errors from native host
 function handleDownloadProgress(downloadId, downloadRequest, response) {
-    // response can have one of 3 commands: download-progress, download-success, download-error
+    // response can have one of 4 commands: download-progress, download-success, download-error, download-canceled
 
     // Store progress in local map for UI restoration 
     activeDownloadProgress.set(downloadId, response);
 
-    // Handle completion/error - clean up active tracking
-    if (response.success !== undefined || response.error) {
+    // Handle completion/error/cancellation - clean up active tracking
+    if (['download-canceled', 'download-success', 'download-error'].includes(response.command)) {
         // Remove from active downloads Set
         activeDownloads.delete(downloadId);
         
-        // Clean up progress map on completion/error
+        // Clean up progress map on completion/error/cancellation
         activeDownloadProgress.delete(downloadId);
 
-        if (response.error) {
+        if (response.command === 'download-error') {
             logger.error('Download error:', downloadId, response.error);
             broadcastToPopups({
                 command: 'download-error',
@@ -131,14 +131,27 @@ function handleDownloadProgress(downloadId, downloadRequest, response) {
             return;
         }
         
+        if (response.command === 'download-canceled') {
+            logger.debug('Download canceled:', downloadId);
+            broadcastToPopups({
+                command: 'download-canceled',
+                downloadUrl: downloadRequest.downloadUrl,
+                masterUrl: downloadRequest.masterUrl || null,
+                filename: downloadRequest.filename,
+                downloadBtnOrigHTML: downloadRequest.downloadBtnOrigHTML || null,
+                selectedOptionOrigText: downloadRequest.selectedOptionOrigText || null
+            });
+            return;
+        }
+        
         // Create completion notification
-        if (response.success) {
+        if (response.command === 'download-success') {
             createCompletionNotification(downloadRequest.filename);
         }
     }
 
     // Prepare broadcast data with completion flags for UI
-    const broadcastData = (response.success !== undefined || response.error)
+    const broadcastData = (['download-canceled', 'download-success', 'download-error'].includes(response.command))
         ? { ...response, 
             success: response.success, 
             error: response.error,
@@ -218,4 +231,46 @@ export function debugDownloadManagerState() {
             withProgress: activeDownloadProgress.size
         }
     });
+}
+
+/**
+ * Cancel an active download
+ * @param {Object} cancelRequest - Cancellation request with downloadUrl
+ * @returns {Promise<void>}
+ */
+export async function cancelDownload(cancelRequest) {
+    const downloadId = cancelRequest.downloadUrl;
+    
+    logger.debug('Canceling download:', downloadId);
+    
+    // Check if download is actually active
+    if (!activeDownloads.has(downloadId)) {
+        logger.debug('No active download found to cancel:', downloadId);
+        return;
+    }
+    
+    try {
+        // Send cancellation request to native host
+        const response = await nativeHostService.sendMessage({
+            command: 'cancel-download',
+            downloadUrl: downloadId
+        });
+        
+        // Native host will send download-canceled message through progress handler
+        // No need to clean up here - let the normal completion flow handle it
+        
+    } catch (error) {
+        logger.error('Failed to cancel download:', error);
+        
+        // If cancel failed, force cleanup
+        activeDownloads.delete(downloadId);
+        activeDownloadProgress.delete(downloadId);
+        
+        // Broadcast error to UI
+        broadcastToPopups({
+            command: 'download-error',
+            downloadUrl: downloadId,
+            message: `Cancel failed: ${error.message}`
+        });
+    }
 }

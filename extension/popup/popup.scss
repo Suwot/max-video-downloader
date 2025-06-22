@@ -955,6 +955,12 @@ body {
         background-color: var(--color-error);
         opacity: 0.5;
     }
+
+    &.canceled::after {
+        width: 100%;
+        background-color: var(--color-warning);
+        opacity: 0.5;
+    }
 }
 
 // DASH multi-column layout
@@ -1081,6 +1087,10 @@ body {
         color: white !important;
     }
 }
+    &.canceled {
+        background-color: var(--color-warning) !important;
+        color: white !important;
+    }
 
 // =====================================================
 // BADGES

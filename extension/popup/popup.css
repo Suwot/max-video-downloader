@@ -936,6 +936,11 @@ body.theme-light {
   background-color: var(--color-error);
   opacity: 0.5;
 }
+.dropdown-option.canceled::after {
+  width: 100%;
+  background-color: var(--color-warning);
+  opacity: 0.5;
+}
 
 .tracks-columns-container {
   display: -webkit-box;
@@ -1057,6 +1062,10 @@ body.theme-light {
 }
 .selected-option.error {
   background-color: var(--color-error) !important;
+  color: white !important;
+}
+.selected-option.canceled {
+  background-color: var(--color-warning) !important;
   color: white !important;
 }
 

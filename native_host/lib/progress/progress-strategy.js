@@ -57,7 +57,7 @@ class ProgressStrategy {
         
         // For tracking stream information from FFmpeg
         this.downloadStats = null;
-        this.ffmpegError = null; // Store FFmpeg error information after progress=end
+        this.ffmpegFinalMessage = null; // Store FFmpeg final message after progress=end (for all outcomes)
         this.progressEndSeen = false; // Track if we've seen progress=end
         
         // Persistent state - accumulates all data over time
@@ -481,34 +481,16 @@ class ProgressStrategy {
             return;
         }
         
-        // Capture FFmpeg error information that appears after progress=end
+        // Capture ALL FFmpeg output after progress=end as final message (for all outcomes)
         if (this.progressEndSeen && output.trim()) {
-            // Only capture lines that look like actual errors, not normal FFmpeg output
             const trimmedOutput = output.trim();
             
-            // Error patterns to capture
-            const errorPatterns = [
-                /Error writing/i,
-                /Conversion failed/i,
-                /Unable to/i,
-                /No such file/i,
-                /Permission denied/i,
-                /Cannot/i,
-                /Failed to/i,
-                /Invalid/i,
-                /does not exist/i
-            ];
-            
-            // Check if this line contains error information
-            const isErrorLine = errorPatterns.some(pattern => pattern.test(trimmedOutput));
-            
-            if (isErrorLine) {
-                if (!this.ffmpegError) {
-                    this.ffmpegError = '';
-                }
-                this.ffmpegError += (this.ffmpegError ? '\n' : '') + trimmedOutput;
-                logDebug('ProgressStrategy: Captured FFmpeg error:', trimmedOutput);
+            // Accumulate all output after progress=end
+            if (!this.ffmpegFinalMessage) {
+                this.ffmpegFinalMessage = '';
             }
+            this.ffmpegFinalMessage += (this.ffmpegFinalMessage ? '\n' : '') + trimmedOutput;
+            logDebug('ProgressStrategy: Captured FFmpeg final message:', trimmedOutput);
         }
         
         // Universal data parsing - only parse if we haven't seen progress=end yet

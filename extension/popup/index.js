@@ -101,6 +101,7 @@ function handlePortMessage(message) {
     case 'download-progress':
     case 'download-success':
     case 'download-error':
+    case 'download-canceled':
       updateDownloadProgress(message);
       break;
 

@@ -106,10 +106,10 @@ function updateDownloadButton(progressData = {}) {
                 downloadBtn.innerHTML = 'Stop';
                 downloadBtnWrapper.classList.add('downloading', 'stop-mode');
                 
-                // Add stop handler (empty for now)
+                // Add stop handler
                 downloadBtn.onclick = () => {
-                    logger.debug('Stop button clicked - handler not implemented yet');
-                    // TODO: Implement stop functionality
+                    logger.debug('Stop button clicked for:', progressData.downloadUrl);
+                    handleDownloadCancellation(progressData.downloadUrl);
                 };
                 
                 logger.debug('Download button switched to Stop mode');
@@ -118,11 +118,16 @@ function updateDownloadButton(progressData = {}) {
             
         case 'download-success':
         case 'download-error':
+        case 'download-canceled':
             // Restore original button state
             downloadBtn.innerHTML = progressData.downloadBtnOrigHTML || 'Download';
             downloadBtnWrapper.classList.remove('downloading', 'stop-mode');
-            downloadBtn.onclick = null; // Remove stop handler
-            
+            // Restore download handler if available
+            if (downloadBtn._downloadHandler) {
+                downloadBtn.onclick = downloadBtn._downloadHandler;
+            } else {
+                downloadBtn.onclick = null;
+            }
             logger.debug('Download button restored to original state');
             break;
     }
@@ -198,10 +203,31 @@ function updateDropdown(progressData = {}) {
             }
             break;
             
+        case 'download-canceled':
+            // Handle dropdown option cancellation
+            if (dropdownOption) {
+                dropdownOption.classList.add('canceled');
+                setTimeout(() => {
+                    dropdownOption.classList.remove('downloading', 'canceled');
+                    dropdownOption.style.removeProperty('--progress');
+                }, 2000);
+            }
+
+            // Handle selected option cancellation
+            if (selectedOption) {
+                selectedOption.classList.add('canceled');
+                selectedOption.classList.remove('downloading');
+                const textSpan = selectedOption.querySelector('span:first-child') || selectedOption;
+                textSpan.textContent = 'Canceled';
+                setTimeout(() => restoreOriginalOption(selectedOption, progressData), 2000);
+            }
+            break;
+            
         case 'download-error':
             // Handle dropdown option error
             if (dropdownOption) {
                 dropdownOption.classList.add('error');
+                selectedOption.classList.remove('downloading');
                 setTimeout(() => {
                     dropdownOption.classList.remove('downloading', 'error');
                     dropdownOption.style.removeProperty('--progress');
@@ -227,10 +253,36 @@ function restoreOriginalOption(selectedOption, progressData = {}) {
     textSpan.textContent = progressData.selectedOptionOrigText;
 
     // Clean up progress styling
-    selectedOption.classList.remove('downloading', 'complete', 'error');
+    selectedOption.classList.remove('downloading', 'complete', 'error', 'canceled');
     selectedOption.style.removeProperty('--progress');
     
     logger.debug('Restored original option:', progressData.selectedOptionOrigText);
+}
+
+/**
+ * Handle download cancellation request
+ * @param {string} downloadUrl - The download URL to cancel
+ */
+async function handleDownloadCancellation(downloadUrl) {
+    logger.debug('Requesting download cancellation for:', downloadUrl);
+    
+    try {
+        const port = getBackgroundPort();
+        if (!port) {
+            throw new Error('No connection to background script');
+        }
+        
+        port.postMessage({
+            command: 'cancel-download',
+            downloadUrl: downloadUrl
+        });
+        
+        logger.debug('Cancellation request sent to background');
+        
+    } catch (error) {
+        logger.error('Failed to send cancellation request:', error);
+        showError('Failed to cancel download');
+    }
 }
 
 function formatTime(seconds) {
