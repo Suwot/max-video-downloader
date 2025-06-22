@@ -933,7 +933,6 @@ body {
             height: 100%;
             width: var(--progress, 0%);
             background-color: var(--color-success);
-            opacity: 0.3;
             transition: width var(--transition-fast);
             z-index: 0;
         }
@@ -947,19 +946,16 @@ body {
     &.complete::after {
         width: 100%;
         background-color: var(--color-success);
-        opacity: 0.5;
     }
 
     &.error::after {
         width: 100%;
         background-color: var(--color-error);
-        opacity: 0.5;
     }
 
     &.canceled::after {
         width: 100%;
         background-color: var(--color-warning);
-        opacity: 0.5;
     }
 }
 
@@ -1086,11 +1082,12 @@ body {
         background-color: var(--color-error) !important;
         color: white !important;
     }
-}
+    
     &.canceled {
         background-color: var(--color-warning) !important;
         color: white !important;
     }
+}
 
 // =====================================================
 // BADGES

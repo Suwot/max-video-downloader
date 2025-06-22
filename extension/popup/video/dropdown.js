@@ -181,7 +181,11 @@ function createSimpleOptions(container, variants, initialSelection, onSelect) {
         
         // Pass the container's type or fallback to 'direct'
         const mediaType = container.closest('.custom-dropdown')?.dataset.type || 'direct';
-        option.textContent = formatVariantLabel(variant, mediaType);
+        // Create label span for the option text
+        const labelSpan = document.createElement('span');
+        labelSpan.className = 'label';
+        labelSpan.textContent = formatVariantLabel(variant, mediaType);
+        option.appendChild(labelSpan);
         option.dataset.url = variant.url;
         
         // Add filesize data attribute based on the media type

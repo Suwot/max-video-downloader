@@ -917,7 +917,6 @@ body.theme-light {
   height: 100%;
   width: var(--progress, 0%);
   background-color: var(--color-success);
-  opacity: 0.3;
   -webkit-transition: width var(--transition-fast);
   transition: width var(--transition-fast);
   z-index: 0;
@@ -929,17 +928,14 @@ body.theme-light {
 .dropdown-option.complete::after {
   width: 100%;
   background-color: var(--color-success);
-  opacity: 0.5;
 }
 .dropdown-option.error::after {
   width: 100%;
   background-color: var(--color-error);
-  opacity: 0.5;
 }
 .dropdown-option.canceled::after {
   width: 100%;
   background-color: var(--color-warning);
-  opacity: 0.5;
 }
 
 .tracks-columns-container {
