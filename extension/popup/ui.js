@@ -134,10 +134,9 @@ export function initializeUI() {
         return null;
     }
 
+    const header = document.querySelector('header');
+
     // Create main containers
-    const refreshContainer = document.createElement('div');
-    refreshContainer.className = 'refresh-container';
-    
     const leftButtonsContainer = document.createElement('div');
     leftButtonsContainer.className = 'left-buttons-container';
     
@@ -152,11 +151,12 @@ export function initializeUI() {
     // Assemble DOM structure
     leftButtonsContainer.append(clearCacheButton, cacheStatsElement);
     rightButtonsContainer.appendChild(themeToggle);
-    refreshContainer.append(leftButtonsContainer, rightButtonsContainer);
+    header.prepend(leftButtonsContainer);
+    header.append(rightButtonsContainer);
     
     // Insert into page
-    container.parentElement.insertBefore(refreshContainer, container);
-    
+    container.parentElement.insertBefore(header, container);
+
     // Attach event handlers
     clearCacheButton.addEventListener('click', handleClearCacheClick);
     themeToggle.addEventListener('click', handleThemeToggleClick);
@@ -167,8 +167,7 @@ export function initializeUI() {
     return {
         container,
         clearCacheButton,
-        themeToggle,
-        refreshContainer
+        themeToggle
     };
 }
 

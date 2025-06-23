@@ -113,12 +113,10 @@ body {
 
     .theme-dark & {
         color: var(--text-primary-dark);
-        border-bottom: 1px solid var(--border-primary-dark);
     }
 
     .theme-light & {
         color: var(--text-title-light);
-        border-bottom: 1px solid var(--border-primary-light);
     }
 }
 
@@ -164,13 +162,13 @@ body {
 // HEADER
 // =====================================================
 
-.refresh-container {
+header {
     position: sticky;
     top: 0;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 6px;
+    padding: 8px;
     z-index: 101;
     transition: box-shadow var(--transition-normal);
 
@@ -198,6 +196,7 @@ body {
 // Button containers
 .left-buttons-container,
 .right-buttons-container {
+    position: relative;
     display: flex;
     align-items: center;
 }
@@ -256,8 +255,13 @@ body {
         flex-shrink: 0;
     }
 
-    &:hover {
+    &:hover, &:focus {
         background-color: var(--color-warning-hover);
+
+        &+ .cache-stats {
+            display: block;
+        }
+
     }
 
     .tooltip {
@@ -270,8 +274,28 @@ body {
 // Cache stats
 .cache-stats {
     font-size: var(--font-body);
-    color: var(--text-secondary);
-    margin-left: 8px;
+    display: none;
+    position: absolute;
+    left: 110%;
+    top: 50%;
+    transform: translateY(-50%);
+    padding: 4px 10px;
+    border-radius: 6px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    white-space: nowrap;
+    z-index: 10;
+
+    .theme-dark & {
+        background-color: var(--bg-primary-dark);
+        color: var(--text-secondary-dark);
+        border: 1px solid var(--border-primary-dark);
+    }
+
+    .theme-light & {
+        background-color: var(--bg-primary-light);
+        color: var(--text-secondary-light);
+        border: 1px solid var(--border-primary-light);
+    }
 }
 
 // Dismiss button
@@ -446,8 +470,6 @@ body {
 }
 
 .media-type-content {
-    transition: max-height var(--transition-normal);
-
     &.collapsed {
         max-height: 0;
         overflow: hidden;
@@ -857,7 +879,7 @@ body {
     position: absolute;
     left: 0;
     margin-top: 1px;
-    background: #2c2c2c;
+    background: var(--bg-primary-dark);
     border-radius: 6px;
     border: 1px solid var(--border-primary-dark);
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
@@ -877,7 +899,7 @@ body {
     }
 
     &::-webkit-scrollbar-track {
-        background: #2c2c2c;
+        background: var(--bg-primary-dark);
     }
 
     &::-webkit-scrollbar-thumb {
@@ -1082,7 +1104,7 @@ body {
         background-color: var(--color-error) !important;
         color: white !important;
     }
-    
+
     &.canceled {
         background-color: var(--color-warning) !important;
         color: white !important;
