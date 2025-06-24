@@ -12,23 +12,13 @@
 import {
   initializeUI,
   setScrollPosition,
-  getScrollPosition,
-  hideInitMessage,
+  getScrollPosition
 } from './ui.js';
-import { renderVideos } from './video/video-renderer.js';
-import { updateDownloadProgress } from './video/download-handler.js';
 import { createLogger } from '../shared/utils/logger.js';
 import { normalizeUrl } from '../shared/utils/normalize-url.js';
+import * as BackgroundCommunication from './messaging/background-communication.js';
 
 const logger = createLogger('Popup');
-
-// Global port connection for communicating with the background script
-let backgroundPort = null;
-let currentTabId = null;
-let refreshInterval = null;
-let isEmptyState = true; // Track if we're currently showing 'No videos found'
-let currentVideos = []; // Simple local video cache for current popup session
-let lastFetchTime = 0; // Track last fetch time to prevent excessive requests
 
 // Simple theme management - no service needed
 let currentTheme = null;
@@ -41,219 +31,6 @@ let groupStates = {
   blob: true, // collapsed by default
   unknown: false, // expanded by default
 };
-
-/**
- * Establish a connection to the background script
- * @returns {Port} The connection port object
- */
-function getBackgroundPort() {
-  if (!backgroundPort) {
-    try {
-      backgroundPort = chrome.runtime.connect({ name: 'popup' });
-      logger.debug('Connected to background script via port');
-
-      // Set up disconnect handler
-      backgroundPort.onDisconnect.addListener(() => {
-        logger.debug('Port disconnected from background script');
-        backgroundPort = null;
-      });
-
-      // Set up message handler
-      backgroundPort.onMessage.addListener(handlePortMessage);
-    } catch (e) {
-      logger.error('Failed to connect to background script:', e);
-      return null;
-    }
-  }
-  return backgroundPort;
-}
-
-/**
- * Handle messages received via the port connection
- * @param {Object} message - Message received from background script
- */
-function handlePortMessage(message) {
-  logger.debug('Received port message:', message);
-
-  switch (message.command) {
-    case 'videoStateUpdated':
-      if (message.videos) {
-        logger.debug(`Received ${message.videos.length} videos via port`);
-        currentVideos = message.videos; // Update local cache
-        updateVideoDisplay(message.videos);
-      } else {
-        logger.warn('videoStateUpdated message missing videos property:', message);
-      }
-      break;
-
-    // new case 'cachesCleared' – show initial message instad of video list
-    case 'cachesCleared':
-      logger.debug('Caches cleared, showing initial message');
-      // write function to show initial message
-      const container = document.getElementById('videos');
-      container.innerHTML = 
-        `<div class="initial-message">
-            <p>No videos found on the page.</p>
-            <p>Play a video or Refresh the page.</p>
-        </div>`;
-      break;
-
-    case 'download-progress':
-    case 'download-success':
-    case 'download-error':
-    case 'download-canceled':
-      updateDownloadProgress(message);
-      break;
-
-    case 'videoUpdated':
-      logger.debug('Received unified video update:', message.url);
-      // Update video in local cache
-      const index = currentVideos.findIndex((v) => v.url === message.url);
-      if (index !== -1) {
-        currentVideos[index] = { ...currentVideos[index], ...message.video };
-      }
-      // Update the UI element directly
-      import('./video/video-renderer.js').then((module) => {
-        module.updateVideoElement(message.url, message.video);
-      });
-      break;
-
-    case 'previewCacheStats':
-      logger.debug('Received preview cache stats:', message.stats);
-      // Trigger cache stats update directly
-      const cacheStatsElement = document.querySelector('.cache-stats');
-      if (cacheStatsElement) {
-        updateCacheStatsDisplay(cacheStatsElement, message.stats);
-      }
-      break;
-
-    default:
-      logger.warn('Unknown command received in port message:', message.command, message);
-      break;
-  }
-}
-
-/**
- * Single entry point for updating videos in the UI
- * @param {Array} videos - The videos to display
- */
-function updateVideoDisplay(videos) {
-  logger.debug('Updating video display with', videos.length, 'videos');
-
-  const hasVideos = videos.length > 0;
-  isEmptyState = !hasVideos;
-
-  renderVideos(videos);
-  hideInitMessage();
-
-  logger.debug(
-    hasVideos
-      ? `Updated UI with ${videos.length} videos`
-      : 'No videos to display, showing empty state'
-  );
-}
-
-/**
- * Send a message to the background script using the port connection
- * @param {Object} message - Message to send to the background script
- * @returns {Boolean} - Success status
- */
-function sendPortMessage(message) {
-  const port = getBackgroundPort();
-  if (port) {
-    try {
-      port.postMessage(message);
-      return true;
-    } catch (e) {
-      logger.error('Error sending message via port:', e);
-      backgroundPort = null;
-      return false;
-    }
-  }
-  logger.warn('No port connection available', message);
-  return false;
-}
-
-/**
- * Request videos for the current tab
- * @param {boolean} forceRefresh - Whether to force a refresh from the background
- */
-function requestVideos(forceRefresh = false) {
-  if (!currentTabId) return;
-
-  const now = Date.now();
-
-  // Only fetch if forced or it's been a while since last fetch
-  if (!forceRefresh && now - lastFetchTime < 2000) {
-    logger.debug('Skipping fetch, too soon since last request');
-    return;
-  }
-
-  lastFetchTime = now;
-  logger.debug(
-    'Fetching videos for tab:',
-    currentTabId,
-    forceRefresh ? '(forced)' : ''
-  );
-
-  sendPortMessage({
-    command: 'getVideos',
-    tabId: currentTabId,
-    forceRefresh,
-  });
-}
-
-/**
- * Clear all caches and video data
- */
-function clearCaches() {
-  logger.debug('Clearing caches');
-
-  // Clear local cache
-  currentVideos = [];
-
-  // Request background to clear all caches
-  sendPortMessage({
-    command: 'clearCaches',
-  });
-
-  // Reset last fetch time to force refresh next time
-  lastFetchTime = 0;
-
-  // Update UI to show empty state
-  updateVideoDisplay([]);
-}
-
-/**
- * Get preview cache statistics
- */
-function getPreviewCacheStats() {
-  sendPortMessage({
-    command: 'getPreviewCacheStats',
-  });
-}
-
-/**
- * Update cache stats display element
- * @param {HTMLElement} statsElement - The stats display element
- * @param {Object} stats - The cache stats
- */
-function updateCacheStatsDisplay(statsElement, stats) {
-  if (!statsElement) {
-    logger.warn('No stats element provided to updateCacheStatsDisplay');
-    return;
-  }
-
-  if (!stats) {
-    statsElement.textContent = 'No cache stats available';
-    return;
-  }
-
-  const count = stats.count || 0;
-  const sizeInKB = Math.round((stats.size || 0) / 1024);
-
-  statsElement.textContent = `${count} previews (${sizeInKB} KB)`;
-}
 
 // Simple theme management functions
 /**
@@ -372,35 +149,6 @@ async function initializeGroupStates() {
   }
 }
 
-/**
- * Set up a periodic refresh to check for new videos
- * Especially important if popup was opened before videos were detected
- */
-function setupPeriodicRefresh() {
-  // Clear any existing interval
-  if (refreshInterval) {
-    clearInterval(refreshInterval);
-  }
-
-  // Create a new interval - refresh every 2.5 seconds if we're in empty state
-  refreshInterval = setInterval(() => {
-    if (isEmptyState) {
-      logger.debug('Performing periodic check for new videos...');
-      requestVideos(true);
-    }
-  }, 2500);
-}
-
-/**
- * Clean up the periodic refresh interval
- */
-function cleanupPeriodicRefresh() {
-  if (refreshInterval) {
-    clearInterval(refreshInterval);
-    refreshInterval = null;
-  }
-}
-
 // Initialize when DOM is ready
 document.addEventListener('DOMContentLoaded', async () => {
   try {
@@ -413,45 +161,39 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Initialize UI elements
     initializeUI();
 
-    // Connect to background script via port
-    getBackgroundPort();
-
-    // Get the active tab ID and register with background
+    // Get the active tab and initialize communication service
     const activeTab = await getActiveTab();
-    currentTabId = activeTab.id;
+    BackgroundCommunication.initialize(activeTab.id);
+
+    // Connect to background script
+    BackgroundCommunication.connect();
 
     // Register this popup with the background script
-    sendPortMessage({
-      command: 'register',
-      tabId: currentTabId,
-      url: normalizeUrl(activeTab.url),
-    });
+    BackgroundCommunication.register(normalizeUrl(activeTab.url));
 
     // Request videos directly from background script
-    requestVideos(true);
-
-    // Set up periodic refresh to check for new videos
-    setupPeriodicRefresh();
+    BackgroundCommunication.requestVideos(true);
 
     // Add Clear Cache button handler - direct cache clearing
     document
       .getElementById('clear-cache-btn')
       ?.addEventListener('click', async () => {
         logger.debug('Clear cache button clicked');
-        clearCaches();
-        requestVideos(true);
+        BackgroundCommunication.clearCaches();
+        BackgroundCommunication.requestVideos(true);
       });
 
     // Set up scroll position handling
     const container = document.getElementById('videos');
-    if (container && currentTabId) {
+    const state = BackgroundCommunication.getState();
+    if (container && state.currentTabId) {
       // Save position when scrolling
       container.addEventListener('scroll', () => {
-        setScrollPosition(currentTabId, container.scrollTop);
+        setScrollPosition(state.currentTabId, container.scrollTop);
       });
 
       // Restore position for this tab
-      getScrollPosition(currentTabId, (position) => {
+      getScrollPosition(state.currentTabId, (position) => {
         setTimeout(() => {
           if (container.scrollHeight > container.clientHeight) {
             container.scrollTop = position;
@@ -475,23 +217,17 @@ document.addEventListener('DOMContentLoaded', async () => {
 // Listen for popup unload to notify content script
 window.addEventListener('unload', () => {
   // Clean up the refresh interval
-  cleanupPeriodicRefresh();
+  BackgroundCommunication.cleanupPeriodicRefresh();
 
   // Save final scroll position
   const container = document.getElementById('videos');
-  if (container && currentTabId) {
-    setScrollPosition(currentTabId, container.scrollTop);
+  const state = BackgroundCommunication.getState();
+  if (container && state.currentTabId) {
+    setScrollPosition(state.currentTabId, container.scrollTop);
   }
 
-  // Disconnect port
-  if (backgroundPort) {
-    try {
-      backgroundPort.disconnect();
-      backgroundPort = null;
-    } catch (e) {
-      // Suppress errors during unload
-    }
-  }
+  // Disconnect from background
+  BackgroundCommunication.disconnect();
 });
 
 /**
@@ -508,15 +244,9 @@ async function getActiveTab() {
 
 // Export functions for use by other modules
 export {
-  currentTabId,
-  clearCaches,
-  getPreviewCacheStats,
-  updateCacheStatsDisplay,
   getTheme,
   setTheme,
   getGroupState,
   setGroupState,
   getActiveTab,
-  sendPortMessage,
-  getBackgroundPort,
 };

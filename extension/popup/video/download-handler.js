@@ -4,7 +4,7 @@
  */
 
 import { createLogger } from '../../shared/utils/logger.js';
-import { getBackgroundPort } from '../index.js';
+import { sendPortMessage, getState } from '../messaging/background-communication.js';
 import { showError } from '../ui.js';
 import { formatSize } from '../../shared/utils/video-utils.js';
 
@@ -47,14 +47,9 @@ export async function handleDownload(elementsDiv, videoData = {}) {
         // selected-option original text
         const selectedOption = elementsDiv.querySelector('.selected-option .label');
         const selectedOptionOrigText = selectedOption ? selectedOption.textContent : ''; 
-
-        // Send download request to background (NHS handles everything)
-        const port = getBackgroundPort();
-        if (!port) {
-            throw new Error('No connection to background script');
-        }
         
-        port.postMessage({
+        const state = getState();
+        const downloadMessage = {
             command: 'download',
             downloadUrl: videoData.downloadUrl,
             filename: videoData.filename,
@@ -68,9 +63,12 @@ export async function handleDownload(elementsDiv, videoData = {}) {
             streamSelection: videoData.streamSelection || null,
             masterUrl: videoData.masterUrl || null,
             duration: videoData.duration || null,
-            tabId: tabId,
+            tabId: state.currentTabId,
             selectedOptionOrigText
-        });
+        };
+        
+        // Send via communication service
+        sendPortMessage(downloadMessage);
         
         logger.debug('Download request sent to background');
         
@@ -278,12 +276,7 @@ async function handleDownloadCancellation(downloadUrl) {
     logger.debug('Requesting download cancellation for:', downloadUrl);
     
     try {
-        const port = getBackgroundPort();
-        if (!port) {
-            throw new Error('No connection to background script');
-        }
-        
-        port.postMessage({
+        sendPortMessage({
             command: 'cancel-download',
             downloadUrl: downloadUrl
         });

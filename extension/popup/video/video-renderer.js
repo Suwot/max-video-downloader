@@ -21,8 +21,11 @@ export async function renderVideos(videos) {
         fragment.appendChild(group);
     }
     
-    container.innerHTML = '';
-    container.appendChild(fragment);
+    container.innerHTML = `<div class="initial-message">
+                <p>No videos found on the page.</p>
+                <p>Play a video or Refresh the page.</p>
+            </div>`;
+    container.prepend(fragment);
     
     // Add CSS for the extracted badge and timestamp if it doesn't exist
     if (!document.getElementById('custom-badges-style')) {
@@ -136,4 +139,3 @@ export async function updateVideoElement(url, updatedVideo, isMetadataOnly = fal
         }
     }
 }
-

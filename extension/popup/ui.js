@@ -6,7 +6,8 @@
  * - Manages responsive UI adjustments
  */
 
-import { clearCaches, getPreviewCacheStats, updateCacheStatsDisplay, getTheme, setTheme } from './index.js';
+import { getTheme, setTheme } from './index.js';
+import { sendPortMessage, clearCaches } from './messaging/background-communication.js';
 
 const logger = console; // Using console directly for UI logging
 
@@ -42,7 +43,7 @@ function createCacheStatsElement() {
     const element = document.createElement('div');
     element.className = 'cache-stats';
     element.textContent = 'Loading cache stats...';
-    getPreviewCacheStats(); // Request stats via port message
+    sendPortMessage({ command: 'getPreviewCacheStats' }); // Request stats via communication service
     return element;
 }
 
@@ -69,13 +70,10 @@ async function handleClearCacheClick(event) {
     button.disabled = true;
     
     try {
-        clearCaches();
-        
+        clearCaches(); // from comm service
+
         // Request updated cache stats
-        const cacheStats = document.querySelector('.cache-stats');
-        if (cacheStats) {
-            getPreviewCacheStats(); // This will trigger updateCacheStatsDisplay via port message
-        }
+        sendPortMessage({ command: 'getPreviewCacheStats' }); // Request stats 
         
         // Show success using shared tooltip
         showTooltipOnElement(button, 'Cache cleared!', 2000);
@@ -206,13 +204,6 @@ export function showError(message) {
         notification.style.transform = 'translateX(-50%) translateY(20px)';
         setTimeout(() => notification.remove(), 300);
     }, 3000);
-}
-
-export function hideInitMessage() {
-    const initialMessage = document.querySelector('.initial-message');
-    if (initialMessage) {
-        initialMessage.remove();
-    }
 }
 
 export function showToast(message, duration = 3000) {

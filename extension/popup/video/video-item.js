@@ -2,8 +2,7 @@ import { formatDuration } from '../../shared/utils/video-utils.js';
 import { showHoverPreview, hideHoverPreview } from './preview-hover.js';
 import { createCustomDropdown } from './dropdown.js';
 import { createDownloadButton } from './download-button.js';
-import { sendPortMessage } from '../index.js';
-import { normalizeUrl } from '../../shared/utils/normalize-url.js';
+import { sendPortMessage } from '../messaging/background-communication.js';
 
 /**
  * Create a video element for the UI
