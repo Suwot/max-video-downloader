@@ -10,22 +10,26 @@
   --color-warning-hover: #E64A19;
   --bg-primary-dark: #252525;
   --bg-primary-dark-hover: #303030;
+  --bg-secondary-dark: #1E1E1E;
   --bg-selected-dark: #393939;
   --bg-selected-dark-hover: #5D5D5D;
-  --bg-secondary-dark: #1E1E1E;
   --border-primary-dark: #61616133;
   --text-primary-dark: #FAFAFA;
   --text-secondary-dark: #999;
   --text-secondary-dark-hover: #FAFAFA;
-  --bg-primary-light: #f5f5f5;
-  --bg-hover-light: #f5f5f5;
-  --bg-active-light: #f5f5f5;
+  --bg-primary-light: #FFF;
   --bg-secondary-light: #f5f5f5;
-  --text-primary-light: #333;
-  --text-secondary-light: #666;
+  --bg-element-light: rgb(232 232 237 / 70%);
+  --bg-element-hover-light: rgb(232, 232, 237);
+  --bg-element-active-light: rgb(211 211 215);
+  --bg-element-shadow-light: inset 0 0 1px rgba(0,0,0,.7);
+  --text-primary-light: #1d1d1d;
+  --text-secondary-light: #797979;
+  --border-primary-light: 1px solid #FFF;
   --text-secondary-light-hover: #999;
-  --text-title-light: #1a73e8;
-  --border-primary-light: #e0e0e0;
+  --backdrop-filter: saturate(180%) blur(20px);
+  --bg-backdrop-light: rgba(255, 255, 255, 0.6);
+  --bg-backdrop-dark: rgba(0, 0, 0, 0.6);
   --transition-fast: 0.1s ease;
   --transition-normal: 0.2s ease;
   --transition-slow: 0.3s ease;
@@ -40,11 +44,13 @@
   padding: 0;
   -webkit-box-sizing: border-box;
           box-sizing: border-box;
+  border: none;
+  outline: none;
 }
 
 body {
   width: 420px;
-  min-height: 100px;
+  min-height: 50px;
   max-height: 500px;
   height: auto;
   margin: 0;
@@ -88,7 +94,7 @@ body.theme-light {
   color: var(--text-primary-dark);
 }
 .theme-light .app-title {
-  color: var(--text-title-light);
+  color: var(--color-primary);
 }
 
 .initial-message,
@@ -155,10 +161,11 @@ header {
   transition: -webkit-box-shadow var(--transition-normal);
   transition: box-shadow var(--transition-normal);
   transition: box-shadow var(--transition-normal), -webkit-box-shadow var(--transition-normal);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+          backdrop-filter: saturate(180%) blur(20px);
 }
 .theme-dark header {
-  background-color: var(--bg-primary-dark);
-  border-bottom: 1px solid #333;
+  background-color: var(--bg-backdrop-dark);
   -webkit-box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
           box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
@@ -166,10 +173,9 @@ header {
   fill: white;
 }
 .theme-light header {
-  background-color: #fff;
-  border-bottom: 1px solid #e0e0e0;
-  -webkit-box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-          box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  background-color: rgba(255, 255, 255, 0.8);
+  -webkit-box-shadow: var(--bg-element-shadow-light);
+          box-shadow: var(--bg-element-shadow-light);
 }
 .theme-light header svg {
   fill: #666;
@@ -203,6 +209,8 @@ header {
   cursor: pointer;
   padding: 0;
   position: relative;
+  -webkit-box-shadow: var(--bg-element-shadow-light);
+          box-shadow: var(--bg-element-shadow-light);
 }
 .theme-dark .theme-toggle,
 .theme-dark .clear-cache-button {
@@ -215,12 +223,16 @@ header {
 }
 .theme-light .theme-toggle,
 .theme-light .clear-cache-button {
-  background-color: var(--bg-primary-light);
-  border: 1px solid var(--border-primary-light);
+  background-color: var(--bg-element-light);
 }
-.theme-light .theme-toggle:hover,
-.theme-light .clear-cache-button:hover {
-  background-color: var(--bg-hover-light);
+.theme-light .theme-toggle:hover, .theme-light .theme-toggle:focus,
+.theme-light .clear-cache-button:hover,
+.theme-light .clear-cache-button:focus {
+  background-color: var(--bg-element-hover-light);
+}
+.theme-light .theme-toggle:active,
+.theme-light .clear-cache-button:active {
+  background-color: var(--bg-element-active-light);
 }
 .theme-dark .theme-toggle svg,
 .theme-dark .clear-cache-button svg {
@@ -232,14 +244,10 @@ header {
 }
 
 .clear-cache-button svg {
-  fill: white;
   width: 16px;
   height: 16px;
   -ms-flex-negative: 0;
       flex-shrink: 0;
-}
-.clear-cache-button:hover, .clear-cache-button:focus {
-  background-color: var(--color-warning-hover);
 }
 .clear-cache-button:hover + .cache-stats, .clear-cache-button:focus + .cache-stats {
   display: block;
@@ -261,20 +269,21 @@ header {
           transform: translateY(-50%);
   padding: 4px 10px;
   border-radius: 6px;
-  -webkit-box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
-          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
   white-space: nowrap;
   z-index: 10;
+  -webkit-backdrop-filter: var(--backdrop-filter);
+          backdrop-filter: var(--backdrop-filter);
 }
 .theme-dark .cache-stats {
-  background-color: var(--bg-primary-dark);
+  background-color: var(--bg-backdrop-dark);
   color: var(--text-secondary-dark);
   border: 1px solid var(--border-primary-dark);
 }
 .theme-light .cache-stats {
-  background-color: var(--bg-primary-light);
+  background-color: var(--bg-backdrop-light);
   color: var(--text-secondary-light);
-  border: 1px solid var(--border-primary-light);
+  -webkit-box-shadow: var(--bg-element-shadow-light);
+          box-shadow: var(--bg-element-shadow-light);
 }
 
 .dismiss-button {
@@ -314,7 +323,7 @@ header {
   background-color: var(--bg-primary-dark);
 }
 .theme-light #videos {
-  background-color: var(--bg-primary-light);
+  background-color: var(--bg-secondary-light);
 }
 #videos::-webkit-scrollbar {
   width: 6px;
@@ -358,12 +367,10 @@ header {
 .theme-dark .media-type-group {
   -webkit-box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
           box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
-  background-color: #252525;
 }
 .theme-light .media-type-group {
   -webkit-box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
           box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-  background-color: white;
 }
 
 .media-type-header {
@@ -393,7 +400,7 @@ header {
   color: var(--text-primary-light);
 }
 .theme-light .media-type-header:hover {
-  background-color: var(--bg-hover-light);
+  background-color: var(--bg-element-hover-light);
 }
 
 .media-type-title {
@@ -460,8 +467,9 @@ header {
   border: var(--border-primary-dark) 1px solid;
 }
 .theme-light .video-item {
-  background-color: var(--bg-secondary-light);
-  border: var(--border-primary-light) 1px solid;
+  background-color: var(--bg-primary-light);
+  -webkit-box-shadow: var(--bg-element-shadow-light);
+          box-shadow: var(--bg-element-shadow-light);
 }
 
 .preview-column {
@@ -784,7 +792,6 @@ header {
   position: relative;
   width: 100%;
   height: 24px;
-  background: #242424;
   border-radius: 6px;
   cursor: pointer;
   -webkit-user-select: none;
@@ -806,7 +813,6 @@ header {
   height: 100%;
   border-radius: 6px;
   background: var(--bg-primary-dark);
-  color: #FAFAFA;
   font-size: var(--font-body);
   -webkit-transition: background-color var(--transition-normal);
   transition: background-color var(--transition-normal);
@@ -816,18 +822,26 @@ header {
 }
 .theme-dark .custom-dropdown .selected-option {
   border: 1px solid var(--border-primary-dark);
+  background-color: var(--bg-secondary-dark);
+  color: var(--text-primary-dark);
 }
-.theme-light .custom-dropdown .selected-option {
-  border: 1px solid var(--border-primary-light);
-}
-.custom-dropdown:hover .selected-option {
+.theme-dark .custom-dropdown .selected-option:hover {
   background: var(--bg-primary-dark-hover);
 }
-.custom-dropdown.open .selected-option {
-  background-color: var(--bg-selected-dark);
+.theme-light .custom-dropdown .selected-option {
+  background-color: var(--bg-element-light);
+  color: var(--text-primary-light);
+  -webkit-box-shadow: var(--bg-element-shadow-light);
+          box-shadow: var(--bg-element-shadow-light);
 }
-.custom-dropdown.open .selected-option:hover {
-  background-color: var(--bg-selected-dark-hover);
+.theme-light .custom-dropdown .selected-option:hover, .theme-light .custom-dropdown .selected-option:focus {
+  background: var(--bg-element-hover-light);
+}
+.theme-light .custom-dropdown .selected-option:active {
+  background: var(--bg-element-active-light);
+}
+.theme-light .custom-dropdown .selected-option path {
+  stroke: var(--text-primary-light);
 }
 .custom-dropdown.open .dropdown-icon svg {
   -webkit-transform: rotate(180deg);
@@ -837,6 +851,18 @@ header {
   max-height: 300px;
   opacity: 1;
   visibility: visible;
+}
+.theme-dark .custom-dropdown.open .selected-option {
+  background-color: var(--bg-selected-dark);
+}
+.theme-dark .custom-dropdown.open .selected-option:hover, .theme-dark .custom-dropdown.open .selected-option:focus {
+  background-color: var(--bg-selected-dark-hover);
+}
+.theme-light .custom-dropdown.open .selected-option:hover, .theme-light .custom-dropdown.open .selected-option:focus {
+  background-color: var(--bg-element-hover-light);
+}
+.theme-light .custom-dropdown.open .selected-option:active {
+  background-color: var(--bg-element-active-light);
 }
 
 .dropdown-icon {
@@ -862,9 +888,7 @@ header {
   position: absolute;
   left: 0;
   margin-top: 1px;
-  background: var(--bg-primary-dark);
   border-radius: 6px;
-  border: 1px solid var(--border-primary-dark);
   -webkit-box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
           box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
   z-index: 100;
@@ -875,12 +899,18 @@ header {
   opacity: 0;
   visibility: hidden;
   width: 282px;
+  -webkit-backdrop-filter: var(--backdrop-filter);
+          backdrop-filter: var(--backdrop-filter);
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
 .custom-dropdown[data-type=dash] .options-container {
   width: 404px;
   left: -115px;
+}
+.theme-dark .options-container {
+  background: var(--bg-backdrop-dark);
+  border: 1px solid var(--border-primary-dark);
 }
 .options-container::-webkit-scrollbar {
   width: 6px;
@@ -895,6 +925,11 @@ header {
 .options-container::-webkit-scrollbar-thumb:hover {
   background: #666;
 }
+.theme-light .options-container {
+  background: var(--bg-backdrop-light);
+  -webkit-box-shadow: var(--bg-element-shadow-light);
+          box-shadow: var(--bg-element-shadow-light);
+}
 
 .video-item .download-group {
   position: relative;
@@ -902,7 +937,6 @@ header {
 
 .dropdown-option {
   padding: 8px;
-  color: var(--text-secondary-dark);
   font-size: var(--font-body);
   -webkit-transition: background-color var(--transition-fast);
   transition: background-color var(--transition-fast);
@@ -910,22 +944,43 @@ header {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.dropdown-option.selected {
+.theme-dark .dropdown-option {
+  color: var(--text-secondary-dark);
+}
+.theme-dark .dropdown-option.selected {
   background: var(--bg-selected-dark);
   color: var(--text-primary-dark);
 }
-.dropdown-option.selected:hover {
+.theme-dark .dropdown-option.selected:hover {
   background: var(--bg-selected-dark-hover);
 }
-.dropdown-option:not(.selected):hover {
+.theme-dark .dropdown-option:not(.selected):hover {
   position: relative;
   color: var(--text-primary-dark);
   background: var(--bg-selected-dark);
+}
+.theme-dark .dropdown-option.downloading {
+  background: var(--bg-selected-dark);
+}
+.theme-light .dropdown-option {
+  color: var(--text-secondary-light);
+}
+.theme-light .dropdown-option.selected {
+  background: var(--bg-element-active-light);
+  color: var(--text-primary-light);
+}
+.theme-light .dropdown-option:hover {
+  position: relative;
+  color: var(--text-primary-light);
+  background: var(--bg-element-hover-light);
+}
+.theme-light .dropdown-option.downloading {
+  background: var(--bg-element-active-light);
 }
 .dropdown-option.downloading {
   position: relative;
   overflow: hidden;
-  color: var(--text-primary-dark);
+  color: white !important;
 }
 .dropdown-option.downloading::after {
   content: "";
@@ -1052,6 +1107,7 @@ header {
 .selected-option.downloading {
   position: relative;
   overflow: hidden;
+  color: white !important;
 }
 .selected-option.downloading::after {
   content: "";
@@ -1074,13 +1130,22 @@ header {
   background-color: var(--color-success) !important;
   color: white !important;
 }
+.selected-option.complete path {
+  stroke: white !important;
+}
 .selected-option.error {
   background-color: var(--color-error) !important;
   color: white !important;
 }
+.selected-option.error path {
+  stroke: white !important;
+}
 .selected-option.canceled {
   background-color: var(--color-warning) !important;
   color: white !important;
+}
+.selected-option.canceled path {
+  stroke: white !important;
 }
 
 .source-badge {
