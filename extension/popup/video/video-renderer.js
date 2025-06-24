@@ -1,11 +1,20 @@
 import { groupVideosByType, createTypeGroup } from './video-groups.js';
+import { getVideos } from '../state.js';
 
 /**
- * Render a list of videos in the UI
- * @param {Array} videos - Videos to render
+ * Render current videos from state
  */
-export async function renderVideos(videos) {
+export function renderVideos() {
+    const videos = getVideos();
     const container = document.getElementById('videos');
+    
+    if (!videos || videos.length === 0) {
+        container.innerHTML = `<div class="initial-message">
+            <p>No videos found on the page.</p>
+            <p>Play a video or Refresh the page.</p>
+        </div>`;
+        return;
+    }
     
     // Group videos by type
     const videoGroups = groupVideosByType(videos);
@@ -21,11 +30,8 @@ export async function renderVideos(videos) {
         fragment.appendChild(group);
     }
     
-    container.innerHTML = `<div class="initial-message">
-                <p>No videos found on the page.</p>
-                <p>Play a video or Refresh the page.</p>
-            </div>`;
-    container.prepend(fragment);
+    container.innerHTML = '';
+    container.appendChild(fragment);
     
     // Add CSS for the extracted badge and timestamp if it doesn't exist
     if (!document.getElementById('custom-badges-style')) {

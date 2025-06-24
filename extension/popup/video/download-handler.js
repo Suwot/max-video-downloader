@@ -4,7 +4,8 @@
  */
 
 import { createLogger } from '../../shared/utils/logger.js';
-import { sendPortMessage, getState } from '../messaging/background-communication.js';
+import { sendPortMessage } from '../communication.js';
+import { getState } from '../state.js';
 import { showError } from '../ui.js';
 import { formatSize } from '../../shared/utils/video-utils.js';
 
@@ -63,7 +64,7 @@ export async function handleDownload(elementsDiv, videoData = {}) {
             streamSelection: videoData.streamSelection || null,
             masterUrl: videoData.masterUrl || null,
             duration: videoData.duration || null,
-            tabId: state.currentTabId,
+            tabId: state.tabId,
             selectedOptionOrigText
         };
         

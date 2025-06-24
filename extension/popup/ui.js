@@ -6,8 +6,9 @@
  * - Manages responsive UI adjustments
  */
 
-import { getTheme, setTheme } from './index.js';
-import { sendPortMessage, clearCaches } from './messaging/background-communication.js';
+import { getTheme, setTheme } from './state.js';
+import { sendPortMessage } from './communication.js';
+import { applyTheme } from './index.js';
 
 const logger = console; // Using console directly for UI logging
 
@@ -70,7 +71,7 @@ async function handleClearCacheClick(event) {
     button.disabled = true;
     
     try {
-        clearCaches(); // from comm service
+        sendPortMessage({ command: 'clearCaches' });
 
         // Request updated cache stats
         sendPortMessage({ command: 'getPreviewCacheStats' }); // Request stats 
@@ -102,6 +103,7 @@ async function handleThemeToggleClick(event) {
     
     try {
         await setTheme(newTheme);
+        applyTheme(newTheme);
         button.innerHTML = THEME_ICONS[newTheme];
     } catch (error) {
         logger.error('Error toggling theme:', error);
@@ -167,23 +169,6 @@ export function initializeUI() {
         clearCacheButton,
         themeToggle
     };
-}
-
-
-// Scroll position management
-export function setScrollPosition(tabId, position) {
-    chrome.storage.local.get(['scrollPositions'], (result) => {
-        const scrollPositions = result.scrollPositions || {};
-        scrollPositions[tabId] = position;
-        chrome.storage.local.set({ scrollPositions });
-    });
-}
-
-export function getScrollPosition(tabId, callback) {
-    chrome.storage.local.get(['scrollPositions'], (result) => {
-        const position = result.scrollPositions?.[tabId] || 0;
-        callback(position);
-    });
 }
 
 // Notification utilities
