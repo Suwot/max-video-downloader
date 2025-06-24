@@ -94,7 +94,6 @@ export async function startDownload(downloadRequest) {
             masterUrl: downloadRequest.masterUrl || null,
             filename: downloadRequest.filename,
             error: error.message,
-            downloadBtnOrigHTML: downloadRequest.downloadBtnOrigHTML || null,
             selectedOptionOrigText: downloadRequest.selectedOptionOrigText || null
         });
         
@@ -125,7 +124,6 @@ function handleDownloadProgress(downloadId, downloadRequest, response) {
                 masterUrl: downloadRequest.masterUrl || null,
                 filename: downloadRequest.filename,
                 error: response.error,
-                downloadBtnOrigHTML: downloadRequest.downloadBtnOrigHTML || null,
                 selectedOptionOrigText: downloadRequest.selectedOptionOrigText || null
             });
             return;
@@ -138,7 +136,6 @@ function handleDownloadProgress(downloadId, downloadRequest, response) {
                 downloadUrl: downloadRequest.downloadUrl,
                 masterUrl: downloadRequest.masterUrl || null,
                 filename: downloadRequest.filename,
-                downloadBtnOrigHTML: downloadRequest.downloadBtnOrigHTML || null,
                 selectedOptionOrigText: downloadRequest.selectedOptionOrigText || null
             });
             return;
@@ -155,7 +152,6 @@ function handleDownloadProgress(downloadId, downloadRequest, response) {
         ? { ...response, 
             success: response.success, 
             error: response.error,
-            downloadBtnOrigHTML: downloadRequest.downloadBtnOrigHTML || null,
             selectedOptionOrigText: downloadRequest.selectedOptionOrigText || null
         }
         : response;
