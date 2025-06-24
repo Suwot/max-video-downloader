@@ -133,9 +133,8 @@ body {
 }
 
 // Initial states
-.initial-message,
-.no-videos-message {
-    display: flex;
+.initial-message {
+    display: none;
     flex-direction: column;
     align-items: center;
     justify-content: center;
@@ -388,6 +387,10 @@ header {
                 background: #aaa;
             }
         }
+    }
+
+    > .initial-message:first-child {
+        display: flex;
     }
 }
 
