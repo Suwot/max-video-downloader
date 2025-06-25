@@ -85,6 +85,8 @@ function handleIncomingMessage(message) {
         case 'download-success':
         case 'download-error':
         case 'download-canceled':
+        case 'download-queued':
+        case 'download-unqueued':
             updateDownloadProgress(message);
             break;
             

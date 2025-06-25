@@ -11,12 +11,19 @@ import { broadcastToPopups } from '../messaging/popup-communication.js';
 
 const logger = createLogger('Download Manager');
 
+// Maximum concurrent downloads (set to 1 for dev/testing)
+const MAX_CONCURRENT_DOWNLOADS = 1;
+
 // Simple Set for active download deduplication
 const activeDownloads = new Set();
 
 // Simple Map for tracking download progress per URL (for UI restoration)
 // Key: downloadUrl, Value: full progress message from NHS
 const activeDownloadProgress = new Map();
+
+// Queue for pending download requests
+// Array of complete download request objects
+const downloadQueue = [];
 
 /**
  * Initialize download manager
@@ -43,11 +50,51 @@ export async function startDownload(downloadRequest) {
     
     logger.debug('Starting download:', downloadId);
     
-    // Simple deduplication check using Set
-    if (activeDownloads.has(downloadId)) {
-        logger.debug('Download already active:', downloadId);
+    // Simple deduplication check - active downloads or queued downloads
+    if (activeDownloads.has(downloadId) || downloadQueue.find(req => req.downloadUrl === downloadId)) {
+        logger.debug('Download already active or queued:', downloadId);
         return;
     }
+    
+    // Check if we're at concurrent download limit
+    if (activeDownloads.size >= MAX_CONCURRENT_DOWNLOADS) {
+        logger.debug('Queue download - at concurrent limit:', downloadId);
+        
+        // Add to queue
+        downloadQueue.push(downloadRequest);
+        
+        // Store queue state in progress map for UI restoration
+        activeDownloadProgress.set(downloadId, {
+            command: 'download-queued',
+            downloadUrl: downloadRequest.downloadUrl,
+            masterUrl: downloadRequest.masterUrl || null,
+            filename: downloadRequest.filename,
+            selectedOptionOrigText: downloadRequest.selectedOptionOrigText || null
+        });
+        
+        // Broadcast queue state to UI
+        broadcastToPopups({
+            command: 'download-queued',
+            downloadUrl: downloadRequest.downloadUrl,
+            masterUrl: downloadRequest.masterUrl || null,
+            filename: downloadRequest.filename,
+            selectedOptionOrigText: downloadRequest.selectedOptionOrigText || null
+        });
+        
+        logger.debug('Download queued:', downloadId);
+        return;
+    }
+    
+    // Start download immediately
+    startDownloadImmediately(downloadRequest);
+}
+
+/**
+ * Start download immediately (extracted from original startDownload logic)
+ * @param {Object} downloadRequest - Complete download request
+ */
+function startDownloadImmediately(downloadRequest) {
+    const downloadId = downloadRequest.downloadUrl;
     
     try {
         // Add to active downloads Set for deduplication
@@ -116,6 +163,7 @@ function handleDownloadProgress(downloadId, downloadRequest, response) {
         // Clean up progress map on completion/error/cancellation
         activeDownloadProgress.delete(downloadId);
 
+        // Handle specific completion types
         if (response.command === 'download-error') {
             logger.error('Download error:', downloadId, response.error);
             broadcastToPopups({
@@ -126,10 +174,7 @@ function handleDownloadProgress(downloadId, downloadRequest, response) {
                 error: response.error,
                 selectedOptionOrigText: downloadRequest.selectedOptionOrigText || null
             });
-            return;
-        }
-        
-        if (response.command === 'download-canceled') {
+        } else if (response.command === 'download-canceled') {
             logger.debug('Download canceled:', downloadId);
             broadcastToPopups({
                 command: 'download-canceled',
@@ -138,13 +183,13 @@ function handleDownloadProgress(downloadId, downloadRequest, response) {
                 filename: downloadRequest.filename,
                 selectedOptionOrigText: downloadRequest.selectedOptionOrigText || null
             });
-            return;
-        }
-        
-        // Create completion notification
-        if (response.command === 'download-success') {
+        } else if (response.command === 'download-success') {
+            // Create completion notification
             createCompletionNotification(downloadRequest.filename);
         }
+        
+        // Process next download in queue after ANY completion (success, error, or cancellation)
+        processNextDownload();
     }
 
     // Prepare broadcast data with completion flags for UI
@@ -239,6 +284,19 @@ export async function cancelDownload(cancelRequest) {
     
     logger.debug('Canceling download:', downloadId);
     
+    // Check if download is queued - remove from queue
+    if (removeFromQueue(downloadId)) {
+        // Broadcast unqueue state to UI
+        broadcastToPopups({
+            command: 'download-unqueued',
+            downloadUrl: downloadId,
+            masterUrl: cancelRequest.masterUrl || null,
+            filename: cancelRequest.filename || 'Unknown',
+            selectedOptionOrigText: cancelRequest.selectedOptionOrigText || null
+        });
+        return;
+    }
+    
     // Check if download is actually active
     if (!activeDownloads.has(downloadId)) {
         logger.debug('No active download found to cancel:', downloadId);
@@ -269,4 +327,42 @@ export async function cancelDownload(cancelRequest) {
             message: `Cancel failed: ${error.message}`
         });
     }
+}
+
+/**
+ * Process next download in queue when space becomes available
+ */
+function processNextDownload() {
+    if (downloadQueue.length === 0 || activeDownloads.size >= MAX_CONCURRENT_DOWNLOADS) {
+        return;
+    }
+    
+    // Get next download from queue
+    const nextDownload = downloadQueue.shift();
+    logger.debug('Processing next queued download:', nextDownload.downloadUrl);
+    
+    // Remove from progress map (will be re-added when download starts)
+    activeDownloadProgress.delete(nextDownload.downloadUrl);
+    
+    // Start the download
+    startDownloadImmediately(nextDownload);
+}
+
+/**
+ * Remove download from queue
+ * @param {string} downloadUrl - URL to remove from queue
+ * @returns {boolean} - True if removed, false if not found
+ */
+export function removeFromQueue(downloadUrl) {
+    const initialLength = downloadQueue.length;
+    const index = downloadQueue.findIndex(req => req.downloadUrl === downloadUrl);
+    
+    if (index !== -1) {
+        downloadQueue.splice(index, 1);
+        activeDownloadProgress.delete(downloadUrl);
+        logger.debug('Removed from queue:', downloadUrl);
+        return true;
+    }
+    
+    return false;
 }

@@ -34,7 +34,7 @@ async function handlePortMessage(message, port, portId) {
     }
     
     // Define commands that don't require tab ID (global operations)
-    const globalCommands = ['clearCaches', 'getPreviewCacheStats'];
+    const globalCommands = ['clearCaches', 'getPreviewCacheStats', 'getDownloadProgress'];
     
     // Commands that require tab ID validation (tab-specific operations)
     const tabSpecificCommands = ['getVideos', 'generatePreview', 'download'];
@@ -56,6 +56,17 @@ async function handlePortMessage(message, port, portId) {
             if (activeProgress.length > 0) {
                 logger.debug(`Sending ${activeProgress.length} active download progress states to popup`);
                 activeProgress.forEach(progressData => {
+                    port.postMessage(progressData);
+                });
+            }
+            break;
+
+        case 'getDownloadProgress':
+            // Send only download progress states (no video updates)
+            const downloadProgress = getActiveDownloadProgress();
+            if (downloadProgress.length > 0) {
+                logger.debug(`Sending ${downloadProgress.length} download progress states for rerender`);
+                downloadProgress.forEach(progressData => {
                     port.postMessage(progressData);
                 });
             }

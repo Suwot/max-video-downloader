@@ -1,5 +1,5 @@
 import { groupVideosByType, createTypeGroup } from './video-groups.js';
-import { getVideos } from '../state.js';
+import { getVideos, getTabId } from '../state.js';
 import { sendPortMessage } from '../communication.js';
 
 /**
@@ -37,8 +37,10 @@ export async function renderVideos() {
         </div>`;
     container.prepend(fragment);
 
-    sendPortMessage({ command: 'getPreviewCacheStats' })
-    
+    // Request cache stats and download progress restoration
+    sendPortMessage({ command: 'getPreviewCacheStats' });    
+    sendPortMessage({ command: 'getDownloadProgress' }); // Restore download progress during rerender
+
     // Add CSS for the extracted badge and timestamp if it doesn't exist
     if (!document.getElementById('custom-badges-style')) {
         const style = document.createElement('style');

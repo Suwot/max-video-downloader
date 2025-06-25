@@ -85,13 +85,13 @@ export async function handleDownload(elementsDiv, videoData = {}) {
  * @param {Object} progressData - Progress data from background
  */
 export function updateDownloadProgress(progressData = {}) {
-    logger.debug('Progress update received:', progressData.command, progressData.progress + '%');
+    logger.debug('Progress update received:', progressData.command, progressData.progress ? progressData.progress + '%' : 'No progress');
     
     // Orchestrate all UI updates
     updateDownloadButton(progressData);
     updateDropdown(progressData);
     
-    logger.debug('All UI elements updated for progress:', progressData.progress + '%');
+    logger.debug('All UI elements updated for command:', progressData.command);
 }
 
 /**
@@ -110,16 +110,52 @@ function updateDownloadButton(progressData = {}) {
     }
 
     switch (progressData.command) {
+        case 'download-queued':
+            // Update button to queued state
+            downloadBtn.innerHTML = 'Queued...';
+            downloadBtnWrapper.classList.add('queued');
+            
+            // Add queue cancellation handler
+            downloadBtn.onclick = () => {
+                logger.debug('Queue cancellation clicked for:', progressData.downloadUrl);
+                handleQueueCancellation(progressData);
+            };
+            
+            logger.debug('Download button set to queued state');
+            break;
+            
+        case 'download-unqueued':
+            // Show unqueued state briefly
+            downloadBtn.innerHTML = 'Unqueued';
+            downloadBtnWrapper.classList.remove('queued');
+            downloadBtnWrapper.classList.add('unqueued');
+            
+            // Restore original state after 2 seconds
+            setTimeout(() => {
+                downloadBtn.innerHTML = DL_BTN_ORIG_HTML;
+                downloadBtnWrapper.classList.remove('unqueued');
+                // Restore download handler if available
+                if (downloadBtn._downloadHandler) {
+                    downloadBtn.onclick = downloadBtn._downloadHandler;
+                } else {
+                    downloadBtn.onclick = null;
+                }
+            }, 2000);
+
+            logger.debug('Download button set to unqueued state');
+            break;
+            
         case 'download-progress':
             if (!downloadBtnWrapper.classList.contains('downloading')) {
                 // Update button text and state
                 downloadBtn.innerHTML = 'Stop';
+                downloadBtnWrapper.classList.remove('queued'); // Clear any queue state
                 downloadBtnWrapper.classList.add('downloading', 'stop-mode');
                 
                 // Add stop handler
                 downloadBtn.onclick = () => {
                     logger.debug('Stop button clicked for:', progressData.downloadUrl);
-                    handleDownloadCancellation(progressData.downloadUrl);
+                    handleDownloadCancellation(progressData);
                 };
                 
                 logger.debug('Download button switched to Stop mode');
@@ -131,7 +167,7 @@ function updateDownloadButton(progressData = {}) {
         case 'download-canceled':
             // Restore original button state
             downloadBtn.innerHTML = DL_BTN_ORIG_HTML;
-            downloadBtnWrapper.classList.remove('downloading', 'stop-mode');
+            downloadBtnWrapper.classList.remove('downloading', 'stop-mode', 'queued', 'unqueued');
             // Restore download handler if available
             if (downloadBtn._downloadHandler) {
                 downloadBtn.onclick = downloadBtn._downloadHandler;
@@ -163,16 +199,58 @@ function updateDropdown(progressData = {}) {
     const dropdownOption = document.querySelector(`.dropdown-option[data-url="${progressData.downloadUrl}"]`);
 
     switch (progressData.command) {
+        case 'download-queued':
+            // Update selected option for queued state
+            if (selectedOption) {
+                selectedOption.classList.add('queued');
+                const textSpan = selectedOption.querySelector('span:first-child') || selectedOption;
+                textSpan.textContent = 'Queued...';
+            }
+            
+            // Update dropdown option for queued state
+            if (dropdownOption) {
+                dropdownOption.classList.add('queued');
+            }
+            
+            logger.debug('Dropdown set to queued state');
+            break;
+            
+        case 'download-unqueued':
+            // Update selected option for unqueued state
+            if (selectedOption) {
+                selectedOption.classList.remove('queued');
+                selectedOption.classList.add('unqueued');
+                const textSpan = selectedOption.querySelector('span:first-child') || selectedOption;
+                textSpan.textContent = 'unqueued';
+                
+                // Restore after 2 seconds
+                setTimeout(() => restoreOriginalOption(selectedOption, progressData), 2000);
+            }
+            
+            // Update dropdown option for unqueued state
+            if (dropdownOption) {
+                dropdownOption.classList.remove('queued');
+                dropdownOption.classList.add('unqueued');
+                setTimeout(() => {
+                    dropdownOption.classList.remove('unqueued');
+                }, 2000);
+            }
+            
+            logger.debug('Dropdown set to unqueued state');
+            break;
+            
         case 'download-progress':
             // Update dropdown option background (no text change)
             if (dropdownOption) {
                 dropdownOption.style.setProperty('--progress', `${progress}%`);
+                dropdownOption.classList.remove('queued'); // Clear any queue state
                 dropdownOption.classList.add('downloading');
             }
 
             // Update selected option (with progress text)
             if (selectedOption) {
                 selectedOption.style.setProperty('--progress', `${progress}%`);
+                selectedOption.classList.remove('queued'); // Clear any queue state
                 selectedOption.classList.add('downloading');
 
                 // Build progress display text
@@ -262,8 +340,8 @@ function restoreOriginalOption(selectedOption, progressData = {}) {
     const textSpan = selectedOption.querySelector('span:first-child') || selectedOption;
     textSpan.textContent = progressData.selectedOptionOrigText;
 
-    // Clean up progress styling
-    selectedOption.classList.remove('downloading', 'complete', 'error', 'canceled');
+    // Clean up progress styling and all state classes
+    selectedOption.classList.remove('downloading', 'complete', 'error', 'canceled', 'queued', 'unqueued');
     selectedOption.style.removeProperty('--progress');
     
     logger.debug('Restored original option:', progressData.selectedOptionOrigText);
@@ -273,13 +351,15 @@ function restoreOriginalOption(selectedOption, progressData = {}) {
  * Handle download cancellation request
  * @param {string} downloadUrl - The download URL to cancel
  */
-async function handleDownloadCancellation(downloadUrl) {
-    logger.debug('Requesting download cancellation for:', downloadUrl);
+async function handleDownloadCancellation(progressData) {
+    logger.debug('Requesting download cancellation for:', progressData.downloadUrl);
     
     try {
         sendPortMessage({
             command: 'cancel-download',
-            downloadUrl: downloadUrl
+            downloadUrl: progressData.downloadUrl,
+            masterUrl: progressData.masterUrl || null,
+            selectedOptionOrigText: progressData.selectedOptionOrigText
         });
         
         logger.debug('Cancellation request sent to background');
@@ -287,6 +367,29 @@ async function handleDownloadCancellation(downloadUrl) {
     } catch (error) {
         logger.error('Failed to send cancellation request:', error);
         showError('Failed to cancel download');
+    }
+}
+
+/**
+ * Handle queue cancellation request (unqueue)
+ * @param {string} downloadUrl - The download URL to remove from queue
+ */
+async function handleQueueCancellation(progressData) {
+    logger.debug('Requesting queue cancellation for:', progressData.downloadUrl);
+    
+    try {
+        sendPortMessage({
+            command: 'cancel-download',
+            downloadUrl: progressData.downloadUrl,
+            masterUrl: progressData.masterUrl || null,
+            selectedOptionOrigText: progressData.selectedOptionOrigText
+        });
+        
+        logger.debug('Queue cancellation request sent to background');
+        
+    } catch (error) {
+        logger.error('Failed to send queue cancellation request:', error);
+        showError('Failed to cancel queued download');
     }
 }
 
