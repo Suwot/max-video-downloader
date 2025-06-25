@@ -188,7 +188,8 @@ function createPlaceholderContent(tab) {
             break;
         case 'about':
             icon.innerHTML = '<svg viewBox="0 0 24 24" width="48" height="48"><path d="M12,2C6.48,2,2,6.48,2,12s4.48,10,10,10s10-4.48,10-10S17.52,2,12,2z M13,17h-2v-6h2V17z M13,9h-2V7h2V9z"/></svg>';
-            description.textContent = 'Information about MAX Video Downloader';
+            description.innerHTML = '<img src="../icons/bear.gif" alt="Bear Icon" width="150" height="150">';
+            title.textContent = '';
             break;
     }
     
