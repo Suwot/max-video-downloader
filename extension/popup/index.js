@@ -5,7 +5,7 @@
 import { initializeUI } from './ui.js';
 import { createLogger } from '../shared/utils/logger.js';
 import { normalizeUrl } from '../shared/utils/normalize-url.js';
-import { initializeState, setTabId, getTheme, setTheme, getGroupState, setGroupState, setScrollPosition, getScrollPosition } from './state.js';
+import { initializeState, setTabId, getTheme, setTheme, getGroupState, setGroupState } from './state.js';
 import { connect, disconnect, sendPortMessage } from './communication.js';
 
 const logger = createLogger('Popup');
@@ -47,6 +47,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         // Get active tab and set tab ID
         const activeTab = await getActiveTab();
         setTabId(activeTab.id);
+        logger.debug('Active tab ID set:', activeTab.id); // Debug log
 
         // Initialize UI
         await initializeUI();
@@ -66,23 +67,6 @@ document.addEventListener('DOMContentLoaded', async () => {
             tabId: activeTab.id,
             forceRefresh: true
         });
-
-        // Set up scroll position handling
-        const container = document.getElementById('videos');
-        if (container) {
-            // Save scroll position on scroll
-            container.addEventListener('scroll', () => {
-                setScrollPosition(container.scrollTop);
-            });
-            
-            // Restore scroll position
-            setTimeout(async () => {
-                const position = await getScrollPosition();
-                if (position > 0 && container.scrollHeight > container.clientHeight) {
-                    container.scrollTop = position;
-                }
-            }, 50);
-        }
         
     } catch (error) {
         logger.error('Initialization error:', error);
@@ -98,13 +82,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 // Clean up on popup close
-window.addEventListener('unload', () => {
-    // Save final scroll position
-    const container = document.getElementById('videos');
-    if (container) {
-        setScrollPosition(container.scrollTop);
-    }
-    
+window.addEventListener('beforeunload', () => {
     // Disconnect from background
     disconnect();
 });

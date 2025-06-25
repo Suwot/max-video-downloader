@@ -1,6 +1,6 @@
 /**
  * Streamlined popup state management
- * Persistent data (theme, groupStates, scrollPositions) stored directly in chrome.storage.local with tab isolation
+ * Persistent data (theme, groupStates) stored directly in chrome.storage.local with tab isolation
  * Ephemeral data (videos, tabId) kept as simple variables
  */
 
@@ -137,42 +137,6 @@ async function setGroupState(type, isCollapsed) {
 }
 
 /**
- * Set scroll position for current tab directly to storage
- */
-async function setScrollPosition(position) {
-    if (!currentTabId) {
-        logger.warn('No tab ID set, cannot save scroll position');
-        return;
-    }
-    
-    try {
-        const key = `scrollPosition_${currentTabId}`;
-        await chrome.storage.local.set({ [key]: position });
-    } catch (error) {
-        logger.error('Error saving scroll position:', error);
-    }
-}
-
-/**
- * Get scroll position for current tab from storage
- */
-async function getScrollPosition() {
-    if (!currentTabId) {
-        logger.warn('No tab ID set, using default scroll position');
-        return 0;
-    }
-    
-    try {
-        const key = `scrollPosition_${currentTabId}`;
-        const result = await chrome.storage.local.get([key]);
-        return result[key] || 0;
-    } catch (error) {
-        logger.error('Error getting scroll position:', error);
-        return 0;
-    }
-}
-
-/**
  * Set current videos (ephemeral)
  */
 function setVideos(videos) {
@@ -221,8 +185,6 @@ export {
     setTheme,
     getGroupState,
     setGroupState,
-    setScrollPosition,
-    getScrollPosition,
     setVideos,
     getVideos,
     updateVideo,
