@@ -67,7 +67,7 @@ async function getTheme() {
 }
 
 /**
- * Set theme directly to storage
+ * Set theme directly to storage and apply to DOM
  */
 async function setTheme(theme) {
     if (theme !== 'light' && theme !== 'dark') {
@@ -77,7 +77,17 @@ async function setTheme(theme) {
     
     try {
         await chrome.storage.local.set({ theme });
-        logger.debug('Theme set to:', theme);
+        
+        // Apply theme to DOM directly
+        if (theme === 'dark') {
+            document.body.classList.add('theme-dark');
+            document.body.classList.remove('theme-light');
+        } else {
+            document.body.classList.add('theme-light');
+            document.body.classList.remove('theme-dark');
+        }
+        
+        logger.debug('Theme set and applied:', theme);
     } catch (error) {
         logger.error('Error saving theme:', error);
     }

@@ -10,18 +10,7 @@ import { connect, disconnect, sendPortMessage } from './communication.js';
 
 const logger = createLogger('Popup');
 
-/**
- * Apply theme to document
- */
-function applyTheme(theme) {
-    if (theme === 'dark') {
-        document.body.classList.add('theme-dark');
-        document.body.classList.remove('theme-light');
-    } else {
-        document.body.classList.add('theme-light');
-        document.body.classList.remove('theme-dark');
-    }
-}
+
 
 /**
  * Get current active tab
@@ -43,7 +32,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         const state = await initializeState();
         
         // Apply current theme to UI
-        applyTheme(state.theme);
+        await setTheme(state.theme);
         
         // Listen for system theme changes
         window.matchMedia('(prefers-color-scheme: dark)')
@@ -52,7 +41,6 @@ document.addEventListener('DOMContentLoaded', async () => {
                 if (currentResult.theme === undefined) {
                     const newTheme = event.matches ? 'dark' : 'light';
                     await setTheme(newTheme);
-                    applyTheme(newTheme);
                 }
             });
 
@@ -128,5 +116,4 @@ export {
     getGroupState,
     setGroupState,
     getActiveTab,
-    applyTheme,
 };

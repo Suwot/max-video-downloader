@@ -8,7 +8,6 @@
 
 import { getTheme, setTheme } from './state.js';
 import { sendPortMessage } from './communication.js';
-import { applyTheme } from './index.js';
 
 const logger = console; // Using console directly for UI logging
 
@@ -81,7 +80,6 @@ async function createThemeToggle() {
         
         try {
             await setTheme(newTheme);
-            applyTheme(newTheme);
             button.innerHTML = THEME_ICONS[newTheme];
         } catch (error) {
             logger.error('Error toggling theme:', error);
@@ -137,11 +135,14 @@ export async function initializeUI() {
     // Insert into page
     container.parentElement.insertBefore(header, container);
 
-    // Apply current theme
-    getTheme().then(theme => applyTheme(theme)).catch(error => {
+    // Apply current theme on initialization
+    try {
+        const theme = await getTheme();
+        await setTheme(theme); // This will apply the theme to DOM
+    } catch (error) {
         logger.error('Error applying theme:', error);
-        applyTheme('dark'); // fallback
-    });
+        await setTheme('dark'); // fallback
+    }
     
     return {
         container,
