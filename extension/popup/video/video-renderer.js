@@ -1,5 +1,6 @@
 import { groupVideosByType, createTypeGroup } from './video-groups.js';
 import { getVideos } from '../state.js';
+import { sendPortMessage } from '../communication.js';
 
 /**
  * Render current videos from state
@@ -35,6 +36,8 @@ export async function renderVideos() {
             <p>Play a video or Refresh the page.</p>
         </div>`;
     container.prepend(fragment);
+
+    sendPortMessage({ command: 'getPreviewCacheStats' })
     
     // Add CSS for the extracted badge and timestamp if it doesn't exist
     if (!document.getElementById('custom-badges-style')) {

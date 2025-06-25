@@ -79,12 +79,6 @@ document.addEventListener('DOMContentLoaded', async () => {
             forceRefresh: true
         });
 
-        // Set up clear cache button
-        document.getElementById('clear-cache-btn')?.addEventListener('click', () => {
-            logger.debug('Clear cache button clicked');
-            sendPortMessage({ command: 'clearCaches' });
-        });
-
         // Set up scroll position handling
         const container = document.getElementById('videos');
         if (container) {

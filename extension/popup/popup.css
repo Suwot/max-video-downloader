@@ -240,7 +240,7 @@ header {
   -ms-flex-negative: 0;
       flex-shrink: 0;
 }
-.clear-cache-button:hover + .cache-stats, .clear-cache-button:focus + .cache-stats {
+.clear-cache-button:hover .cache-stats, .clear-cache-button:focus .cache-stats {
   display: block;
 }
 .clear-cache-button .tooltip {

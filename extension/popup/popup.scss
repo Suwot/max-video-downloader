@@ -269,7 +269,7 @@ header {
     }
 
     &:hover, &:focus {
-        &+ .cache-stats {
+        .cache-stats {
             display: block;
         }
     }

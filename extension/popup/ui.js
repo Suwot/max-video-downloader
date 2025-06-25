@@ -23,92 +23,72 @@ const THEME_ICONS = {
 };
 
 /**
- * Create clear cache button with icon and text
+ * Create clear cache button with icon, text, and click handler
  */
 function createClearCacheButton() {
     const button = document.createElement('button');
     button.className = 'clear-cache-button';
-    button.id = 'clear-cache-button';
     button.innerHTML = `
         <svg viewBox="0 0 24 24" width="16" height="16">
             <path d="M15 16h4v2h-4zm0-8h7v2h-7zm0 4h6v2h-6zM3 18c0 1.1.9 2 2 2h6c1.1 0 2-.9 2-2V8H3v10zm2-8h6v8H5v-8zm5-6H6L5 5H2v2h12V5h-3z"/>
         </svg>
     `;
+
+    const cacheStats = document.createElement('div');
+    cacheStats.className = 'cache-stats';
+    cacheStats.textContent = 'Loading cache stats...';
+    sendPortMessage({ command: 'getPreviewCacheStats' }); // Request stats via communication service
+
+    button.appendChild(cacheStats);
+
+    // Attach click handler directly
+    button.addEventListener('click', async (event) => {
+        button.disabled = true;
+
+        try {
+            sendPortMessage({ command: 'clearCaches' });
+            cacheStats.textContent = 'Cache cleared!';
+            setTimeout(() => {
+                sendPortMessage({ command: 'getPreviewCacheStats' });
+            }, 2000);
+        } catch (error) {
+            logger.error('Error clearing cache:', error);
+            cacheStats.textContent = 'Failed to clear cache';
+            setTimeout(() => {
+                sendPortMessage({ command: 'getPreviewCacheStats' });
+            }, 2000);
+        } finally {
+            button.disabled = false;
+        }
+    });
+
     return button;
 }
 
 /**
- * Create cache stats display element
- */
-function createCacheStatsElement() {
-    const element = document.createElement('div');
-    element.className = 'cache-stats';
-    element.textContent = 'Loading cache stats...';
-    sendPortMessage({ command: 'getPreviewCacheStats' }); // Request stats via communication service
-    return element;
-}
-
-/**
- * Create theme toggle button with current theme icon
+ * Create theme toggle button with current theme icon and click handler
  */
 async function createThemeToggle() {
     const button = document.createElement('button');
     button.className = 'theme-toggle';
     const currentTheme = await getTheme();
     button.innerHTML = THEME_ICONS[currentTheme];
+
+    // Attach click handler directly
+    button.addEventListener('click', async (event) => {
+        const currentTheme = await getTheme();
+        const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+        
+        try {
+            await setTheme(newTheme);
+            applyTheme(newTheme);
+            button.innerHTML = THEME_ICONS[newTheme];
+        } catch (error) {
+            logger.error('Error toggling theme:', error);
+        }
+    });
+
     return button;
-}
-
-/**
- * Handle clear cache button click with loading states
- */
-async function handleClearCacheClick(event) {
-    const button = event.target.closest('.clear-cache-button');
-    if (!button) {
-        logger.error('Clear cache button not found in event target');
-        return;
-    }
-
-    button.disabled = true;
-    
-    try {
-        sendPortMessage({ command: 'clearCaches' });
-
-        // Request updated cache stats
-        sendPortMessage({ command: 'getPreviewCacheStats' }); // Request stats 
-        
-        // Show success using shared tooltip
-        showTooltipOnElement(button, 'Cache cleared!', 2000);
-        
-    } catch (error) {
-        logger.error('Error clearing cache:', error);
-        showTooltipOnElement(button, 'Failed to clear cache', 2000);
-    } finally {
-        // Restore button state
-        button.disabled = false;
-    }
-}
-
-/**
- * Handle theme toggle button click
- */
-async function handleThemeToggleClick(event) {
-    const button = event.target.closest('.theme-toggle');
-    if (!button) {
-        logger.error('Theme toggle button not found in event target');
-        return;
-    }
-
-    const currentTheme = await getTheme();
-    const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
-    
-    try {
-        await setTheme(newTheme);
-        applyTheme(newTheme);
-        button.innerHTML = THEME_ICONS[newTheme];
-    } catch (error) {
-        logger.error('Error toggling theme:', error);
-    }
 }
 
 /**
@@ -146,22 +126,17 @@ export async function initializeUI() {
     
     // Create UI elements
     const clearCacheButton = createClearCacheButton();
-    const cacheStatsElement = createCacheStatsElement();
     const themeToggle = await createThemeToggle();
     
     // Assemble DOM structure
-    leftButtonsContainer.append(clearCacheButton, cacheStatsElement);
-    rightButtonsContainer.appendChild(themeToggle);
+    leftButtonsContainer.append(clearCacheButton);
+    rightButtonsContainer.append(themeToggle);
     header.prepend(leftButtonsContainer);
     header.append(rightButtonsContainer);
     
     // Insert into page
     container.parentElement.insertBefore(header, container);
 
-    // Attach event handlers
-    clearCacheButton.addEventListener('click', handleClearCacheClick);
-    themeToggle.addEventListener('click', handleThemeToggleClick);
-    
     // Apply current theme
     getTheme().then(theme => applyTheme(theme)).catch(error => {
         logger.error('Error applying theme:', error);
@@ -208,12 +183,4 @@ export function showToast(message, duration = 3000) {
         toast.classList.remove('visible');
         setTimeout(() => document.body.removeChild(toast), 300);
     }, duration);
-}
-
-// Utility functions for external use
-export async function toggleTheme() {
-    const currentTheme = await getTheme();
-    const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
-    await setTheme(newTheme);
-    return newTheme;
 }
