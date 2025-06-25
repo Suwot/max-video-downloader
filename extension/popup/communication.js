@@ -6,7 +6,7 @@
 
 import { createLogger } from '../shared/utils/logger.js';
 import { updateDownloadProgress } from './video/download-handler.js';
-import { renderVideos, updateVideoElement } from './video/video-renderer.js';
+import { renderVideos } from './video/video-renderer.js';
 import { setVideos, updateVideo, clearVideos, getVideos } from './state.js';
 
 const logger = createLogger('Communication');
@@ -67,7 +67,6 @@ function handleIncomingMessage(message) {
         case 'videoUpdated':
             if (message.url && message.video) {
                 updateVideo(message.url, message.video);
-                updateVideoElement(message.url, message.video);
             }
             break;
             
