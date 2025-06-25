@@ -118,7 +118,7 @@ function showTooltipOnElement(element, message, duration = 2000) {
  * Create tab navigation bar with click handlers
  */
 function createTabNavigation() {
-    const tabNav = document.createElement('div');
+    const tabNav = document.createElement('section');
     tabNav.className = 'tab-navigation';
     
     TABS.forEach(tab => {
@@ -140,7 +140,7 @@ function createTabNavigation() {
  * Create content containers for all tabs
  */
 function createTabContents(videosContainer) {
-    const tabContents = document.createElement('div');
+    const tabContents = document.createElement('section');
     tabContents.className = 'tab-contents';
     
     TABS.forEach(tab => {

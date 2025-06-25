@@ -11,16 +11,16 @@
     --color-primary-hover: #0369d6;
     
     // Error/Stop Red Scheme
-    --color-error: #C62828;
+    --color-error: #FF3B42;
     --color-error-hover: #b71c1c;
     
     // Success Green Scheme
-    --color-success: #43A047;
-    --color-success-hover: #27642a;
+    --color-success: #00CA55;
+    --color-success-hover: #205838;
     
     // Warning Orange Scheme
-    --color-warning: #FF5722;
-    --color-warning-hover: #E64A19;
+    --color-warning: #FF8738;
+    --color-warning-hover: #FF8F45;
     
     // Dark Theme
     --bg-primary-dark: #252525;
@@ -346,78 +346,90 @@ header {
 
 .tab-navigation {
     display: flex;
-    position: sticky;
     width: 100%;
-    top: 52px; // After header
-    z-index: 100;
-    border-bottom: 1px solid transparent;
+    padding: 3px;
+    margin: 8px;
+    border-radius: 16px;
+    gap: 7px;
 
     .theme-dark & {
-        border-bottom-color: var(--border-primary-dark);
+        background-color: var(--bg-primary-dark);
+        border: var(--border-primary-dark) 1px solid;
     }
 
     .theme-light & {
-        border-bottom-color: rgba(0, 0, 0, 0.1);
         box-shadow: var(--bg-element-shadow-light);
+    }
+
+    &:hover .tab-button::after {
+        display: none;
     }
 }
 
 .tab-button {
     flex: 1;
-    padding: 12px 8px;
+    padding: 6px;
     border: none;
     background: none;
     cursor: pointer;
     font-size: var(--font-h2);
     font-weight: 500;
     position: relative;
-    transition: all var(--transition-normal);
+    transition: all var(--transition-fast);
     text-align: center;
+    border-radius: 16px;
+    position: relative;
+
+    &.active {
+        background-color: var(--color-primary) !important;
+        color: var(--text-primary-dark) !important;
+
+        &:hover {
+            background-color: var(--color-primary-hover);
+        }
+    }
+
+    &:not(:last-child)::after {
+        content: '';
+        position: absolute;
+        height: 80%;
+        right: -4px;
+        width: 1px;
+        top: 50%;
+        transform: translateY(-50%);
+    }
 
     .theme-dark & {
         color: var(--text-secondary-dark);
+
+        &:not(:last-child)::after {
+            background-color: var(--bg-selected-dark);
+        }
 
         &:hover {
             color: var(--text-primary-dark);
             background-color: var(--bg-primary-dark-hover);
         }
 
-        &.active {
-            color: var(--color-primary);
-            
-            &::after {
-                content: '';
-                position: absolute;
-                bottom: 0;
-                left: 0;
-                right: 0;
-                height: 2px;
-                background-color: var(--color-primary);
-            }
-        }
+
+
     }
 
     .theme-light & {
         color: var(--text-secondary-light);
 
+        &:not(:last-child)::after {
+            background-color: var(--bg-element-active-light);
+        }
+
         &:hover {
-            color: var(--text-primary-light);
             background-color: var(--bg-element-hover-light);
         }
 
-        &.active {
-            color: var(--color-primary);
-            
-            &::after {
-                content: '';
-                position: absolute;
-                bottom: 0;
-                left: 0;
-                right: 0;
-                height: 2px;
-                background-color: var(--color-primary);
-            }
+        &:focus {
+            background-color: var(--bg-element-active-light);
         }
+
     }
 }
 

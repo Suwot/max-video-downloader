@@ -204,7 +204,7 @@ function updateDropdown(progressData = {}) {
             if (selectedOption) {
                 selectedOption.classList.add('queued');
                 const textSpan = selectedOption.querySelector('span:first-child') || selectedOption;
-                textSpan.textContent = 'Queued...';
+                textSpan.textContent = 'Waiting in queue...';
             }
             
             // Update dropdown option for queued state
@@ -221,7 +221,7 @@ function updateDropdown(progressData = {}) {
                 selectedOption.classList.remove('queued');
                 selectedOption.classList.add('unqueued');
                 const textSpan = selectedOption.querySelector('span:first-child') || selectedOption;
-                textSpan.textContent = 'unqueued';
+                textSpan.textContent = 'Removed from queue';
                 
                 // Restore after 2 seconds
                 setTimeout(() => restoreOriginalOption(selectedOption, progressData), 2000);
