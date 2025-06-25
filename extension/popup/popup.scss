@@ -1021,7 +1021,6 @@ header {
     &.downloading {
         position: relative;
         overflow: hidden;
-        color: white !important;
 
         &::after {
             content: '';
@@ -1151,7 +1150,6 @@ header {
     &.downloading {
         position: relative;
         overflow: hidden;
-        color: white !important;
 
         &::after {
             content: '';

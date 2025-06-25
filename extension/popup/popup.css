@@ -976,7 +976,6 @@ header {
 .dropdown-option.downloading {
   position: relative;
   overflow: hidden;
-  color: white !important;
 }
 .dropdown-option.downloading::after {
   content: "";
@@ -1103,7 +1102,6 @@ header {
 .selected-option.downloading {
   position: relative;
   overflow: hidden;
-  color: white !important;
 }
 .selected-option.downloading::after {
   content: "";
