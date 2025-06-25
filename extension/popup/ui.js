@@ -51,10 +51,11 @@ function createCacheStatsElement() {
 /**
  * Create theme toggle button with current theme icon
  */
-function createThemeToggle() {
+async function createThemeToggle() {
     const button = document.createElement('button');
     button.className = 'theme-toggle';
-    button.innerHTML = THEME_ICONS[getTheme()];
+    const currentTheme = await getTheme();
+    button.innerHTML = THEME_ICONS[currentTheme];
     return button;
 }
 
@@ -98,7 +99,7 @@ async function handleThemeToggleClick(event) {
         return;
     }
 
-    const currentTheme = getTheme();
+    const currentTheme = await getTheme();
     const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
     
     try {
@@ -127,7 +128,7 @@ function showTooltipOnElement(element, message, duration = 2000) {
 /**
  * Initialize the UI - coordinates all UI element creation and setup
  */
-export function initializeUI() {
+export async function initializeUI() {
     const container = document.getElementById('videos');
     if (!container) {
         logger.error('Videos container not found');
@@ -146,7 +147,7 @@ export function initializeUI() {
     // Create UI elements
     const clearCacheButton = createClearCacheButton();
     const cacheStatsElement = createCacheStatsElement();
-    const themeToggle = createThemeToggle();
+    const themeToggle = await createThemeToggle();
     
     // Assemble DOM structure
     leftButtonsContainer.append(clearCacheButton, cacheStatsElement);
@@ -162,7 +163,10 @@ export function initializeUI() {
     themeToggle.addEventListener('click', handleThemeToggleClick);
     
     // Apply current theme
-    getTheme();
+    getTheme().then(theme => applyTheme(theme)).catch(error => {
+        logger.error('Error applying theme:', error);
+        applyTheme('dark'); // fallback
+    });
     
     return {
         container,
@@ -208,7 +212,7 @@ export function showToast(message, duration = 3000) {
 
 // Utility functions for external use
 export async function toggleTheme() {
-    const currentTheme = getTheme();
+    const currentTheme = await getTheme();
     const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
     await setTheme(newTheme);
     return newTheme;

@@ -58,7 +58,9 @@ function handleIncomingMessage(message) {
         case 'videoStateUpdated':
             if (message.videos) {
                 setVideos(message.videos);
-                renderVideos();
+                renderVideos().catch(error => {
+                    logger.error('Error rendering videos:', error);
+                });
             }
             break;
             
@@ -71,7 +73,9 @@ function handleIncomingMessage(message) {
             
         case 'cachesCleared':
             clearVideos();
-            renderVideos();
+            renderVideos().catch(error => {
+                logger.error('Error rendering videos after cache clear:', error);
+            });
             break;
             
         case 'previewCacheStats':

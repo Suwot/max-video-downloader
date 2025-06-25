@@ -43,11 +43,12 @@ export function groupVideosByType(videos) {
  * Create a group for a specific video type
  * @param {string} type - Video type (hls, dash, etc.)
  * @param {Array} videos - Videos of this type
- * @returns {HTMLElement} Group element
+ * @returns {Promise<HTMLElement>} Group element
  */
-export function createTypeGroup(type, videos) {
+export async function createTypeGroup(type, videos) {
     const group = document.createElement('div');
     group.className = 'media-type-group';
+    
     // Create header
     const header = document.createElement('div');
     header.className = `media-type-header ${type}`;
@@ -64,28 +65,35 @@ export function createTypeGroup(type, videos) {
             <path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"/>
         </svg>
     `;
-    if (getGroupState(type)) {
+    
+    // Get current group state
+    const isCollapsed = await getGroupState(type);
+    if (isCollapsed) {
         toggle.classList.add('collapsed');
     }
     header.append(title, toggle);
+    
     // Create content
     const content = document.createElement('div');
     content.className = 'media-type-content';
-    if (getGroupState(type)) {
+    if (isCollapsed) {
         content.classList.add('collapsed');
     }
+    
     // Add videos to group
     videos.forEach(video => {
         const videoElement = createVideoElement(video, group);
         content.appendChild(videoElement);
     });
+    
     // Toggle event
-    header.addEventListener('click', () => {
+    header.addEventListener('click', async () => {
         toggle.classList.toggle('collapsed');
         content.classList.toggle('collapsed');
         // Update and save state
-        setGroupState(type, content.classList.contains('collapsed'));
+        await setGroupState(type, content.classList.contains('collapsed'));
     });
+    
     group.append(header, content);
     return group;
 }

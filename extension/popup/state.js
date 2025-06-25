@@ -1,86 +1,73 @@
 /**
- * Simple popup-only state management
- * Lives only while popup is open - no persistence needed for videos
+ * Streamlined popup state management
+ * Persistent data (theme, groupStates, scrollPositions) stored directly in chrome.storage.local with tab isolation
+ * Ephemeral data (videos, tabId) kept as simple variables
  */
 
 import { createLogger } from '../shared/utils/logger.js';
 
 const logger = createLogger('PopupState');
 
-// Popup state - ephemeral, reset on each popup open
-let state = {
-    // Theme management
-    theme: 'dark',
-    
-    // Group drawer states (collapsed/expanded)
-    groupStates: {
-        hls: false,      // expanded by default
-        dash: false,     // expanded by default
-        direct: false,   // expanded by default
-        blob: true,      // collapsed by default
-        unknown: false,  // expanded by default
-    },
-    
-    // Scroll positions per tab
-    scrollPositions: {},
-    
-    // Current videos (delivered from background, not persisted)
-    videos: [],
-    
-    // Current tab ID
-    tabId: null,
+// Ephemeral data - only exists while popup is open
+let currentVideos = [];
+let currentTabId = null;
+
+// Default group states
+const DEFAULT_GROUP_STATES = {
+    hls: false,      // expanded by default
+    dash: false,     // expanded by default  
+    direct: false,   // expanded by default
+    blob: true,      // collapsed by default
+    unknown: false,  // expanded by default
 };
 
 /**
- * Initialize state from storage (theme and group states only)
+ * Initialize theme only (ephemeral data needs no initialization)
  */
 async function initializeState() {
     try {
-        // Load theme from storage
-        const themeResult = await chrome.storage.sync.get(['theme']);
-        if (themeResult.theme) {
-            state.theme = themeResult.theme;
-        } else {
-            // Use system preference
-            const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-            state.theme = prefersDark ? 'dark' : 'light';
-        }
-        
-        // Load group states from storage
-        const groupResult = await chrome.storage.local.get(['groupState']);
-        if (groupResult.groupState) {
-            state.groupStates = { ...state.groupStates, ...groupResult.groupState };
-        }
-        
-        logger.debug('State initialized:', { 
-            theme: state.theme, 
-            groupStates: state.groupStates 
-        });
-        
-        return state;
+        // Theme initialization is handled by getTheme() - no need to preload
+        logger.debug('State initialized');
+        return true;
     } catch (error) {
         logger.error('Error initializing state:', error);
-        return state;
+        return false;
     }
 }
 
 /**
- * Set current tab ID
+ * Set current tab ID (ephemeral)
  */
 function setTabId(tabId) {
-    state.tabId = tabId;
+    currentTabId = tabId;
     logger.debug('Tab ID set to:', tabId);
 }
 
 /**
- * Get current theme
+ * Get current theme from storage
  */
-function getTheme() {
-    return state.theme;
+async function getTheme() {
+    try {
+        const result = await chrome.storage.local.get(['theme']);
+        if (result.theme) {
+            return result.theme;
+        }
+        
+        // Use system preference as fallback
+        const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        const systemTheme = prefersDark ? 'dark' : 'light';
+        
+        // Save system preference for next time
+        await chrome.storage.local.set({ theme: systemTheme });
+        return systemTheme;
+    } catch (error) {
+        logger.error('Error getting theme:', error);
+        return 'dark'; // Safe fallback
+    }
 }
 
 /**
- * Set theme and save to storage
+ * Set theme directly to storage
  */
 async function setTheme(theme) {
     if (theme !== 'light' && theme !== 'dark') {
@@ -88,97 +75,138 @@ async function setTheme(theme) {
         return;
     }
     
-    state.theme = theme;
-    logger.debug('Theme set to:', theme);
-    
     try {
-        await chrome.storage.sync.set({ theme });
+        await chrome.storage.local.set({ theme });
+        logger.debug('Theme set to:', theme);
     } catch (error) {
         logger.error('Error saving theme:', error);
     }
 }
 
 /**
- * Get group state for a type
+ * Get group state for a type from storage (tab-specific)
  */
-function getGroupState(type) {
-    return state.groupStates[type] ?? false;
+async function getGroupState(type) {
+    if (!currentTabId) {
+        logger.warn('No tab ID set, using default group state for:', type);
+        return DEFAULT_GROUP_STATES[type] ?? false;
+    }
+    
+    try {
+        const key = `groupState_${currentTabId}`;
+        const result = await chrome.storage.local.get([key]);
+        const tabGroupStates = result[key] || {};
+        return tabGroupStates[type] ?? DEFAULT_GROUP_STATES[type] ?? false;
+    } catch (error) {
+        logger.error('Error getting group state:', error);
+        return DEFAULT_GROUP_STATES[type] ?? false;
+    }
 }
 
 /**
- * Set group state and save to storage
+ * Set group state directly to storage (tab-specific)
  */
 async function setGroupState(type, isCollapsed) {
-    state.groupStates[type] = isCollapsed;
-    logger.debug(`Group ${type} state set to:`, isCollapsed ? 'collapsed' : 'expanded');
+    if (!currentTabId) {
+        logger.warn('No tab ID set, cannot save group state for:', type);
+        return;
+    }
     
     try {
-        await chrome.storage.local.set({ groupState: state.groupStates });
+        const key = `groupState_${currentTabId}`;
+        const result = await chrome.storage.local.get([key]);
+        const tabGroupStates = result[key] || {};
+        
+        tabGroupStates[type] = isCollapsed;
+        await chrome.storage.local.set({ [key]: tabGroupStates });
+        
+        logger.debug(`Group ${type} state set to:`, isCollapsed ? 'collapsed' : 'expanded');
     } catch (error) {
         logger.error('Error saving group state:', error);
     }
 }
 
 /**
- * Set scroll position for current tab
+ * Set scroll position for current tab directly to storage
  */
-function setScrollPosition(position) {
-    if (state.tabId) {
-        state.scrollPositions[state.tabId] = position;
+async function setScrollPosition(position) {
+    if (!currentTabId) {
+        logger.warn('No tab ID set, cannot save scroll position');
+        return;
+    }
+    
+    try {
+        const key = `scrollPosition_${currentTabId}`;
+        await chrome.storage.local.set({ [key]: position });
+    } catch (error) {
+        logger.error('Error saving scroll position:', error);
     }
 }
 
 /**
- * Get scroll position for current tab
+ * Get scroll position for current tab from storage
  */
-function getScrollPosition() {
-    return state.scrollPositions[state.tabId] || 0;
+async function getScrollPosition() {
+    if (!currentTabId) {
+        logger.warn('No tab ID set, using default scroll position');
+        return 0;
+    }
+    
+    try {
+        const key = `scrollPosition_${currentTabId}`;
+        const result = await chrome.storage.local.get([key]);
+        return result[key] || 0;
+    } catch (error) {
+        logger.error('Error getting scroll position:', error);
+        return 0;
+    }
 }
 
 /**
- * Set current videos (from background)
+ * Set current videos (ephemeral)
  */
 function setVideos(videos) {
-    state.videos = videos || [];
-    logger.debug(`Videos updated: ${state.videos.length} videos`);
+    currentVideos = videos || [];
+    logger.debug(`Videos updated: ${currentVideos.length} videos`);
 }
 
 /**
- * Get current videos
+ * Get current videos (ephemeral)
  */
 function getVideos() {
-    return state.videos;
+    return currentVideos;
 }
 
 /**
- * Update a single video in the list
+ * Update a single video in the current list (ephemeral)
  */
 function updateVideo(url, videoUpdate) {
-    const index = state.videos.findIndex(v => v.url === url);
+    const index = currentVideos.findIndex(v => v.url === url);
     if (index !== -1) {
-        state.videos[index] = { ...state.videos[index], ...videoUpdate };
+        currentVideos[index] = { ...currentVideos[index], ...videoUpdate };
         logger.debug('Video updated:', url);
     }
 }
 
 /**
- * Clear videos
+ * Clear current videos (ephemeral)
  */
 function clearVideos() {
-    state.videos = [];
+    currentVideos = [];
     logger.debug('Videos cleared');
 }
 
 /**
- * Get complete state (for debugging)
+ * Get current tab ID (ephemeral)
  */
-function getState() {
-    return { ...state };
+function getTabId() {
+    return currentTabId;
 }
 
 export {
     initializeState,
     setTabId,
+    getTabId,
     getTheme,
     setTheme,
     getGroupState,
@@ -188,6 +216,5 @@ export {
     setVideos,
     getVideos,
     updateVideo,
-    clearVideos,
-    getState
+    clearVideos
 };

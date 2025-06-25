@@ -5,7 +5,7 @@
 
 import { createLogger } from '../../shared/utils/logger.js';
 import { sendPortMessage } from '../communication.js';
-import { getState } from '../state.js';
+import { getTabId } from '../state.js';
 import { showError } from '../ui.js';
 import { formatSize } from '../../shared/utils/video-utils.js';
 
@@ -49,7 +49,7 @@ export async function handleDownload(elementsDiv, videoData = {}) {
         const selectedOption = elementsDiv.querySelector('.selected-option .label');
         const selectedOptionOrigText = selectedOption ? selectedOption.textContent : ''; 
         
-        const state = getState();
+        const currentTabId = getTabId();
         const downloadMessage = {
             command: 'download',
             downloadUrl: videoData.downloadUrl,
@@ -64,7 +64,7 @@ export async function handleDownload(elementsDiv, videoData = {}) {
             streamSelection: videoData.streamSelection || null,
             masterUrl: videoData.masterUrl || null,
             duration: videoData.duration || null,
-            tabId: state.tabId,
+            tabId: currentTabId,
             selectedOptionOrigText
         };
         

@@ -4,7 +4,7 @@ import { getVideos } from '../state.js';
 /**
  * Render current videos from state
  */
-export function renderVideos() {
+export async function renderVideos() {
     const videos = getVideos();
     const container = document.getElementById('videos');
     
@@ -22,11 +22,11 @@ export function renderVideos() {
     // Create document fragment for better performance
     const fragment = document.createDocumentFragment();
     
-    // Create type groups
+    // Create type groups (now async)
     for (const [type, typeVideos] of Object.entries(videoGroups)) {
         if (typeVideos.length === 0) continue;
         
-        const group = createTypeGroup(type, typeVideos);
+        const group = await createTypeGroup(type, typeVideos);
         fragment.appendChild(group);
     }
     

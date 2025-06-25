@@ -61,7 +61,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         setTabId(activeTab.id);
 
         // Initialize UI
-        initializeUI();
+        await initializeUI();
 
         // Connect to background and register
         connect();
@@ -94,8 +94,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             });
             
             // Restore scroll position
-            setTimeout(() => {
-                const position = getScrollPosition();
+            setTimeout(async () => {
+                const position = await getScrollPosition();
                 if (position > 0 && container.scrollHeight > container.clientHeight) {
                     container.scrollTop = position;
                 }
