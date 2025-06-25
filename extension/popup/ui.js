@@ -228,39 +228,25 @@ export { switchTab };
  * Initialize the UI - coordinates all UI element creation and setup
  */
 export async function initializeUI() {
-    const container = document.getElementById('videos');
-    if (!container) {
-        logger.error('Videos container not found');
-        return null;
-    }
-
+    const mainContainer = document.querySelector('main.container');
     const header = document.querySelector('header');
-    const mainContainer = container.parentElement;
+    const videosContainer = document.getElementById('videos');
 
-    // Create main containers
-    const leftButtonsContainer = document.createElement('div');
-    leftButtonsContainer.className = 'left-buttons-container';
-    
-    const rightButtonsContainer = document.createElement('div');
-    rightButtonsContainer.className = 'right-buttons-container';
-    
     // Create UI elements
     const clearCacheButton = createClearCacheButton();
     const themeToggle = await createThemeToggle();
     
-    // Assemble header structure
-    leftButtonsContainer.append(clearCacheButton);
-    rightButtonsContainer.append(themeToggle);
-    header.prepend(leftButtonsContainer);
-    header.append(rightButtonsContainer);
-    
     // Create tab navigation and content structure
-    const tabNavigation = createTabNavigation();
-    const tabContents = createTabContents(container);
+    const tabContents = createTabContents(videosContainer);
+
+    // Assemble header structure
+    header.querySelector('.left-buttons-container').append(clearCacheButton);
+    header.querySelector('.right-buttons-container').append(themeToggle);
+    header.append(createTabNavigation());
     
     // Clear main container and rebuild structure
     mainContainer.innerHTML = '';
-    mainContainer.append(header, tabNavigation, tabContents);
+    mainContainer.append(tabContents);
 
     // Apply current theme on initialization
     try {
@@ -285,7 +271,6 @@ export async function initializeUI() {
         container: tabContents.querySelector('[data-tab-id="videos"]'),
         clearCacheButton,
         themeToggle,
-        tabNavigation,
         tabContents,
         switchTab
     };

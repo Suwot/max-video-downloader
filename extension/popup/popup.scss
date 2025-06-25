@@ -81,7 +81,6 @@
 body {
     width: 420px;
     min-height: 50px;
-    max-height: 500px;
     height: auto;
     margin: 0;
     padding: 0;
@@ -177,12 +176,15 @@ header {
     position: sticky;
     top: 0;
     display: flex;
+    flex-wrap: wrap;
     justify-content: space-between;
     align-items: center;
-    padding: 8px;
     z-index: 101;
     transition: box-shadow var(--transition-normal);
     backdrop-filter: saturate(180%) blur(20px);
+
+    .title-row {padding: 8px;}
+
 
     .theme-dark & {
         background-color: var(--bg-backdrop-dark);
@@ -345,18 +347,16 @@ header {
 .tab-navigation {
     display: flex;
     position: sticky;
+    width: 100%;
     top: 52px; // After header
     z-index: 100;
-    backdrop-filter: var(--backdrop-filter);
     border-bottom: 1px solid transparent;
 
     .theme-dark & {
-        background-color: var(--bg-backdrop-dark);
         border-bottom-color: var(--border-primary-dark);
     }
 
     .theme-light & {
-        background-color: var(--bg-backdrop-light);
         border-bottom-color: rgba(0, 0, 0, 0.1);
         box-shadow: var(--bg-element-shadow-light);
     }

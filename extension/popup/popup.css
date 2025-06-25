@@ -51,7 +51,6 @@
 body {
   width: 420px;
   min-height: 50px;
-  max-height: 500px;
   height: auto;
   margin: 0;
   padding: 0;
@@ -140,13 +139,14 @@ header {
   display: -webkit-box;
   display: -ms-flexbox;
   display: flex;
+  -ms-flex-wrap: wrap;
+      flex-wrap: wrap;
   -webkit-box-pack: justify;
       -ms-flex-pack: justify;
           justify-content: space-between;
   -webkit-box-align: center;
       -ms-flex-align: center;
           align-items: center;
-  padding: 8px;
   z-index: 101;
   -webkit-transition: -webkit-box-shadow var(--transition-normal);
   transition: -webkit-box-shadow var(--transition-normal);
@@ -154,6 +154,9 @@ header {
   transition: box-shadow var(--transition-normal), -webkit-box-shadow var(--transition-normal);
   -webkit-backdrop-filter: saturate(180%) blur(20px);
           backdrop-filter: saturate(180%) blur(20px);
+}
+header .title-row {
+  padding: 8px;
 }
 .theme-dark header {
   background-color: var(--bg-backdrop-dark);
@@ -304,18 +307,15 @@ header {
   display: -ms-flexbox;
   display: flex;
   position: sticky;
+  width: 100%;
   top: 52px;
   z-index: 100;
-  -webkit-backdrop-filter: var(--backdrop-filter);
-          backdrop-filter: var(--backdrop-filter);
   border-bottom: 1px solid transparent;
 }
 .theme-dark .tab-navigation {
-  background-color: var(--bg-backdrop-dark);
   border-bottom-color: var(--border-primary-dark);
 }
 .theme-light .tab-navigation {
-  background-color: var(--bg-backdrop-light);
   border-bottom-color: rgba(0, 0, 0, 0.1);
   -webkit-box-shadow: var(--bg-element-shadow-light);
           box-shadow: var(--bg-element-shadow-light);
