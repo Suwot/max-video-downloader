@@ -21,19 +21,7 @@ const DEFAULT_GROUP_STATES = {
     unknown: false,  // expanded by default
 };
 
-/**
- * Initialize theme only (ephemeral data needs no initialization)
- */
-async function initializeState() {
-    try {
-        // Theme initialization is handled by getTheme() - no need to preload
-        logger.debug('State initialized');
-        return true;
-    } catch (error) {
-        logger.error('Error initializing state:', error);
-        return false;
-    }
-}
+
 
 /**
  * Set current tab ID (ephemeral)
@@ -70,6 +58,11 @@ async function getTheme() {
  * Set theme directly to storage and apply to DOM
  */
 async function setTheme(theme) {
+    if (!theme) {
+        logger.warn('setTheme called with undefined/null theme, using dark as fallback');
+        theme = 'dark';
+    }
+    
     if (theme !== 'light' && theme !== 'dark') {
         logger.error('Invalid theme:', theme);
         return;
@@ -178,7 +171,6 @@ function getTabId() {
 }
 
 export {
-    initializeState,
     setTabId,
     getTabId,
     getTheme,

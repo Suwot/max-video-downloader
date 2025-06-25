@@ -139,6 +139,16 @@ export async function initializeUI() {
     try {
         const theme = await getTheme();
         await setTheme(theme); // This will apply the theme to DOM
+        
+        // Listen for system theme changes
+        window.matchMedia('(prefers-color-scheme: dark)')
+            .addEventListener('change', async (event) => {
+                const currentResult = await chrome.storage.local.get(['theme']);
+                if (currentResult.theme === undefined) {
+                    const newTheme = event.matches ? 'dark' : 'light';
+                    await setTheme(newTheme);
+                }
+            });
     } catch (error) {
         logger.error('Error applying theme:', error);
         await setTheme('dark'); // fallback

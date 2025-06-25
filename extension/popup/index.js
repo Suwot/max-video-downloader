@@ -5,7 +5,7 @@
 import { initializeUI } from './ui.js';
 import { createLogger } from '../shared/utils/logger.js';
 import { normalizeUrl } from '../shared/utils/normalize-url.js';
-import { initializeState, setTabId, getTheme, setTheme, getGroupState, setGroupState } from './state.js';
+import { setTabId, getGroupState, setGroupState } from './state.js';
 import { connect, disconnect, sendPortMessage } from './communication.js';
 
 const logger = createLogger('Popup');
@@ -28,28 +28,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     try {
         logger.debug('Popup initializing...');
 
-        // Initialize state (theme, group states)
-        const state = await initializeState();
-        
-        // Apply current theme to UI
-        await setTheme(state.theme);
-        
-        // Listen for system theme changes
-        window.matchMedia('(prefers-color-scheme: dark)')
-            .addEventListener('change', async (event) => {
-                const currentResult = await chrome.storage.sync.get(['theme']);
-                if (currentResult.theme === undefined) {
-                    const newTheme = event.matches ? 'dark' : 'light';
-                    await setTheme(newTheme);
-                }
-            });
-
-        // Get active tab and set tab ID
+        // Get active tab and set tab ID first
         const activeTab = await getActiveTab();
         setTabId(activeTab.id);
-        logger.debug('Active tab ID set:', activeTab.id); // Debug log
+        logger.debug('Active tab ID set:', activeTab.id);
 
-        // Initialize UI
+        // Initialize UI (theme will be handled there)
         await initializeUI();
 
         // Connect to background and register
@@ -89,8 +73,6 @@ window.addEventListener('beforeunload', () => {
 
 // Export functions for use by other modules
 export {
-    getTheme,
-    setTheme,
     getGroupState,
     setGroupState,
     getActiveTab,
