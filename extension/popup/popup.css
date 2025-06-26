@@ -1,13 +1,17 @@
 /* Video Downloader MV3 - Main SCSS File */
 :root {
-  --color-primary: #037AFB;
-  --color-primary-hover: #0369d6;
-  --color-error: #FF3B42;
-  --color-error-hover: #b71c1c;
-  --color-success: #00CA55;
-  --color-success-hover: #205838;
-  --color-warning: #FF8738;
-  --color-warning-hover: #FF8F45;
+  --color-blue: #037AFB;
+  --color-blue-hover: #0369d6;
+  --color-red: #FF3B42;
+  --color-red-hover: #d32f2f;
+  --color-green: #00CA55;
+  --color-green-hover: #029944;
+  --color-orange: #FF8738;
+  --color-orange-hover: #e06d1a;
+  --color-yellow: #FFCF30;
+  --color-yellow-hover: #e6b82a;
+  --color-purple: #DD31E8;
+  --color-purple-hover: #c22bcc;
   --bg-primary-dark: #252525;
   --bg-primary-dark-hover: #303030;
   --bg-secondary-dark: #1E1E1E;
@@ -93,7 +97,7 @@ body.theme-light {
   color: var(--text-primary-dark);
 }
 .theme-light .app-title {
-  color: var(--color-primary);
+  color: var(--color-blue);
 }
 
 .initial-message {
@@ -141,6 +145,10 @@ header {
   display: flex;
   -ms-flex-wrap: wrap;
       flex-wrap: wrap;
+  -webkit-box-orient: vertical;
+  -webkit-box-direction: normal;
+      -ms-flex-direction: column;
+          flex-direction: column;
   -webkit-box-pack: justify;
       -ms-flex-pack: justify;
           justify-content: space-between;
@@ -154,9 +162,17 @@ header {
   transition: box-shadow var(--transition-normal), -webkit-box-shadow var(--transition-normal);
   -webkit-backdrop-filter: saturate(180%) blur(20px);
           backdrop-filter: saturate(180%) blur(20px);
-}
-header .title-row {
   padding: 8px;
+  gap: 8px;
+}
+header .heading-row {
+  width: 100%;
+  display: -webkit-box;
+  display: -ms-flexbox;
+  display: flex;
+  -webkit-box-pack: justify;
+      -ms-flex-pack: justify;
+          justify-content: space-between;
 }
 .theme-dark header {
   background-color: var(--bg-backdrop-dark);
@@ -308,7 +324,6 @@ header .title-row {
   display: flex;
   width: 100%;
   padding: 3px;
-  margin: 8px;
   border-radius: 16px;
   gap: 7px;
 }
@@ -342,11 +357,8 @@ header .title-row {
   position: relative;
 }
 .tab-button.active {
-  background-color: var(--color-primary) !important;
+  background-color: var(--color-blue) !important;
   color: var(--text-primary-dark) !important;
-}
-.tab-button.active:hover {
-  background-color: var(--color-primary-hover);
 }
 .tab-button:not(:last-child)::after {
   content: "";
@@ -719,6 +731,7 @@ header .title-row {
   -webkit-box-pack: justify;
       -ms-flex-pack: justify;
           justify-content: space-between;
+  gap: 4px;
 }
 
 .title-row {
@@ -731,7 +744,6 @@ header .title-row {
   -webkit-box-align: start;
       -ms-flex-align: start;
           align-items: flex-start;
-  margin-bottom: 4px;
   width: 100%;
 }
 
@@ -875,23 +887,23 @@ header .title-row {
   overflow: hidden;
 }
 .download-btn-wrapper.downloading.stop-mode .download-btn {
-  background-color: var(--color-error) !important;
+  background-color: var(--color-red) !important;
 }
 .download-btn-wrapper.downloading.stop-mode .download-btn:hover {
-  background-color: var(--color-error-hover) !important;
+  background-color: var(--color-red-hover) !important;
 }
 .download-btn-wrapper.downloading.stop-mode .download-menu-btn {
-  background-color: var(--color-error) !important;
-  border-left-color: var(--color-error-hover) !important;
+  background-color: var(--color-red) !important;
+  border-left-color: var(--color-red-hover) !important;
 }
 .download-btn-wrapper.downloading.stop-mode .download-menu-btn:hover {
-  background-color: var(--color-error-hover) !important;
+  background-color: var(--color-red-hover) !important;
 }
 .download-btn-wrapper:not(.downloading) .download-btn:hover {
-  background-color: var(--color-primary-hover);
+  background-color: var(--color-blue-hover);
 }
 .download-btn-wrapper:not(.downloading) .download-menu-btn:hover {
-  background-color: var(--color-primary-hover);
+  background-color: var(--color-blue-hover);
 }
 
 .download-btn {
@@ -905,7 +917,7 @@ header .title-row {
       -ms-flex-pack: center;
           justify-content: center;
   padding: 0 8px;
-  background-color: var(--color-primary);
+  background-color: var(--color-blue);
   color: white;
   border: none;
   font-size: var(--font-body);
@@ -955,11 +967,11 @@ header .title-row {
           justify-content: center;
   width: 19px;
   height: 100%;
-  background-color: var(--color-primary);
+  background-color: var(--color-blue);
   border: none;
   cursor: pointer;
   padding: 0;
-  border-left: 1px solid var(--color-primary-hover);
+  border-left: 1px solid var(--color-blue-hover);
   -webkit-transition: background-color var(--transition-fast);
   transition: background-color var(--transition-fast);
 }
@@ -1169,7 +1181,7 @@ header .title-row {
   left: 0;
   height: 100%;
   width: var(--progress, 0%);
-  background-color: var(--color-success);
+  background-color: var(--color-green);
   -webkit-transition: width var(--transition-fast);
   transition: width var(--transition-fast);
   z-index: 0;
@@ -1180,15 +1192,15 @@ header .title-row {
 }
 .dropdown-option.complete::after {
   width: 100%;
-  background-color: var(--color-success);
+  background-color: var(--color-green);
 }
 .dropdown-option.error::after {
   width: 100%;
-  background-color: var(--color-error);
+  background-color: var(--color-red);
 }
 .dropdown-option.canceled::after {
   width: 100%;
-  background-color: var(--color-warning);
+  background-color: var(--color-orange);
 }
 
 .tracks-columns-container {
@@ -1238,8 +1250,8 @@ header .title-row {
   width: fit-content;
   color: var(--text-secondary-dark-hover);
   background: var(--bg-selected-dark);
-  -webkit-box-shadow: 0 0 0 1px var(--color-primary);
-          box-shadow: 0 0 0 1px var(--color-primary);
+  -webkit-box-shadow: 0 0 0 1px var(--color-blue);
+          box-shadow: 0 0 0 1px var(--color-blue);
 }
 .track-option.selected {
   background: var(--bg-selected-dark);
@@ -1249,15 +1261,15 @@ header .title-row {
   background: var(--bg-selected-dark-hover);
 }
 .track-option.compatible {
-  border-left: 3px solid var(--color-success);
+  border-left: 3px solid var(--color-green);
 }
 .track-option.incompatible {
-  border-left: 3px solid var(--color-error);
+  border-left: 3px solid var(--color-red);
   opacity: 0.8;
 }
 .track-option input {
   margin-right: 6px;
-  accent-color: var(--color-primary);
+  accent-color: var(--color-blue);
 }
 
 .track-label {
@@ -1271,7 +1283,7 @@ header .title-row {
   width: calc(100% - 16px);
   margin: 0 8px 8px;
   padding: 6px;
-  background: var(--color-primary);
+  background: var(--color-blue);
   color: white;
   border: none;
   border-radius: 6px;
@@ -1281,7 +1293,7 @@ header .title-row {
   transition: background-color var(--transition-normal);
 }
 .apply-button:hover {
-  background: var(--color-primary-hover);
+  background: var(--color-blue-hover);
 }
 
 .selected-option.downloading {
@@ -1295,7 +1307,7 @@ header .title-row {
   left: 0;
   height: 100%;
   width: var(--progress, 0%);
-  background-color: var(--color-success);
+  background-color: var(--color-green);
   opacity: 0.9;
   -webkit-transition: width var(--transition-fast);
   transition: width var(--transition-fast);
@@ -1306,21 +1318,21 @@ header .title-row {
   z-index: 1;
 }
 .selected-option.complete {
-  background-color: var(--color-success) !important;
+  background-color: var(--color-green) !important;
   color: white !important;
 }
 .selected-option.complete path {
   stroke: white !important;
 }
 .selected-option.error {
-  background-color: var(--color-error) !important;
+  background-color: var(--color-red) !important;
   color: white !important;
 }
 .selected-option.error path {
   stroke: white !important;
 }
 .selected-option.canceled {
-  background-color: var(--color-warning) !important;
+  background-color: var(--color-orange) !important;
   color: white !important;
 }
 .selected-option.canceled path {
