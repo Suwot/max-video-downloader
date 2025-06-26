@@ -355,6 +355,16 @@ header .heading-row {
   text-align: center;
   border-radius: 16px;
   position: relative;
+  display: -webkit-box;
+  display: -ms-flexbox;
+  display: flex;
+  -webkit-box-align: center;
+      -ms-flex-align: center;
+          align-items: center;
+  -webkit-box-pack: center;
+      -ms-flex-pack: center;
+          justify-content: center;
+  gap: 6px;
 }
 .tab-button.active {
   background-color: var(--color-blue) !important;
@@ -391,6 +401,41 @@ header .heading-row {
 }
 .theme-light .tab-button:focus {
   background-color: var(--bg-element-active-light);
+}
+
+.tab-counter {
+  display: -webkit-inline-box;
+  display: -ms-inline-flexbox;
+  display: inline-flex;
+  -webkit-box-align: center;
+      -ms-flex-align: center;
+          align-items: center;
+  -webkit-box-pack: center;
+      -ms-flex-pack: center;
+          justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  padding: 0 4px;
+  font-size: var(--font-body);
+  line-height: 1;
+  -webkit-transition: all var(--transition-fast);
+  transition: all var(--transition-fast);
+}
+.theme-dark .tab-counter {
+  background-color: rgba(255, 255, 255, 0.2);
+  color: var(--text-primary-dark);
+}
+.theme-light .tab-counter {
+  background-color: rgba(0, 0, 0, 0.1);
+  color: var(--text-primary-light);
+}
+.tab-button.active .tab-counter {
+  background-color: rgba(255, 255, 255, 0.3);
+  color: white;
+}
+.tab-counter:empty {
+  display: none;
 }
 
 .tab-contents {

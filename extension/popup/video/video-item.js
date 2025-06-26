@@ -138,6 +138,7 @@ export function createVideoElement(video, group) {
     `;
     dismissButton.title = 'Dismiss';
     dismissButton.addEventListener('click', () => {
+        // Send dismiss command to background
         if (video.type === 'blob') {
             sendPortMessage({
                 command: 'dismissVideo',
@@ -152,15 +153,22 @@ export function createVideoElement(video, group) {
             });
         }
 
-        // find closest media-type-header (down from "group" element, available from args of this function), check if .media-type-count.textContent is >1 ? remove element : remove .media-type-group
+        // Update UI counters - check if group becomes empty after removal
         const mediaTypeCount = group.querySelector('.media-type-count');
-        const count = parseInt(mediaTypeCount.textContent, 10);
-        if (count > 1) {
-            mediaTypeCount.textContent = String(count - 1); // Update the count if needed
+        const drawerCount = parseInt(mediaTypeCount.textContent, 10);
+        
+        if (drawerCount > 1) {
+            mediaTypeCount.textContent = String(drawerCount - 1); // Update the count if needed
             element.remove(); // Just remove this video item
         } else {
             group.remove(); // Remove the entire group if only one left
         }
+
+        // update videos tab counter without state modifications
+        const tabCounter = document.querySelector('[data-tab-id="videos"] .tab-counter');
+        const tabCount = parseInt(tabCounter.textContent, 10); 
+        tabCounter.textContent = tabCount > 1 ? String(tabCount - 1) : '';
+
     });
     
     titleRow.append(title, dismissButton);

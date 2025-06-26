@@ -8,6 +8,7 @@ import { createLogger } from '../shared/utils/logger.js';
 import { updateDownloadProgress } from './video/download-handler.js';
 import { renderVideos } from './video/video-renderer.js';
 import { setVideos, updateVideo, clearVideos, getVideos } from './state.js';
+import { updateTabCounter } from './ui.js';
 
 const logger = createLogger('Communication');
 
@@ -61,6 +62,7 @@ function handleIncomingMessage(message) {
                 renderVideos().catch(error => {
                     logger.error('Error rendering videos:', error);
                 });
+                updateTabCounter('videos'); // Update counter on full video list update
             }
             break;
             
@@ -75,6 +77,7 @@ function handleIncomingMessage(message) {
             renderVideos().catch(error => {
                 logger.error('Error rendering videos after cache clear:', error);
             });
+            updateTabCounter('videos'); // Update counter after clearing cache
             break;
             
         case 'previewCacheStats':

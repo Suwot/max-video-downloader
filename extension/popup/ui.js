@@ -7,7 +7,7 @@
  * - Manages tab navigation and content switching
  */
 
-import { getTheme, setTheme } from './state.js';
+import { getTheme, setTheme, getVideos } from './state.js';
 import { sendPortMessage } from './communication.js';
 
 const logger = console; // Using console directly for UI logging
@@ -126,6 +126,10 @@ function createTabNavigation() {
         tabButton.className = `tab-button ${tab.isDefault ? 'active' : ''}`;
         tabButton.dataset.tabId = tab.id;
         tabButton.textContent = tab.label;
+
+        if (tab.id === 'videos' || tab.id === 'downloads') {
+            tabButton.appendChild(document.createElement('span')).className = 'tab-counter';
+        }
         
         // Add click handler
         tabButton.addEventListener('click', () => switchTab(tab.id));
@@ -224,6 +228,24 @@ function switchTab(tabId) {
 
 // Export switchTab function for external use
 export { switchTab };
+
+/**
+ * Update tab counter badge
+ */
+export function updateTabCounter(uiTabId) {
+    if (uiTabId === 'videos') {
+        const count = getVideos().length;
+        const counter = document.querySelector(`[data-tab-id="${uiTabId}"] .tab-counter`);
+        counter.textContent = count > 0 ? count : '';
+    } else if (uiTabId === 'downloads') {
+        // TODO: logic to get active downloads count
+        const count = 0; // Placeholder for active downloads count
+        const counter = document.querySelector(`[data-tab-id="${uiTabId}"] .tab-counter`);
+        counter.textContent = count > 0 ? count : '';
+    } else {
+        logger.warn(`No counter update logic for tab: ${uiTabId}`);
+    }
+}
 
 /**
  * Initialize the UI - coordinates all UI element creation and setup
