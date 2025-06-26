@@ -8,7 +8,7 @@
  */
 
 import { getTheme, setTheme, getVideos } from './state.js';
-import { sendPortMessage } from './communication.js';
+import { sendPortMessage, downloadCounts } from './communication.js';
 
 const logger = console; // Using console directly for UI logging
 
@@ -238,8 +238,7 @@ export function updateTabCounter(uiTabId) {
         const counter = document.querySelector(`[data-tab-id="${uiTabId}"] .tab-counter`);
         counter.textContent = count > 0 ? count : '';
     } else if (uiTabId === 'downloads') {
-        // TODO: logic to get active downloads count
-        const count = 0; // Placeholder for active downloads count
+        const count = downloadCounts.total;
         const counter = document.querySelector(`[data-tab-id="${uiTabId}"] .tab-counter`);
         counter.textContent = count > 0 ? count : '';
     } else {

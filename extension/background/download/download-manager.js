@@ -63,6 +63,9 @@ export async function startDownload(downloadRequest) {
         // Add to queue
         downloadQueue.push(downloadRequest);
         
+        // Notify count change
+        notifyDownloadCountChange();
+        
         // Store queue state in progress map for UI restoration
         activeDownloadProgress.set(downloadId, {
             command: 'download-queued',
@@ -99,6 +102,9 @@ function startDownloadImmediately(downloadRequest) {
     try {
         // Add to active downloads Set for deduplication
         activeDownloads.add(downloadId);
+        
+        // Notify count change
+        notifyDownloadCountChange();
         
         // Create Chrome notification
         createDownloadNotification(downloadRequest.filename);
@@ -162,6 +168,9 @@ function handleDownloadProgress(downloadId, downloadRequest, response) {
         
         // Clean up progress map on completion/error/cancellation
         activeDownloadProgress.delete(downloadId);
+
+        // Notify count change
+        notifyDownloadCountChange();
 
         // Handle specific completion types
         if (response.command === 'download-error') {
@@ -247,9 +256,25 @@ export function getActiveDownloadProgress() {
     return progressArray;
 }
 
-//Get count of active downloads
+//Get count of active downloads and queue
 export function getActiveDownloadCount() {
-    return activeDownloads.size;
+    return {
+        active: activeDownloads.size,
+        queued: downloadQueue.length,
+        total: activeDownloads.size + downloadQueue.length
+    };
+}
+
+/**
+ * Notify all popups about download count changes
+ */
+function notifyDownloadCountChange() {
+    const counts = getActiveDownloadCount();
+    broadcastToPopups({
+        command: 'downloadCountUpdated',
+        counts: counts
+    });
+    logger.debug('Download count updated:', counts);
 }
 
 // Check if a specific URL is currently being downloaded
@@ -286,6 +311,9 @@ export async function cancelDownload(cancelRequest) {
     
     // Check if download is queued - remove from queue
     if (removeFromQueue(downloadId)) {
+        // Notify count change after queue removal
+        notifyDownloadCountChange();
+        
         // Broadcast unqueue state to UI
         broadcastToPopups({
             command: 'download-unqueued',
@@ -320,6 +348,9 @@ export async function cancelDownload(cancelRequest) {
         activeDownloads.delete(downloadId);
         activeDownloadProgress.delete(downloadId);
         
+        // Notify count change after cleanup
+        notifyDownloadCountChange();
+        
         // Broadcast error to UI
         broadcastToPopups({
             command: 'download-error',
@@ -340,6 +371,9 @@ function processNextDownload() {
     // Get next download from queue
     const nextDownload = downloadQueue.shift();
     logger.debug('Processing next queued download:', nextDownload.downloadUrl);
+    
+    // Notify count change after queue shift
+    notifyDownloadCountChange();
     
     // Remove from progress map (will be re-added when download starts)
     activeDownloadProgress.delete(nextDownload.downloadUrl);

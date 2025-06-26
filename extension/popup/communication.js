@@ -16,6 +16,9 @@ const logger = createLogger('Communication');
 let backgroundPort = null;
 let isConnected = false;
 
+// Store download counts for tab counter
+let downloadCounts = { active: 0, queued: 0, total: 0 };
+
 /**
  * Connect to background script
  */
@@ -93,6 +96,13 @@ function handleIncomingMessage(message) {
             updateDownloadProgress(message);
             break;
             
+        case 'downloadCountUpdated':
+            if (message.counts) {
+                downloadCounts = message.counts;
+                updateTabCounter('downloads');
+            }
+            break;
+            
         default:
             logger.warn('Unknown message command:', message.command);
     }
@@ -156,5 +166,6 @@ function updateCacheStatsDisplay(stats) {
 export {
     connect,
     disconnect,
-    sendPortMessage
+    sendPortMessage,
+    downloadCounts
 };
