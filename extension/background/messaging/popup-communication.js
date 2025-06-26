@@ -51,15 +51,6 @@ async function handlePortMessage(message, port, portId) {
             // Delegate to video-manager using unified approach
             sendVideoUpdateToUI(message.tabId, null, { _sendFullList: true });
             
-            // Send active download progress for immediate UI restoration
-            const activeProgress = getActiveDownloadProgress();
-            if (activeProgress.length > 0) {
-                logger.debug(`Sending ${activeProgress.length} active download progress states to popup`);
-                activeProgress.forEach(progressData => {
-                    port.postMessage(progressData);
-                });
-            }
-            
             // Send current download counts
             const downloadCounts = getActiveDownloadCount();
             port.postMessage({
