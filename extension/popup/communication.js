@@ -65,7 +65,7 @@ function handleIncomingMessage(message) {
                 renderVideos().catch(error => {
                     logger.error('Error rendering videos:', error);
                 });
-                updateTabCounter('videos'); // Update counter on full video list update
+                updateTabCounter('videos-tab'); // Update counter on full video list update
             }
             break;
             
@@ -80,7 +80,7 @@ function handleIncomingMessage(message) {
             renderVideos().catch(error => {
                 logger.error('Error rendering videos after cache clear:', error);
             });
-            updateTabCounter('videos'); // Update counter after clearing cache
+            updateTabCounter('videos-tab'); // Update counter after clearing cache
             break;
             
         case 'previewCacheStats':
@@ -99,7 +99,7 @@ function handleIncomingMessage(message) {
         case 'downloadCountUpdated':
             if (message.counts) {
                 downloadCounts = message.counts;
-                updateTabCounter('downloads');
+                updateTabCounter('downloads-tab');
             }
             break;
             

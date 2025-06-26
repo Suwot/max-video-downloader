@@ -277,17 +277,17 @@ function notifyDownloadCountChange() {
     logger.debug('Download count updated:', counts);
 }
 
-// Check if a specific URL is currently being downloaded
+// Check if a specific URL is currently being downloaded – not used anywhere yet
 export function isDownloadActive(downloadUrl) {
     return activeDownloads.has(downloadUrl);
 }
 
-// Get all active download URLs
+// Get all active download URLs – not used anywhere yet
 export function getActiveDownloadUrls() {
     return Array.from(activeDownloads);
 }
 
-// Debug function to log current download manager state
+// Debug function to log current download manager state – not used anywhere yet
 export function debugDownloadManagerState() {
     logger.debug('Download Manager State:', {
         activeDownloads: Array.from(activeDownloads),

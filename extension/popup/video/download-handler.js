@@ -191,7 +191,7 @@ function updateDropdown(progressData = {}) {
     // Single DOM query for the dropdown container
     const downloadGroup = document.querySelector(`.video-item[data-url="${lookupUrl}"] .download-group`);
     if (!downloadGroup) {
-        logger.warn('Download group not found for URL:', lookupUrl);
+        logger.warn('Download group not found for URL:', lookupUrl, progressData);
         return;
     }
 

@@ -7,7 +7,7 @@ import { sendPortMessage } from '../communication.js';
  */
 export async function renderVideos() {
     const videos = getVideos();
-    const container = document.getElementById('videos');
+    const container = document.getElementById('videos-list');
     
     if (!videos || videos.length === 0) {
         container.innerHTML = `<div class="initial-message">

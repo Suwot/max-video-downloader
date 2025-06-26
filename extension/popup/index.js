@@ -54,7 +54,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         
     } catch (error) {
         logger.error('Initialization error:', error);
-        const container = document.getElementById('videos');
+        const container = document.getElementById('videos-list');
         if (container) {
             container.innerHTML = `
                 <div class='initial-message'>

@@ -395,11 +395,6 @@ header {
     justify-content: center;
     gap: 6px;
 
-    &.active {
-        background-color: var(--color-blue) !important;
-        color: var(--text-primary-dark) !important;
-    }
-
     &:not(:last-child)::after {
         content: '';
         position: absolute;
@@ -420,6 +415,11 @@ header {
         &:hover {
             color: var(--text-primary-dark);
             background-color: var(--bg-primary-dark-hover);
+        }
+
+        &.active {
+            background-color: var(--color-blue);
+            color: var(--text-primary-dark);
         }
     }
 
@@ -449,12 +449,15 @@ header {
     border-radius: 50%;
     padding: 0 4px;
     font-size: var(--font-body);
+    font-weight: 600;
     line-height: 1;
     transition: all var(--transition-fast);
 
     .theme-dark & {
         background-color: rgba(255, 255, 255, 0.2);
         color: var(--text-primary-dark);
+
+
     }
 
     .theme-light & {
@@ -473,6 +476,20 @@ header {
         display: none;
     }
 }
+
+#videos-tab.active {
+    background-color: var(--color-blue);
+}
+#downloads-tab.active {
+    background-color: var(--color-green);
+}
+#settings-tab.active {
+    background-color: var(--color-yellow);
+}
+#about-tab.active {
+    background-color: var(--color-purple);
+}
+
 
 // =====================================================
 // TAB CONTENTS
@@ -586,7 +603,7 @@ header {
 // VIDEO LIST
 // =====================================================
 
-#videos,
+#videos-list,
 .tab-content[data-tab-id="videos"] {
     flex: 1;
     overflow-y: visible;
