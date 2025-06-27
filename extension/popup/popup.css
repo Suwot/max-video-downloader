@@ -603,6 +603,69 @@ header .heading-row {
   height: auto;
 }
 
+.downloads-container {
+  padding: 8px;
+  height: auto;
+  display: -webkit-box;
+  display: -ms-flexbox;
+  display: flex;
+  -webkit-box-orient: vertical;
+  -webkit-box-direction: normal;
+      -ms-flex-direction: column;
+          flex-direction: column;
+  gap: 16px;
+}
+
+.active-downloads-section h3,
+.downloads-history-section h3 {
+  font-size: var(--font-h2);
+  font-weight: 600;
+  margin-bottom: 8px;
+  padding: 0 8px;
+}
+.theme-dark .active-downloads-section h3,
+.theme-dark .downloads-history-section h3 {
+  color: var(--text-primary-dark);
+}
+.theme-light .active-downloads-section h3,
+.theme-light .downloads-history-section h3 {
+  color: var(--text-primary-light);
+}
+
+.active-downloads > .initial-message:first-child,
+.downloads-history > .initial-message:first-child {
+  display: -webkit-box;
+  display: -ms-flexbox;
+  display: flex;
+}
+
+.downloads-history .history-item {
+  opacity: 0.8;
+}
+.downloads-history .history-item.history-success {
+  border-left: 3px solid var(--color-green);
+}
+.downloads-history .history-item.history-error {
+  border-left: 3px solid var(--color-red);
+}
+.downloads-history .history-item.history-canceled {
+  border-left: 3px solid var(--color-orange);
+}
+.downloads-history .download-timestamp {
+  font-size: var(--font-badge);
+  margin-top: 4px;
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+.theme-dark .downloads-history .download-timestamp {
+  color: var(--text-secondary-dark);
+  background-color: rgba(255, 255, 255, 0.05);
+}
+.theme-light .downloads-history .download-timestamp {
+  color: var(--text-secondary-light);
+  background-color: rgba(0, 0, 0, 0.05);
+}
+
 .media-type-group {
   display: -webkit-box;
   display: -ms-flexbox;

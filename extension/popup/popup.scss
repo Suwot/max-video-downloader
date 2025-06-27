@@ -662,6 +662,79 @@ header {
 }
 
 // =====================================================
+// DOWNLOADS SECTIONS
+// =====================================================
+
+.downloads-container {
+    padding: 8px;
+    height: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.active-downloads-section,
+.downloads-history-section {
+    h3 {
+        font-size: var(--font-h2);
+        font-weight: 600;
+        margin-bottom: 8px;
+        padding: 0 8px;
+
+        .theme-dark & {
+            color: var(--text-primary-dark);
+        }
+
+        .theme-light & {
+            color: var(--text-primary-light);
+        }
+    }
+}
+
+.active-downloads,
+.downloads-history {
+    > .initial-message:first-child {
+        display: flex;
+    }
+}
+
+// Downloads history specific styling
+.downloads-history {
+    .history-item {
+        opacity: 0.8;
+        
+        &.history-success {
+            border-left: 3px solid var(--color-green);
+        }
+        
+        &.history-error {
+            border-left: 3px solid var(--color-red);
+        }
+        
+        &.history-canceled {
+            border-left: 3px solid var(--color-orange);
+        }
+    }
+    
+    .download-timestamp {
+        font-size: var(--font-badge);
+        margin-top: 4px;
+        padding: 2px 6px;
+        border-radius: 3px;
+        
+        .theme-dark & {
+            color: var(--text-secondary-dark);
+            background-color: rgba(255, 255, 255, 0.05);
+        }
+        
+        .theme-light & {
+            color: var(--text-secondary-light);
+            background-color: rgba(0, 0, 0, 0.05);
+        }
+    }
+}
+
+// =====================================================
 // MEDIA GROUPS
 // =====================================================
 

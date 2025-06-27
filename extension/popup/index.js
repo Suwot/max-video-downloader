@@ -7,6 +7,7 @@ import { createLogger } from '../shared/utils/logger.js';
 import { normalizeUrl } from '../shared/utils/normalize-url.js';
 import { setTabId, getGroupState, setGroupState } from './state.js';
 import { connect, disconnect, sendPortMessage } from './communication.js';
+import { restoreActiveDownloads, restoreDownloadsHistory } from './video/download-handler.js';
 
 const logger = createLogger('Popup');
 
@@ -51,6 +52,10 @@ document.addEventListener('DOMContentLoaded', async () => {
             tabId: activeTab.id,
             forceRefresh: true
         });
+
+        // Restore downloads data
+        await restoreActiveDownloads();
+        await restoreDownloadsHistory();
         
     } catch (error) {
         logger.error('Initialization error:', error);

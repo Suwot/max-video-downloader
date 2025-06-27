@@ -11,6 +11,9 @@ import { formatSize } from '../../shared/utils/video-utils.js';
 
 const logger = createLogger('Download');
 
+// Downloads management constants
+const MAX_DOWNLOAD_HISTORY_ITEMS = 50;
+
 const DL_BTN_ORIG_HTML = `<span class="download-btn-icon">
         <svg width="9" height="9" viewBox="0 0 9 9" fill="none" xmlns="http://www.w3.org/2000/svg">
             <g clip-path="url(#clip0_43_340)">
@@ -68,6 +71,9 @@ export async function handleDownload(elementsDiv, videoData = {}) {
             selectedOptionOrigText
         };
         
+        // Clone video item to downloads tab before sending request
+        await cloneVideoItemToDownloads(elementsDiv, downloadMessage);
+        
         // Send via communication service
         sendPortMessage(downloadMessage);
         
@@ -91,6 +97,15 @@ export function updateDownloadProgress(progressData = {}) {
     updateDownloadButton(progressData);
     updateDropdown(progressData);
     
+    // Handle completion states
+    if (progressData.command === 'download-success') {
+        setTimeout(() => moveToHistory(progressData, 'success'), 3000);
+    } else if (progressData.command === 'download-error') {
+        setTimeout(() => moveToHistory(progressData, 'error', progressData.error), 4000);
+    } else if (progressData.command === 'download-canceled') {
+        setTimeout(() => moveToHistory(progressData, 'canceled'), 3000);
+    }
+    
     logger.debug('All UI elements updated for command:', progressData.command);
 }
 
@@ -100,7 +115,7 @@ export function updateDownloadProgress(progressData = {}) {
  */
 function updateDownloadButton(progressData = {}) {
     const lookupUrl = progressData.masterUrl || progressData.downloadUrl;
-    const downloadBtnWrapper = document.querySelector(`.video-item[data-url="${lookupUrl}"] .download-btn-wrapper`);
+    const downloadBtnWrapper = document.querySelector(`.tab-content.active .video-item[data-url="${lookupUrl}"] .download-btn-wrapper`);
     const downloadBtn = downloadBtnWrapper?.querySelector('.download-btn');
     const menuBtn = downloadBtnWrapper?.querySelector('.download-menu-btn');
     
@@ -188,15 +203,14 @@ function updateDropdown(progressData = {}) {
     const lookupUrl = progressData.masterUrl || progressData.downloadUrl;
     const progress = progressData.progress;
 
-    // Single DOM query for the dropdown container
-    const downloadGroup = document.querySelector(`.video-item[data-url="${lookupUrl}"] .download-group`);
+    const downloadGroup = document.querySelector(`.tab-content.active .video-item[data-url="${lookupUrl}"] .download-group`);
     if (!downloadGroup) {
         logger.warn('Download group not found for URL:', lookupUrl, progressData);
         return;
     }
 
     const selectedOption = downloadGroup.querySelector('.selected-option');
-    const dropdownOption = document.querySelector(`.dropdown-option[data-url="${progressData.downloadUrl}"]`);
+    const dropdownOption = downloadGroup.querySelector(`.dropdown-option[data-url="${progressData.downloadUrl}"]`);
 
     switch (progressData.command) {
         case 'download-queued':
@@ -390,6 +404,194 @@ async function handleQueueCancellation(progressData) {
     } catch (error) {
         logger.error('Failed to send queue cancellation request:', error);
         showError('Failed to cancel queued download');
+    }
+}
+
+/**
+ * Clone video item to downloads tab and store in local storage
+ * @param {HTMLElement} elementsDiv - The video item element to clone
+ * @param {Object} downloadData - Download metadata
+ */
+async function cloneVideoItemToDownloads(elementsDiv, downloadData) {
+    try {
+        // Find the video-item container
+        const videoItem = elementsDiv.closest('.video-item');
+        if (!videoItem) {
+            logger.error('Could not find video-item container to clone');
+            return;
+        }
+
+        // Clone the element (without event listeners)
+        const clonedElement = videoItem.cloneNode(true);
+        
+        // Create download entry for storage
+        const downloadEntry = {
+            lookupUrl: downloadData.masterUrl || downloadData.downloadUrl,
+            downloadUrl: downloadData.downloadUrl,
+            masterUrl: downloadData.masterUrl || null,
+            filename: downloadData.filename,
+            elementHTML: clonedElement.outerHTML,
+            timestamp: Date.now(),
+            selectedOptionOrigText: downloadData.selectedOptionOrigText
+        };
+
+        // Store in active downloads
+        const result = await chrome.storage.local.get(['downloads_active']);
+        const activeDownloads = result.downloads_active || [];
+        activeDownloads.push(downloadEntry);
+        await chrome.storage.local.set({ downloads_active: activeDownloads });
+
+        // Insert cloned element into downloads tab
+        const activeDownloadsContainer = document.querySelector('.active-downloads');
+        activeDownloadsContainer.prepend(clonedElement);
+
+    } catch (error) {
+        logger.error('Error cloning video item to downloads:', error);
+    }
+}
+
+/**
+ * Restore active downloads from storage on popup reopen
+ */
+export async function restoreActiveDownloads() {
+    try {
+        const result = await chrome.storage.local.get(['downloads_active']);
+        const activeDownloads = result.downloads_active || [];
+        
+        const activeDownloadsContainer = document.querySelector('.active-downloads');
+        if (!activeDownloadsContainer || activeDownloads.length === 0) {
+            return;
+        }
+
+        // Clear existing content
+        activeDownloadsContainer.innerHTML = `<div class="initial-message">
+                                <p>Ongoing downloads will appear here</p>
+                            </div>`;
+
+        // Restore each download element by prepending (reverse order to maintain chronological order)
+        activeDownloads.reverse().forEach(downloadEntry => {
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = downloadEntry.elementHTML;
+            const videoItem = tempDiv.firstElementChild;
+            activeDownloadsContainer.prepend(videoItem);
+        });
+
+        logger.debug(`Restored ${activeDownloads.length} active downloads`);
+
+    } catch (error) {
+        logger.error('Error restoring active downloads:', error);
+    }
+}
+
+/**
+ * Move completed download to history and remove from active downloads
+ * @param {Object} progressData - Progress data containing download info
+ * @param {string} status - 'success' or 'error' or 'canceled'
+ * @param {string} error - Error message if status is 'error'
+ */
+async function moveToHistory(progressData, status, error = null) {
+    try {
+        const lookupUrl = progressData.masterUrl || progressData.downloadUrl;
+
+        // Remove from active downloads storage
+        const activeResult = await chrome.storage.local.get(['downloads_active']);
+        const activeDownloads = activeResult.downloads_active || [];
+        const downloadEntry = activeDownloads.find(entry => entry.lookupUrl === lookupUrl);
+        
+        if (downloadEntry) {
+            // Remove from active downloads array
+            const updatedActiveDownloads = activeDownloads.filter(entry => entry.lookupUrl !== lookupUrl);
+            await chrome.storage.local.set({ downloads_active: updatedActiveDownloads });
+
+            // Only add to history if it's success or error (not canceled)
+            if (status === 'success' || status === 'error') {
+                // Add to history
+                const historyResult = await chrome.storage.local.get(['downloads_history']);
+                const history = historyResult.downloads_history || [];
+                
+                const historyEntry = {
+                    ...downloadEntry,
+                    status,
+                    error,
+                    completedAt: Date.now()
+                };
+
+                history.unshift(historyEntry); // Add to beginning of array
+
+                // Maintain history size limit
+                if (history.length > MAX_DOWNLOAD_HISTORY_ITEMS) {
+                    history.splice(MAX_DOWNLOAD_HISTORY_ITEMS);
+                }
+
+                await chrome.storage.local.set({ downloads_history: history });
+                logger.debug(`Moved download to history with status: ${status}`);
+
+                // Update history display
+                await restoreDownloadsHistory();
+            }
+
+            // Remove from active downloads UI
+            const activeDownloadsContainer = document.querySelector('.active-downloads');
+            if (activeDownloadsContainer) {
+                const videoItemToRemove = activeDownloadsContainer.querySelector(`[data-url="${lookupUrl}"]`);
+                if (videoItemToRemove) {
+                    videoItemToRemove.remove();
+                }
+            }
+        }
+
+    } catch (error) {
+        logger.error('Error moving download to history:', error);
+    }
+}
+
+/**
+ * Restore downloads history from storage
+ */
+export async function restoreDownloadsHistory() {
+    try {
+        const result = await chrome.storage.local.get(['downloads_history']);
+        const history = result.downloads_history || [];
+        
+        const historyContainer = document.querySelector('.downloads-history');
+        if (!historyContainer) {
+            return;
+        }
+
+        // Clear existing content
+        historyContainer.innerHTML = `<div class="initial-message">
+                                <p>You don't have any downloads in history</p>
+                            </div>`;
+
+        if (history.length === 0) {
+            return; // Keep initial message visible
+        }
+
+        // Restore each history item by prepending
+        history.reverse().forEach(historyEntry => {
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = historyEntry.elementHTML;
+            const videoItem = tempDiv.firstElementChild;
+            
+            if (videoItem) {
+                // Add history status classes
+                videoItem.classList.add('history-item', `history-${historyEntry.status}`);
+                
+                // Add completion timestamp
+                const completedDate = new Date(historyEntry.completedAt).toLocaleString();
+                const timestampDiv = document.createElement('div');
+                timestampDiv.className = 'download-timestamp';
+                timestampDiv.textContent = completedDate;
+                videoItem.appendChild(timestampDiv);
+
+                historyContainer.prepend(videoItem);
+            }
+        });
+
+        logger.debug(`Restored ${history.length} history items`);
+
+    } catch (error) {
+        logger.error('Error restoring downloads history:', error);
     }
 }
 
