@@ -19,14 +19,35 @@ const tabsWithMpd = new Map();
 const dashSegmentPathCache = new Map();
 
 /**
+ * Get the URL of a tab for page context tracking
+ * @param {number} tabId - Tab ID
+ * @returns {Promise<Object|null>} Tab info object or null if not found
+ */
+async function getTabUrl(tabId) {
+    try {
+        const tab = await chrome.tabs.get(tabId);
+        return {
+            url: tab.url || null,
+            title: tab.title || null,
+            favIconUrl: tab.favIconUrl || null,
+            incognito: tab.incognito || false
+        };
+    } catch (error) {
+        logger.debug(`Could not get URL for tab ${tabId}:`, error.message);
+        return null;
+    }
+}
+
+/**
  * Helper function to add detected video with common processing
  * @param {number} tabId - Tab ID
  * @param {string} url - Video URL
  * @param {Object} videoInfo - Video type information
  * @param {Object} metadata - Request metadata
  * @param {string} source - Detection source identifier
+ * @param {Object|null} tabInfo - Tab information (url, title, favIconUrl, incognito)
  */
-function addVideoWithCommonProcessing(tabId, url, videoInfo, metadata, source) {
+function addVideoWithCommonProcessing(tabId, url, videoInfo, metadata, source, tabInfo = null) {
     // Extract expiry info once
     const expiryInfo = extractExpiryInfo(url);
     
@@ -35,6 +56,10 @@ function addVideoWithCommonProcessing(tabId, url, videoInfo, metadata, source) {
         type: videoInfo.type,
         source,
         timestampDetected: metadata?.timestampDetected || Date.now(),
+        ...(tabInfo?.url && { pageUrl: tabInfo.url }),
+        ...(tabInfo?.title && { pageTitle: tabInfo.title }),
+        ...(tabInfo?.favIconUrl && { pageFavicon: tabInfo.favIconUrl }),
+        ...(tabInfo?.incognito && { incognito: tabInfo.incognito }),
         ...(metadata && { metadata }),
         ...(videoInfo.mediaType && { mediaType: videoInfo.mediaType }),
         ...(videoInfo.originalContainer && { originalContainer: videoInfo.originalContainer }),
@@ -50,7 +75,7 @@ function addVideoWithCommonProcessing(tabId, url, videoInfo, metadata, source) {
  * @param {string} url - The URL to process
  * @param {Object} metadata - Optional metadata from response headers
  */
-export function processWebRequest(tabId, url, metadata = null) {
+export async function processWebRequest(tabId, url, metadata = null) {
     if (tabId < 0 || !url) return;
 
     // First check if we should ignore this URL
@@ -58,6 +83,9 @@ export function processWebRequest(tabId, url, metadata = null) {
         return;
     }
     logger.debug(`Processing video URL after ShouldIgnoreForMediaDetection: ${url} with metadata:`, metadata);
+    
+    // Get tab URL for page context tracking
+    const tabInfo = await getTabUrl(tabId);
     
     // Try MIME type detection first (most reliable)
     if (metadata?.contentType) {
@@ -67,7 +95,7 @@ export function processWebRequest(tabId, url, metadata = null) {
             // Handle DASH manifest detection
             if (mimeTypeInfo.type === 'dash') {
                 tabsWithMpd.set(tabId, Date.now());
-                addVideoWithCommonProcessing(tabId, url, mimeTypeInfo, metadata, `BG_webRequest_mime_${mimeTypeInfo.type}`);
+                addVideoWithCommonProcessing(tabId, url, mimeTypeInfo, metadata, `BG_webRequest_mime_${mimeTypeInfo.type}`, tabInfo);
                 return;
             }
             
@@ -89,7 +117,7 @@ export function processWebRequest(tabId, url, metadata = null) {
                 }
             }
             
-            addVideoWithCommonProcessing(tabId, url, mimeTypeInfo, metadata, `BG_webRequest_mime_${mimeTypeInfo.type}`);
+            addVideoWithCommonProcessing(tabId, url, mimeTypeInfo, metadata, `BG_webRequest_mime_${mimeTypeInfo.type}`, tabInfo);
             return;
         }
     }
@@ -97,14 +125,14 @@ export function processWebRequest(tabId, url, metadata = null) {
     // Fallback to URL-based detection
     const videoInfo = identifyVideoType(url);
     if (videoInfo) {
-        addVideoWithCommonProcessing(tabId, url, videoInfo, metadata, `BG_webRequest_${videoInfo.type}`);
+        addVideoWithCommonProcessing(tabId, url, videoInfo, metadata, `BG_webRequest_${videoInfo.type}`, tabInfo);
     }
 }
 
 /**
  * Process video detection from content script
  * @param {number} tabId - Tab ID where video was detected
- * @param {Object} videoData - Video data from content script
+ * @param {Object} videoData - Video data from content script (should include pageUrl)
  */
 export function processContentScriptVideo(tabId, videoData) {
     if (!tabId || tabId <= 0 || !videoData) {
@@ -214,6 +242,9 @@ function setupWebRequestListener() {
                 const headerName = header.name.toLowerCase();
                 
                 switch(headerName) {
+                    case 'content-range':
+                        logger.debug(`Skipping partial content response with Content-Range: ${header.value} for URL: ${details.url}`);
+                        return;
                     case 'content-type':
                         metadata.contentType = header.value;
                         break;
@@ -258,8 +289,10 @@ function setupWebRequestListener() {
 
             // logger.debug(`Received headers for URL:`, details);
 
-            // Call the video detector with the metadata
-            processWebRequest(details.tabId, details.url, metadata);
+            // Call the video detector with the metadata (async, but don't await to avoid blocking)
+            processWebRequest(details.tabId, details.url, metadata).catch(error => {
+                logger.debug('Error in processWebRequest:', error);
+            });
         },
         { urls: ["<all_urls>"], types: ["xmlhttprequest", "other", "media"] },
         ["responseHeaders"]
@@ -275,7 +308,10 @@ function setupMessageListener() {
         if (request.command === 'addVideo') {
             const tabId = sender.tab?.id;
             if (tabId && tabId > 0) {
-                processContentScriptVideo(tabId, request);
+                // Process async but don't await to avoid blocking the message handler
+                processContentScriptVideo(tabId, request).catch(error => {
+                    logger.debug('Error in processContentScriptVideo:', error);
+                });
             }
             return false;
         }

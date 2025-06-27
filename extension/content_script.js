@@ -656,6 +656,7 @@ function processVideo(url, type = null, metadata = {}) {
     originalUrl: videoInfo.originalUrl,
     timestampDetected: videoInfo.timestampDetected,
     title: videoInfo.title, // Always include title for better file naming
+    pageUrl: window.location.href, // Include page URL for tracking
     // Include additional metadata but filter out redundant fields
     ...Object.fromEntries(
       Object.entries(videoInfo)
