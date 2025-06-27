@@ -438,6 +438,19 @@ header {
             background-color: var(--bg-element-active-light);
         }
     }
+
+    &[data-tab-id="videos-tab"].active {
+        background-color: var(--color-blue);
+    }
+    &[data-tab-id="downloads-tab"].active {
+        background-color: var(--color-green);
+    }
+    &[data-tab-id="settings-tab"].active {
+        background-color: var(--color-yellow);
+    }
+    &[data-tab-id="about-tab"].active {
+        background-color: var(--color-purple);
+    }
 }
 
 .tab-counter {
@@ -475,19 +488,6 @@ header {
     &:empty {
         display: none;
     }
-}
-
-#videos-tab.active {
-    background-color: var(--color-blue);
-}
-#downloads-tab.active {
-    background-color: var(--color-green);
-}
-#settings-tab.active {
-    background-color: var(--color-yellow);
-}
-#about-tab.active {
-    background-color: var(--color-purple);
 }
 
 

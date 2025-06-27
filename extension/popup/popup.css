@@ -402,6 +402,18 @@ header .heading-row {
 .theme-light .tab-button:focus {
   background-color: var(--bg-element-active-light);
 }
+.tab-button[data-tab-id=videos-tab].active {
+  background-color: var(--color-blue);
+}
+.tab-button[data-tab-id=downloads-tab].active {
+  background-color: var(--color-green);
+}
+.tab-button[data-tab-id=settings-tab].active {
+  background-color: var(--color-yellow);
+}
+.tab-button[data-tab-id=about-tab].active {
+  background-color: var(--color-purple);
+}
 
 .tab-counter {
   display: -webkit-inline-box;
@@ -437,22 +449,6 @@ header .heading-row {
 }
 .tab-counter:empty {
   display: none;
-}
-
-#videos-tab.active {
-  background-color: var(--color-blue);
-}
-
-#downloads-tab.active {
-  background-color: var(--color-green);
-}
-
-#settings-tab.active {
-  background-color: var(--color-yellow);
-}
-
-#about-tab.active {
-  background-color: var(--color-purple);
 }
 
 .tab-contents {
