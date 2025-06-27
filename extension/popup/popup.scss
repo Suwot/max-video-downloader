@@ -503,7 +503,7 @@ header {
 .tab-content {
     display: none;
     height: 100%;
-    overflow-y: auto;
+    overflow-y: visible;
     scroll-behavior: smooth;
 
     &.active {
