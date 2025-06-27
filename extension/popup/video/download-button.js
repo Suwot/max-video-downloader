@@ -127,5 +127,7 @@ function createVideoMetadata(video) {
         segmentCount: video.type === 'hls' ? video.variants?.[0].metaJS?.segmentCount : null,
         duration: video.duration || null,
         masterUrl: video.isMaster ? video.url : null,
+        pageUrl: video.pageUrl || null,
+        pageFavicon: video.pageFavicon || null,
     };
 }

@@ -152,7 +152,10 @@ class DownloadCommand extends BaseCommand {
             // Progress tracking fields
             fileSizeBytes = null,
             duration = null,
-            segmentCount = null
+            segmentCount = null,
+            // Page context fields
+            pageUrl = null,
+            pageFavicon = null
         } = params;
 
         logDebug('Starting download:', params);
@@ -198,7 +201,9 @@ class DownloadCommand extends BaseCommand {
                 headers, 
                 duration,
                 fileSizeBytes,
-                segmentCount
+                segmentCount,
+                pageUrl,
+                pageFavicon
             });
             
         } catch (err) {
@@ -211,7 +216,9 @@ class DownloadCommand extends BaseCommand {
                 type,
                 ffmpegError: null,
                 downloadStats: {}, // No stats available for early errors
-                completedAt: Date.now()
+                completedAt: Date.now(),
+                pageUrl,
+                pageFavicon
             });
             throw err;
         }
@@ -474,7 +481,9 @@ class DownloadCommand extends BaseCommand {
         headers,
         duration,
         fileSizeBytes,
-        segmentCount
+        segmentCount,
+        pageUrl,
+        pageFavicon
     }) {
         return new Promise(async (resolve, reject) => {
             // Probe duration upfront if not provided to avoid race conditions
@@ -571,7 +580,9 @@ class DownloadCommand extends BaseCommand {
                         message: 'Download was canceled',
                         downloadStats: downloadStats || {},
                         ffmpegFinalMessage: ffmpegFinalMessage || null,
-                        completedAt: Date.now()
+                        completedAt: Date.now(),
+                        pageUrl,
+                        pageFavicon
                     });
                     return resolve({ 
                         success: false, 
@@ -589,7 +600,9 @@ class DownloadCommand extends BaseCommand {
                         type,
                         downloadStats: downloadStats || {},
                         ffmpegFinalMessage: ffmpegFinalMessage || null,
-                        completedAt: Date.now()
+                        completedAt: Date.now(),
+                        pageUrl,
+                        pageFavicon
                     });
                     resolve({ 
                         success: true, 
@@ -607,7 +620,9 @@ class DownloadCommand extends BaseCommand {
                         message: 'Download was canceled',
                         downloadStats: downloadStats || {},
                         ffmpegFinalMessage: ffmpegFinalMessage || null,
-                        completedAt: Date.now()
+                        completedAt: Date.now(),
+                        pageUrl,
+                        pageFavicon
                     });
                     // Note: The original download promise resolves as canceled
                     // The cancel-download command gets its own immediate response in cancelDownload()
@@ -630,7 +645,9 @@ class DownloadCommand extends BaseCommand {
                         type,
                         ffmpegFinalMessage: ffmpegFinalMessage || null,
                         downloadStats: downloadStats || {}, // Include stats in error message too
-                        completedAt: Date.now()
+                        completedAt: Date.now(),
+                        pageUrl,
+                        pageFavicon
                     });
                     reject(new Error(error));
                 }
@@ -657,7 +674,9 @@ class DownloadCommand extends BaseCommand {
                         type,
                         ffmpegFinalMessage: ffmpegFinalMessage || null,
                         downloadStats: downloadStats || {}, // Include stats in spawn error too
-                        completedAt: Date.now()
+                        completedAt: Date.now(),
+                        pageUrl,
+                        pageFavicon
                     });
                     
                     reject(err);

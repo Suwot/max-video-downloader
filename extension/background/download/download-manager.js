@@ -109,21 +109,11 @@ function startDownloadImmediately(downloadRequest) {
         // Create Chrome notification
         createDownloadNotification(downloadRequest.filename);
         
-        // Prepare native host message
+        // Prepare native host message using object spread for all fields,
+        // only overriding command and headers which need transformation
         const nativeHostMessage = {
+            ...downloadRequest,
             command: 'download',
-            downloadUrl: downloadRequest.downloadUrl,
-            filename: downloadRequest.filename,
-            savePath: downloadRequest.savePath || null,
-            type: downloadRequest.type,
-            fileSizeBytes: downloadRequest.fileSizeBytes || null,
-            segmentCount: downloadRequest.segmentCount || null,
-            preferredContainer: downloadRequest.preferredContainer || null,
-            originalContainer: downloadRequest.originalContainer || 'mp4',
-            audioOnly: downloadRequest.audioOnly || false,
-            streamSelection: downloadRequest.streamSelection || null,
-            masterUrl: downloadRequest.masterUrl || null,
-            duration: downloadRequest.duration || null,
             headers: getRequestHeaders(downloadRequest.tabId || -1, downloadRequest.downloadUrl) || {}
         };
         

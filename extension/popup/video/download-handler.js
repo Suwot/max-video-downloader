@@ -55,20 +55,9 @@ export async function handleDownload(elementsDiv, videoData = {}) {
         const currentTabId = getTabId();
         const downloadMessage = {
             command: 'download',
-            downloadUrl: videoData.downloadUrl,
-            filename: videoData.filename,
-            savePath: videoData.savePath || null,
-            type: videoData.type,
-            fileSizeBytes: videoData.fileSizeBytes || null,
-            segmentCount: videoData.segmentCount || null,
-            preferredContainer: videoData.preferredContainer || null,
-            originalContainer: videoData.originalContainer || 'mp4',
-            audioOnly: videoData.audioOnly || false,
-            streamSelection: videoData.streamSelection || null,
-            masterUrl: videoData.masterUrl || null,
-            duration: videoData.duration || null,
             tabId: currentTabId,
-            selectedOptionOrigText
+            selectedOptionOrigText,
+            ...videoData  // Spread all videoData properties instead of manual mapping
         };
         
         // Clone video item to downloads tab before sending request
