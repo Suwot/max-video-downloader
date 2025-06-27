@@ -91,7 +91,8 @@ class DownloadCommand extends BaseCommand {
             this.sendSuccess({
                 command: 'cancel-download',
                 downloadUrl,
-                message: 'Download cancellation initiated successfully'
+                message: 'Download cancellation initiated successfully',
+                completedAt: Date.now()
             });
             
         } catch (error) {
@@ -99,7 +100,8 @@ class DownloadCommand extends BaseCommand {
             this.sendError({
                 command: 'download-error',
                 message: `Failed to cancel download: ${error.message}`,
-                downloadUrl
+                downloadUrl,
+                completedAt: Date.now()
             });
         }
     }
@@ -208,7 +210,8 @@ class DownloadCommand extends BaseCommand {
                 masterUrl,
                 type,
                 ffmpegError: null,
-                downloadStats: {} // No stats available for early errors
+                downloadStats: {}, // No stats available for early errors
+                completedAt: Date.now()
             });
             throw err;
         }
@@ -567,7 +570,8 @@ class DownloadCommand extends BaseCommand {
                         type,
                         message: 'Download was canceled',
                         downloadStats: downloadStats || {},
-                        ffmpegFinalMessage: ffmpegFinalMessage || null
+                        ffmpegFinalMessage: ffmpegFinalMessage || null,
+                        completedAt: Date.now()
                     });
                     return resolve({ 
                         success: false, 
@@ -584,7 +588,8 @@ class DownloadCommand extends BaseCommand {
                         masterUrl,
                         type,
                         downloadStats: downloadStats || {},
-                        ffmpegFinalMessage: ffmpegFinalMessage || null
+                        ffmpegFinalMessage: ffmpegFinalMessage || null,
+                        completedAt: Date.now()
                     });
                     resolve({ 
                         success: true, 
@@ -601,7 +606,8 @@ class DownloadCommand extends BaseCommand {
                         type,
                         message: 'Download was canceled',
                         downloadStats: downloadStats || {},
-                        ffmpegFinalMessage: ffmpegFinalMessage || null
+                        ffmpegFinalMessage: ffmpegFinalMessage || null,
+                        completedAt: Date.now()
                     });
                     // Note: The original download promise resolves as canceled
                     // The cancel-download command gets its own immediate response in cancelDownload()
@@ -623,7 +629,8 @@ class DownloadCommand extends BaseCommand {
                         masterUrl,
                         type,
                         ffmpegFinalMessage: ffmpegFinalMessage || null,
-                        downloadStats: downloadStats || {} // Include stats in error message too
+                        downloadStats: downloadStats || {}, // Include stats in error message too
+                        completedAt: Date.now()
                     });
                     reject(new Error(error));
                 }
@@ -649,7 +656,8 @@ class DownloadCommand extends BaseCommand {
                         masterUrl,
                         type,
                         ffmpegFinalMessage: ffmpegFinalMessage || null,
-                        downloadStats: downloadStats || {} // Include stats in spawn error too
+                        downloadStats: downloadStats || {}, // Include stats in spawn error too
+                        completedAt: Date.now()
                     });
                     
                     reject(err);

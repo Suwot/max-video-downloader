@@ -555,9 +555,9 @@ async function moveToHistory(progressData, status, error = null) {
                 
                 const historyEntry = {
                     ...downloadEntry,
+                    progressData,
                     status,
-                    error,
-                    completedAt: Date.now()
+                    error
                 };
 
                 history.unshift(historyEntry); // Add to beginning of array
@@ -622,7 +622,7 @@ export async function restoreDownloadsHistory() {
                 videoItem.classList.add('history-item', `history-${historyEntry.status}`);
                 
                 // Add completion timestamp
-                const completedDate = new Date(historyEntry.completedAt).toLocaleString();
+                const completedDate = new Date(historyEntry.progressData.completedAt).toLocaleString();
                 const timestampDiv = document.createElement('div');
                 timestampDiv.className = 'download-timestamp';
                 timestampDiv.textContent = completedDate;
