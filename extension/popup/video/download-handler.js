@@ -111,18 +111,44 @@ export function updateDownloadProgress(progressData = {}) {
 
 /**
  * Update download button state based on progress
+ * Updates all matching elements in both videos tab and active downloads
  * @param {Object} progressData - Progress data from background
  */
 function updateDownloadButton(progressData = {}) {
     const lookupUrl = progressData.masterUrl || progressData.downloadUrl;
-    const downloadBtnWrapper = document.querySelector(`.tab-content.active .video-item[data-url="${lookupUrl}"] .download-btn-wrapper`);
-    const downloadBtn = downloadBtnWrapper?.querySelector('.download-btn');
-    const menuBtn = downloadBtnWrapper?.querySelector('.download-menu-btn');
     
-    if (!downloadBtn || !menuBtn) {
+    // Target both videos container and active downloads (not history)
+    const downloadBtnWrappers = document.querySelectorAll(
+        `.videos-container .video-item[data-url="${lookupUrl}"] .download-btn-wrapper, ` +
+        `.active-downloads .video-item[data-url="${lookupUrl}"] .download-btn-wrapper`
+    );
+    
+    if (downloadBtnWrappers.length === 0) {
         logger.warn('Download button elements not found for URL:', lookupUrl);
         return;
     }
+    
+    // Update all matching elements
+    downloadBtnWrappers.forEach(downloadBtnWrapper => {
+        const downloadBtn = downloadBtnWrapper?.querySelector('.download-btn');
+        const menuBtn = downloadBtnWrapper?.querySelector('.download-menu-btn');
+        
+        if (!downloadBtn || !menuBtn) {
+            logger.warn('Download button sub-elements not found in wrapper');
+            return;
+        }
+        
+        updateSingleDownloadButton(downloadBtn, downloadBtnWrapper, progressData);
+    });
+}
+
+/**
+ * Update a single download button element with progress state
+ * @param {HTMLElement} downloadBtn - The download button element
+ * @param {HTMLElement} downloadBtnWrapper - The wrapper element
+ * @param {Object} progressData - Progress data from background
+ */
+function updateSingleDownloadButton(downloadBtn, downloadBtnWrapper, progressData = {}) {
 
     switch (progressData.command) {
         case 'download-queued':
@@ -196,19 +222,37 @@ function updateDownloadButton(progressData = {}) {
 
 /**
  * Update entire dropdown (selected-option + dropdown-option) during download
- * Consolidates all dropdown-related UI updates in one place
+ * Updates all matching elements in both videos tab and active downloads
  * @param {Object} progressData - Progress data
  */
 function updateDropdown(progressData = {}) {
     const lookupUrl = progressData.masterUrl || progressData.downloadUrl;
     const progress = progressData.progress;
 
-    const downloadGroup = document.querySelector(`.tab-content.active .video-item[data-url="${lookupUrl}"] .download-group`);
-    if (!downloadGroup) {
+    // Target both videos container and active downloads (not history)
+    const downloadGroups = document.querySelectorAll(
+        `.videos-container .video-item[data-url="${lookupUrl}"] .download-group, ` +
+        `.active-downloads .video-item[data-url="${lookupUrl}"] .download-group`
+    );
+    
+    if (downloadGroups.length === 0) {
         logger.warn('Download group not found for URL:', lookupUrl, progressData);
         return;
     }
+    
+    // Update all matching elements
+    downloadGroups.forEach(downloadGroup => {
+        updateSingleDropdown(downloadGroup, progressData, progress);
+    });
+}
 
+/**
+ * Update a single dropdown element with progress state
+ * @param {HTMLElement} downloadGroup - The download group element
+ * @param {Object} progressData - Progress data
+ * @param {number} progress - Progress percentage
+ */
+function updateSingleDropdown(downloadGroup, progressData = {}, progress) {
     const selectedOption = downloadGroup.querySelector('.selected-option');
     const dropdownOption = downloadGroup.querySelector(`.dropdown-option[data-url="${progressData.downloadUrl}"]`);
 
