@@ -89,7 +89,6 @@ h1, .h1, .app-title {
 h2, .h2, .section-title {
   font-size: var(--font-h2);
   font-weight: 600;
-  margin: 0 0 8px 0;
   display: -webkit-box;
   display: -ms-flexbox;
   display: flex;
@@ -513,7 +512,6 @@ header .heading-row {
   background-color: var(--bg-primary-dark-hover);
 }
 .theme-dark .tab-button.active {
-  background-color: var(--color-blue);
   color: var(--text-primary-dark);
 }
 .theme-light .tab-button {
@@ -527,6 +525,9 @@ header .heading-row {
 }
 .theme-light .tab-button:focus {
   background-color: var(--bg-element-active-light);
+}
+.theme-light .tab-button.active {
+  color: var(--text-primary-dark);
 }
 .tab-button[data-tab-id=videos-tab].active {
   background-color: var(--color-blue);

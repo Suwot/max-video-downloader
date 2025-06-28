@@ -93,7 +93,7 @@ export function updateDownloadProgress(progressData = {}) {
     // Handle completion states - unified cleanup with conditional timing and history
     if (progressData.command === 'download-success' || progressData.command === 'download-error') {
         // Delayed cleanup with history addition
-        setTimeout(() => handleDownloadCompletion(progressData, true), 3000);
+        setTimeout(() => handleDownloadCompletion(progressData, true), 2000);
     } else if (progressData.command === 'download-unqueued' || progressData.command === 'download-canceled') {
         // Immediate cleanup without history addition
         handleDownloadCompletion(progressData, false);
@@ -370,7 +370,7 @@ function updateSingleDropdown(downloadGroup, progressData = {}, progress) {
                 setTimeout(() => {
                     dropdownOption.classList.remove('downloading', 'error');
                     dropdownOption.style.removeProperty('--progress');
-                }, 3000);
+                }, 2000);
             }
 
             // Handle selected option error
@@ -378,7 +378,7 @@ function updateSingleDropdown(downloadGroup, progressData = {}, progress) {
                 selectedOption.classList.add('error');
                 const textSpan = selectedOption.querySelector('span:first-child') || selectedOption;
                 textSpan.textContent = 'Error';
-                setTimeout(() => restoreOriginalOption(selectedOption, progressData), 3000);
+                setTimeout(() => restoreOriginalOption(selectedOption, progressData), 2000);
             }
             break;
     }

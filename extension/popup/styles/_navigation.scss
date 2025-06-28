@@ -191,7 +191,6 @@
         }
 
         &.active {
-            background-color: var(--color-blue);
             color: var(--text-primary-dark);
         }
     }
@@ -209,6 +208,10 @@
 
         &:focus {
             background-color: var(--bg-element-active-light);
+        }
+
+        &.active {
+            color: var(--text-primary-dark);
         }
     }
 
