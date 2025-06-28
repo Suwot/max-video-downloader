@@ -91,6 +91,7 @@ class DownloadCommand extends BaseCommand {
             this.sendSuccess({
                 command: 'cancel-download',
                 downloadUrl,
+                duration: progressTracker.getDuration(),
                 message: 'Download cancellation initiated successfully',
                 completedAt: Date.now()
             });
@@ -567,6 +568,7 @@ class DownloadCommand extends BaseCommand {
                 progressTracker.cleanup();
                 const processInfo = DownloadCommand.activeProcesses.get(downloadUrl);
                 const wasCanceled = processInfo?.wasCanceled === true;
+                const duration = progressTracker.getDuration();
                 DownloadCommand.activeProcesses.delete(downloadUrl); // Remove from active processes on close
                 const ffmpegFinalMessage = progressTracker.getFFmpegFinalMessage();
                 const downloadStats = progressTracker.getDownloadStats();
@@ -578,6 +580,7 @@ class DownloadCommand extends BaseCommand {
                         masterUrl,
                         type,
                         message: 'Download was canceled',
+                        duration,
                         downloadStats: downloadStats || {},
                         ffmpegFinalMessage: ffmpegFinalMessage || null,
                         completedAt: Date.now(),
@@ -598,6 +601,7 @@ class DownloadCommand extends BaseCommand {
                         downloadUrl,
                         masterUrl,
                         type,
+                        duration,
                         downloadStats: downloadStats || {},
                         ffmpegFinalMessage: ffmpegFinalMessage || null,
                         completedAt: Date.now(),
@@ -618,6 +622,7 @@ class DownloadCommand extends BaseCommand {
                         masterUrl,
                         type,
                         message: 'Download was canceled',
+                        duration,
                         downloadStats: downloadStats || {},
                         ffmpegFinalMessage: ffmpegFinalMessage || null,
                         completedAt: Date.now(),
@@ -643,6 +648,7 @@ class DownloadCommand extends BaseCommand {
                         downloadUrl,
                         masterUrl,
                         type,
+                        duration,
                         ffmpegFinalMessage: ffmpegFinalMessage || null,
                         downloadStats: downloadStats || {}, // Include stats in error message too
                         completedAt: Date.now(),
@@ -656,6 +662,7 @@ class DownloadCommand extends BaseCommand {
             ffmpeg.on('error', (err) => {
                 if (!hasError) {
                     hasError = true;
+                    const duration = progressTracker.getDuration();
                     DownloadCommand.activeProcesses.delete(downloadUrl); // Remove from active processes on error
                     progressTracker.cleanup();
                     const ffmpegFinalMessage = progressTracker.getFFmpegFinalMessage();
@@ -672,6 +679,7 @@ class DownloadCommand extends BaseCommand {
                         downloadUrl,
                         masterUrl,
                         type,
+                        duration,
                         ffmpegFinalMessage: ffmpegFinalMessage || null,
                         downloadStats: downloadStats || {}, // Include stats in spawn error too
                         completedAt: Date.now(),

@@ -166,6 +166,15 @@ class ProgressTracker {
     }
     
     /**
+     * Get media duration
+     * @returns {number|null} Duration in seconds or null if not available
+     */
+    getDuration() {
+        // Return duration from fileInfo (which includes both initial and probed duration)
+        return this.fileInfo?.duration || null;
+    }
+    
+    /**
      * Clean up resources
      */
     cleanup() {

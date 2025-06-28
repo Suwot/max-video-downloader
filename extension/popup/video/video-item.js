@@ -165,7 +165,7 @@ export function createVideoElement(video, group) {
         }
 
         // update videos tab counter without state modifications
-        const tabCounter = document.querySelector('[data-tab-id="videos"] .tab-counter');
+        const tabCounter = document.querySelector('.tab-button[data-tab-id="videos-tab"] .tab-counter');
         const tabCount = parseInt(tabCounter.textContent, 10); 
         tabCounter.textContent = tabCount > 1 ? String(tabCount - 1) : '';
 

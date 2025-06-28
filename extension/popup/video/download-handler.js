@@ -49,9 +49,12 @@ export async function handleDownload(elementsDiv, videoData = {}) {
         }
 
         // selected-option original text
-        const selectedOption = elementsDiv.querySelector('.selected-option .label');
-        const selectedOptionOrigText = selectedOption ? selectedOption.textContent : ''; 
-        
+        const isDash = elementsDiv.querySelector('[data-type="dash"]');
+        const dropdownOption = isDash ?
+            elementsDiv.querySelector('.selected-option .label') :
+            elementsDiv.querySelector('.dropdown-option.selected .label');
+        const selectedOptionOrigText = dropdownOption ? dropdownOption.textContent : '';
+
         const currentTabId = getTabId();
         const downloadMessage = {
             command: 'download',
@@ -385,7 +388,7 @@ function updateSingleDropdown(downloadGroup, progressData = {}, progress) {
  */
 function restoreOriginalOption(selectedOption, progressData = {}) {
     const textSpan = selectedOption.querySelector('span:first-child') || selectedOption;
-    textSpan.textContent = progressData.selectedOptionOrigText;
+    textSpan.textContent = progressData.selectedOptionOrigText.split('•').slice(0, 2).join('•');
 
     // Clean up progress styling and all state classes
     selectedOption.classList.remove('downloading', 'complete', 'error', 'canceled', 'queued', 'unqueued');
@@ -548,6 +551,8 @@ async function moveToHistory(progressData, status, error = null) {
                     status,
                     error
                 };
+
+                logger.debug(`Moving download to history:`, historyEntry);
 
                 history.unshift(historyEntry); // Add to beginning of array
 
