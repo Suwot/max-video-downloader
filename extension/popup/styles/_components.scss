@@ -19,6 +19,7 @@
         align-items: center;
         justify-content: space-between;
         padding: 0 8px;
+        max-width: 186px;
         height: 100%;
         border-radius: 6px;
         background: var(--bg-primary-dark);
@@ -182,6 +183,11 @@
         &.downloading {
             background: var(--bg-selected-dark);
         }
+
+        &.queued, &.unqueued {
+            background-color: var(--color-yellow);
+            color: var(--text-primary-light);
+        }
     }
 
     .theme-light & {
@@ -200,6 +206,11 @@
 
         &.downloading {
             background: var(--bg-element-active-light);
+        }
+
+        &.queued, &.unqueued {
+            background-color: var(--color-yellow);
+            color: var(--text-primary-light);
         }
     }
 

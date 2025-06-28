@@ -254,8 +254,6 @@ function updateSingleDropdown(downloadGroup, progressData = {}, progress) {
             // Update selected option for queued state
             if (selectedOption) {
                 selectedOption.classList.add('queued');
-                const textSpan = selectedOption.querySelector('span:first-child') || selectedOption;
-                textSpan.textContent = 'Waiting in queue...';
             }
             
             // Update dropdown option for queued state
@@ -271,8 +269,6 @@ function updateSingleDropdown(downloadGroup, progressData = {}, progress) {
             if (selectedOption) {
                 selectedOption.classList.remove('queued');
                 selectedOption.classList.add('unqueued');
-                const textSpan = selectedOption.querySelector('span:first-child') || selectedOption;
-                textSpan.textContent = 'Removed from queue';
                 
                 // Restore after 2 seconds
                 setTimeout(() => restoreOriginalOption(selectedOption, progressData), 2000);
@@ -478,9 +474,14 @@ async function cloneVideoItemToDownloads(elementsDiv, downloadData) {
         activeDownloads.push(downloadEntry);
         await chrome.storage.local.set({ downloads_active: activeDownloads });
 
-        // Insert cloned element into downloads tab
+        // Insert cloned element into downloads tab before initial message
         const activeDownloadsContainer = document.querySelector('.active-downloads');
-        activeDownloadsContainer.prepend(clonedElement);
+        const initialMessage = activeDownloadsContainer.querySelector('.initial-message');
+        if (initialMessage) {
+            activeDownloadsContainer.insertBefore(clonedElement, initialMessage);
+        } else {
+            activeDownloadsContainer.append(clonedElement);
+        }
 
     } catch (error) {
         logger.error('Error cloning video item to downloads:', error);
@@ -505,12 +506,17 @@ export async function restoreActiveDownloads() {
                                 <p>Ongoing downloads will appear here</p>
                             </div>`;
 
-        // Restore each download element by prepending (reverse order to maintain chronological order)
-        activeDownloads.reverse().forEach(downloadEntry => {
+        // Restore each download element by inserting before initial message (chronological order)
+        const initialMessage = activeDownloadsContainer.querySelector('.initial-message');
+        activeDownloads.forEach(downloadEntry => {
             const tempDiv = document.createElement('div');
             tempDiv.innerHTML = downloadEntry.elementHTML;
             const videoItem = tempDiv.firstElementChild;
-            activeDownloadsContainer.prepend(videoItem);
+            if (initialMessage) {
+                activeDownloadsContainer.insertBefore(videoItem, initialMessage);
+            } else {
+                activeDownloadsContainer.append(videoItem);
+            }
         });
 
         logger.debug(`Restored ${activeDownloads.length} active downloads`);

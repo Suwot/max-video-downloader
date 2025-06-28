@@ -226,6 +226,12 @@
         align-items: center;
         gap: 4px;
 
+        .theme-light & {
+            circle {
+                fill: var(--text-secondary-light);
+            }
+        }
+
         svg {
             flex-shrink: 0;
         }
