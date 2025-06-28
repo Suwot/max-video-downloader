@@ -7,7 +7,8 @@ import { createLogger } from '../../shared/utils/logger.js';
 import { sendPortMessage } from '../communication.js';
 import { getTabId } from '../state.js';
 import { showError } from '../ui.js';
-import { formatSize } from '../../shared/utils/video-utils.js';
+import { formatSize, formatTime } from '../../shared/utils/video-utils.js';
+import { renderHistoryItems } from './video-renderer.js';
 
 const logger = createLogger('Download');
 
@@ -89,13 +90,13 @@ export function updateDownloadProgress(progressData = {}) {
     updateDownloadButton(progressData);
     updateDropdown(progressData);
     
-    // Handle completion states
-    if (progressData.command === 'download-success') {
-        setTimeout(() => moveToHistory(progressData, 'success'), 3000);
-    } else if (progressData.command === 'download-error') {
-        setTimeout(() => moveToHistory(progressData, 'error', progressData.error), 4000);
-    } else if (progressData.command === 'download-canceled') {
-        setTimeout(() => moveToHistory(progressData, 'canceled'), 3000);
+    // Handle completion states - unified cleanup with conditional timing and history
+    if (progressData.command === 'download-success' || progressData.command === 'download-error') {
+        // Delayed cleanup with history addition
+        setTimeout(() => handleDownloadCompletion(progressData, true), 3000);
+    } else if (progressData.command === 'download-unqueued' || progressData.command === 'download-canceled') {
+        // Immediate cleanup without history addition
+        handleDownloadCompletion(progressData, false);
     }
     
     logger.debug('All UI elements updated for command:', progressData.command);
@@ -520,128 +521,51 @@ export async function restoreActiveDownloads() {
 }
 
 /**
- * Move completed download to history and remove from active downloads
+ * Handle download completion with unified cleanup logic
  * @param {Object} progressData - Progress data containing download info
- * @param {string} status - 'success' or 'error' or 'canceled'
- * @param {string} error - Error message if status is 'error'
+ * @param {boolean} addToHistory - Whether to add this download to history
  */
-async function moveToHistory(progressData, status, error = null) {
+async function handleDownloadCompletion(progressData, addToHistory = false) {
     try {
         const lookupUrl = progressData.masterUrl || progressData.downloadUrl;
 
-        // Remove from active downloads storage
+        // Always remove from active downloads storage and UI
         const activeResult = await chrome.storage.local.get(['downloads_active']);
         const activeDownloads = activeResult.downloads_active || [];
-        const downloadEntry = activeDownloads.find(entry => entry.lookupUrl === lookupUrl);
-        
-        if (downloadEntry) {
-            // Remove from active downloads array
-            const updatedActiveDownloads = activeDownloads.filter(entry => entry.lookupUrl !== lookupUrl);
-            await chrome.storage.local.set({ downloads_active: updatedActiveDownloads });
+        const updatedActiveDownloads = activeDownloads.filter(entry => entry.lookupUrl !== lookupUrl);
+        await chrome.storage.local.set({ downloads_active: updatedActiveDownloads });
 
-            // Only add to history if it's success or error (not canceled)
-            if (status === 'success' || status === 'error') {
-                // Add to history
-                const historyResult = await chrome.storage.local.get(['downloads_history']);
-                const history = historyResult.downloads_history || [];
-                
-                const historyEntry = {
-                    ...downloadEntry,
-                    progressData,
-                    status,
-                    error
-                };
+        // Remove from active downloads UI
+        const activeDownloadsContainer = document.querySelector('.active-downloads');
+        if (activeDownloadsContainer) {
+            const videoItemToRemove = activeDownloadsContainer.querySelector(`[data-url="${lookupUrl}"]`);
+            if (videoItemToRemove) {
+                videoItemToRemove.remove();
+            }
+        }
 
-                logger.debug(`Moving download to history:`, historyEntry);
+        logger.debug(`Cleaned up download for ${progressData.command}:`, lookupUrl);
 
-                history.unshift(historyEntry); // Add to beginning of array
+        // Conditionally add to history
+        if (addToHistory) {
+            const historyResult = await chrome.storage.local.get(['downloads_history']);
+            const history = historyResult.downloads_history || [];
 
-                // Maintain history size limit
-                if (history.length > MAX_DOWNLOAD_HISTORY_ITEMS) {
-                    history.splice(MAX_DOWNLOAD_HISTORY_ITEMS);
-                }
+            history.unshift(progressData); // Add to beginning of array
 
-                await chrome.storage.local.set({ downloads_history: history });
-                logger.debug(`Moved download to history with status: ${status}`);
-
-                // Update history display
-                await restoreDownloadsHistory();
+            // Maintain history size limit
+            if (history.length > MAX_DOWNLOAD_HISTORY_ITEMS) {
+                history.splice(MAX_DOWNLOAD_HISTORY_ITEMS);
             }
 
-            // Remove from active downloads UI
-            const activeDownloadsContainer = document.querySelector('.active-downloads');
-            if (activeDownloadsContainer) {
-                const videoItemToRemove = activeDownloadsContainer.querySelector(`[data-url="${lookupUrl}"]`);
-                if (videoItemToRemove) {
-                    videoItemToRemove.remove();
-                }
-            }
+            await chrome.storage.local.set({ downloads_history: history });
+            logger.debug(`Added download to history with status: ${progressData.command}`);
+
+            // Re-render history items
+            await renderHistoryItems();
         }
 
     } catch (error) {
-        logger.error('Error moving download to history:', error);
-    }
-}
-
-/**
- * Restore downloads history from storage
- */
-export async function restoreDownloadsHistory() {
-    try {
-        const result = await chrome.storage.local.get(['downloads_history']);
-        const history = result.downloads_history || [];
-        
-        const historyContainer = document.querySelector('.downloads-history');
-        if (!historyContainer) {
-            return;
-        }
-
-        // Clear existing content
-        historyContainer.innerHTML = `<div class="initial-message">
-                                <p>You don't have any downloads in history</p>
-                            </div>`;
-
-        if (history.length === 0) {
-            return; // Keep initial message visible
-        }
-
-        // Restore each history item by prepending
-        history.reverse().forEach(historyEntry => {
-            const tempDiv = document.createElement('div');
-            tempDiv.innerHTML = historyEntry.elementHTML;
-            const videoItem = tempDiv.firstElementChild;
-            
-            if (videoItem) {
-                // Add history status classes
-                videoItem.classList.add('history-item', `history-${historyEntry.status}`);
-                
-                // Add completion timestamp
-                const completedDate = new Date(historyEntry.progressData.completedAt).toLocaleString();
-                const timestampDiv = document.createElement('div');
-                timestampDiv.className = 'download-timestamp';
-                timestampDiv.textContent = completedDate;
-                videoItem.appendChild(timestampDiv);
-
-                historyContainer.prepend(videoItem);
-            }
-        });
-
-        logger.debug(`Restored ${history.length} history items`);
-
-    } catch (error) {
-        logger.error('Error restoring downloads history:', error);
-    }
-}
-
-function formatTime(seconds) {
-    if (seconds < 60) {
-        return `${Math.round(seconds)}s`;
-    } else if (seconds < 3600) {
-        const minutes = Math.floor(seconds / 60);
-        return `${minutes}m ${Math.round(seconds % 60)}s`;
-    } else {
-        const hours = Math.floor(seconds / 3600);
-        const minutes = Math.floor((seconds % 3600) / 60);
-        return `${hours}h ${minutes}m`;
+        logger.error('Error handling download completion:', error);
     }
 }

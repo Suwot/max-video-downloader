@@ -43,11 +43,7 @@ class DownloadCommand extends BaseCommand {
         const processInfo = DownloadCommand.activeProcesses.get(downloadUrl);
         if (!processInfo) {
             logDebug('No active process found for:', downloadUrl);
-            this.sendError({
-                command: 'download-error',
-                message: 'No active download found for this URL',
-                downloadUrl
-            });
+            logDebug('Cancel request ignored - no matching download process');
             return;
         }
         
@@ -98,12 +94,7 @@ class DownloadCommand extends BaseCommand {
             
         } catch (error) {
             logDebug('Error during download cancellation:', error);
-            this.sendError({
-                command: 'download-error',
-                message: `Failed to cancel download: ${error.message}`,
-                downloadUrl,
-                completedAt: Date.now()
-            });
+            logDebug('Cancel operation failed, but not sending error message to extension');
         }
     }
 

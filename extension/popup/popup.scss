@@ -735,6 +735,225 @@ header {
 }
 
 // =====================================================
+// HISTORY ITEMS
+// =====================================================
+
+.history-item {
+    display: flex;
+    flex-direction: column;
+    margin: 8px;
+    padding: 8px;
+    border-radius: 12px;
+    gap: 4px;
+    
+    .theme-dark & {
+        background-color: var(--bg-secondary-dark);
+        border: 1px solid var(--border-primary-dark);
+    }
+
+    .theme-light & {
+        background-color: var(--bg-element-light);
+        border: var(--border-primary-light);
+    }
+
+    &.history-success {
+        .theme-dark & {
+            border-left: 3px solid var(--color-green);
+        }
+        
+        .theme-light & {
+            border-left: 3px solid var(--color-green);
+        }
+    }
+
+    &.history-error {
+        .theme-dark & {
+            border-left: 3px solid var(--color-red);
+        }
+        
+        .theme-light & {
+            border-left: 3px solid var(--color-red);
+        }
+    }
+}
+
+.history-header {
+    display: flex;
+    align-items: center;
+    font-size: var(--font-body);
+    margin-bottom: 2px;
+    gap: 4px;
+}
+
+.completion-time {
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-right: auto;
+    
+    .theme-dark & {
+        color: var(--text-secondary-dark);
+    }
+
+    .theme-light & {
+        color: var(--text-secondary-light);
+    }
+
+    svg {
+        flex-shrink: 0;
+    }
+}
+
+.history-delete-btn {
+    background: none;
+    border: none;
+    padding: 4px;
+    cursor: pointer;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0.6;
+    transition: opacity var(--transition-fast);
+
+    &:hover {
+        opacity: 1;
+    }
+
+    svg {
+        flex-shrink: 0;
+    }
+}
+.page-info {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    min-width: 0;
+
+    .favicon {
+        width: 12px;
+        height: 12px;
+        border-radius: 2px;
+        flex-shrink: 0;
+    }
+
+    .page-url {
+        font-size: var(--font-body);
+        text-decoration: none;
+        max-width: 120px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+
+        .theme-dark & {
+            color: var(--color-blue);
+        }
+
+        .theme-light & {
+            color: var(--color-blue);
+        }
+
+        &:hover {
+            .theme-dark & {
+                color: var(--color-blue-hover);
+            }
+
+            .theme-light & {
+                color: var(--color-blue-hover);
+            }
+        }
+    }
+}
+
+.history-item .filename {
+    font-size: var(--font-h2);
+    font-weight: 500;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-bottom: 2px;
+
+    .theme-dark & {
+        color: var(--text-primary-dark);
+    }
+
+    .theme-light & {
+        color: var(--text-primary-light);
+    }
+}
+
+.download-stats {
+    display: flex;
+    gap: 8px;
+    font-size: var(--font-body);
+
+    .theme-dark & {
+        color: var(--text-secondary-dark);
+    }
+
+    .theme-light & {
+        color: var(--text-secondary-light);
+    }
+
+    .quality {
+        font-weight: 500;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+
+        svg {
+            flex-shrink: 0;
+        }
+    }
+
+    .filesize {
+        position: relative;
+        cursor: help;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+
+        svg {
+            flex-shrink: 0;
+        }
+
+        // Tooltip for detailed size breakdown
+        &[title]:hover::after {
+            content: attr(title);
+            position: absolute;
+            bottom: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: rgba(0, 0, 0, 0.9);
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: var(--font-body);
+            white-space: nowrap;
+            z-index: 1000;
+            pointer-events: none;
+        }
+    }
+
+    .duration {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+
+        svg {
+            flex-shrink: 0;
+        }
+    }
+
+    // Hide empty stats
+    span:empty {
+        display: none;
+    }
+}
+
+
+// =====================================================
 // MEDIA GROUPS
 // =====================================================
 
@@ -861,7 +1080,7 @@ header {
     position: relative;
     width: 100px;
     height: 62px;
-    border-radius: 6px;
+    border-radius: 9px;
     overflow: hidden;
 
     .theme-dark & {

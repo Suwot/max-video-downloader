@@ -99,54 +99,43 @@ export async function startDownload(downloadRequest) {
 function startDownloadImmediately(downloadRequest) {
     const downloadId = downloadRequest.downloadUrl;
     
+    // Add to active downloads Set for deduplication
+    activeDownloads.add(downloadId);
+    
+    // Notify count change
+    notifyDownloadCountChange();
+    
+    // Create Chrome notification
+    createDownloadNotification(downloadRequest.filename);
+    
+    // Prepare native host message using object spread for all fields,
+    // only overriding command and headers which need transformation
+    const nativeHostMessage = {
+        ...downloadRequest,
+        command: 'download',
+        headers: getRequestHeaders(downloadRequest.tabId || -1, downloadRequest.downloadUrl) || {}
+    };
+    
+    // Start download with progress tracking
     try {
-        // Add to active downloads Set for deduplication
-        activeDownloads.add(downloadId);
-        
-        // Notify count change
-        notifyDownloadCountChange();
-        
-        // Create Chrome notification
-        createDownloadNotification(downloadRequest.filename);
-        
-        // Prepare native host message using object spread for all fields,
-        // only overriding command and headers which need transformation
-        const nativeHostMessage = {
-            ...downloadRequest,
-            command: 'download',
-            headers: getRequestHeaders(downloadRequest.tabId || -1, downloadRequest.downloadUrl) || {}
-        };
-        
-        // Start download with progress tracking
         nativeHostService.sendMessage(nativeHostMessage, (response) => {
             handleDownloadProgress(downloadId, downloadRequest, response);
         });
         
         logger.debug('🔄 Download initiated successfully:', downloadId);
-        
     } catch (error) {
-        logger.error('Failed to start download:', error);
+        // Only handle communication errors, not download content errors
+        logger.error('Failed to communicate with native host:', error);
         
         // Clean up failed download from active set
         activeDownloads.delete(downloadId);
-        
-        // Notify error to UI via direct broadcast
-        broadcastToPopups({
-            command: 'download-error',
-            downloadUrl: downloadRequest.downloadUrl,
-            masterUrl: downloadRequest.masterUrl || null,
-            filename: downloadRequest.filename,
-            error: error.message,
-            selectedOptionOrigText: downloadRequest.selectedOptionOrigText || null
-        });
-        
-        throw error;
+        notifyDownloadCountChange();
     }
 }
 
 // Handle download progress updates and errors from native host
 function handleDownloadProgress(downloadId, downloadRequest, response) {
-    // response can have one of 4 commands: download-progress, download-success, download-error, download-canceled
+    // response can have one of 6 commands: download-progress, download-success, download-error, download-canceled, download-queued, download-unqueued
 
     // Store progress in local map for UI restoration 
     activeDownloadProgress.set(downloadId, response);
@@ -165,14 +154,7 @@ function handleDownloadProgress(downloadId, downloadRequest, response) {
         // Handle specific completion types
         if (response.command === 'download-error') {
             logger.error('Download error:', downloadId, response.error);
-            broadcastToPopups({
-                command: 'download-error',
-                downloadUrl: downloadRequest.downloadUrl,
-                masterUrl: downloadRequest.masterUrl || null,
-                filename: downloadRequest.filename,
-                error: response.error,
-                selectedOptionOrigText: downloadRequest.selectedOptionOrigText || null
-            });
+            // Error details will be broadcast via the general broadcastData below
         } else if (response.command === 'download-canceled') {
             logger.debug('Download canceled:', downloadId);
             broadcastToPopups({
@@ -321,8 +303,8 @@ export async function cancelDownload(cancelRequest) {
         return;
     }
     
+    // Send cancellation request to native host
     try {
-        // Send cancellation request to native host
         const response = await nativeHostService.sendMessage({
             command: 'cancel-download',
             downloadUrl: downloadId
@@ -330,23 +312,9 @@ export async function cancelDownload(cancelRequest) {
         
         // Native host will send download-canceled message through progress handler
         // No need to clean up here - let the normal completion flow handle it
-        
     } catch (error) {
-        logger.error('Failed to cancel download:', error);
-        
-        // If cancel failed, force cleanup
-        activeDownloads.delete(downloadId);
-        activeDownloadProgress.delete(downloadId);
-        
-        // Notify count change after cleanup
-        notifyDownloadCountChange();
-        
-        // Broadcast error to UI
-        broadcastToPopups({
-            command: 'download-error',
-            downloadUrl: downloadId,
-            message: `Cancel failed: ${error.message}`
-        });
+        // Only handle communication errors, not cancellation content errors
+        logger.error('Failed to communicate cancel request to native host:', error);
     }
 }
 
