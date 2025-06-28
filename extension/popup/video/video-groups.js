@@ -52,8 +52,8 @@ export async function createTypeGroup(type, videos) {
     // Create header
     const header = document.createElement('div');
     header.className = `media-type-header ${type}`;
-    const title = document.createElement('div');
-    title.className = 'media-type-title';
+    const title = document.createElement('h2');
+    title.className = 'section-title';
     title.innerHTML = `
         ${type.toUpperCase()}
         <span class="media-type-count">${videos.length}</span>

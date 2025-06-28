@@ -117,7 +117,7 @@ export function createVideoElement(video, group) {
     titleRow.className = 'title-row';
     
     const title = document.createElement('h3');
-    title.className = 'video-title';
+    title.className = 'video-title item-title';
     title.textContent = video.title || 'Untitled Video';
     
     // Add extracted badge for videos found in query parameters

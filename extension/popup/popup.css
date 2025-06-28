@@ -74,6 +74,54 @@ body.theme-light {
   color: var(--text-primary-light);
 }
 
+h1, .h1, .app-title {
+  font-size: var(--font-h1);
+  font-weight: 500;
+  margin: 0;
+}
+.theme-dark h1, .theme-dark .h1, .theme-dark .app-title {
+  color: var(--text-primary-dark);
+}
+.theme-light h1, .theme-light .h1, .theme-light .app-title {
+  color: var(--color-blue);
+}
+
+h2, .h2, .section-title {
+  font-size: var(--font-h2);
+  font-weight: 600;
+  margin: 0 0 8px 0;
+  display: -webkit-box;
+  display: -ms-flexbox;
+  display: flex;
+  -webkit-box-align: center;
+      -ms-flex-align: center;
+          align-items: center;
+  gap: 8px;
+}
+.theme-dark h2, .theme-dark .h2, .theme-dark .section-title {
+  color: var(--text-primary-dark);
+}
+.theme-light h2, .theme-light .h2, .theme-light .section-title {
+  color: var(--text-primary-light);
+}
+
+h3, .h3, .item-title {
+  font-size: var(--font-h2);
+  font-weight: 500;
+  margin: 0;
+}
+.theme-dark h3, .theme-dark .h3, .theme-dark .item-title {
+  color: var(--text-primary-dark);
+}
+.theme-light h3, .theme-light .h3, .theme-light .item-title {
+  color: var(--text-primary-light);
+}
+
+.app-title {
+  text-align: center;
+  padding: 8px;
+}
+
 .container {
   display: -webkit-box;
   display: -ms-flexbox;
@@ -88,16 +136,8 @@ body.theme-light {
 }
 
 .app-title {
-  font-size: var(--font-h1);
-  font-weight: 500;
   text-align: center;
   padding: 8px;
-}
-.theme-dark .app-title {
-  color: var(--text-primary-dark);
-}
-.theme-light .app-title {
-  color: var(--color-blue);
 }
 
 .initial-message {
@@ -616,22 +656,6 @@ header .heading-row {
   gap: 16px;
 }
 
-.active-downloads-section h3,
-.downloads-history-section h3 {
-  font-size: var(--font-h2);
-  font-weight: 600;
-  margin-bottom: 8px;
-  padding: 0 8px;
-}
-.theme-dark .active-downloads-section h3,
-.theme-dark .downloads-history-section h3 {
-  color: var(--text-primary-dark);
-}
-.theme-light .active-downloads-section h3,
-.theme-light .downloads-history-section h3 {
-  color: var(--text-primary-light);
-}
-
 .active-downloads > .initial-message:first-child,
 .downloads-history > .initial-message:first-child {
   display: -webkit-box;
@@ -939,18 +963,6 @@ header .heading-row {
   background-color: var(--bg-element-hover-light);
 }
 
-.media-type-title {
-  font-weight: 600;
-  font-size: var(--font-h2);
-  display: -webkit-box;
-  display: -ms-flexbox;
-  display: flex;
-  -webkit-box-align: center;
-      -ms-flex-align: center;
-          align-items: center;
-  gap: 8px;
-}
-
 .media-type-count {
   border-radius: 12px;
   padding: 1px 6px;
@@ -1094,9 +1106,6 @@ header .heading-row {
   -webkit-box-flex: 1;
       -ms-flex: 1;
           flex: 1;
-  font-size: var(--font-h2);
-  font-weight: 500;
-  margin: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   display: -webkit-box;
@@ -1106,12 +1115,6 @@ header .heading-row {
   word-break: break-word;
   max-width: calc(100% - 30px);
   line-height: 1.2;
-}
-.theme-dark .video-title {
-  color: white;
-}
-.theme-light .video-title {
-  color: #333;
 }
 
 .file-info {
