@@ -76,12 +76,15 @@ export async function renderHistoryItems() {
 
         if (history.length > 0) {
             const historyContainer = document.querySelector('.downloads-history');
-            historyContainer.innerHTML = '';
-
-            // Create history items from progressData
+            // Create history items from progressData and insert before initial message
+            const initialMessage = historyContainer.querySelector('.initial-message');
             history.forEach(historyEntry => {
                 const historyItem = createHistoryItemElement(historyEntry);
-                historyContainer.appendChild(historyItem);
+                if (initialMessage) {
+                    historyContainer.insertBefore(historyItem, initialMessage);
+                } else {
+                    historyContainer.appendChild(historyItem);
+                }
             });
 
             logger.debug(`Rendered ${history.length} history items`);

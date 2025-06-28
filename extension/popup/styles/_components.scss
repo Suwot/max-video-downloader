@@ -525,3 +525,95 @@
         border: 1px solid rgba(255, 255, 255, 0.4);
     }
 }
+
+// =====================================================
+// SECTION HEADER COMPONENT
+// =====================================================
+// Standardized section header component that supports both:
+// - Static headers (downloads tab)  
+// - Collapsible headers (videos tab)
+//
+// Usage Examples:
+// 
+// Static header (no toggle, no hover):
+// <div class="section-header static">
+//     <h2 class="section-title">Downloads</h2>
+// </div>
+//
+// Collapsible header (with toggle and hover):
+// <div class="section-header collapsible">
+//     <h2 class="section-title">
+//         HLS <span class="section-count">3</span>
+//     </h2>
+//     <div class="section-toggle">
+//         <svg>...</svg>
+//     </div>
+// </div>
+
+.section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px;
+    width: 100%;
+
+    // Collapsible variant (clickable, has toggle icon)
+    &.collapsible {
+        cursor: pointer;
+        position: sticky;
+        top: 0;
+        z-index: 50;
+
+        .theme-dark & {
+            &:hover {
+                background-color: var(--bg-primary-dark-hover);
+            }
+        }
+
+        .theme-light & {
+            &:hover {
+                background-color: var(--bg-element-hover-light);
+            }
+        }
+    }
+
+    // Static variant (non-clickable, no toggle icon)
+    &.static {
+        cursor: default;
+    }
+
+    .section-title {
+        margin: 0;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+}
+
+.section-count {
+    border-radius: 12px;
+    padding: 1px 6px;
+    font-size: var(--font-body);
+
+    .theme-dark & {
+        background-color: rgba(255,255,255,0.2);
+    }
+
+    .theme-light & {
+        background-color: rgba(0,0,0,0.1);
+    }
+}
+
+.section-toggle {
+    display: flex;
+    transition: transform var(--transition-normal);
+
+    .theme-dark & {
+        color: white;
+        fill: white;
+    }
+
+    &.collapsed {
+        transform: rotate(-90deg);
+    }
+}

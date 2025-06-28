@@ -83,62 +83,7 @@
     }
 }
 
-.media-type-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 8px;
-    cursor: pointer;
-    position: sticky;
-    top: 0;
-    z-index: 50;
-    width: 100%;
-
-    .theme-dark & {
-        color: var(--text-primary-dark);
-
-        &:hover {
-            background-color: var(--bg-primary-dark-hover);
-        }
-    }
-
-    .theme-light & {
-        color: var(--text-primary-light);
-
-        &:hover {
-            background-color: var(--bg-element-hover-light);
-        }
-    }
-}
-
-.media-type-count {
-    border-radius: 12px;
-    padding: 1px 6px;
-    font-size: var(--font-body);
-
-    .theme-dark & {
-        background-color: rgba(255,255,255,0.2);
-    }
-
-    .theme-light & {
-        background-color: rgba(0,0,0,0.1);
-    }
-}
-
-.media-type-toggle {
-    display: flex;
-    transition: transform var(--transition-normal);
-
-    .theme-dark & {
-        color: white;
-        fill: white;
-    }
-
-    &.collapsed {
-        transform: rotate(-90deg);
-    }
-}
-
+// Media type content container (collapsible section content)
 .media-type-content {
     display: flex;
     flex-direction: column;

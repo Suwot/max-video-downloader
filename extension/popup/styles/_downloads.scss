@@ -7,7 +7,6 @@
 // =====================================================
 
 .downloads-container {
-    padding: 8px;
     height: auto;
     display: flex;
     flex-direction: column;
@@ -16,13 +15,23 @@
 
 .active-downloads,
 .downloads-history {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 8px;
+
     > .initial-message:first-child {
         display: flex;
+        max-height: 92px;
     }
 }
 
 // Downloads history specific styling
 .downloads-history {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+
     .history-item {
         opacity: 0.8;
         
@@ -64,9 +73,8 @@
 .history-item {
     display: flex;
     flex-direction: column;
-    margin: 8px;
     padding: 8px;
-    border-radius: 12px;
+    border-radius: 16px;
     gap: 4px;
     
     .theme-dark & {
