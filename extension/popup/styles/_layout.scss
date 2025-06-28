@@ -1,0 +1,207 @@
+// =====================================================
+// LAYOUT STRUCTURE
+// =====================================================
+
+.container {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    width: 100%;
+    overflow: visible;
+}
+
+// Initial states
+.initial-message {
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100px;
+    text-align: center;
+    font-size: var(--font-h2);
+    padding: 16px;
+
+    .theme-dark & {
+        color: #aaa;
+    }
+
+    .theme-light & {
+        color: #757575;
+    }
+
+    svg {
+        margin-bottom: 16px;
+        opacity: 0.7;
+
+        .theme-dark & {
+            fill: #aaa;
+        }
+
+        .theme-light & {
+            fill: #757575;
+        }
+    }
+
+    p {
+        margin: 4px 0;
+    }
+}
+
+// =====================================================
+// HEADER
+// =====================================================
+
+header {
+    position: sticky;
+    top: 0;
+    display: flex;
+    flex-wrap: wrap;
+    flex-direction: column;
+    justify-content: space-between;
+    align-items: center;
+    z-index: 101;
+    transition: box-shadow var(--transition-normal);
+    backdrop-filter: saturate(180%) blur(20px);
+    padding: 8px;
+    gap: 8px;
+
+    .heading-row {
+        width: 100%;
+        display: flex;
+        justify-content: space-between;
+    }
+
+    .theme-dark & {
+        background-color: var(--bg-backdrop-dark);
+        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+
+        svg {
+            fill: white;
+        }
+    }
+
+    .theme-light & {
+        background-color: rgba(255, 255, 255, 0.8);
+        box-shadow: var(--bg-element-shadow-light);
+
+        svg {
+            fill: #666;
+        }
+    }
+}
+
+// Button containers
+.left-buttons-container,
+.right-buttons-container {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+// =====================================================
+// TAB CONTENTS STRUCTURE
+// =====================================================
+
+.tab-contents {
+    flex: 1;
+    position: relative;
+}
+
+.tab-content {
+    display: none;
+    height: 100%;
+    overflow-y: visible;
+    scroll-behavior: smooth;
+
+    &.active {
+        display: block;
+    }
+
+    // Inherit scrollbar styling
+    &::-webkit-scrollbar {
+        width: 6px;
+        height: 6px;
+    }
+
+    &::-webkit-scrollbar-track {
+        background: transparent;
+    }
+
+    &::-webkit-scrollbar-thumb {
+        border-radius: 3px;
+
+        .theme-dark & {
+            background: #444;
+
+            &:hover {
+                background: #555;
+            }
+        }
+
+        .theme-light & {
+            background: #ccc;
+
+            &:hover {
+                background: #aaa;
+            }
+        }
+    }
+}
+
+// =====================================================
+// TAB PLACEHOLDERS
+// =====================================================
+
+.tab-placeholder {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 300px;
+    text-align: center;
+    padding: 32px;
+    gap: 16px;
+
+    .placeholder-icon {
+        opacity: 0.6;
+        margin-bottom: 8px;
+
+        svg {
+            .theme-dark & {
+                fill: var(--text-secondary-dark);
+            }
+
+            .theme-light & {
+                fill: var(--text-secondary-light);
+            }
+        }
+    }
+
+    h3 {
+        font-size: var(--font-h1);
+        font-weight: 500;
+        margin: 0;
+
+        .theme-dark & {
+            color: var(--text-primary-dark);
+        }
+
+        .theme-light & {
+            color: var(--text-primary-light);
+        }
+    }
+
+    p {
+        font-size: var(--font-h2);
+        margin: 0;
+        opacity: 0.8;
+
+        .theme-dark & {
+            color: var(--text-secondary-dark);
+        }
+
+        .theme-light & {
+            color: var(--text-secondary-light);
+        }
+    }
+}

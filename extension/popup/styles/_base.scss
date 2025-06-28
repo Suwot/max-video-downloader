@@ -1,0 +1,93 @@
+// =====================================================
+// BASE STYLES & TYPOGRAPHY SYSTEM
+// =====================================================
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    border: none;
+    outline: none;
+}
+
+body {
+    width: 420px;
+    min-height: 50px;
+    height: auto;
+    margin: 0;
+    padding: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    overflow-y: auto;
+    overflow-x: hidden;
+
+    &.expanded {
+        min-height: 500px;
+    }
+
+    // Theme variants
+    &.theme-dark {
+        background-color: var(--bg-primary-dark);
+        color: var(--text-primary-dark);
+    }
+
+    &.theme-light {
+        background-color: var(--bg-primary-light);
+        color: var(--text-primary-light);
+    }
+}
+
+// =====================================================
+// TYPOGRAPHY SYSTEM
+// =====================================================
+
+// Unified heading styles
+h1, .h1, .app-title {
+    font-size: var(--font-h1);
+    font-weight: 500;
+    margin: 0;
+
+    .theme-dark & {
+        color: var(--text-primary-dark);
+    }
+
+    .theme-light & {
+        color: var(--color-blue);
+    }
+}
+
+h2, .h2, .section-title {
+    font-size: var(--font-h2);
+    font-weight: 600;
+    margin: 0 0 8px 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+
+    .theme-dark & {
+        color: var(--text-primary-dark);
+    }
+
+    .theme-light & {
+        color: var(--text-primary-light);
+    }
+}
+
+h3, .h3, .item-title {
+    font-size: var(--font-h2);
+    font-weight: 500;
+    margin: 0;
+
+    .theme-dark & {
+        color: var(--text-primary-dark);
+    }
+
+    .theme-light & {
+        color: var(--text-primary-light);
+    }
+}
+
+// Specific overrides for app title positioning
+.app-title {
+    text-align: center;
+    padding: 8px;
+}
