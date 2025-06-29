@@ -21,10 +21,6 @@
     justify-content: center;
     z-index: 1;
 
-    .theme-dark & {
-        background-color: rgba(0,0,0,0.5);
-    }
-
     .theme-light & {
         background-color: rgba(0,0,0,0.2);
     }

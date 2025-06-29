@@ -1963,9 +1963,6 @@ header .heading-row {
           justify-content: center;
   z-index: 1;
 }
-.theme-dark .loader {
-  background-color: rgba(0, 0, 0, 0.5);
-}
 .theme-light .loader {
   background-color: rgba(0, 0, 0, 0.2);
 }
