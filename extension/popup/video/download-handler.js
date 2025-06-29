@@ -250,11 +250,26 @@ function updateSingleDropdown(downloadGroup, progressData = {}, progress) {
             break;
             
         case 'download-progress':
-            // Update ONLY selected-option with progress bar (no text change)
+            // Update selected-option with progress bar AND text
             if (selectedOption) {
                 selectedOption.style.setProperty('--progress', `${progress}%`);
                 selectedOption.classList.remove('queued'); // Clear any queue state
                 selectedOption.classList.add('downloading');
+                
+                // Build progress display text
+                let displayText = `${progress}%`;
+                if (progressData.currentSegment) {
+                    displayText += ` (${progressData.currentSegment}/${progressData.totalSegments})`;
+                }
+                if (progressData.speed) {
+                    displayText += ` • ${formatSize(progressData.speed)}/s`;
+                }
+                if (progressData.eta && progressData.eta > 0 && progress < 100) {
+                    displayText += ` • ${formatTime(progressData.eta)}`;
+                }
+
+                const textSpan = selectedOption.querySelector('span:first-child') || selectedOption;
+                textSpan.textContent = displayText;
             }
 
             // Remove queued from dropdown-option when download starts
