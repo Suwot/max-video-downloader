@@ -122,6 +122,12 @@ export async function renderHistoryItems(fullRender = true) {
                 const newInitialMessage = historyContainer.querySelector('.initial-message');
                 newInitialMessage.style.display = 'flex';
             }
+            
+            // Update section count (following same pattern as renderVideos)
+            const sectionCount = document.querySelector('.downloads-history-section .section-count');
+            if (sectionCount) {
+                sectionCount.textContent = history.length > 0 ? history.length : '';
+            }
         } else {
             // Incremental render: prepend only the latest (first) item
             if (history.length > 0) {
@@ -137,6 +143,12 @@ export async function renderHistoryItems(fullRender = true) {
                 historyContainer.prepend(historyItem);
                 
                 logger.debug('Incremental render: prepended latest item');
+            }
+            
+            // Update section count for incremental render
+            const sectionCount = document.querySelector('.downloads-history-section .section-count');
+            if (sectionCount) {
+                sectionCount.textContent = history.length > 0 ? history.length : '';
             }
         }
     } catch (error) {
@@ -339,6 +351,12 @@ async function deleteHistoryItem(completedAt) {
         const initialMessage = historyContainer.querySelector('.initial-message');
         if (remainingHistoryItems.length === 0 && initialMessage) {
             initialMessage.style.display = 'flex';
+        }
+        
+        // Update section count after deletion (following same pattern as renderVideos)
+        const sectionCount = document.querySelector('.downloads-history-section .section-count');
+        if (sectionCount) {
+            sectionCount.textContent = updatedHistory.length > 0 ? updatedHistory.length : '';
         }
         
         logger.debug('Deleted history item:', completedAt);
