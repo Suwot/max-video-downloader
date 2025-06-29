@@ -236,7 +236,7 @@ export function handleDownloadWithStateChange(elementsDiv, videoData, cancelHand
 export function createDownloadButton(video, elementsDiv, dropdown) {
     // Create button wrapper
     const buttonWrapper = document.createElement('div');
-    buttonWrapper.className = 'download-btn-wrapper';
+    buttonWrapper.className = 'download-btn-wrapper btn-default';
     
     // Create main download button
     const downloadBtn = document.createElement('button');

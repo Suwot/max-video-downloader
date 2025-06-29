@@ -1575,24 +1575,6 @@ header .heading-row {
 .download-btn-wrapper.btn-canceled .download-menu-btn:hover {
   background-color: var(--color-orange-hover);
 }
-.download-btn-wrapper.queued .download-btn, .download-btn-wrapper.unqueued .download-btn {
-  background-color: var(--color-yellow);
-  color: var(--text-primary-light);
-}
-.download-btn-wrapper.queued .download-btn:hover, .download-btn-wrapper.unqueued .download-btn:hover {
-  background-color: var(--color-yellow-hover);
-}
-.download-btn-wrapper.queued .download-menu-btn, .download-btn-wrapper.unqueued .download-menu-btn {
-  background-color: var(--color-yellow);
-  color: var(--text-primary-light);
-  border-left-color: var(--color-yellow-hover);
-}
-.download-btn-wrapper.queued .download-menu-btn:hover, .download-btn-wrapper.unqueued .download-menu-btn:hover {
-  background-color: var(--color-yellow-hover);
-}
-.download-btn-wrapper.queued .download-menu-btn circle, .download-btn-wrapper.unqueued .download-menu-btn circle {
-  fill: var(--text-primary-light);
-}
 
 .download-btn {
   display: -webkit-box;

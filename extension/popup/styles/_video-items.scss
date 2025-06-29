@@ -452,33 +452,6 @@
             }
         }
     }
-
-    // Legacy compatibility (remove once fully migrated)
-
-    &.queued, &.unqueued {
-        .download-btn {
-            background-color: var(--color-yellow);
-            color: var(--text-primary-light);
-
-            &:hover {
-                background-color: var(--color-yellow-hover);
-            }
-        }
-
-        .download-menu-btn {
-            background-color: var(--color-yellow);
-            color: var(--text-primary-light);
-            border-left-color: var(--color-yellow-hover);
-
-            &:hover {
-                background-color: var(--color-yellow-hover);
-            }
-
-            circle {
-                fill: var(--text-primary-light);
-            }
-        }
-    }
 }
 
 .download-btn {
