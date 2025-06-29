@@ -243,8 +243,13 @@ function setupWebRequestListener() {
                 
                 switch(headerName) {
                     case 'content-range':
-                        logger.debug(`Skipping partial content response with Content-Range: ${header.value} for URL: ${details.url}`);
-                        return;
+                        // Parse Content-Range to determine if this is a legitimate video or just a segment
+                        const shouldSkip = shouldSkipBasedOnContentRange(header.value, details.url);
+                        if (shouldSkip) {
+                            return;
+                        }
+                        metadata.contentRange = header.value;
+                        break;
                     case 'content-type':
                         metadata.contentType = header.value;
                         break;
@@ -321,6 +326,41 @@ function setupMessageListener() {
     });
     
     logger.debug('Message listener set up for video detection');
+}
+
+/**
+ * Analyze Content-Range header to determine if we should skip this request
+ * @param {string} contentRange - Content-Range header value
+ * @param {string} url - Request URL for logging
+ * @returns {boolean} True if should skip, false if should process
+ */
+function shouldSkipBasedOnContentRange(contentRange, url) {
+    // Parse Content-Range header: "bytes start-end/total"
+    const rangeMatch = /bytes (\d+)-(\d+)\/(\d+)/.exec(contentRange);
+    
+    if (!rangeMatch) {
+        logger.debug(`Invalid Content-Range format: ${contentRange} for URL: ${url}`);
+        return false; // If we can't parse it, don't skip
+    }
+    
+    const start = parseInt(rangeMatch[1], 10);
+    const end = parseInt(rangeMatch[2], 10);
+    const total = parseInt(rangeMatch[3], 10);
+    
+    // Calculate what percentage of the file this range covers
+    const rangeSize = end - start + 1;
+    const coverage = rangeSize / total;
+    
+    // Keep if: starts at 0 OR covers ≥95% of the file
+    const shouldKeep = start === 0 || coverage >= 0.95;
+    
+    if (shouldKeep) {
+        logger.debug(`Keeping Content-Range request: ${contentRange} (${(coverage * 100).toFixed(1)}% coverage, starts at ${start}) for URL: ${url}`);
+        return false; // Don't skip
+    } else {
+        logger.debug(`Skipping partial Content-Range request: ${contentRange} (${(coverage * 100).toFixed(1)}% coverage, starts at ${start}) for URL: ${url}`);
+        return true; // Skip
+    }
 }
 
 /**
