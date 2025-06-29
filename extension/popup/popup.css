@@ -539,9 +539,6 @@ header .heading-row {
 .tab-button[data-tab-id=settings-tab].active {
   background-color: var(--color-yellow);
 }
-.tab-button[data-tab-id=about-tab].active {
-  background-color: var(--color-purple);
-}
 
 .tab-counter {
   display: -webkit-inline-box;
