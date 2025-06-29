@@ -251,8 +251,8 @@ export function initializeCollapsibleSections() {
         const toggleIcon = document.createElement('div');
         toggleIcon.className = 'toggle-icon';
         toggleIcon.innerHTML = `
-            <svg viewBox="0 0 24 24" width="16" height="16">
-                <path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"/>
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M1.70833 3.125C1.31771 2.73438 0.683333 2.73438 0.292708 3.125C-0.0979167 3.51562 -0.0979167 4.15 0.292708 4.54062L4.29271 8.54062C4.68333 8.93125 5.31771 8.93125 5.70833 8.54062L9.70833 4.54062C10.099 4.15 10.099 3.51562 9.70833 3.125C9.31771 2.73438 8.68333 2.73438 8.29271 3.125L5 6.41875L1.70833 3.125Z"/>
             </svg>
         `;
         
