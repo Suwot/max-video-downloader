@@ -168,7 +168,7 @@ async function handleDownloadProgress(downloadId, downloadRequest, response) {
                 ...response,
                 downloadUrl: downloadRequest.downloadUrl,
                 masterUrl: downloadRequest.masterUrl || null,
-                filename: downloadRequest.filename,
+                filename: response.filename,
                 selectedOptionOrigText: downloadRequest.selectedOptionOrigText || null
             });
         }
