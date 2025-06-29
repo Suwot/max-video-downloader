@@ -93,26 +93,51 @@ export async function renderVideos() {
 
 /**
  * Render downloads history from storage
+ * @param {boolean} [fullRender=true] - If true, clears container and renders all items. If false, only prepends latest item.
  */
-export async function renderHistoryItems() {
+export async function renderHistoryItems(fullRender = true) {
     try {
         const result = await chrome.storage.local.get(['downloads_history']);
         const history = result.downloads_history || [];
+        const historyContainer = document.querySelector('.downloads-history');
+        const initialMessage = historyContainer.querySelector('.initial-message');
 
-        if (history.length > 0) {
-            const historyContainer = document.querySelector('.downloads-history');
-            // Create history items from progressData and insert before initial message
-            const initialMessage = historyContainer.querySelector('.initial-message');
-            history.forEach(historyEntry => {
-                const historyItem = createHistoryItemElement(historyEntry);
-                if (initialMessage) {
-                    historyContainer.insertBefore(historyItem, initialMessage);
-                } else {
+        if (fullRender) {
+            // Clear container completely and rebuild from scratch
+            historyContainer.innerHTML = '<div class="initial-message"><p>You don\'t have any downloads in history</p></div>';
+            
+            if (history.length > 0) {
+                // Hide initial message and render all history items
+                const newInitialMessage = historyContainer.querySelector('.initial-message');
+                newInitialMessage.style.display = 'none';
+                
+                history.forEach(historyEntry => {
+                    const historyItem = createHistoryItemElement(historyEntry);
                     historyContainer.appendChild(historyItem);
+                });
+                
+                logger.debug(`Full render: ${history.length} history items`);
+            } else {
+                // Show initial message when no history
+                const newInitialMessage = historyContainer.querySelector('.initial-message');
+                newInitialMessage.style.display = 'flex';
+            }
+        } else {
+            // Incremental render: prepend only the latest (first) item
+            if (history.length > 0) {
+                const latestEntry = history[0];
+                const historyItem = createHistoryItemElement(latestEntry);
+                
+                // Hide initial message if visible and prepend new item
+                if (initialMessage) {
+                    initialMessage.style.display = 'none';
                 }
-            });
-
-            logger.debug(`Rendered ${history.length} history items`);
+                
+                // Always prepend - simple and consistent
+                historyContainer.prepend(historyItem);
+                
+                logger.debug('Incremental render: prepended latest item');
+            }
         }
     } catch (error) {
         logger.error('Error rendering history items:', error);
@@ -270,11 +295,18 @@ async function deleteHistoryItem(completedAt) {
         
         await chrome.storage.local.set({ downloads_history: updatedHistory });
         
-        // Remove from UI
+        // Remove from UI and manage initial message visibility
         const historyContainer = document.querySelector('.downloads-history');
         const historyItem = historyContainer.querySelector(`[data-completion="${completedAt}"]`);
         if (historyItem) {
             historyItem.remove();
+        }
+        
+        // Show initial message if no more history items remain
+        const remainingHistoryItems = historyContainer.querySelectorAll('.history-item');
+        const initialMessage = historyContainer.querySelector('.initial-message');
+        if (remainingHistoryItems.length === 0 && initialMessage) {
+            initialMessage.style.display = 'flex';
         }
         
         logger.debug('Deleted history item:', completedAt);

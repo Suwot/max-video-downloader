@@ -20,12 +20,7 @@
     padding: 8px;
 
     > .initial-message {
-        display: none;
-        
-        &:first-child {
-            display: flex;
-            max-height: 76px;
-        }
+        max-height: 76px;
     }
 }
 

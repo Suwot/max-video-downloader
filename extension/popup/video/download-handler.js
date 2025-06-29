@@ -474,14 +474,15 @@ async function cloneVideoItemToDownloads(elementsDiv, downloadData) {
         activeDownloads.push(downloadEntry);
         await chrome.storage.local.set({ downloads_active: activeDownloads });
 
-        // Insert cloned element into downloads tab before initial message
+        // Insert cloned element into downloads tab and manage initial message visibility
         const activeDownloadsContainer = document.querySelector('.active-downloads');
         const initialMessage = activeDownloadsContainer.querySelector('.initial-message');
+        
+        // Hide initial message and append the element
         if (initialMessage) {
-            activeDownloadsContainer.insertBefore(clonedElement, initialMessage);
-        } else {
-            activeDownloadsContainer.append(clonedElement);
+            initialMessage.style.display = 'none';
         }
+        activeDownloadsContainer.appendChild(clonedElement);
 
     } catch (error) {
         logger.error('Error cloning video item to downloads:', error);
@@ -497,7 +498,7 @@ export async function restoreActiveDownloads() {
         const activeDownloads = result.downloads_active || [];
         
         const activeDownloadsContainer = document.querySelector('.active-downloads');
-        if (!activeDownloadsContainer || activeDownloads.length === 0) {
+        if (!activeDownloadsContainer) {
             return;
         }
 
@@ -506,17 +507,22 @@ export async function restoreActiveDownloads() {
                                 <p>Ongoing downloads will appear here</p>
                             </div>`;
 
-        // Restore each download element by inserting before initial message (chronological order)
         const initialMessage = activeDownloadsContainer.querySelector('.initial-message');
+
+        if (activeDownloads.length === 0) {
+            // Show initial message when no active downloads
+            initialMessage.style.display = 'flex';
+            return;
+        }
+
+        // Hide initial message and restore downloads
+        initialMessage.style.display = 'none';
+        
         activeDownloads.forEach(downloadEntry => {
             const tempDiv = document.createElement('div');
             tempDiv.innerHTML = downloadEntry.elementHTML;
             const videoItem = tempDiv.firstElementChild;
-            if (initialMessage) {
-                activeDownloadsContainer.insertBefore(videoItem, initialMessage);
-            } else {
-                activeDownloadsContainer.append(videoItem);
-            }
+            activeDownloadsContainer.appendChild(videoItem);
         });
 
         logger.debug(`Restored ${activeDownloads.length} active downloads`);
@@ -541,12 +547,19 @@ async function handleDownloadCompletion(progressData, addToHistory = false) {
         const updatedActiveDownloads = activeDownloads.filter(entry => entry.lookupUrl !== lookupUrl);
         await chrome.storage.local.set({ downloads_active: updatedActiveDownloads });
 
-        // Remove from active downloads UI
+        // Remove from active downloads UI and manage initial message visibility
         const activeDownloadsContainer = document.querySelector('.active-downloads');
         if (activeDownloadsContainer) {
             const videoItemToRemove = activeDownloadsContainer.querySelector(`[data-url="${lookupUrl}"]`);
             if (videoItemToRemove) {
                 videoItemToRemove.remove();
+            }
+            
+            // Show initial message if no more active downloads remain
+            const remainingVideoItems = activeDownloadsContainer.querySelectorAll('.video-item');
+            const initialMessage = activeDownloadsContainer.querySelector('.initial-message');
+            if (remainingVideoItems.length === 0 && initialMessage) {
+                initialMessage.style.display = 'flex';
             }
         }
 
@@ -567,8 +580,8 @@ async function handleDownloadCompletion(progressData, addToHistory = false) {
             await chrome.storage.local.set({ downloads_history: history });
             logger.debug(`Added download to history with status: ${progressData.command}`);
 
-            // Re-render history items
-            await renderHistoryItems();
+            // Re-render history items incrementally (prepend only the new item)
+            await renderHistoryItems(false);
         }
 
     } catch (error) {

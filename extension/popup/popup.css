@@ -1248,14 +1248,6 @@ header .heading-row {
   overflow: visible;
   position: relative;
 }
-.theme-dark .video-type-group {
-  -webkit-box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
-          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
-}
-.theme-light .video-type-group {
-  -webkit-box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-}
 
 .video-group {
   margin-bottom: 12px;
@@ -1634,13 +1626,6 @@ header .heading-row {
 }
 .active-downloads > .initial-message,
 .downloads-history > .initial-message {
-  display: none;
-}
-.active-downloads > .initial-message:first-child,
-.downloads-history > .initial-message:first-child {
-  display: -webkit-box;
-  display: -ms-flexbox;
-  display: flex;
   max-height: 76px;
 }
 

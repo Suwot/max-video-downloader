@@ -71,14 +71,6 @@
     flex-direction: column;
     overflow: visible;
     position: relative;
-
-    .theme-dark & {
-        box-shadow: 0 1px 3px rgba(0,0,0,0.2);
-    }
-
-    .theme-light & {
-        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-    }
 }
 
 .video-group {
