@@ -368,6 +368,40 @@ class VideoProcessingPipeline {
     }
     
     /**
+     * Determine default container for direct videos based on FFprobe data
+     * @param {Object} video - Video object
+     * @param {Object} streamInfo - FFprobe stream info
+     * @returns {string} Default container format
+     * @private
+     */
+    determineDirectDefaultContainer(video, streamInfo) {
+        // 1. Use FFprobe container info (most reliable)
+        if (streamInfo?.container) {
+            const container = streamInfo.container.toLowerCase();
+            if (container.includes('mp4') || container.includes('quicktime')) return 'mp4';
+            if (container.includes('webm') || container.includes('matroska')) return 'webm';
+            if (container.includes('mkv')) return 'mkv';
+            if (container.includes('mov')) return 'mp4'; // MOV -> MP4 for compatibility
+        }
+        
+        // 2. Use headers content-type
+        if (video.metadata?.contentType) {
+            if (video.metadata.contentType.includes('mp4')) return 'mp4';
+            if (video.metadata.contentType.includes('webm')) return 'webm';
+        }
+        
+        // 3. URL detection fallback
+        if (video.originalContainer) {
+            const container = video.originalContainer.toLowerCase();
+            if (['mp4', 'webm', 'mkv'].includes(container)) return container;
+            if (['mov', 'm4v'].includes(container)) return 'mp4';
+        }
+        
+        // 4. Final fallback
+        return 'mp4';
+    }
+
+    /**
      * Get FFprobe metadata for direct video
      * @param {number} tabId - Tab ID
      * @param {string} normalizedUrl - Normalized video URL
@@ -414,6 +448,9 @@ class VideoProcessingPipeline {
                 // Only set isValid: false if ffprobe confirms not a video
                 const isValid = streamInfo.hasVideo === false ? false : true;
 
+                // Determine default container from FFprobe data
+                const defaultContainer = this.determineDirectDefaultContainer(video, streamInfo);
+
                 const updatedVideo = updateVideo('getFFprobeMetadata', tabId, normalizedUrl, {
                     isValid,
                     metaFFprobe: streamInfo,
@@ -421,7 +458,8 @@ class VideoProcessingPipeline {
                     isFullyParsed: true,
                     standardizedResolution: standardizedRes,
                     estimatedFileSizeBytes: streamInfo.estimatedFileSizeBytes || video.fileSize,
-                    fileSize: streamInfo.sizeBytes || null
+                    fileSize: streamInfo.sizeBytes || null,
+                    defaultContainer: defaultContainer
                 });
 
                 if (updatedVideo) {

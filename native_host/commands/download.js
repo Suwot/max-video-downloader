@@ -44,6 +44,16 @@ class DownloadCommand extends BaseCommand {
         if (!processInfo) {
             logDebug('No active process found for:', downloadUrl);
             logDebug('Cancel request ignored - no matching download process');
+            
+            // Send response even when no process exists - UI needs confirmation
+            this.sendSuccess({
+                command: 'download-canceled',
+                downloadUrl,
+                message: 'Download already stopped or not found',
+                downloadStats: null,
+                duration: null,
+                completedAt: Date.now()
+            });
             return;
         }
         
@@ -52,6 +62,11 @@ class DownloadCommand extends BaseCommand {
         try {
             // Mark as canceled before terminating FFmpeg process
             processInfo.wasCanceled = true;
+            
+            // IMMEDIATELY remove from activeProcesses to prevent repeated cancels
+            DownloadCommand.activeProcesses.delete(downloadUrl);
+            logDebug('Removed process from activeProcesses Map immediately. Remaining processes:', DownloadCommand.activeProcesses.size);
+            
             // Gracefully terminate FFmpeg process
             if (ffmpegProcess && !ffmpegProcess.killed) {
                 logDebug('Terminating FFmpeg process with SIGTERM');
@@ -59,11 +74,13 @@ class DownloadCommand extends BaseCommand {
                 
                 // Give it a moment to clean up, then force kill if needed
                 setTimeout(() => {
-                    if (!ffmpegProcess.killed) {
+                    if (ffmpegProcess && !ffmpegProcess.killed) {
                         logDebug('Force killing FFmpeg process with SIGKILL');
                         ffmpegProcess.kill('SIGKILL');
                     }
                 }, 2000);
+            } else {
+                logDebug('FFmpeg process already terminated or killed');
             }
             
             // Clean up progress tracker
@@ -85,9 +102,10 @@ class DownloadCommand extends BaseCommand {
             
             // Send immediate cancel confirmation
             this.sendSuccess({
-                command: 'cancel-download',
+                command: 'download-canceled',
                 downloadUrl,
                 duration: progressTracker.getDuration(),
+                downloadStats: progressTracker.getDownloadStats() || null,
                 message: 'Download cancellation initiated successfully',
                 completedAt: Date.now()
             });
@@ -107,7 +125,7 @@ class DownloadCommand extends BaseCommand {
      * @param {string} params.savePath Path to save file to
      * @param {string} params.type Media type ('hls', 'dash', 'direct')
      * @param {string} params.preferredContainer User's preferred container format (optional)
-     * @param {string} params.originalContainer Original container from source (optional)
+     * @param {string} params.defaultContainer Default container from processing (optional)
      * @param {boolean} params.audioOnly Whether to download audio only (optional)
      * @param {string} params.streamSelection Stream selection spec for DASH (optional)
      * @param {string} params.masterUrl Optional master manifest URL (for reporting)
@@ -136,7 +154,7 @@ class DownloadCommand extends BaseCommand {
             savePath,
             type,
             preferredContainer = null,
-            originalContainer = null,
+            defaultContainer = null,
             audioOnly = false,
             streamSelection,
             masterUrl = null,
@@ -207,7 +225,8 @@ class DownloadCommand extends BaseCommand {
                 masterUrl,
                 type,
                 ffmpegError: null,
-                downloadStats: {}, // No stats available for early errors
+                downloadStats: null, // No stats available for early errors (before FFmpeg starts)
+                duration: null,
                 completedAt: Date.now(),
                 pageUrl,
                 pageFavicon
@@ -221,21 +240,29 @@ class DownloadCommand extends BaseCommand {
      * @private
      */
     determineContainerFormat(params) {
-        const { preferredContainer, originalContainer, type, downloadUrl } = params;
+        const { preferredContainer, defaultContainer, type, audioOnly, downloadUrl } = params;
         
-        // Explicit preferred container takes priority
-        if (preferredContainer && /^(mp4|webm|mkv)$/i.test(preferredContainer)) {
+        // 1. User override takes priority (future feature)
+        if (preferredContainer && /^(mp4|webm|mkv|mp3|m4a)$/i.test(preferredContainer)) {
             return preferredContainer.toLowerCase();
         }
         
-        // Original container if provided (extension handles DASH container selection)
-        if (originalContainer) {
-            if (/^(mp4|webm|mkv|mov|m4v|ts|avi|flv)$/i.test(originalContainer)) {
-                return originalContainer.toLowerCase();
-            }
+        // 2. Audio-only mode - always use mp3
+        if (audioOnly) {
+            return 'mp3';
         }
         
-        // For direct videos with webm extension, use webm
+        // 3. Use defaultContainer from processing (DASH from UI, Direct from FFprobe)
+        if (defaultContainer && /^(mp4|webm|mkv|mov|m4v|ts|avi|flv)$/i.test(defaultContainer)) {
+            return defaultContainer.toLowerCase();
+        }
+        
+        // 4. Type-specific fallbacks
+        if (type === 'hls') {
+            return 'mp4';
+        }
+        
+        // For direct videos with webm extension, use webm as final fallback
         if (type === 'direct') {
             const urlExtMatch = downloadUrl.match(/\.([^./?#]+)($|\?|#)/i);
             const urlExt = urlExtMatch ? urlExtMatch[1].toLowerCase() : null;
@@ -244,12 +271,7 @@ class DownloadCommand extends BaseCommand {
             }
         }
         
-        // For HLS, default to MP4
-        if (type === 'hls') {
-            return 'mp4';
-        }
-        
-        // Default fallback
+        // 5. Final fallback
         return 'mp4';
     }
     
@@ -259,10 +281,15 @@ class DownloadCommand extends BaseCommand {
      */
     generateOutputFilename(filename, container) {
         // Clean up filename: remove query params and extension  
-        let outputFilename = (filename ? filename.replace(/[?#].*$/, '') : 'video');
+        let outputFilename = (filename ? filename.replace(/[?#].*$/, '') : 'audio');
         
-        // Remove any existing video extensions
-        outputFilename = outputFilename.replace(/\.(mp4|webm|mov|m4v|ts|avi|mkv|flv)$/i, '');
+        // For audio-only downloads, default to 'audio' if no filename
+        if (container === 'mp3' && (!filename || filename.trim() === '')) {
+            outputFilename = 'audio';
+        }
+        
+        // Remove any existing video/audio extensions
+        outputFilename = outputFilename.replace(/\.(mp4|webm|mov|m4v|ts|avi|mkv|flv|mp3|m4a|aac|wav)$/i, '');
         
         return `${outputFilename}.${container}`;
     }
@@ -412,11 +439,14 @@ class DownloadCommand extends BaseCommand {
             logDebug('FFprobe command:', ffprobePath, args.join(' '));
             
             // Execute ffprobe as a child process
+            const probeStartTime = Date.now();
             const { stdout } = await new Promise((resolve, reject) => {
                 const ffprobe = spawn(ffprobePath, args, { 
                     env: getFullEnv(),
                     windowsVerbatimArguments: process.platform === 'win32'
                 });
+                
+                logDebug('FFprobe process started with PID:', ffprobe.pid);
                 
                 let stdout = '';
                 let stderr = '';
@@ -429,15 +459,20 @@ class DownloadCommand extends BaseCommand {
                     stderr += data.toString();
                 });
                 
-                ffprobe.on('close', (code) => {
+                ffprobe.on('close', (code, signal) => {
+                    const probeDuration = Date.now() - probeStartTime;
+                    logDebug(`FFprobe completed in ${probeDuration}ms with code ${code}${signal ? ` (signal: ${signal})` : ''}`);
+                    
                     if (code === 0) {
                         resolve({ stdout, stderr });
                     } else {
-                        reject(new Error(`FFprobe exited with code ${code}: ${stderr}`));
+                        reject(new Error(`FFprobe exited with code ${code}${signal ? ` (signal: ${signal})` : ''}: ${stderr}`));
                     }
                 });
                 
                 ffprobe.on('error', (err) => {
+                    const probeDuration = Date.now() - probeStartTime;
+                    logDebug(`FFprobe spawn error after ${probeDuration}ms:`, err.message);
                     reject(err);
                 });
             });
@@ -526,17 +561,23 @@ class DownloadCommand extends BaseCommand {
             }
             
             // Start FFmpeg process
+            const downloadStartTime = Date.now();
             const ffmpeg = spawn(ffmpegService.getFFmpegPath(), ffmpegArgs, { 
                 env: getFullEnv(),
                 windowsVerbatimArguments: process.platform === 'win32',
                 stdio: ['ignore', 'pipe', 'pipe']
             });
+            
+            logDebug('FFmpeg process started with PID:', ffmpeg.pid);
+            
             // Track this process as active
             DownloadCommand.activeProcesses.set(downloadUrl, {
                 ffmpegProcess: ffmpeg,
                 progressTracker,
                 outputPath: uniqueOutput,
-                wasCanceled: false // default
+                wasCanceled: false, // default
+                startTime: downloadStartTime,
+                pid: ffmpeg.pid
             });
             
             logDebug('Added process to activeProcesses Map. Total processes:', DownloadCommand.activeProcesses.size);
@@ -555,25 +596,34 @@ class DownloadCommand extends BaseCommand {
                 progressTracker.processOutput(output);
             });
             
-            ffmpeg.on('close', (code) => {
+            ffmpeg.on('close', (code, signal) => {
                 progressTracker.cleanup();
                 const processInfo = DownloadCommand.activeProcesses.get(downloadUrl);
-                const wasCanceled = processInfo?.wasCanceled === true;
                 const duration = progressTracker.getDuration();
+                const downloadDuration = processInfo?.startTime ? Date.now() - processInfo.startTime : null;
                 DownloadCommand.activeProcesses.delete(downloadUrl); // Remove from active processes on close
                 const ffmpegFinalMessage = progressTracker.getFFmpegFinalMessage();
                 const downloadStats = progressTracker.getDownloadStats();
-                if (wasCanceled) {
+                
+                // Determine termination reason using signal and exit code
+                const terminationInfo = this.analyzeProcessTermination(code, signal, processInfo?.wasCanceled);
+                logDebug(`FFmpeg process (PID: ${processInfo?.pid}) terminated after ${downloadDuration}ms:`, terminationInfo);
+                if (terminationInfo.wasCanceled) {
                     logDebug('Download was canceled by user.');
                     this.sendSuccess({
                         command: 'download-canceled',
                         downloadUrl,
                         masterUrl,
                         type,
-                        message: 'Download was canceled',
+                        message: `Download was canceled (${terminationInfo.reason})`,
                         duration,
-                        downloadStats: downloadStats || {},
+                        downloadStats: downloadStats || null,
                         ffmpegFinalMessage: ffmpegFinalMessage || null,
+                        terminationInfo,
+                        processInfo: {
+                            pid: processInfo?.pid,
+                            downloadDuration
+                        },
                         completedAt: Date.now(),
                         pageUrl,
                         pageFavicon
@@ -583,7 +633,7 @@ class DownloadCommand extends BaseCommand {
                         downloadStats
                     });
                 }
-                if (code === 0 && !hasError) {
+                if (terminationInfo.isSuccess && !hasError) {
                     logDebug('Download completed successfully.');
                     this.sendSuccess({ 
                         command: 'download-success',
@@ -593,8 +643,13 @@ class DownloadCommand extends BaseCommand {
                         masterUrl,
                         type,
                         duration,
-                        downloadStats: downloadStats || {},
+                        downloadStats: downloadStats || null,
                         ffmpegFinalMessage: ffmpegFinalMessage || null,
+                        terminationInfo,
+                        processInfo: {
+                            pid: processInfo?.pid,
+                            downloadDuration
+                        },
                         completedAt: Date.now(),
                         pageUrl,
                         pageFavicon
@@ -604,31 +659,34 @@ class DownloadCommand extends BaseCommand {
                         path: uniqueOutput,
                         downloadStats
                     });
-                } else if (code === 255 && !hasError) {
-                    // SIGTERM - process was terminated (cancellation)
-                    logDebug('Download was terminated (SIGTERM).');
+                } else if (terminationInfo.wasCanceled && !hasError) {
+                    // Handle signal-based cancellation detection
+                    logDebug(`Download was terminated (${terminationInfo.reason}).`);
                     this.sendSuccess({
                         command: 'download-canceled',
                         downloadUrl,
                         masterUrl,
                         type,
-                        message: 'Download was canceled',
+                        message: `Download was canceled (${terminationInfo.reason})`,
                         duration,
-                        downloadStats: downloadStats || {},
+                        downloadStats: downloadStats || null,
                         ffmpegFinalMessage: ffmpegFinalMessage || null,
+                        terminationInfo,
+                        processInfo: {
+                            pid: processInfo?.pid,
+                            downloadDuration
+                        },
                         completedAt: Date.now(),
                         pageUrl,
                         pageFavicon
                     });
-                    // Note: The original download promise resolves as canceled
-                    // The cancel-download command gets its own immediate response in cancelDownload()
                     resolve({ 
                         success: false, 
                         downloadStats
                     });
                 } else if (!hasError) {
                     hasError = true;
-                    const error = `FFmpeg exited with code ${code}: ${errorOutput}`;
+                    const error = `FFmpeg exited with code ${code}${signal ? ` (signal: ${signal})` : ''}: ${errorOutput}`;
                     logDebug('Download failed:', error);
                     if (ffmpegFinalMessage) {
                         logDebug('FFmpeg final message:', ffmpegFinalMessage);
@@ -641,7 +699,12 @@ class DownloadCommand extends BaseCommand {
                         type,
                         duration,
                         ffmpegFinalMessage: ffmpegFinalMessage || null,
-                        downloadStats: downloadStats || {}, // Include stats in error message too
+                        downloadStats: downloadStats || null, // Include stats in error message too
+                        terminationInfo,
+                        processInfo: {
+                            pid: processInfo?.pid,
+                            downloadDuration
+                        },
                         completedAt: Date.now(),
                         pageUrl,
                         pageFavicon
@@ -653,13 +716,15 @@ class DownloadCommand extends BaseCommand {
             ffmpeg.on('error', (err) => {
                 if (!hasError) {
                     hasError = true;
+                    const processInfo = DownloadCommand.activeProcesses.get(downloadUrl);
+                    const downloadDuration = processInfo?.startTime ? Date.now() - processInfo.startTime : null;
                     const duration = progressTracker.getDuration();
                     DownloadCommand.activeProcesses.delete(downloadUrl); // Remove from active processes on error
                     progressTracker.cleanup();
                     const ffmpegFinalMessage = progressTracker.getFFmpegFinalMessage();
                     const downloadStats = progressTracker.getDownloadStats(); // Get stats even on spawn error
                     
-                    logDebug('FFmpeg spawn error:', err);
+                    logDebug(`FFmpeg spawn error (PID: ${processInfo?.pid}) after ${downloadDuration}ms:`, err);
                     if (ffmpegFinalMessage) {
                         logDebug('FFmpeg final message:', ffmpegFinalMessage);
                     }
@@ -672,7 +737,11 @@ class DownloadCommand extends BaseCommand {
                         type,
                         duration,
                         ffmpegFinalMessage: ffmpegFinalMessage || null,
-                        downloadStats: downloadStats || {}, // Include stats in spawn error too
+                        downloadStats: downloadStats || null, // Include stats in spawn error too
+                        processInfo: {
+                            pid: processInfo?.pid,
+                            downloadDuration
+                        },
                         completedAt: Date.now(),
                         pageUrl,
                         pageFavicon
@@ -682,6 +751,99 @@ class DownloadCommand extends BaseCommand {
                 }
             });
         });
+    }
+    
+    /**
+     * Analyze process termination to determine the exact reason
+     * @param {number} exitCode - Process exit code
+     * @param {string|null} signal - Termination signal (SIGTERM, SIGKILL, etc.)
+     * @param {boolean} wasCanceledFlag - Manual cancellation flag
+     * @returns {Object} Termination analysis with reason, type, and flags
+     * @private
+     */
+    analyzeProcessTermination(exitCode, signal, wasCanceledFlag = false) {
+        // Signal-based detection (most reliable)
+        if (signal) {
+            switch (signal) {
+                case 'SIGTERM':
+                    return {
+                        wasCanceled: true,
+                        isSuccess: false,
+                        reason: 'SIGTERM (graceful termination)',
+                        signal,
+                        exitCode,
+                        method: 'signal-detection'
+                    };
+                case 'SIGKILL':
+                    return {
+                        wasCanceled: true,
+                        isSuccess: false,
+                        reason: 'SIGKILL (force termination)',
+                        signal,
+                        exitCode,
+                        method: 'signal-detection'
+                    };
+                case 'SIGINT':
+                    return {
+                        wasCanceled: true,
+                        isSuccess: false,
+                        reason: 'SIGINT (interrupt)',
+                        signal,
+                        exitCode,
+                        method: 'signal-detection'
+                    };
+                default:
+                    return {
+                        wasCanceled: true,
+                        isSuccess: false,
+                        reason: `${signal} (unknown signal)`,
+                        signal,
+                        exitCode,
+                        method: 'signal-detection'
+                    };
+            }
+        }
+        
+        // Exit code based detection (fallback)
+        if (exitCode === 0) {
+            return {
+                wasCanceled: false,
+                isSuccess: true,
+                reason: 'successful completion',
+                signal: null,
+                exitCode,
+                method: 'exit-code'
+            };
+        } else if (exitCode === 255) {
+            // FFmpeg often returns 255 for SIGTERM
+            return {
+                wasCanceled: true,
+                isSuccess: false,
+                reason: 'exit code 255 (likely SIGTERM)',
+                signal: null,
+                exitCode,
+                method: 'exit-code'
+            };
+        } else if (wasCanceledFlag) {
+            // Manual flag detection (least reliable)
+            return {
+                wasCanceled: true,
+                isSuccess: false,
+                reason: 'manual cancellation flag',
+                signal: null,
+                exitCode,
+                method: 'manual-flag'
+            };
+        } else {
+            return {
+                wasCanceled: false,
+                isSuccess: false,
+                reason: `error exit code ${exitCode}`,
+                signal: null,
+                exitCode,
+                method: 'exit-code'
+            };
+        }
     }
 }
 

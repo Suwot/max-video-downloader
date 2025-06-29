@@ -336,7 +336,7 @@ function extractDownloadData(videoData, elementsDiv) {
         dash: () => {
             videoData.downloadUrl = selectedOption?.dataset.url; // it's always dash manifest url
             videoData.streamSelection = selectedOption?.dataset.trackMap || null;
-            videoData.originalContainer = selectedOption?.dataset.container || null;
+            videoData.defaultContainer = selectedOption?.dataset.defaultContainer || null;
             videoData.fileSizeBytes = selectedOption?.dataset.totalfilesize || null;
         },
         direct: () => {
@@ -356,10 +356,18 @@ function extractDownloadData(videoData, elementsDiv) {
  * @returns {Object} - Video metadata
  */
 function createVideoMetadata(video) {
+    // Determine defaultContainer based on type
+    let defaultContainer = video.defaultContainer || null;
+    
+    // For HLS, always default to mp4 if not set
+    if (video.type === 'hls' && !defaultContainer) {
+        defaultContainer = 'mp4';
+    }
+    
     return {
         filename: video.title,
         type: video.type,
-        originalContainer: video.type === 'hls' ? 'mp4' : (video.originalContainer || null),
+        defaultContainer: defaultContainer,
         segmentCount: video.type === 'hls' ? video.variants?.[0].metaJS?.segmentCount : null,
         duration: video.duration || null,
         masterUrl: video.isMaster ? video.url : null,

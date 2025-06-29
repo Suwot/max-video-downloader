@@ -269,10 +269,10 @@ function createDashOptions(container, tracks, initialSelection, onSelect) {
         
         if (hasIncompatibleTracks) {
             applyButton.textContent = `Apply as .mkv`;
-            applyButton.dataset.container = 'mkv';
+            applyButton.dataset.defaultContainer = 'mkv';
         } else {
             applyButton.textContent = `Apply as .${videoContainer}`;
-            applyButton.dataset.container = videoContainer;
+            applyButton.dataset.defaultContainer = videoContainer;
         }
         
         // Calculate total file size from all selected tracks
@@ -288,8 +288,8 @@ function createDashOptions(container, tracks, initialSelection, onSelect) {
         const selectedDisplay = dropdown?.elements?.selectedDisplay;
          
         if (selectedDisplay) {
-            if (applyButton.dataset.container) {
-                selectedDisplay.dataset.container = applyButton.dataset.container;
+            if (applyButton.dataset.defaultContainer) {
+                selectedDisplay.dataset.defaultContainer = applyButton.dataset.defaultContainer;
             }
             selectedDisplay.dataset.totalfilesize = totalSizeBytes;
         }
@@ -353,14 +353,14 @@ function createDashOptions(container, tracks, initialSelection, onSelect) {
         });
         
         // Get container format from button's dataset
-        const containerFormat = applyButton.dataset.container || 'mkv';
+        const containerFormat = applyButton.dataset.defaultContainer || 'mkv';
         
         const selection = {
             selectedVideo: selectedVideoId,
             selectedAudio: selectedAudioIds,
             selectedSubs: selectedSubIds,
             trackMap,
-            container: containerFormat,
+            defaultContainer: containerFormat,
             totalfilesize: totalSizeBytes
         };
         
