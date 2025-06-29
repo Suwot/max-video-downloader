@@ -527,7 +527,7 @@
 }
 
 // =====================================================
-// SECTION HEADER COMPONENT
+// SECTION HEADER & COLLAPSIBLE COMPONENTS
 // =====================================================
 // Standardized section header component that supports both:
 // - Static headers (downloads tab)  
@@ -545,9 +545,6 @@
 //     <h2 class="section-title">
 //         HLS <span class="section-count">3</span>
 //     </h2>
-//     <div class="section-toggle">
-//         <svg>...</svg>
-//     </div>
 // </div>
 
 .section-header {
@@ -560,6 +557,7 @@
     // Collapsible variant (clickable, has toggle icon)
     &.collapsible {
         cursor: pointer;
+        user-select: none;
         position: sticky;
         top: 0;
         z-index: 50;
@@ -573,6 +571,42 @@
         .theme-light & {
             &:hover {
                 background-color: var(--bg-element-hover-light);
+            }
+        }
+        
+        .toggle-icon {
+            margin-left: auto;
+            transition: transform 0.2s ease;
+            flex-shrink: 0;
+            
+            svg {
+                transition: transform 0.1s ease;
+                
+                path {
+                    fill: var(--text-secondary-dark);
+                }
+                
+                .theme-light & {
+                    path {
+                        fill: var(--text-secondary-light);
+                    }
+                }
+            }
+            
+            &.rotated {
+                svg {
+                    transform: rotate(-90deg);
+                }
+            }
+        }
+        
+        &:hover {
+            .toggle-icon svg path {
+                fill: var(--text-primary-dark);
+                
+                .theme-light & {
+                    fill: var(--text-primary-light);
+                }
             }
         }
     }
@@ -602,18 +636,27 @@
     .theme-light & {
         background-color: rgba(0,0,0,0.1);
     }
+    
+    // Hide when empty
+    &:empty {
+        display: none;
+    }
 }
 
-.section-toggle {
+.section-content {
     display: flex;
-    transition: transform var(--transition-normal);
-
-    .theme-dark & {
-        color: white;
-        fill: white;
-    }
-
+    flex-direction: column;
+    padding: 8px;
+    gap: 8px;
+    transition: max-height var(--transition-fast) ease, opacity var(--transition-fast) ease;
+    overflow-y: visible;
+    max-height: 2000px; // Large enough for any reasonable content
+    opacity: 1;
+    
     &.collapsed {
-        transform: rotate(-90deg);
+        max-height: 0;
+        opacity: 0;
+        padding: 0;
+        overflow: hidden;
     }
 }

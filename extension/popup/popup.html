@@ -28,6 +28,56 @@
         <section class="tab-contents">
             <div class="tab-content active" data-tab-id="videos-tab">
                 <section id="videos-list" class="videos-container">
+                    <!-- HLS Group -->
+                    <div class="video-type-group" data-video-type="hls" style="display: none;">
+                        <div class="section-header collapsible">
+                            <h2 class="section-title">HLS Streams<span class="section-count"></span></h2>
+                        </div>
+                        <div class="section-content">
+                            <!-- Video items populated here -->
+                        </div>
+                    </div>
+                    
+                    <!-- DASH Group -->
+                    <div class="video-type-group" data-video-type="dash" style="display: none;">
+                        <div class="section-header collapsible">
+                            <h2 class="section-title">DASH Streams<span class="section-count"></span></h2>
+                        </div>
+                        <div class="section-content">
+                            <!-- Video items populated here -->
+                        </div>
+                    </div>
+                    
+                    <!-- Direct Video Group -->
+                    <div class="video-type-group" data-video-type="direct" style="display: none;">
+                        <div class="section-header collapsible">
+                            <h2 class="section-title">Direct Videos<span class="section-count"></span></h2>
+                        </div>
+                        <div class="section-content">
+                            <!-- Video items populated here -->
+                        </div>
+                    </div>
+                    
+                    <!-- Blob Video Group -->
+                    <div class="video-type-group" data-video-type="blob" style="display: none;">
+                        <div class="section-header collapsible">
+                            <h2 class="section-title">Blob Videos<span class="section-count"></span></h2>
+                        </div>
+                        <div class="section-content">
+                            <!-- Video items populated here -->
+                        </div>
+                    </div>
+                    
+                    <!-- Unknown Video Group -->
+                    <div class="video-type-group" data-video-type="unknown" style="display: none;">
+                        <div class="section-header collapsible">
+                            <h2 class="section-title">Other Videos<span class="section-count"></span></h2>
+                        </div>
+                        <div class="section-content">
+                            <!-- Video items populated here -->
+                        </div>
+                    </div>
+                    
                     <div class="initial-message">
                         <p>No videos found on the page.</p>
                         <p>Play a video or Refresh the page.</p>
@@ -41,17 +91,17 @@
                         <div class="section-header collapsible">
                             <h2 class="section-title">Active & Queued</h2>
                         </div>
-                        <div class="active-downloads">
+                        <div class="section-content active-downloads">
                             <div class="initial-message">
                                 <p>Ongoing downloads will appear here</p>
                             </div>
                         </div>
                     </div>
                     <div class="downloads-history-section">
-                        <div class="section-header static">
+                        <div class="section-header collapsible">
                             <h2 class="section-title">History</h2>
                         </div>
-                        <div class="downloads-history">
+                        <div class="section-content downloads-history">
                             <div class="initial-message">
                                 <p>You don't have any downloads in history</p>
                             </div>

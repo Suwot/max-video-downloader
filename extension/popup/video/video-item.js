@@ -9,7 +9,7 @@ import { sendPortMessage } from '../communication.js';
  * @param {Object} video - Video data
  * @returns {HTMLElement} Video element
  */
-export function createVideoElement(video, group) {
+export function createVideoElement(video) {
     const element = document.createElement('div');
     element.className = 'video-item';
     element.dataset.url = video.url;
@@ -154,14 +154,20 @@ export function createVideoElement(video, group) {
         }
 
         // Update UI counters - check if group becomes empty after removal
-        const mediaTypeCount = group.querySelector('.media-type-count');
-        const drawerCount = parseInt(mediaTypeCount.textContent, 10);
+        const group = document.querySelector(`.video-type-group[data-video-type="${video.type}"]`);
+        const sectionCount = group.querySelector('.section-count');
+        const drawerCount = parseInt(sectionCount.textContent, 10);
         
         if (drawerCount > 1) {
-            mediaTypeCount.textContent = String(drawerCount - 1); // Update the count if needed
+            sectionCount.textContent = String(drawerCount - 1); // Update the count if needed
             element.remove(); // Just remove this video item
         } else {
-            group.remove(); // Remove the entire group if only one left
+            element.remove();
+            group.style.display = 'none'; // hide the group if only one left
+
+            const isLastVideo = document.querySelectorAll('.video-item').length === 0;
+            const initMessage = document.querySelector('#videos-list .initial-message');
+            isLastVideo ? initMessage.style.display = 'flex' : initMessage.style.display = 'none';
         }
 
         // update videos tab counter without state modifications

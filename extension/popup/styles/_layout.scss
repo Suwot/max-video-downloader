@@ -12,14 +12,13 @@
 
 // Initial states
 .initial-message {
-    display: none;
+    display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
     height: 100px;
     text-align: center;
     font-size: var(--font-h2);
-    padding: 16px;
 
     .theme-dark & {
         color: #aaa;

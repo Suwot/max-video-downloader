@@ -54,9 +54,7 @@
         }
     }
 
-    > .initial-message:first-child {
-        display: flex;
-    }
+    // Initial message display is handled by JavaScript
 }
 
 .videos-container {
@@ -65,10 +63,10 @@
 }
 
 // =====================================================
-// MEDIA GROUPS
+// VIDEO TYPE GROUPS
 // =====================================================
 
-.media-type-group {
+.video-type-group {
     display: flex;
     flex-direction: column;
     overflow: visible;
@@ -80,20 +78,6 @@
 
     .theme-light & {
         box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-    }
-}
-
-// Media type content container (collapsible section content)
-.media-type-content {
-    display: flex;
-    flex-direction: column;
-    padding: 8px;
-    gap: 8px;
-
-    &.collapsed {
-        max-height: 0;
-        padding: 0;
-        overflow: hidden;
     }
 }
 

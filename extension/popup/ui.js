@@ -189,6 +189,9 @@ export async function initializeUI() {
         await setTheme('dark'); // fallback
     }
     
+    // Initialize collapsible sections
+    initializeCollapsibleSections();
+    
     return {
         container: videosContainer,
         clearCacheButton,
@@ -231,4 +234,38 @@ export function showToast(message, duration = 3000) {
         toast.classList.remove('visible');
         setTimeout(() => document.body.removeChild(toast), 300);
     }, duration);
+}
+
+/**
+ * Initialize collapsible sections throughout the UI
+ * Finds all .section-header.collapsible elements and adds toggle functionality
+ */
+export function initializeCollapsibleSections() {
+    document.querySelectorAll('.section-header.collapsible').forEach(header => {
+        // Skip if already initialized (has toggle icon)
+        if (header.querySelector('.toggle-icon')) {
+            return;
+        }
+        
+        // Add toggle icon using innerHTML for efficiency
+        const toggleIcon = document.createElement('div');
+        toggleIcon.className = 'toggle-icon';
+        toggleIcon.innerHTML = `
+            <svg viewBox="0 0 24 24" width="16" height="16">
+                <path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"/>
+            </svg>
+        `;
+        
+        // Insert toggle icon at the end of header
+        header.appendChild(toggleIcon);
+        
+        // Add click handler
+        header.addEventListener('click', () => {
+            const content = header.nextElementSibling;
+            if (content?.classList.contains('section-content')) {
+                content.classList.toggle('collapsed');
+                toggleIcon.classList.toggle('rotated');
+            }
+        });
+    });
 }

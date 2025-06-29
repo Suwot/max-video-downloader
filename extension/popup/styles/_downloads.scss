@@ -10,7 +10,6 @@
     height: auto;
     display: flex;
     flex-direction: column;
-    gap: 16px;
 }
 
 .active-downloads,
@@ -20,9 +19,13 @@
     gap: 8px;
     padding: 8px;
 
-    > .initial-message:first-child {
-        display: flex;
-        max-height: 92px;
+    > .initial-message {
+        display: none;
+        
+        &:first-child {
+            display: flex;
+            max-height: 76px;
+        }
     }
 }
 

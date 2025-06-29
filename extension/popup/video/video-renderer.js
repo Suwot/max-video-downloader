@@ -1,45 +1,70 @@
-import { groupVideosByType, createTypeGroup } from './video-groups.js';
 import { getVideos, getTabId } from '../state.js';
 import { sendPortMessage } from '../communication.js';
 import { createLogger } from '../../shared/utils/logger.js';
 import { formatSize, formatDuration } from '../../shared/utils/video-utils.js';
+import { createVideoElement } from './video-item.js';
 
 const logger = createLogger('Video Renderer');
 
 /**
- * Render current videos from state
+ * Render current videos from state using static group structure
  */
 export async function renderVideos() {
     const videos = getVideos();
     const container = document.getElementById('videos-list');
     
     if (!videos || videos.length === 0) {
-        container.innerHTML = `<div class="initial-message">
-            <p>No videos found on the page.</p>
-            <p>Play a video or Refresh the page.</p>
-        </div>`;
+        // Hide all groups and show initial message
+        container.querySelectorAll('.video-type-group').forEach(group => {
+            group.style.display = 'none';
+            // Clear count when hiding groups
+            const sectionCount = group.querySelector('.section-count');
+            if (sectionCount) {
+                sectionCount.textContent = '';
+            }
+        });
+        container.querySelector('.initial-message').style.display = 'flex';
         return;
     }
     
     // Group videos by type
     const videoGroups = groupVideosByType(videos);
     
-    // Create document fragment for better performance
-    const fragment = document.createDocumentFragment();
+    // Hide initial message
+    container.querySelector('.initial-message').style.display = 'none';
     
-    // Create type groups (now async)
+    // Show and populate groups that have videos
     for (const [type, typeVideos] of Object.entries(videoGroups)) {
-        if (typeVideos.length === 0) continue;
+        const group = container.querySelector(`[data-video-type="${type}"]`);
+        if (!group) continue;
         
-        const group = await createTypeGroup(type, typeVideos);
-        fragment.appendChild(group);
+        if (typeVideos.length > 0) {
+            // Show group
+            group.style.display = 'block';
+            
+            // Update section count - simple textContent update
+            const sectionCount = group.querySelector('.section-count');
+            if (sectionCount) {
+                sectionCount.textContent = typeVideos.length;
+            }
+            
+            // Populate content
+            const content = group.querySelector('.section-content');
+            content.innerHTML = ''; // Clear previous items
+            
+            typeVideos.forEach(video => {
+                const videoElement = createVideoElement(video);
+                content.appendChild(videoElement);
+            });
+        } else {
+            // Hide group if no videos and clear count
+            group.style.display = 'none';
+            const sectionCount = group.querySelector('.section-count');
+            if (sectionCount) {
+                sectionCount.textContent = '';
+            }
+        }
     }
-    
-    container.innerHTML = `<div class="initial-message">
-            <p>No videos found on the page.</p>
-            <p>Play a video or Refresh the page.</p>
-        </div>`;
-    container.prepend(fragment);
 
     // Request cache stats and download progress restoration
     sendPortMessage({ command: 'getPreviewCacheStats' });    
@@ -257,4 +282,42 @@ async function deleteHistoryItem(completedAt) {
     } catch (error) {
         logger.error('Error deleting history item:', error);
     }
+}
+
+/**
+ * Group videos by type for display
+ * @param {Array} videos - The videos to group
+ * @returns {Object} Grouped videos by type
+ */
+export function groupVideosByType(videos) {
+    // Initialize video groups
+    const groups = {
+        hls: [],
+        dash: [],
+        direct: [],
+        blob: [],
+        unknown: []
+    };
+
+    // Group videos by type
+    videos.forEach(video => {
+        if (!video || !video.url) return;
+        
+        const type = video.type || 'unknown';
+        
+        // Add to appropriate group
+        if (type === 'hls') {
+            groups.hls.push(video);
+        } else if (type === 'dash') {
+            groups.dash.push(video);
+        } else if (type === 'blob') {
+            groups.blob.push(video);
+        } else if (type === 'direct') {
+            groups.direct.push(video);
+        } else {
+            groups.unknown.push(video);
+        }
+    });
+    
+    return groups;
 }
