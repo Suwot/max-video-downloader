@@ -14,6 +14,9 @@ const logger = createLogger('Download Manager');
 // Maximum concurrent downloads (set to 1 for dev/testing)
 const MAX_CONCURRENT_DOWNLOADS = 1;
 
+// Storage management constants
+const MAX_DOWNLOAD_HISTORY_ITEMS = 50;
+
 // Simple Set for active download deduplication
 const activeDownloads = new Set();
 
@@ -63,6 +66,9 @@ export async function startDownload(downloadRequest) {
         // Add to queue
         downloadQueue.push(downloadRequest);
         
+        // Add to storage with queued status
+        await addToActiveDownloadsStorage(downloadRequest);
+        
         // Notify count change
         notifyDownloadCountChange();
         
@@ -102,6 +108,11 @@ function startDownloadImmediately(downloadRequest) {
     // Add to active downloads Set for deduplication
     activeDownloads.add(downloadId);
     
+    // Add to storage or update status if already exists (from queue)
+    addToActiveDownloadsStorage(downloadRequest).then(() => {
+        updateActiveDownloadStatus(downloadId, 'downloading');
+    });
+    
     // Notify count change
     notifyDownloadCountChange();
     
@@ -123,6 +134,9 @@ function startDownloadImmediately(downloadRequest) {
         });
         
         logger.debug('🔄 Download initiated successfully:', downloadId);
+        
+        // Add to active downloads storage
+        addToActiveDownloadsStorage(downloadRequest);
     } catch (error) {
         // Only handle communication errors, not download content errors
         logger.error('Failed to communicate with native host:', error);
@@ -134,7 +148,7 @@ function startDownloadImmediately(downloadRequest) {
 }
 
 // Handle download progress updates and errors from native host
-function handleDownloadProgress(downloadId, downloadRequest, response) {
+async function handleDownloadProgress(downloadId, downloadRequest, response) {
     // response can have one of 6 commands: download-progress, download-success, download-error, download-canceled, download-queued, download-unqueued
 
     // Store progress in local map for UI restoration 
@@ -144,6 +158,20 @@ function handleDownloadProgress(downloadId, downloadRequest, response) {
     if (['download-canceled', 'download-success', 'download-error'].includes(response.command)) {
         // Remove from active downloads Set
         activeDownloads.delete(downloadId);
+        
+        // Remove from active downloads storage
+        await removeFromActiveDownloadsStorage(downloadId);
+        
+        // Add to history storage for success/error only
+        if (response.command === 'download-success' || response.command === 'download-error') {
+            await addToHistoryStorage({
+                ...response,
+                downloadUrl: downloadRequest.downloadUrl,
+                masterUrl: downloadRequest.masterUrl || null,
+                filename: downloadRequest.filename,
+                selectedOptionOrigText: downloadRequest.selectedOptionOrigText || null
+            });
+        }
         
         // Clean up progress map on completion/error/cancellation
         activeDownloadProgress.delete(downloadId);
@@ -168,6 +196,9 @@ function handleDownloadProgress(downloadId, downloadRequest, response) {
             // Create completion notification
             createCompletionNotification(downloadRequest.filename);
         }
+        
+        // Remove from active downloads storage
+        removeFromActiveDownloadsStorage(downloadId);
         
         // Process next download in queue after ANY completion (success, error, or cancellation)
         processNextDownload();
@@ -283,6 +314,9 @@ export async function cancelDownload(cancelRequest) {
     
     // Check if download is queued - remove from queue
     if (removeFromQueue(downloadId)) {
+        // Remove from storage as well
+        await removeFromActiveDownloadsStorage(downloadId);
+        
         // Notify count change after queue removal
         notifyDownloadCountChange();
         
@@ -357,4 +391,108 @@ export function removeFromQueue(downloadUrl) {
     }
     
     return false;
+}
+
+/**
+ * Add download to active downloads storage
+ * @param {Object} downloadRequest - Download request data (includes elementHTML from UI)
+ */
+async function addToActiveDownloadsStorage(downloadRequest) {
+    try {
+        const result = await chrome.storage.local.get(['downloads_active']);
+        const activeDownloads = result.downloads_active || [];
+        
+        // Store the full download entry as created by UI, preserving all original data
+        const downloadEntry = {
+            lookupUrl: downloadRequest.masterUrl || downloadRequest.downloadUrl,
+            downloadUrl: downloadRequest.downloadUrl,
+            masterUrl: downloadRequest.masterUrl || null,
+            filename: downloadRequest.filename,
+            elementHTML: downloadRequest.elementHTML, // Full HTML from UI cloning
+            timestamp: Date.now(),
+            selectedOptionOrigText: downloadRequest.selectedOptionOrigText || null,
+            status: 'queued' // Will be updated to 'downloading' when actually started
+        };
+        
+        activeDownloads.push(downloadEntry);
+        await chrome.storage.local.set({ downloads_active: activeDownloads });
+        
+        logger.debug('Added to active downloads storage:', downloadRequest.downloadUrl);
+    } catch (error) {
+        logger.error('Error adding to active downloads storage:', error);
+    }
+}
+
+/**
+ * Update download status in active downloads storage
+ * @param {string} downloadUrl - Download URL to update
+ * @param {string} status - New status ('downloading', 'queued')
+ */
+async function updateActiveDownloadStatus(downloadUrl, status) {
+    try {
+        const result = await chrome.storage.local.get(['downloads_active']);
+        const activeDownloads = result.downloads_active || [];
+        
+        const downloadIndex = activeDownloads.findIndex(entry => 
+            entry.downloadUrl === downloadUrl || entry.lookupUrl === downloadUrl
+        );
+        
+        if (downloadIndex !== -1) {
+            activeDownloads[downloadIndex].status = status;
+            await chrome.storage.local.set({ downloads_active: activeDownloads });
+            logger.debug('Updated download status in storage:', downloadUrl, status);
+        }
+    } catch (error) {
+        logger.error('Error updating download status:', error);
+    }
+}
+
+/**
+ * Remove download from active downloads storage
+ * @param {string} downloadUrl - Download URL to remove
+ */
+async function removeFromActiveDownloadsStorage(downloadUrl) {
+    try {
+        const result = await chrome.storage.local.get(['downloads_active']);
+        const activeDownloads = result.downloads_active || [];
+        
+        const lookupUrl = downloadUrl;
+        const updatedActiveDownloads = activeDownloads.filter(entry => 
+            entry.lookupUrl !== lookupUrl && entry.downloadUrl !== lookupUrl
+        );
+        
+        await chrome.storage.local.set({ downloads_active: updatedActiveDownloads });
+        logger.debug('Removed from active downloads storage:', downloadUrl);
+    } catch (error) {
+        logger.error('Error removing from active downloads storage:', error);
+    }
+}
+
+/**
+ * Add download to history storage (success/error only)
+ * @param {Object} progressData - Final progress data with completion info
+ */
+async function addToHistoryStorage(progressData) {
+    try {
+        const result = await chrome.storage.local.get(['downloads_history']);
+        const history = result.downloads_history || [];
+        
+        // Add completion timestamp
+        const historyEntry = {
+            ...progressData,
+            completedAt: Date.now()
+        };
+        
+        history.unshift(historyEntry); // Add to beginning
+        
+        // Maintain history size limit
+        if (history.length > MAX_DOWNLOAD_HISTORY_ITEMS) {
+            history.splice(MAX_DOWNLOAD_HISTORY_ITEMS);
+        }
+        
+        await chrome.storage.local.set({ downloads_history: history });
+        logger.debug('Added to history storage:', progressData.downloadUrl, progressData.command);
+    } catch (error) {
+        logger.error('Error adding to history storage:', error);
+    }
 }

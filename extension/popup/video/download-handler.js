@@ -104,20 +104,26 @@ export function updateDownloadProgress(progressData = {}) {
 
 /**
  * Update download button state based on progress
- * Updates all matching elements in both videos tab and active downloads
+ * Downloads-first: always update active downloads, optionally update videos if present
  * @param {Object} progressData - Progress data from background
  */
 function updateDownloadButton(progressData = {}) {
     const lookupUrl = progressData.masterUrl || progressData.downloadUrl;
     
-    // Target both videos container and active downloads (not history)
-    const downloadBtnWrappers = document.querySelectorAll(
-        `.videos-container .video-item[data-url="${lookupUrl}"] .download-btn-wrapper, ` +
+    // Always target active downloads (global)
+    const downloadsElements = document.querySelectorAll(
         `.active-downloads .video-item[data-url="${lookupUrl}"] .download-btn-wrapper`
     );
     
+    // Optionally target videos container (contextual)
+    const videosElements = document.querySelectorAll(
+        `.videos-container .video-item[data-url="${lookupUrl}"] .download-btn-wrapper`
+    );
+    
+    const downloadBtnWrappers = [...downloadsElements, ...videosElements];
+    
     if (downloadBtnWrappers.length === 0) {
-        logger.warn('Download button elements not found for URL:', lookupUrl);
+        logger.debug('No download button elements found for URL:', lookupUrl);
         return;
     }
     
@@ -215,21 +221,27 @@ function updateSingleDownloadButton(downloadBtn, downloadBtnWrapper, progressDat
 
 /**
  * Update entire dropdown (selected-option + dropdown-option) during download
- * Updates all matching elements in both videos tab and active downloads
+ * Downloads-first: always update active downloads, optionally update videos if present
  * @param {Object} progressData - Progress data
  */
 function updateDropdown(progressData = {}) {
     const lookupUrl = progressData.masterUrl || progressData.downloadUrl;
     const progress = progressData.progress;
 
-    // Target both videos container and active downloads (not history)
-    const downloadGroups = document.querySelectorAll(
-        `.videos-container .video-item[data-url="${lookupUrl}"] .download-group, ` +
+    // Always target active downloads (global)
+    const downloadsElements = document.querySelectorAll(
         `.active-downloads .video-item[data-url="${lookupUrl}"] .download-group`
     );
     
+    // Optionally target videos container (contextual)
+    const videosElements = document.querySelectorAll(
+        `.videos-container .video-item[data-url="${lookupUrl}"] .download-group`
+    );
+    
+    const downloadGroups = [...downloadsElements, ...videosElements];
+    
     if (downloadGroups.length === 0) {
-        logger.warn('Download group not found for URL:', lookupUrl, progressData);
+        logger.debug('No download group elements found for URL:', lookupUrl);
         return;
     }
     
@@ -441,7 +453,7 @@ async function handleQueueCancellation(progressData) {
 }
 
 /**
- * Clone video item to downloads tab and store in local storage
+ * Clone video item to downloads tab (UI only, no storage)
  * @param {HTMLElement} elementsDiv - The video item element to clone
  * @param {Object} downloadData - Download metadata
  */
@@ -457,22 +469,8 @@ async function cloneVideoItemToDownloads(elementsDiv, downloadData) {
         // Clone the element (without event listeners)
         const clonedElement = videoItem.cloneNode(true);
         
-        // Create download entry for storage
-        const downloadEntry = {
-            lookupUrl: downloadData.masterUrl || downloadData.downloadUrl,
-            downloadUrl: downloadData.downloadUrl,
-            masterUrl: downloadData.masterUrl || null,
-            filename: downloadData.filename,
-            elementHTML: clonedElement.outerHTML,
-            timestamp: Date.now(),
-            selectedOptionOrigText: downloadData.selectedOptionOrigText
-        };
-
-        // Store in active downloads
-        const result = await chrome.storage.local.get(['downloads_active']);
-        const activeDownloads = result.downloads_active || [];
-        activeDownloads.push(downloadEntry);
-        await chrome.storage.local.set({ downloads_active: activeDownloads });
+        // Add elementHTML to downloadData for storage by Download Manager
+        downloadData.elementHTML = clonedElement.outerHTML;
 
         // Insert cloned element into downloads tab and manage initial message visibility
         const activeDownloadsContainer = document.querySelector('.active-downloads');
@@ -483,6 +481,8 @@ async function cloneVideoItemToDownloads(elementsDiv, downloadData) {
             initialMessage.style.display = 'none';
         }
         activeDownloadsContainer.appendChild(clonedElement);
+        
+        logger.debug('Cloned video item to downloads UI');
 
     } catch (error) {
         logger.error('Error cloning video item to downloads:', error);
@@ -518,6 +518,7 @@ export async function restoreActiveDownloads() {
         // Hide initial message and restore downloads
         initialMessage.style.display = 'none';
         
+        // Restore full HTML elements as stored (unified with original cloning logic)
         activeDownloads.forEach(downloadEntry => {
             const tempDiv = document.createElement('div');
             tempDiv.innerHTML = downloadEntry.elementHTML;
@@ -533,19 +534,13 @@ export async function restoreActiveDownloads() {
 }
 
 /**
- * Handle download completion with unified cleanup logic
+ * Handle download completion with unified cleanup logic (UI only)
  * @param {Object} progressData - Progress data containing download info
- * @param {boolean} addToHistory - Whether to add this download to history
+ * @param {boolean} addToHistory - Whether to add this download to history (now handled by DM)
  */
 async function handleDownloadCompletion(progressData, addToHistory = false) {
     try {
         const lookupUrl = progressData.masterUrl || progressData.downloadUrl;
-
-        // Always remove from active downloads storage and UI
-        const activeResult = await chrome.storage.local.get(['downloads_active']);
-        const activeDownloads = activeResult.downloads_active || [];
-        const updatedActiveDownloads = activeDownloads.filter(entry => entry.lookupUrl !== lookupUrl);
-        await chrome.storage.local.set({ downloads_active: updatedActiveDownloads });
 
         // Remove from active downloads UI and manage initial message visibility
         const activeDownloadsContainer = document.querySelector('.active-downloads');
@@ -563,28 +558,14 @@ async function handleDownloadCompletion(progressData, addToHistory = false) {
             }
         }
 
-        logger.debug(`Cleaned up download for ${progressData.command}:`, lookupUrl);
+        logger.debug(`UI cleanup completed for ${progressData.command}:`, lookupUrl);
 
-        // Conditionally add to history
+        // Re-render history items incrementally if this was added to history
         if (addToHistory) {
-            const historyResult = await chrome.storage.local.get(['downloads_history']);
-            const history = historyResult.downloads_history || [];
-
-            history.unshift(progressData); // Add to beginning of array
-
-            // Maintain history size limit
-            if (history.length > MAX_DOWNLOAD_HISTORY_ITEMS) {
-                history.splice(MAX_DOWNLOAD_HISTORY_ITEMS);
-            }
-
-            await chrome.storage.local.set({ downloads_history: history });
-            logger.debug(`Added download to history with status: ${progressData.command}`);
-
-            // Re-render history items incrementally (prepend only the new item)
             await renderHistoryItems(false);
         }
 
     } catch (error) {
-        logger.error('Error handling download completion:', error);
+        logger.error('Error handling download completion UI:', error);
     }
 }
