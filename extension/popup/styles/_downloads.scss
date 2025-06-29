@@ -259,32 +259,12 @@
     }
 
     .filesize {
-        position: relative;
         display: flex;
         align-items: center;
         gap: 4px;
 
-        &[title] {cursor: help;}
-
         svg {
             flex-shrink: 0;
-        }
-
-        // Tooltip for detailed size breakdown
-        &[title]:hover::after {
-            content: attr(title);
-            position: absolute;
-            bottom: 100%;
-            left: 50%;
-            transform: translateX(-50%);
-            background-color: rgba(0, 0, 0, 0.9);
-            color: white;
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-size: var(--font-body);
-            white-space: nowrap;
-            z-index: 1000;
-            pointer-events: none;
         }
     }
 
@@ -301,5 +281,27 @@
     // Hide empty stats
     span:empty {
         display: none;
+    }
+
+    // Tooltip for detailed size breakdown
+    span[data-tooltip] {
+        cursor: help;
+        position: relative;
+    
+        &:hover::after {
+            content: attr(data-tooltip);
+            position: absolute;
+            bottom: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: rgba(0, 0, 0, 0.9);
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: var(--font-body);
+            white-space: nowrap;
+            z-index: 1000;
+            pointer-events: none;
+        }
     }
 }

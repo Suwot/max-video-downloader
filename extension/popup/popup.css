@@ -1855,7 +1855,6 @@ header .heading-row {
   color: var(--bg-secondary-light);
 }
 .download-stats .filesize {
-  position: relative;
   display: -webkit-box;
   display: -ms-flexbox;
   display: flex;
@@ -1864,28 +1863,9 @@ header .heading-row {
           align-items: center;
   gap: 4px;
 }
-.download-stats .filesize[title] {
-  cursor: help;
-}
 .download-stats .filesize svg {
   -ms-flex-negative: 0;
       flex-shrink: 0;
-}
-.download-stats .filesize[title]:hover::after {
-  content: attr(title);
-  position: absolute;
-  bottom: 100%;
-  left: 50%;
-  -webkit-transform: translateX(-50%);
-          transform: translateX(-50%);
-  background-color: rgba(0, 0, 0, 0.9);
-  color: white;
-  padding: 4px 8px;
-  border-radius: 4px;
-  font-size: var(--font-body);
-  white-space: nowrap;
-  z-index: 1000;
-  pointer-events: none;
 }
 .download-stats .duration {
   display: -webkit-box;
@@ -1902,6 +1882,26 @@ header .heading-row {
 }
 .download-stats span:empty {
   display: none;
+}
+.download-stats span[data-tooltip] {
+  cursor: help;
+  position: relative;
+}
+.download-stats span[data-tooltip]:hover::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  -webkit-transform: translateX(-50%);
+          transform: translateX(-50%);
+  background-color: rgba(0, 0, 0, 0.9);
+  color: white;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: var(--font-body);
+  white-space: nowrap;
+  z-index: 1000;
+  pointer-events: none;
 }
 
 .spinning {

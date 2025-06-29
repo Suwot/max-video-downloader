@@ -230,17 +230,31 @@ function buildStatsHtml(progressData) {
     
     // Quality from selectedOptionOrigText (white circle)
     if (progressData.selectedOptionOrigText) {
-        const quality = progressData.type === 'dash' ? 
-        progressData.selectedOptionOrigText.split('≈')[0]?.trim() : 
-        progressData.selectedOptionOrigText.split('•')[0]?.trim();
-        
-        if (quality) {
+        const qualityText = progressData.type === 'dash' ? 
+            progressData.selectedOptionOrigText.split('≈')[0]?.trim() : 
+            progressData.selectedOptionOrigText.split('•')[0]?.trim();
+
+        if (qualityText) {
+            let displayQuality = qualityText;
+            let tooltipAttr = '';
+            
+            // For DASH, extract quality and tooltip info
+            if (progressData.type === 'dash') {
+                const parenMatch = qualityText.match(/^([^(]+)\s*(\(.+\))?$/);
+                if (parenMatch) {
+                    displayQuality = parenMatch[1].trim();
+                    if (parenMatch[2]) {
+                        tooltipAttr = ` data-tooltip="${parenMatch[2].slice(1, -1)}"`;
+                    }
+                }
+            }
+
             stats.push(`
-                <span class="quality">
+                <span class="quality"${tooltipAttr}>
                     <svg width="4" height="4" viewBox="0 0 6 6" fill="none">
                         <circle cx="3" cy="3" r="3" fill="var(--text-primary-dark)"/>
                     </svg>
-                    ${quality}
+                    ${displayQuality}
                 </span>
             `);
         }
@@ -255,7 +269,7 @@ function buildStatsHtml(progressData) {
             const videoSize = formatSize(progressData.downloadStats.videoSize);
             const audioSize = formatSize(progressData.downloadStats.audioSize);
             stats.push(`
-                <span class="filesize" title="Video: ${videoSize}, Audio: ${audioSize}">
+                <span class="filesize" data-tooltip="Video: ${videoSize}, Audio: ${audioSize}">
                     <svg width="4" height="4" viewBox="0 0 6 6" fill="none">
                         <circle cx="3" cy="3" r="3" fill="var(--color-green)"/>
                     </svg>
