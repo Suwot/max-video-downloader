@@ -71,13 +71,6 @@ export function createVideoElement(video) {
         
         previewContainer.appendChild(statusBadge);
     }
-    
-    // Add source badge (CS or BG)
-    const sourceBadge = document.createElement('div');
-    const sourceOrigin = video.source.includes('BG');
-    sourceBadge.className = `source-badge ${sourceOrigin ? 'background' : 'content_script'}`;
-    sourceBadge.textContent = sourceOrigin ? 'BG' : 'CS';
-    previewContainer.appendChild(sourceBadge);
 
     const loader = document.createElement('div');
     loader.className = 'loader';
