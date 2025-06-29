@@ -219,9 +219,21 @@ function createHistoryItemElement(progressData) {
 function buildStatsHtml(progressData) {
     const stats = [];
     
+    // Type badge from progressData.type (bubble style)
+    if (progressData.type) {
+        stats.push(`
+            <span class="type-badge">
+                ${progressData.type.toUpperCase()}
+            </span>
+        `);
+    }
+    
     // Quality from selectedOptionOrigText (white circle)
     if (progressData.selectedOptionOrigText) {
-        const quality = progressData.selectedOptionOrigText.split('•')[0]?.trim();
+        const quality = progressData.type === 'dash' ? 
+        progressData.selectedOptionOrigText.split('≈')[0]?.trim() : 
+        progressData.selectedOptionOrigText.split('•')[0]?.trim();
+        
         if (quality) {
             stats.push(`
                 <span class="quality">

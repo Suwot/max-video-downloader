@@ -1639,9 +1639,6 @@ header .heading-row {
           flex-direction: column;
   gap: 8px;
 }
-.downloads-history .history-item {
-  opacity: 0.8;
-}
 .downloads-history .history-item.history-success {
   border-left: 3px solid var(--color-green);
 }
@@ -1843,9 +1840,22 @@ header .heading-row {
   -ms-flex-negative: 0;
       flex-shrink: 0;
 }
+.download-stats .type-badge {
+  display: inline-block;
+  font-weight: 500;
+  padding: 2px 6px;
+  border-radius: 10px;
+}
+.theme-dark .download-stats .type-badge {
+  background-color: var(--text-primary-dark);
+  color: var(--bg-secondary-dark);
+}
+.theme-light .download-stats .type-badge {
+  background-color: var(--text-primary-light);
+  color: var(--bg-secondary-light);
+}
 .download-stats .filesize {
   position: relative;
-  cursor: help;
   display: -webkit-box;
   display: -ms-flexbox;
   display: flex;
@@ -1853,6 +1863,9 @@ header .heading-row {
       -ms-flex-align: center;
           align-items: center;
   gap: 4px;
+}
+.download-stats .filesize[title] {
+  cursor: help;
 }
 .download-stats .filesize svg {
   -ms-flex-negative: 0;
