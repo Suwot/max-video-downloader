@@ -184,6 +184,11 @@ function createHistoryItemElement(progressData) {
     // Build stats (only show available data)
     const statsHtml = buildStatsHtml(progressData);
 
+    // Build error message for failed downloads
+    const errorMessageHtml = progressData.command === 'download-error' && progressData.ffmpegFinalMessage 
+        ? `<div class="error-message">${progressData.ffmpegFinalMessage}</div>` 
+        : '';
+
     historyItem.innerHTML = `
         <div class="history-header">
             <div class="completion-time">
@@ -201,6 +206,7 @@ function createHistoryItemElement(progressData) {
             </button>
         </div>
         <div class="filename">${displayFilename}</div>
+        ${errorMessageHtml}
         ${statsHtml ? `<div class="download-stats">${statsHtml}</div>` : ''}
     `;
 
