@@ -21,6 +21,12 @@ const DEFAULT_GROUP_STATES = {
     unknown: false,  // expanded by default
 };
 
+// Default downloads section states (global, not tab-specific)
+const DEFAULT_DOWNLOADS_SECTION_STATES = {
+    active: false,   // expanded by default
+    history: false,  // expanded by default
+};
+
 
 
 /**
@@ -130,6 +136,34 @@ async function setGroupState(type, isCollapsed) {
 }
 
 /**
+ * Get downloads section state from storage (global)
+ */
+async function getDownloadsSectionState(section) {
+    try {
+        const key = `downloadsSectionState_${section}`;
+        const result = await chrome.storage.local.get([key]);
+        return result[key] ?? DEFAULT_DOWNLOADS_SECTION_STATES[section] ?? false;
+    } catch (error) {
+        logger.error('Error getting downloads section state:', error);
+        return DEFAULT_DOWNLOADS_SECTION_STATES[section] ?? false;
+    }
+}
+
+/**
+ * Set downloads section state directly to storage (global)
+ */
+async function setDownloadsSectionState(section, isCollapsed) {
+    try {
+        const key = `downloadsSectionState_${section}`;
+        await chrome.storage.local.set({ [key]: isCollapsed });
+        
+        logger.debug(`Downloads section ${section} state set to:`, isCollapsed ? 'collapsed' : 'expanded');
+    } catch (error) {
+        logger.error('Error saving downloads section state:', error);
+    }
+}
+
+/**
  * Set current videos (ephemeral)
  */
 function setVideos(videos) {
@@ -177,6 +211,8 @@ export {
     setTheme,
     getGroupState,
     setGroupState,
+    getDownloadsSectionState,
+    setDownloadsSectionState,
     setVideos,
     getVideos,
     updateVideo,

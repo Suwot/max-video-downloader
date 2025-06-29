@@ -7,7 +7,7 @@
  * - Manages tab navigation and content switching
  */
 
-import { getTheme, setTheme, getVideos } from './state.js';
+import { getTheme, setTheme, getVideos, getDownloadsSectionState, setDownloadsSectionState } from './state.js';
 import { sendPortMessage, downloadCounts } from './communication.js';
 
 const logger = console; // Using console directly for UI logging
@@ -190,7 +190,7 @@ export async function initializeUI() {
     }
     
     // Initialize collapsible sections
-    initializeCollapsibleSections();
+    await initializeCollapsibleSections();
     
     return {
         container: videosContainer,
@@ -239,12 +239,15 @@ export function showToast(message, duration = 3000) {
 /**
  * Initialize collapsible sections throughout the UI
  * Finds all .section-header.collapsible elements and adds toggle functionality
+ * Handles state restoration for downloads sections (global) differently from video sections (tab-specific)
  */
-export function initializeCollapsibleSections() {
-    document.querySelectorAll('.section-header.collapsible').forEach(header => {
+export async function initializeCollapsibleSections() {
+    const headers = document.querySelectorAll('.section-header.collapsible');
+    
+    for (const header of headers) {
         // Skip if already initialized (has toggle icon)
         if (header.querySelector('.toggle-icon')) {
-            return;
+            continue;
         }
         
         // Add toggle icon using innerHTML for efficiency
@@ -259,13 +262,43 @@ export function initializeCollapsibleSections() {
         // Insert toggle icon at the end of header
         header.appendChild(toggleIcon);
         
-        // Add click handler
-        header.addEventListener('click', () => {
-            const content = header.nextElementSibling;
-            if (content?.classList.contains('section-content')) {
+        // Determine section type and restore state
+        const section = header.closest('.active-downloads-section, .downloads-history-section');
+        const content = header.nextElementSibling;
+        
+        if (section && content?.classList.contains('section-content')) {
+            // Downloads sections - restore global state
+            let sectionKey = null;
+            if (section.classList.contains('active-downloads-section')) {
+                sectionKey = 'active';
+            } else if (section.classList.contains('downloads-history-section')) {
+                sectionKey = 'history';
+            }
+            
+            if (sectionKey) {
+                // Restore downloads section state
+                const isCollapsed = await getDownloadsSectionState(sectionKey);
+                if (isCollapsed) {
+                    content.classList.add('collapsed');
+                    toggleIcon.classList.add('rotated');
+                }
+                
+                // Add click handler with state saving for downloads sections
+                header.addEventListener('click', async () => {
+                    const wasCollapsed = content.classList.contains('collapsed');
+                    content.classList.toggle('collapsed');
+                    toggleIcon.classList.toggle('rotated');
+                    
+                    // Save state
+                    await setDownloadsSectionState(sectionKey, !wasCollapsed);
+                });
+            }
+        } else if (content?.classList.contains('section-content')) {
+            // Video sections - basic toggle (state managed elsewhere by video rendering logic)
+            header.addEventListener('click', () => {
                 content.classList.toggle('collapsed');
                 toggleIcon.classList.toggle('rotated');
-            }
-        });
-    });
+            });
+        }
+    }
 }
