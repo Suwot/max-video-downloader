@@ -751,6 +751,9 @@ header .heading-row {
   background-color: var(--color-yellow);
   color: var(--text-primary-light);
 }
+.theme-dark .dropdown-option.queued:hover, .theme-dark .dropdown-option.unqueued:hover {
+  background-color: var(--color-yellow-hover);
+}
 .theme-light .dropdown-option {
   color: var(--text-secondary-light);
 }
@@ -769,6 +772,9 @@ header .heading-row {
 .theme-light .dropdown-option.queued, .theme-light .dropdown-option.unqueued {
   background-color: var(--color-yellow);
   color: var(--text-primary-light);
+}
+.theme-light .dropdown-option.queued:hover, .theme-light .dropdown-option.unqueued:hover {
+  background-color: var(--color-yellow-hover);
 }
 .dropdown-option.downloading {
   position: relative;
@@ -916,27 +922,6 @@ header .heading-row {
 .selected-option.downloading span {
   position: relative;
   z-index: 1;
-}
-.selected-option.complete {
-  background-color: var(--color-green) !important;
-  color: white !important;
-}
-.selected-option.complete path {
-  stroke: white !important;
-}
-.selected-option.error {
-  background-color: var(--color-red) !important;
-  color: white !important;
-}
-.selected-option.error path {
-  stroke: white !important;
-}
-.selected-option.canceled {
-  background-color: var(--color-orange) !important;
-  color: white !important;
-}
-.selected-option.canceled path {
-  stroke: white !important;
 }
 
 .source-badge {
@@ -1488,24 +1473,107 @@ header .heading-row {
   border-radius: 6px;
   overflow: hidden;
 }
-.download-btn-wrapper.downloading.stop-mode .download-btn {
-  background-color: var(--color-red) !important;
+.download-btn-wrapper.btn-default .download-btn {
+  background-color: var(--color-blue);
+  color: white;
 }
-.download-btn-wrapper.downloading.stop-mode .download-btn:hover {
-  background-color: var(--color-red-hover) !important;
-}
-.download-btn-wrapper.downloading.stop-mode .download-menu-btn {
-  background-color: var(--color-red) !important;
-  border-left-color: var(--color-red-hover) !important;
-}
-.download-btn-wrapper.downloading.stop-mode .download-menu-btn:hover {
-  background-color: var(--color-red-hover) !important;
-}
-.download-btn-wrapper:not(.downloading) .download-btn:hover {
+.download-btn-wrapper.btn-default .download-btn:hover {
   background-color: var(--color-blue-hover);
 }
-.download-btn-wrapper:not(.downloading) .download-menu-btn:hover {
+.download-btn-wrapper.btn-default .download-menu-btn {
+  background-color: var(--color-blue);
+  border-left-color: var(--color-blue-hover);
+}
+.download-btn-wrapper.btn-default .download-menu-btn:hover {
   background-color: var(--color-blue-hover);
+}
+.download-btn-wrapper.btn-starting .download-btn {
+  background-color: var(--color-blue);
+  color: white;
+}
+.download-btn-wrapper.btn-starting .download-btn:hover {
+  background-color: var(--color-blue-hover);
+}
+.download-btn-wrapper.btn-starting .download-menu-btn {
+  background-color: var(--color-blue);
+  border-left-color: var(--color-blue-hover);
+}
+.download-btn-wrapper.btn-starting .download-menu-btn:hover {
+  background-color: var(--color-blue-hover);
+}
+.download-btn-wrapper.btn-downloading .download-btn {
+  background-color: var(--color-red);
+  color: white;
+}
+.download-btn-wrapper.btn-downloading .download-btn:hover {
+  background-color: var(--color-red-hover);
+}
+.download-btn-wrapper.btn-downloading .download-menu-btn {
+  background-color: var(--color-red);
+  border-left-color: var(--color-red-hover);
+}
+.download-btn-wrapper.btn-downloading .download-menu-btn:hover {
+  background-color: var(--color-red-hover);
+}
+.download-btn-wrapper.btn-queued .download-btn {
+  background-color: var(--color-yellow);
+  color: var(--text-primary-light);
+}
+.download-btn-wrapper.btn-queued .download-btn:hover {
+  background-color: var(--color-yellow-hover);
+}
+.download-btn-wrapper.btn-queued .download-menu-btn {
+  background-color: var(--color-yellow);
+  color: var(--text-primary-light);
+  border-left-color: var(--color-yellow-hover);
+}
+.download-btn-wrapper.btn-queued .download-menu-btn:hover {
+  background-color: var(--color-yellow-hover);
+}
+.download-btn-wrapper.btn-queued .download-menu-btn circle {
+  fill: var(--text-primary-light);
+}
+.download-btn-wrapper.btn-error .download-btn {
+  background-color: var(--color-red);
+  color: white;
+}
+.download-btn-wrapper.btn-error .download-btn:hover {
+  background-color: var(--color-red-hover);
+}
+.download-btn-wrapper.btn-error .download-menu-btn {
+  background-color: var(--color-red);
+  border-left-color: var(--color-red-hover);
+}
+.download-btn-wrapper.btn-error .download-menu-btn:hover {
+  background-color: var(--color-red-hover);
+}
+.download-btn-wrapper.btn-success .download-btn {
+  background-color: var(--color-green);
+  color: white;
+}
+.download-btn-wrapper.btn-success .download-btn:hover {
+  background-color: var(--color-green-hover);
+}
+.download-btn-wrapper.btn-success .download-menu-btn {
+  background-color: var(--color-green);
+  border-left-color: var(--color-green-hover);
+}
+.download-btn-wrapper.btn-success .download-menu-btn:hover {
+  background-color: var(--color-green-hover);
+}
+.download-btn-wrapper.btn-canceled .download-btn {
+  background-color: var(--color-orange);
+  color: white;
+}
+.download-btn-wrapper.btn-canceled .download-btn:hover {
+  background-color: var(--color-orange-hover);
+}
+.download-btn-wrapper.btn-canceled .download-menu-btn {
+  background-color: var(--color-orange);
+  border-left-color: var(--color-orange-hover);
+}
+.download-btn-wrapper.btn-canceled .download-menu-btn:hover {
+  background-color: var(--color-orange-hover);
 }
 .download-btn-wrapper.queued .download-btn, .download-btn-wrapper.unqueued .download-btn {
   background-color: var(--color-yellow);

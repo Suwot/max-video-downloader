@@ -187,6 +187,10 @@
         &.queued, &.unqueued {
             background-color: var(--color-yellow);
             color: var(--text-primary-light);
+
+            &:hover {
+                background-color: var(--color-yellow-hover);
+            }
         }
     }
 
@@ -211,6 +215,10 @@
         &.queued, &.unqueued {
             background-color: var(--color-yellow);
             color: var(--text-primary-light);
+
+            &:hover {
+                background-color: var(--color-yellow-hover);
+            }
         }
     }
 
@@ -365,27 +373,6 @@
             position: relative;
             z-index: 1;
         }
-    }
-
-    &.complete {
-        background-color: var(--color-green) !important;
-        color: white !important;
-
-        path { stroke: white !important; }
-    }
-
-    &.error {
-        background-color: var(--color-red) !important;
-        color: white !important;
-
-        path { stroke: white !important; }
-    }
-
-    &.canceled {
-        background-color: var(--color-orange) !important;
-        color: white !important;
-
-        path { stroke: white !important; }
     }
 }
 

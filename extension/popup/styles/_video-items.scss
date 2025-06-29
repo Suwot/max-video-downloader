@@ -297,34 +297,163 @@
     border-radius: 6px;
     overflow: hidden;
 
-    &.downloading.stop-mode {
+    // =====================================================
+    // UNIFIED BUTTON STATES
+    // =====================================================
+    
+    // Default state (btn-default) - Blue button
+    &.btn-default {
         .download-btn {
-            background-color: var(--color-red) !important;
+            background-color: var(--color-blue);
+            color: white;
 
             &:hover {
-                background-color: var(--color-red-hover) !important;
+                background-color: var(--color-blue-hover);
             }
         }
 
         .download-menu-btn {
-            background-color: var(--color-red) !important;
-            border-left-color: var(--color-red-hover) !important;
+            background-color: var(--color-blue);
+            border-left-color: var(--color-blue-hover);
 
             &:hover {
-                background-color: var(--color-red-hover) !important;
+                background-color: var(--color-blue-hover);
             }
         }
     }
 
-    &:not(.downloading) {
-        .download-btn:hover {
-            background-color: var(--color-blue-hover);
+    // Starting state (btn-starting) - Blue button with cancel handler
+    &.btn-starting {
+        .download-btn {
+            background-color: var(--color-blue);
+            color: white;
+
+            &:hover {
+                background-color: var(--color-blue-hover);
+            }
         }
 
-        .download-menu-btn:hover {
-            background-color: var(--color-blue-hover);
+        .download-menu-btn {
+            background-color: var(--color-blue);
+            border-left-color: var(--color-blue-hover);
+
+            &:hover {
+                background-color: var(--color-blue-hover);
+            }
         }
     }
+
+    // Downloading state (btn-downloading) - Red stop button
+    &.btn-downloading {
+        .download-btn {
+            background-color: var(--color-red);
+            color: white;
+
+            &:hover {
+                background-color: var(--color-red-hover);
+            }
+        }
+
+        .download-menu-btn {
+            background-color: var(--color-red);
+            border-left-color: var(--color-red-hover);
+
+            &:hover {
+                background-color: var(--color-red-hover);
+            }
+        }
+    }
+
+    // Queued state (btn-queued) - Yellow cancel button
+    &.btn-queued {
+        .download-btn {
+            background-color: var(--color-yellow);
+            color: var(--text-primary-light);
+
+            &:hover {
+                background-color: var(--color-yellow-hover);
+            }
+        }
+
+        .download-menu-btn {
+            background-color: var(--color-yellow);
+            color: var(--text-primary-light);
+            border-left-color: var(--color-yellow-hover);
+
+            &:hover {
+                background-color: var(--color-yellow-hover);
+            }
+
+            circle {
+                fill: var(--text-primary-light);
+            }
+        }
+    }
+
+    // Error state (btn-error) - Red error button (retryable)
+    &.btn-error {
+        .download-btn {
+            background-color: var(--color-red);
+            color: white;
+
+            &:hover {
+                background-color: var(--color-red-hover);
+            }
+        }
+
+        .download-menu-btn {
+            background-color: var(--color-red);
+            border-left-color: var(--color-red-hover);
+
+            &:hover {
+                background-color: var(--color-red-hover);
+            }
+        }
+    }
+
+    // Success state (btn-success) - Green completion button (2 sec display)
+    &.btn-success {
+        .download-btn {
+            background-color: var(--color-green);
+            color: white;
+
+            &:hover {
+                background-color: var(--color-green-hover);
+            }
+        }
+
+        .download-menu-btn {
+            background-color: var(--color-green);
+            border-left-color: var(--color-green-hover);
+
+            &:hover {
+                background-color: var(--color-green-hover);
+            }
+        }
+    }
+
+    // Canceled state (btn-canceled) - Orange/Yellow cancellation button (2 sec display) 
+    &.btn-canceled {
+        .download-btn {
+            background-color: var(--color-orange);
+            color: white;
+
+            &:hover {
+                background-color: var(--color-orange-hover);
+            }
+        }
+
+        .download-menu-btn {
+            background-color: var(--color-orange);
+            border-left-color: var(--color-orange-hover);
+
+            &:hover {
+                background-color: var(--color-orange-hover);
+            }
+        }
+    }
+
+    // Legacy compatibility (remove once fully migrated)
 
     &.queued, &.unqueued {
         .download-btn {
