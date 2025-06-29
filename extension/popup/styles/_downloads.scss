@@ -10,6 +10,17 @@
     height: auto;
     display: flex;
     flex-direction: column;
+
+    .active-downloads-section .video-item {  
+        .dropdown-icon, .dismiss-button {
+            display: none;
+        }
+
+        .selected-option {
+            cursor: auto;
+        }
+
+    }
 }
 
 .active-downloads,

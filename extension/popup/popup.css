@@ -1452,6 +1452,13 @@ header .heading-row {
   height: 24px;
   border-radius: 6px;
   overflow: hidden;
+  width: 92px;
+}
+.download-btn-wrapper:not(.btn-default) .download-btn {
+  width: 100%;
+}
+.download-btn-wrapper:not(.btn-default) .download-menu-btn {
+  display: none;
 }
 .download-btn-wrapper.btn-default .download-btn {
   background-color: var(--color-blue);
@@ -1640,6 +1647,12 @@ header .heading-row {
   -webkit-box-direction: normal;
       -ms-flex-direction: column;
           flex-direction: column;
+}
+.downloads-container .active-downloads-section .video-item .dropdown-icon, .downloads-container .active-downloads-section .video-item .dismiss-button {
+  display: none;
+}
+.downloads-container .active-downloads-section .video-item .selected-option {
+  cursor: auto;
 }
 
 .active-downloads,

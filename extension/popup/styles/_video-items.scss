@@ -296,10 +296,21 @@
     height: 24px;
     border-radius: 6px;
     overflow: hidden;
+    width: 92px;
 
     // =====================================================
     // UNIFIED BUTTON STATES
     // =====================================================
+
+    &:not(.btn-default) {
+        .download-btn {
+            width: 100%
+        }
+
+        .download-menu-btn {
+            display: none;
+        }
+    }
     
     // Default state (btn-default) - Blue button
     &.btn-default {
