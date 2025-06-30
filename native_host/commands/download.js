@@ -130,6 +130,7 @@ class DownloadCommand extends BaseCommand {
      * @param {string} params.masterUrl Optional master manifest URL (for reporting)
      * @param {Object} params.duration Video duration (optional)
      * @param {Object} params.headers HTTP headers to use (optional)
+     * @param {boolean} params.isRedownload Whether this is a re-download request (optional)
      */
     async execute(params) {
         const { command } = params;
@@ -164,10 +165,37 @@ class DownloadCommand extends BaseCommand {
             segmentCount = null,
             // Page context fields
             pageUrl = null,
-            pageFavicon = null
+            pageFavicon = null,
+            // Re-download flag
+            isRedownload = false
         } = params;
 
+        // Store original command for error reporting and potential re-downloads
+        const originalCommand = {
+            command: 'download',
+            downloadUrl,
+            filename,
+            savePath,
+            type,
+            preferredContainer,
+            defaultContainer,
+            audioOnly,
+            streamSelection,
+            masterUrl,
+            headers,
+            fileSizeBytes,
+            duration,
+            segmentCount,
+            pageUrl,
+            pageFavicon,
+            isRedownload
+        };
+
         logDebug('Starting download:', params);
+        
+        if (isRedownload) {
+            logDebug('🔄 This is a re-download request');
+        }
         
         if (headers && Object.keys(headers).length > 0) {
             logDebug('🔑 Using headers for download request:', Object.keys(headers));
@@ -212,7 +240,9 @@ class DownloadCommand extends BaseCommand {
                 fileSizeBytes,
                 segmentCount,
                 pageUrl,
-                pageFavicon
+                pageFavicon,
+                originalCommand,
+                isRedownload
             });
             
         } catch (err) {
@@ -228,7 +258,9 @@ class DownloadCommand extends BaseCommand {
                 duration: null,
                 completedAt: Date.now(),
                 pageUrl,
-                pageFavicon
+                pageFavicon,
+                originalCommand,
+                isRedownload
             });
             throw err;
         }
@@ -509,7 +541,9 @@ class DownloadCommand extends BaseCommand {
         fileSizeBytes,
         segmentCount,
         pageUrl,
-        pageFavicon
+        pageFavicon,
+        originalCommand,
+        isRedownload
     }) {
         return new Promise(async (resolve, reject) => {
             // Probe duration upfront if not provided to avoid race conditions
@@ -706,7 +740,9 @@ class DownloadCommand extends BaseCommand {
                         },
                         completedAt: Date.now(),
                         pageUrl,
-                        pageFavicon
+                        pageFavicon,
+                        originalCommand,
+                        isRedownload
                     });
                     reject(new Error(error));
                 }
@@ -743,7 +779,9 @@ class DownloadCommand extends BaseCommand {
                         },
                         completedAt: Date.now(),
                         pageUrl,
-                        pageFavicon
+                        pageFavicon,
+                        originalCommand,
+                        isRedownload
                     });
                     
                     reject(err);
