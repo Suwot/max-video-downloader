@@ -348,6 +348,36 @@ class DownloadButtonComponent {
         
         const menuItems = [
             {
+                icon: `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-audio-lines w-3 h-3" aria-hidden="true">
+                    <path d="M2 10v3"></path>
+                    <path d="M6 6v11"></path>
+                    <path d="M10 3v18"></path>
+                    <path d="M14 8v7"></path>
+                    <path d="M18 5v13"></path>
+                    <path d="M22 10v3"></path>
+                </svg>`,
+                text: 'Extract Audio',
+                action: 'extract-audio'
+            },
+            {
+                icon: `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-captions w-3 h-3" aria-hidden="true">
+                    <rect width="18" height="14" x="3" y="5" rx="2" ry="2"></rect>
+                    <path d="M7 15h4M15 15h2M7 11h2M13 11h4"></path>
+                </svg>`,
+                text: 'Extract Subs',
+                action: 'extract-subs'
+            },
+            {
+                icon: `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-file-down w-3 h-3" aria-hidden="true">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                    <polyline points="14,2 14,8 20,8"></polyline>
+                    <path d="M12 18v-6"></path>
+                    <path d="M9 15l3 3 3-3"></path>
+                </svg>`,
+                text: 'Download As',
+                action: 'download-as'
+            },
+            {
                 icon: `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-copy w-3 h-3" aria-hidden="true">
                     <rect width="14" height="14" x="8" y="8" rx="2" ry="2"></rect>
                     <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path>
@@ -356,13 +386,12 @@ class DownloadButtonComponent {
                 action: 'copy-url'
             },
             {
-                icon: `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-info w-3 h-3" aria-hidden="true">
-                    <circle cx="12" cy="12" r="10"></circle>
-                    <path d="M12 16v-4"></path>
-                    <path d="M12 8h.01"></path>
+                icon: `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-repeat w-3 h-3" aria-hidden="true">
+                    <path d="M11 19H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h7m0 12l4-4-4-4"></path>
+                    <path d="M20 5h-7m7 0l-4 4 4 4"></path>
                 </svg>`,
-                text: 'Video Info',
-                action: 'video-info'
+                text: 'Download and Convert',
+                action: 'download-convert'
             }
         ];
         
