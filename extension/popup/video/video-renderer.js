@@ -234,6 +234,14 @@ function createHistoryItemElement(progressData) {
                         </svg>
                     </button>
                 ` : ''}
+                ${progressData.command === 'download-error' && progressData.originalCommand ? `
+                    <button class="history-retry-btn" data-tooltip="Retry download">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-rotate-ccw w-3 h-3" aria-hidden="true">
+                            <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path>
+                            <path d="M3 3v5h5"></path>
+                        </svg>
+                    </button>
+                ` : ''}
              </div>
         </div>
     `;
@@ -272,6 +280,26 @@ function createHistoryItemElement(progressData) {
                     operation: 'showInFolder',
                     params: { filePath }
                 });
+            });
+        }
+    }
+
+    // Add retry handler for failed downloads
+    if (progressData.command === 'download-error' && progressData.originalCommand) {
+        const retryBtn = historyItem.querySelector('.history-retry-btn');
+        
+        if (retryBtn) {
+            retryBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                logger.debug('Retrying download with original command:', progressData.originalCommand);
+                
+                // Send original command with isRedownload flag set to true
+                const retryCommand = {
+                    ...progressData.originalCommand,
+                    isRedownload: true
+                };
+                
+                sendPortMessage(retryCommand);
             });
         }
     }

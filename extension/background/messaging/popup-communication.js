@@ -40,8 +40,11 @@ async function handlePortMessage(message, port, portId) {
     // Commands that require tab ID validation (tab-specific operations)
     const tabSpecificCommands = ['getVideos', 'generatePreview', 'download'];
     
-    // Validate tabId for tab-specific commands only
-    if (tabSpecificCommands.includes(message.command) && !message.tabId) {
+    // Special handling for re-downloads: they have isRedownload flag and complete data
+    const isRedownload = message.command === 'download' && message.isRedownload === true;
+    
+    // Validate tabId for tab-specific commands only (except re-downloads)
+    if (tabSpecificCommands.includes(message.command) && !isRedownload && !message.tabId) {
         logger.error(`Tab-specific command '${message.command}' missing required tabId:`, message);
         return;
     }
@@ -77,6 +80,9 @@ async function handlePortMessage(message, port, portId) {
             break;
             
         case 'download':
+            if (isRedownload) {
+                logger.debug('🔄 Processing re-download request:', message);
+            }
             startDownload(message);
             break;
             

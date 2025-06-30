@@ -124,8 +124,15 @@ function startDownloadImmediately(downloadRequest) {
     const nativeHostMessage = {
         ...downloadRequest,
         command: 'download',
-        headers: getRequestHeaders(downloadRequest.tabId || -1, downloadRequest.downloadUrl) || {}
+        // For re-downloads, use existing headers; for new downloads, get fresh headers
+        headers: downloadRequest.isRedownload && downloadRequest.headers ? 
+            downloadRequest.headers : 
+            (getRequestHeaders(downloadRequest.tabId || -1, downloadRequest.downloadUrl) || {})
     };
+    
+    if (downloadRequest.isRedownload) {
+        logger.debug('🔄 Using preserved headers for re-download:', Object.keys(downloadRequest.headers || {}));
+    }
     
     // Start download with progress tracking
     try {
