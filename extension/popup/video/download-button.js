@@ -4,6 +4,9 @@
  */
 
 import { handleDownload } from './download-handler.js';
+import { createLogger } from '../../shared/utils/logger.js';
+
+const logger = createLogger('Download Button Component');
 
 // Button state constants for unified management
 const BUTTON_STATES = {
@@ -163,7 +166,7 @@ export function setButtonState(elementsDiv, state, options = {}) {
     const downloadBtn = buttonWrapper?.querySelector('.download-btn');
     
     if (!buttonWrapper || !downloadBtn) {
-        console.warn('Button elements not found for state change:', state);
+        logger.warn('Button elements not found for state change:', state);
         return;
     }
 
@@ -280,6 +283,10 @@ export function createDownloadButton(video, elementsDiv, dropdown) {
     buttonWrapper.appendChild(downloadBtn);
     buttonWrapper.appendChild(menuBtn);
     
+    // Create dropdown menu
+    const menuDropdown = createDownloadMenuDropdown();
+    buttonWrapper.appendChild(menuDropdown);
+    
     // Add wrapper to parent
     elementsDiv.appendChild(buttonWrapper);
     
@@ -287,6 +294,9 @@ export function createDownloadButton(video, elementsDiv, dropdown) {
     if (video.type === 'blob') {
         return [downloadBtn, menuBtn, buttonWrapper];
     }
+    
+    // Set up menu button click handler
+    setupMenuButtonHandler(menuBtn, menuDropdown);
     
     // Set up streamlined click handler with direct data binding (use onclick to ensure only one handler)
     const downloadHandler = async () => {
@@ -374,4 +384,145 @@ function createVideoMetadata(video) {
         pageUrl: video.pageUrl || null,
         pageFavicon: video.pageFavicon || null,
     };
+}
+
+/**
+ * Create dropdown menu for download options
+ * @returns {HTMLElement} - Dropdown element
+ */
+function createDownloadMenuDropdown() {
+    const menuDropdown = document.createElement('div');
+    menuDropdown.className = 'download-menu-dropdown';
+    
+    // Add initial menu items (more will be added gradually)
+    const menuItems = [
+        {
+            icon: `<svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M2 1a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V2a1 1 0 0 0-1-1H2zM1 2a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V2z"/>
+                <path d="M10.97 4.97a.75.75 0 0 1-1.08 1.05l-3.99-4.99a.75.75 0 0 1 1.08-1.05l3.99 4.99z"/>
+            </svg>`,
+            text: 'Copy URL',
+            action: 'copy-url',
+            disabled: false
+        },
+        {
+            icon: `<svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M1 3.5A1.5 1.5 0 0 1 2.5 2h7A1.5 1.5 0 0 1 11 3.5v5A1.5 1.5 0 0 1 9.5 10h-7A1.5 1.5 0 0 1 1 8.5v-5zM2.5 3a.5.5 0 0 0-.5.5v5a.5.5 0 0 0 .5.5h7a.5.5 0 0 0 .5-.5v-5a.5.5 0 0 0-.5-.5h-7z"/>
+                <path d="M2 5.5a.5.5 0 0 1 .5-.5h7a.5.5 0 0 1 0 1h-7a.5.5 0 0 1-.5-.5zM2 7.5a.5.5 0 0 1 .5-.5h4a.5.5 0 0 1 0 1h-4a.5.5 0 0 1-.5-.5z"/>
+            </svg>`,
+            text: 'Video Info',
+            action: 'video-info',
+            disabled: false
+        }
+    ];
+    
+    menuItems.forEach(item => {
+        const menuItem = document.createElement('button');
+        menuItem.className = 'download-menu-item';
+        if (item.disabled) {
+            menuItem.disabled = true;
+        }
+        
+        menuItem.innerHTML = `${item.icon}<span>${item.text}</span>`;
+        menuItem.dataset.action = item.action;
+        
+        // Add click handler (will be expanded later)
+        menuItem.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            handleMenuItemClick(item.action, menuItem);
+            hideDropdown(menuDropdown);
+        });
+        
+        menuDropdown.appendChild(menuItem);
+    });
+    
+    return menuDropdown;
+}
+
+/**
+ * Setup menu button click handler
+ * @param {HTMLElement} menuBtn - Menu button element
+ * @param {HTMLElement} menuDropdown - Dropdown element
+ */
+function setupMenuButtonHandler(menuBtn, menuDropdown) {
+    menuBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+
+        const isVisible = menuDropdown.classList.contains('show');
+        
+        if (isVisible) {
+            hideDropdown(menuDropdown);
+        } else {
+            showDropdown(menuDropdown);
+        }
+    });
+}
+
+/**
+ * Show dropdown menu
+ * @param {HTMLElement} menuDropdown - Dropdown element
+ */
+function showDropdown(menuDropdown) {
+    // Hide any other open dropdowns first
+    document.querySelectorAll('.download-menu-dropdown.show').forEach(otherDropdown => {
+        if (otherDropdown !== menuDropdown) {
+            hideDropdown(otherDropdown);
+        }
+    });
+
+    menuDropdown.classList.add('show');
+    
+    // Add click outside handler
+    setTimeout(() => {
+        document.addEventListener('click', (e) => handleClickOutside(e, menuDropdown), { once: true });
+    }, 0);
+}
+
+/**
+ * Hide dropdown menu
+ * @param {HTMLElement} menuDropdown - Dropdown element
+ */
+function hideDropdown(menuDropdown) {
+    menuDropdown.classList.remove('show');
+}
+
+/**
+ * Handle clicks outside dropdown to close it
+ * @param {Event} e - Click event
+ * @param {HTMLElement} menuDropdown - Dropdown element
+ */
+function handleClickOutside(e, menuDropdown) {
+    if (!menuDropdown.contains(e.target)) {
+        hideDropdown(menuDropdown);
+    } else {
+        // Re-add the listener if clicked inside dropdown
+        setTimeout(() => {
+            document.addEventListener('click', (e) => handleClickOutside(e, menuDropdown), { once: true });
+        }, 0);
+    }
+}
+
+/**
+ * Handle menu item clicks
+ * @param {string} action - Action identifier
+ * @param {HTMLElement} menuItem - Menu item element
+ */
+function handleMenuItemClick(action, menuItem) {
+    logger.log('Menu item clicked:', action);
+    
+    // TODO: Implement specific actions
+    switch (action) {
+        case 'copy-url':
+            // Will be implemented later
+            logger.log('Copy URL action');
+            break;
+        case 'video-info':
+            // Will be implemented later
+            logger.log('Video info action');
+            break;
+        default:
+            logger.warn('Unknown menu action:', action);
+    }
 }

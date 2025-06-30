@@ -84,7 +84,29 @@
     border-radius: 16px;
     gap: 4px;
 
+    // Tooltip for detailed size breakdown
 
+    span[data-tooltip] {cursor: help; }
+
+    [data-tooltip] {
+        position: relative;
+    
+        &:hover::after {
+            content: attr(data-tooltip);
+            position: absolute;
+            bottom: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: rgba(0, 0, 0, 0.9);
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: var(--font-body);
+            white-space: nowrap;
+            z-index: 101;
+            pointer-events: none;
+        }
+    }
     
     .theme-dark & {
         background-color: var(--bg-secondary-dark);
@@ -357,28 +379,6 @@
     // Hide empty stats
     span:empty {
         display: none;
-    }
-
-    // Tooltip for detailed size breakdown
-    span[data-tooltip] {
-        cursor: help;
-        position: relative;
-    
-        &:hover::after {
-            content: attr(data-tooltip);
-            position: absolute;
-            bottom: 100%;
-            left: 50%;
-            transform: translateX(-50%);
-            background-color: rgba(0, 0, 0, 0.9);
-            color: white;
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-size: var(--font-body);
-            white-space: nowrap;
-            z-index: 1000;
-            pointer-events: none;
-        }
     }
 }
 

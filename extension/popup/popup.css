@@ -1450,9 +1450,8 @@ header .heading-row {
   -ms-flex-negative: 0;
       flex-shrink: 0;
   height: 24px;
-  border-radius: 6px;
-  overflow: hidden;
   width: 92px;
+  position: relative;
 }
 .download-btn-wrapper:not(.btn-default) .download-btn {
   width: 100%;
@@ -1577,6 +1576,8 @@ header .heading-row {
   background-color: var(--color-blue);
   color: white;
   border: none;
+  border-top-left-radius: 6px;
+  border-bottom-left-radius: 6px;
   font-size: var(--font-body);
   cursor: pointer;
   text-align: center;
@@ -1626,6 +1627,8 @@ header .heading-row {
   height: 100%;
   background-color: var(--color-blue);
   border: none;
+  border-top-right-radius: 6px;
+  border-bottom-right-radius: 6px;
   cursor: pointer;
   padding: 0;
   border-left: 1px solid var(--color-blue-hover);
@@ -1636,6 +1639,115 @@ header .heading-row {
   width: 10px;
   height: 16px;
   display: block;
+}
+
+.download-menu-dropdown {
+  position: absolute;
+  top: calc(100% + 2px);
+  right: 0;
+  z-index: 100;
+  min-width: 160px;
+  border-radius: 6px;
+  -webkit-backdrop-filter: var(--backdrop-filter);
+          backdrop-filter: var(--backdrop-filter);
+  opacity: 0;
+  visibility: hidden;
+  overflow: hidden;
+  height: 0;
+  padding: 0;
+  margin: 0;
+  -webkit-transform: translateY(-4px);
+          transform: translateY(-4px);
+  -webkit-transition: opacity var(--transition-normal), visibility var(--transition-normal), height var(--transition-normal), padding var(--transition-normal), -webkit-transform var(--transition-normal);
+  transition: opacity var(--transition-normal), visibility var(--transition-normal), height var(--transition-normal), padding var(--transition-normal), -webkit-transform var(--transition-normal);
+  transition: opacity var(--transition-normal), visibility var(--transition-normal), transform var(--transition-normal), height var(--transition-normal), padding var(--transition-normal);
+  transition: opacity var(--transition-normal), visibility var(--transition-normal), transform var(--transition-normal), height var(--transition-normal), padding var(--transition-normal), -webkit-transform var(--transition-normal);
+}
+.theme-dark .download-menu-dropdown {
+  background: var(--bg-backdrop-dark);
+  border: 1px solid var(--border-primary-dark);
+}
+.theme-light .download-menu-dropdown {
+  background: var(--bg-backdrop-light);
+  -webkit-box-shadow: var(--bg-element-shadow-light);
+          box-shadow: var(--bg-element-shadow-light);
+}
+.download-menu-dropdown.show {
+  opacity: 1;
+  visibility: visible;
+  overflow: visible;
+  -webkit-transform: translateY(0);
+          transform: translateY(0);
+  height: auto;
+}
+
+.download-menu-item {
+  display: -webkit-box;
+  display: -ms-flexbox;
+  display: flex;
+  -webkit-box-align: center;
+      -ms-flex-align: center;
+          align-items: center;
+  padding: 8px 12px;
+  font-size: var(--font-body);
+  cursor: pointer;
+  -webkit-transition: background-color var(--transition-fast);
+  transition: background-color var(--transition-fast);
+  border: none;
+  background: none;
+  width: 100%;
+  text-align: left;
+}
+.download-menu-item:first-child {
+  border-top-left-radius: 6px;
+  border-top-right-radius: 6px;
+}
+.download-menu-item:last-child {
+  border-bottom-left-radius: 6px;
+  border-bottom-right-radius: 6px;
+}
+.theme-dark .download-menu-item {
+  color: var(--text-secondary-dark);
+}
+.theme-dark .download-menu-item:hover {
+  position: relative;
+  color: var(--text-primary-dark);
+  background: var(--bg-selected-dark);
+}
+.theme-dark .download-menu-item:disabled {
+  color: #666;
+  cursor: not-allowed;
+}
+.theme-light .download-menu-item {
+  color: var(--text-secondary-light);
+}
+.theme-light .download-menu-item:hover {
+  position: relative;
+  color: var(--text-primary-light);
+  background: var(--bg-element-hover-light);
+}
+.theme-light .download-menu-item:disabled {
+  color: #999;
+  cursor: not-allowed;
+}
+.download-menu-item svg {
+  width: 12px;
+  height: 12px;
+  margin-right: 8px;
+  -ms-flex-negative: 0;
+      flex-shrink: 0;
+}
+.theme-dark .download-menu-item svg {
+  fill: var(--text-secondary-dark);
+}
+.theme-light .download-menu-item svg {
+  fill: var(--text-secondary-light);
+}
+.theme-dark .download-menu-item:hover svg {
+  fill: var(--text-primary-dark);
+}
+.theme-light .download-menu-item:hover svg {
+  fill: var(--text-primary-light);
 }
 
 .downloads-container {
@@ -1717,6 +1829,28 @@ header .heading-row {
   padding: 8px;
   border-radius: 16px;
   gap: 4px;
+}
+.history-item span[data-tooltip] {
+  cursor: help;
+}
+.history-item [data-tooltip] {
+  position: relative;
+}
+.history-item [data-tooltip]:hover::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  -webkit-transform: translateX(-50%);
+          transform: translateX(-50%);
+  background-color: rgba(0, 0, 0, 0.9);
+  color: white;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: var(--font-body);
+  white-space: nowrap;
+  z-index: 101;
+  pointer-events: none;
 }
 .theme-dark .history-item {
   background-color: var(--bg-secondary-dark);
@@ -2002,26 +2136,6 @@ header .heading-row {
 }
 .download-stats span:empty {
   display: none;
-}
-.download-stats span[data-tooltip] {
-  cursor: help;
-  position: relative;
-}
-.download-stats span[data-tooltip]:hover::after {
-  content: attr(data-tooltip);
-  position: absolute;
-  bottom: 100%;
-  left: 50%;
-  -webkit-transform: translateX(-50%);
-          transform: translateX(-50%);
-  background-color: rgba(0, 0, 0, 0.9);
-  color: white;
-  padding: 4px 8px;
-  border-radius: 4px;
-  font-size: var(--font-body);
-  white-space: nowrap;
-  z-index: 1000;
-  pointer-events: none;
 }
 
 .error-message {

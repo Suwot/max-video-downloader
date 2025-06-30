@@ -294,9 +294,8 @@
     display: flex;
     flex-shrink: 0;
     height: 24px;
-    border-radius: 6px;
-    overflow: hidden;
     width: 92px;
+    position: relative; // Required for dropdown positioning
 
     // =====================================================
     // UNIFIED BUTTON STATES
@@ -473,6 +472,8 @@
     background-color: var(--color-blue);
     color: white;
     border: none;
+    border-top-left-radius: 6px;
+    border-bottom-left-radius: 6px;
     font-size: var(--font-body);
     cursor: pointer;
     text-align: center;
@@ -513,6 +514,8 @@
     height: 100%;
     background-color: var(--color-blue);
     border: none;
+    border-top-right-radius: 6px;
+    border-bottom-right-radius: 6px;
     cursor: pointer;
     padding: 0;
     border-left: 1px solid var(--color-blue-hover);
@@ -522,5 +525,123 @@
         width: 10px;
         height: 16px;
         display: block;
+    }
+}
+
+// =====================================================
+// DOWNLOAD MENU DROPDOWN
+// =====================================================
+
+.download-menu-dropdown {
+    position: absolute;
+    top: calc(100% + 2px);
+    right: 0;
+    z-index: 100; // Consistent with existing dropdowns
+    min-width: 160px;
+    border-radius: 6px;
+    backdrop-filter: var(--backdrop-filter);
+    opacity: 0;
+    visibility: hidden;
+    overflow: hidden;
+    height: 0;
+    padding: 0;
+    margin: 0;
+    transform: translateY(-4px);
+    transition: opacity var(--transition-normal), visibility var(--transition-normal), transform var(--transition-normal), height var(--transition-normal), padding var(--transition-normal);
+
+    .theme-dark & {
+        background: var(--bg-backdrop-dark);
+        border: 1px solid var(--border-primary-dark);
+    }
+
+    .theme-light & {
+        background: var(--bg-backdrop-light);
+        box-shadow: var(--bg-element-shadow-light);
+    }
+
+    &.show {
+        opacity: 1;
+        visibility: visible;
+        overflow: visible;
+        transform: translateY(0);
+        height: auto;
+    }
+}
+
+.download-menu-item {
+    display: flex;
+    align-items: center;
+    padding: 8px 12px; // Consistent with existing .dropdown-option
+    font-size: var(--font-body);
+    cursor: pointer;
+    transition: background-color var(--transition-fast);
+    border: none;
+    background: none;
+    width: 100%;
+    text-align: left;
+
+    &:first-child {
+        border-top-left-radius: 6px;
+        border-top-right-radius: 6px;
+    }
+
+    &:last-child {
+        border-bottom-left-radius: 6px;
+        border-bottom-right-radius: 6px;
+    }
+
+    .theme-dark & {
+        color: var(--text-secondary-dark);
+
+        &:hover {
+            position: relative;
+            color: var(--text-primary-dark);
+            background: var(--bg-selected-dark);
+        }
+
+        &:disabled {
+            color: #666;
+            cursor: not-allowed;
+        }
+    }
+
+    .theme-light & {
+        color: var(--text-secondary-light);
+
+        &:hover {
+            position: relative;
+            color: var(--text-primary-light);
+            background: var(--bg-element-hover-light);
+        }
+
+        &:disabled {
+            color: #999;
+            cursor: not-allowed;
+        }
+    }
+
+    svg {
+        width: 12px;
+        height: 12px;
+        margin-right: 8px;
+        flex-shrink: 0;
+
+        .theme-dark & {
+            fill: var(--text-secondary-dark);
+        }
+
+        .theme-light & {
+            fill: var(--text-secondary-light);
+        }
+    }
+
+    &:hover svg {
+        .theme-dark & {
+            fill: var(--text-primary-dark);
+        }
+
+        .theme-light & {
+            fill: var(--text-primary-light);
+        }
     }
 }
