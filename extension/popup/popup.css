@@ -1738,18 +1738,6 @@ header .heading-row {
   -ms-flex-negative: 0;
       flex-shrink: 0;
 }
-.theme-dark .download-menu-item svg {
-  fill: var(--text-secondary-dark);
-}
-.theme-light .download-menu-item svg {
-  fill: var(--text-secondary-light);
-}
-.theme-dark .download-menu-item:hover svg {
-  fill: var(--text-primary-dark);
-}
-.theme-light .download-menu-item:hover svg {
-  fill: var(--text-primary-light);
-}
 
 .downloads-container {
   height: auto;

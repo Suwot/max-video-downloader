@@ -626,23 +626,5 @@
         height: 12px;
         margin-right: 8px;
         flex-shrink: 0;
-
-        .theme-dark & {
-            fill: var(--text-secondary-dark);
-        }
-
-        .theme-light & {
-            fill: var(--text-secondary-light);
-        }
-    }
-
-    &:hover svg {
-        .theme-dark & {
-            fill: var(--text-primary-dark);
-        }
-
-        .theme-light & {
-            fill: var(--text-primary-light);
-        }
     }
 }
