@@ -66,7 +66,20 @@ export async function handleDownload(elementsDiv, videoData = {}) {
 export function updateDownloadProgress(progressData = {}) {
     logger.debug('Progress update received:', progressData.command, progressData.progress ? progressData.progress + '%' : 'No progress');
     
-    // Orchestrate all UI updates
+    // Skip video item UI updates for re-downloads (they don't have video items in the videos tab)
+    if (progressData.isRedownload) {
+        logger.debug('🔄 Re-download progress - skipping video item UI updates');
+        // Handle completion states for re-downloads (active downloads UI only)
+        if (progressData.command === 'download-success' || progressData.command === 'download-error' || progressData.command === 'download-canceled') {
+            const shouldAddToHistory = progressData.command !== 'download-canceled';
+            setTimeout(() => handleDownloadCompletion(progressData, shouldAddToHistory), 2000);
+        } else if (progressData.command === 'download-unqueued') {
+            handleDownloadCompletion(progressData, false);
+        }
+        return;
+    }
+    
+    // Orchestrate all UI updates for original downloads
     updateDownloadButton(progressData);
     updateDropdown(progressData);
     

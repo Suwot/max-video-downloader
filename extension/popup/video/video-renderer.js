@@ -296,6 +296,7 @@ function createHistoryItemElement(progressData) {
                 // Send original command with isRedownload flag set to true
                 const retryCommand = {
                     ...progressData.originalCommand,
+                    selectedOptionOrigText: progressData.selectedOptionOrigText,
                     isRedownload: true
                 };
                 

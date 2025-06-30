@@ -106,7 +106,8 @@ class DownloadCommand extends BaseCommand {
                 duration: progressTracker.getDuration(),
                 downloadStats: progressTracker.getDownloadStats() || null,
                 message: 'Download cancellation initiated successfully',
-                completedAt: Date.now()
+                completedAt: Date.now(),
+                isRedownload: processInfo.isRedownload || false
             });
             
         } catch (error) {
@@ -563,7 +564,8 @@ class DownloadCommand extends BaseCommand {
                 onProgress: (data) => {
                     this.sendProgress({
                         ...data,
-                        filename: path.basename(uniqueOutput)
+                        filename: path.basename(uniqueOutput),
+                        isRedownload
                     });
                 },
                 updateInterval: 200,
@@ -610,7 +612,8 @@ class DownloadCommand extends BaseCommand {
                 outputPath: uniqueOutput,
                 wasCanceled: false, // default
                 startTime: downloadStartTime,
-                pid: ffmpeg.pid
+                pid: ffmpeg.pid,
+                isRedownload
             });
             
             logDebug('Added process to activeProcesses Map. Total processes:', DownloadCommand.activeProcesses.size);
@@ -659,7 +662,8 @@ class DownloadCommand extends BaseCommand {
                         },
                         completedAt: Date.now(),
                         pageUrl,
-                        pageFavicon
+                        pageFavicon,
+                        isRedownload
                     });
                     return resolve({ 
                         success: false, 
@@ -685,7 +689,8 @@ class DownloadCommand extends BaseCommand {
                         },
                         completedAt: Date.now(),
                         pageUrl,
-                        pageFavicon
+                        pageFavicon,
+                        isRedownload
                     });
                     resolve({ 
                         success: true, 
@@ -711,7 +716,8 @@ class DownloadCommand extends BaseCommand {
                         },
                         completedAt: Date.now(),
                         pageUrl,
-                        pageFavicon
+                        pageFavicon,
+                        isRedownload
                     });
                     resolve({ 
                         success: false, 
