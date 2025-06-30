@@ -494,23 +494,6 @@
 // =====================================================
 // SECTION HEADER & COLLAPSIBLE COMPONENTS
 // =====================================================
-// Standardized section header component that supports both:
-// - Static headers (downloads tab)  
-// - Collapsible headers (videos tab)
-//
-// Usage Examples:
-// 
-// Static header (no toggle, no hover):
-// <div class="section-header static">
-//     <h2 class="section-title">Downloads</h2>
-// </div>
-//
-// Collapsible header (with toggle and hover):
-// <div class="section-header collapsible">
-//     <h2 class="section-title">
-//         HLS <span class="section-count">3</span>
-//     </h2>
-// </div>
 
 .section-header {
     display: flex;

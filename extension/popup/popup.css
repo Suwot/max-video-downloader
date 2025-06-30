@@ -1455,6 +1455,7 @@ header .heading-row {
 }
 .download-btn-wrapper:not(.btn-default) .download-btn {
   width: 100%;
+  border-radius: 6px;
 }
 .download-btn-wrapper:not(.btn-default) .download-menu-btn {
   display: none;
