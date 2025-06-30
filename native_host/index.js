@@ -104,8 +104,8 @@ async function processMessage(request, commandRunner) {
     const requestId = request.id;
     logDebug('Processing message:', request, 'ID:', requestId);
     
-    // Command type is in the request.type field
-    const commandType = request.type;
+    // Command type is in the request.command field
+    const commandType = request.command;
     
     // Execute the command through the command runner, passing the request ID
     return await commandRunner.executeCommand(request, requestId);
