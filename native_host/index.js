@@ -26,6 +26,7 @@ const DownloadCommand = require('./commands/download');
 const GetQualitiesCommand = require('./commands/get-qualities');
 const GeneratePreviewCommand = require('./commands/generate-preview');
 const HeartbeatCommand = require('./commands/heartbeat');
+const FileSystemCommand = require('./commands/file-system');
 
 /**
  * Application bootstrap
@@ -82,6 +83,7 @@ function registerCommands(commandRunner, registry) {
     registry.registerCommand('getQualities', GetQualitiesCommand);
     registry.registerCommand('generatePreview', GeneratePreviewCommand);
     registry.registerCommand('heartbeat', HeartbeatCommand);
+    registry.registerCommand('fileSystem', FileSystemCommand);
     
     // Register the same commands with the command runner
     commandRunner.registerCommand('download', DownloadCommand);
@@ -89,6 +91,7 @@ function registerCommands(commandRunner, registry) {
     commandRunner.registerCommand('getQualities', GetQualitiesCommand);
     commandRunner.registerCommand('generatePreview', GeneratePreviewCommand);
     commandRunner.registerCommand('heartbeat', HeartbeatCommand);
+    commandRunner.registerCommand('fileSystem', FileSystemCommand);
     
     logDebug('All commands registered');
 }
