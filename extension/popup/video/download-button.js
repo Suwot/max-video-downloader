@@ -1,9 +1,8 @@
 /**
- * Streamlined Download Button Component
- * Creates download buttons with direct data binding during UI creation
+ * Optimized Download Button Component
+ * Self-contained component with direct element references and lazy data extraction
  */
 
-import { handleDownload } from './download-handler.js';
 import { createLogger } from '../../shared/utils/logger.js';
 
 const logger = createLogger('Download Button Component');
@@ -34,495 +33,538 @@ const DOWNLOAD_BUTTON_ORIGINAL_HTML = `<span class="download-btn-icon">
 </span><span>Download</span>`;
 
 /**
- * Unified Button State Manager
- * Handles all 5 button states with clean transitions and auto-restoration
+ * Optimized Download Button Component
+ * Self-contained component with direct element references and lazy data extraction
  */
-class ButtonStateManager {
-    constructor(buttonWrapper, downloadBtn) {
-        this.buttonWrapper = buttonWrapper;
-        this.downloadBtn = downloadBtn;
+class DownloadButtonComponent {
+    constructor(video, elementsDiv) {
+        // Cache all DOM references
+        this.video = video;
+        this.elementsDiv = elementsDiv;
+        this.buttonWrapper = null;
+        this.downloadBtn = null;
+        this.menuBtn = null;
+        this.menuDropdown = null;
+        
+        // State management
         this.currentState = BUTTON_STATES.DEFAULT;
         this.restoreTimer = null;
-        this.originalHandler = downloadBtn._downloadHandler || null;
+        this.originalHandler = null;
+        
+        // Pre-bind data extraction context
+        this.dataExtractors = {
+            hls: (videoData, selectedOption) => this.extractHlsData(videoData, selectedOption),
+            dash: (videoData, selectedOption) => this.extractDashData(videoData, selectedOption),
+            direct: (videoData, selectedOption) => this.extractDirectData(videoData, selectedOption)
+        };
     }
 
     /**
-     * Set button state with unified logic
-     * @param {string} state - Button state from BUTTON_STATES
-     * @param {Object} options - Additional options (text, handler, autoRestore)
+     * Create and render the complete button UI
+     * @returns {Array} - [downloadBtn, menuBtn, buttonWrapper]
      */
-    setState(state, options = {}) {
-        // Clear any existing restore timer
+    render() {
+        // Create button wrapper
+        this.buttonWrapper = document.createElement('div');
+        this.buttonWrapper.className = 'download-btn-wrapper btn-default';
+        
+        // Create main download button
+        this.downloadBtn = document.createElement('button');
+        this.downloadBtn.className = 'download-btn';
+        this.downloadBtn.innerHTML = DOWNLOAD_BUTTON_ORIGINAL_HTML;
+        
+        // Create menu button
+        this.menuBtn = document.createElement('button');
+        this.menuBtn.className = 'download-menu-btn';
+        this.menuBtn.title = 'More options';
+        this.menuBtn.innerHTML = `
+            <svg width="10" height="16" viewBox="0 0 10 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="5" cy="5" r="1" fill="#FAFAFA"/>
+                <circle cx="5" cy="8" r="1" fill="#FAFAFA"/>
+                <circle cx="5" cy="11" r="1" fill="#FAFAFA"/>
+            </svg>
+        `;
+        
+        // Create dropdown menu
+        this.menuDropdown = this.createMenuDropdown();
+        
+        // Assemble UI
+        this.buttonWrapper.appendChild(this.downloadBtn);
+        this.buttonWrapper.appendChild(this.menuBtn);
+        this.buttonWrapper.appendChild(this.menuDropdown);
+        this.elementsDiv.appendChild(this.buttonWrapper);
+        
+        // Store component reference on wrapper for external access
+        this.buttonWrapper._component = this;
+        
+        // Skip setup for blob videos
+        if (this.video.type === 'blob') {
+            return [this.downloadBtn, this.menuBtn, this.buttonWrapper];
+        }
+        
+        // Setup event handlers
+        this.setupEventHandlers();
+        
+        return [this.downloadBtn, this.menuBtn, this.buttonWrapper];
+    }
+
+    /**
+     * Setup all event handlers with direct references
+     */
+    setupEventHandlers() {
+        // Setup download handler
+        this.originalHandler = async () => {
+            const videoData = this.createVideoMetadata();
+            this.extractDownloadData(videoData);
+            
+            const cancelHandler = () => this.sendCancelMessage(videoData);
+            this.updateState(BUTTON_STATES.STARTING, {
+                text: 'Starting...',
+                handler: cancelHandler
+            });
+            
+            // Import and call download handler
+            const { handleDownload } = await import('./download-handler.js');
+            handleDownload(this.elementsDiv, videoData);
+        };
+        
+        this.downloadBtn.onclick = this.originalHandler;
+        
+        // Setup menu button handler
+        this.menuBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            this.toggleMenuDropdown();
+        });
+    }
+
+    /**
+     * Unified state update method - replaces all external state functions
+     * @param {string} state - Button state
+     * @param {Object} options - State options
+     */
+    updateState(state, options = {}) {
+        // Clear restore timer
         if (this.restoreTimer) {
             clearTimeout(this.restoreTimer);
             this.restoreTimer = null;
         }
 
-        // Clear all state classes
-        this.buttonWrapper.classList.remove(
-            'btn-default', 'btn-starting', 'btn-downloading', 'btn-queued', 'btn-error', 'btn-success', 'btn-canceled'
-        );
-
-        // Set new state
+        // Update state and classes
         this.currentState = state;
+        this.buttonWrapper.className = `download-btn-wrapper btn-${state}`;
         
+        // Update button content and handler
         switch (state) {
             case BUTTON_STATES.DEFAULT:
-                this.buttonWrapper.classList.add('btn-default');
                 this.downloadBtn.innerHTML = DOWNLOAD_BUTTON_ORIGINAL_HTML;
                 this.downloadBtn.onclick = this.originalHandler;
                 break;
-
+                
             case BUTTON_STATES.STARTING:
-                this.buttonWrapper.classList.add('btn-starting');
                 this.downloadBtn.innerHTML = options.text || 'Starting...';
                 this.downloadBtn.onclick = options.handler || null;
                 break;
-
+                
             case BUTTON_STATES.DOWNLOADING:
-                this.buttonWrapper.classList.add('btn-downloading');
                 this.downloadBtn.innerHTML = options.text || 'Stop';
                 this.downloadBtn.onclick = options.handler || null;
                 break;
-
+                
             case BUTTON_STATES.QUEUED:
-                this.buttonWrapper.classList.add('btn-queued');
                 this.downloadBtn.innerHTML = options.text || 'Cancel';
                 this.downloadBtn.onclick = options.handler || null;
                 break;
-
+                
             case BUTTON_STATES.ERROR:
-                this.buttonWrapper.classList.add('btn-error');
                 this.downloadBtn.innerHTML = options.text || 'Error';
-                this.downloadBtn.onclick = this.originalHandler; // Restore original for retry
+                this.downloadBtn.onclick = this.originalHandler;
                 break;
-
+                
             case BUTTON_STATES.SUCCESS:
-                this.buttonWrapper.classList.add('btn-success');
                 this.downloadBtn.innerHTML = options.text || 'Completed!';
-                this.downloadBtn.onclick = this.originalHandler; // Allow retry/redownload
+                this.downloadBtn.onclick = this.originalHandler;
                 break;
-
+                
             case BUTTON_STATES.CANCELED:
-                this.buttonWrapper.classList.add('btn-canceled');
                 this.downloadBtn.innerHTML = options.text || 'Canceled';
-                this.downloadBtn.onclick = this.originalHandler; // Allow retry
+                this.downloadBtn.onclick = this.originalHandler;
                 break;
         }
 
         // Auto-restore if requested
         if (options.autoRestore) {
             this.restoreTimer = setTimeout(() => {
-                this.setState(BUTTON_STATES.DEFAULT);
+                this.updateState(BUTTON_STATES.DEFAULT);
             }, options.autoRestoreDelay || 2000);
         }
     }
 
     /**
-     * Set intermediary state (e.g., "Starting...", "Stopping...", "Cancelling...")
+     * Set intermediary text without changing state
      * @param {string} text - Text to display
      */
-    setIntermediaryState(text) {
+    setIntermediaryText(text) {
         this.downloadBtn.innerHTML = text;
-        // Keep current state class, just change text
     }
 
     /**
-     * Restore to original state
+     * Create video metadata for download
+     * @returns {Object} - Video metadata
      */
-    restoreOriginal() {
-        this.setState(BUTTON_STATES.DEFAULT);
+    createVideoMetadata() {
+        let defaultContainer = this.video.defaultContainer || null;
+        
+        if (this.video.type === 'hls' && !defaultContainer) {
+            defaultContainer = 'mp4';
+        }
+        
+        return {
+            filename: this.video.title,
+            type: this.video.type,
+            defaultContainer: defaultContainer,
+            segmentCount: this.video.type === 'hls' ? this.video.variants?.[0].metaJS?.segmentCount : null,
+            duration: this.video.duration || null,
+            masterUrl: this.video.isMaster ? this.video.url : null,
+            pageUrl: this.video.pageUrl || null,
+            pageFavicon: this.video.pageFavicon || null,
+        };
     }
 
     /**
-     * Get current state
+     * Extract download data based on user selection (lazy evaluation)
+     * @param {Object} videoData - Video metadata to populate
      */
-    getCurrentState() {
-        return this.currentState;
+    extractDownloadData(videoData) {
+        const selectedOption = this.elementsDiv.querySelector('.selected-option');
+        const extractor = this.dataExtractors[videoData.type] || this.dataExtractors.direct;
+        extractor(videoData, selectedOption);
     }
 
     /**
-     * Cleanup - call when button is removed
+     * Extract HLS-specific data
+     */
+    extractHlsData(videoData, selectedOption) {
+        videoData.downloadUrl = selectedOption?.dataset.url;
+        videoData.fileSizeBytes = selectedOption?.dataset.filesize || null;
+    }
+
+    /**
+     * Extract DASH-specific data
+     */
+    extractDashData(videoData, selectedOption) {
+        videoData.downloadUrl = selectedOption?.dataset.url;
+        videoData.streamSelection = selectedOption?.dataset.trackMap || null;
+        videoData.defaultContainer = selectedOption?.dataset.defaultContainer || null;
+        videoData.fileSizeBytes = selectedOption?.dataset.totalfilesize || null;
+    }
+
+    /**
+     * Extract direct video data
+     */
+    extractDirectData(videoData, selectedOption) {
+        videoData.downloadUrl = selectedOption?.dataset.url;
+        videoData.fileSizeBytes = selectedOption?.dataset.filesize || null;
+    }
+
+    /**
+     * Send cancel message for download
+     * @param {Object} videoData - Video data with URLs
+     */
+    sendCancelMessage(videoData) {
+        const cancelMessage = {
+            command: 'cancel-download',
+            downloadUrl: videoData.downloadUrl,
+            masterUrl: videoData.masterUrl || null,
+            selectedOptionOrigText: this.elementsDiv.querySelector('.selected-option')?.textContent || ''
+        };
+        
+        import('../communication.js').then(({ sendPortMessage }) => {
+            sendPortMessage(cancelMessage);
+        });
+    }
+
+    /**
+     * Toggle menu dropdown visibility
+     */
+    toggleMenuDropdown() {
+        const isVisible = this.menuDropdown.classList.contains('show');
+        
+        if (isVisible) {
+            this.hideMenuDropdown();
+        } else {
+            this.showMenuDropdown();
+        }
+    }
+
+    /**
+     * Show menu dropdown
+     */
+    showMenuDropdown() {
+        // Hide other dropdowns
+        document.querySelectorAll('.download-menu-dropdown.show').forEach(dropdown => {
+            if (dropdown !== this.menuDropdown) {
+                dropdown.classList.remove('show');
+            }
+        });
+
+        this.menuDropdown.classList.add('show');
+        
+        // Setup click outside handler
+        setTimeout(() => {
+            document.addEventListener('click', (e) => this.handleClickOutside(e), { once: true });
+        }, 0);
+    }
+
+    /**
+     * Hide menu dropdown
+     */
+    hideMenuDropdown() {
+        this.menuDropdown.classList.remove('show');
+    }
+
+    /**
+     * Handle clicks outside dropdown
+     * @param {Event} e - Click event
+     */
+    handleClickOutside(e) {
+        if (!this.menuDropdown.contains(e.target)) {
+            this.hideMenuDropdown();
+        } else {
+            // Re-add listener if clicked inside
+            setTimeout(() => {
+                document.addEventListener('click', (e) => this.handleClickOutside(e), { once: true });
+            }, 0);
+        }
+    }
+
+    /**
+     * Create dropdown menu for additional options
+     * @returns {HTMLElement} - Dropdown element
+     */
+    createMenuDropdown() {
+        const menuDropdown = document.createElement('div');
+        menuDropdown.className = 'download-menu-dropdown';
+        
+        const menuItems = [
+            {
+                icon: `<svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M2 1a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V2a1 1 0 0 0-1-1H2zM1 2a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V2z"/>
+                    <path d="M10.97 4.97a.75.75 0 0 1-1.08 1.05l-3.99-4.99a.75.75 0 0 1 1.08-1.05l3.99 4.99z"/>
+                </svg>`,
+                text: 'Copy URL',
+                action: 'copy-url'
+            },
+            {
+                icon: `<svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M1 3.5A1.5 1.5 0 0 1 2.5 2h7A1.5 1.5 0 0 1 11 3.5v5A1.5 1.5 0 0 1 9.5 10h-7A1.5 1.5 0 0 1 1 8.5v-5zM2.5 3a.5.5 0 0 0-.5.5v5a.5.5 0 0 0 .5.5h7a.5.5 0 0 0 .5-.5v-5a.5.5 0 0 0-.5-.5h-7z"/>
+                    <path d="M2 5.5a.5.5 0 0 1 .5-.5h7a.5.5 0 0 1 0 1h-7a.5.5 0 0 1-.5-.5zM2 7.5a.5.5 0 0 1 .5-.5h4a.5.5 0 0 1 0 1h-4a.5.5 0 0 1-.5-.5z"/>
+                </svg>`,
+                text: 'Video Info',
+                action: 'video-info'
+            }
+        ];
+        
+        menuItems.forEach(item => {
+            const menuItem = document.createElement('button');
+            menuItem.className = 'download-menu-item';
+            menuItem.innerHTML = `${item.icon}<span>${item.text}</span>`;
+            menuItem.dataset.action = item.action;
+            
+            menuItem.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                this.handleMenuItemClick(item.action);
+                this.hideMenuDropdown();
+            });
+            
+            menuDropdown.appendChild(menuItem);
+        });
+        
+        return menuDropdown;
+    }
+
+    /**
+     * Handle menu item clicks
+     * @param {string} action - Action identifier
+     */
+    handleMenuItemClick(action) {
+        logger.log('Menu item clicked:', action);
+        // TODO: Implement specific actions
+    }
+
+    /**
+     * Cleanup component resources
      */
     cleanup() {
         if (this.restoreTimer) {
             clearTimeout(this.restoreTimer);
             this.restoreTimer = null;
         }
+        
+        if (this.buttonWrapper) {
+            this.buttonWrapper._component = null;
+        }
     }
 }
 
-// Store state managers by wrapper element for lookup
-const stateManagers = new WeakMap();
+/**
+ * Backward compatibility API for external state management
+ * Uses component references for optimized performance
+ */
 
 /**
- * Public API for external state management
- * @param {HTMLElement} elementsDiv - Parent container to find button wrapper
- * @param {string} state - Button state 
+ * Create minimal fallback component for cloned elements
+ * @param {HTMLElement} buttonWrapper - Button wrapper element
+ * @param {HTMLElement} elementsDiv - Parent container
+ * @returns {Object} - Minimal component with updateState method
+ */
+function createFallbackComponent(buttonWrapper, elementsDiv) {
+    const downloadBtn = buttonWrapper.querySelector('.download-btn');
+    const menuBtn = buttonWrapper.querySelector('.download-menu-btn');
+    
+    return {
+        buttonWrapper,
+        downloadBtn,
+        menuBtn,
+        elementsDiv,
+        currentState: BUTTON_STATES.DEFAULT,
+        restoreTimer: null,
+        
+        updateState(state, options = {}) {
+            // Clear restore timer
+            if (this.restoreTimer) {
+                clearTimeout(this.restoreTimer);
+                this.restoreTimer = null;
+            }
+
+            // Update state and classes
+            this.currentState = state;
+            this.buttonWrapper.className = `download-btn-wrapper btn-${state}`;
+            
+            // Update button content and attach handlers for cancel/stop actions
+            switch (state) {
+                case BUTTON_STATES.DEFAULT:
+                    this.downloadBtn.innerHTML = DOWNLOAD_BUTTON_ORIGINAL_HTML;
+                    this.downloadBtn.onclick = null;
+                    break;
+                    
+                case BUTTON_STATES.STARTING:
+                    this.downloadBtn.innerHTML = options.text || 'Starting...';
+                    this.downloadBtn.onclick = options.handler || null;
+                    break;
+                    
+                case BUTTON_STATES.DOWNLOADING:
+                    this.downloadBtn.innerHTML = options.text || 'Stop';
+                    this.downloadBtn.onclick = options.handler || null;
+                    break;
+                    
+                case BUTTON_STATES.QUEUED:
+                    this.downloadBtn.innerHTML = options.text || 'Cancel';
+                    this.downloadBtn.onclick = options.handler || null;
+                    break;
+                    
+                case BUTTON_STATES.ERROR:
+                    this.downloadBtn.innerHTML = options.text || 'Error';
+                    this.downloadBtn.onclick = null;
+                    break;
+                    
+                case BUTTON_STATES.SUCCESS:
+                    this.downloadBtn.innerHTML = options.text || 'Completed!';
+                    this.downloadBtn.onclick = null;
+                    break;
+                    
+                case BUTTON_STATES.CANCELED:
+                    this.downloadBtn.innerHTML = options.text || 'Canceled';
+                    this.downloadBtn.onclick = null;
+                    break;
+            }
+
+            // Auto-restore if requested
+            if (options.autoRestore) {
+                this.restoreTimer = setTimeout(() => {
+                    this.updateState(BUTTON_STATES.DEFAULT);
+                }, options.autoRestoreDelay || 2000);
+            }
+        },
+        
+        setIntermediaryText(text) {
+            this.downloadBtn.innerHTML = text;
+        }
+    };
+}
+
+/**
+ * Set button state via component interface
+ * @param {HTMLElement} elementsDiv - Parent container
+ * @param {string} state - Button state
  * @param {Object} options - State options
  */
 export function setButtonState(elementsDiv, state, options = {}) {
     const buttonWrapper = elementsDiv.querySelector('.download-btn-wrapper');
-    const downloadBtn = buttonWrapper?.querySelector('.download-btn');
+    let component = buttonWrapper?._component;
     
-    if (!buttonWrapper || !downloadBtn) {
-        logger.warn('Button elements not found for state change:', state);
+    // Self-healing: create component if missing (for cloned elements)
+    if (!component && buttonWrapper) {
+        component = createFallbackComponent(buttonWrapper, elementsDiv);
+        buttonWrapper._component = component;
+    }
+    
+    if (!component) {
+        logger.warn('Button component not found for state change:', state);
         return;
     }
-
-    // Get or create state manager
-    let stateManager = stateManagers.get(buttonWrapper);
-    if (!stateManager) {
-        stateManager = new ButtonStateManager(buttonWrapper, downloadBtn);
-        stateManagers.set(buttonWrapper, stateManager);
-    }
-
-    stateManager.setState(state, options);
+    
+    component.updateState(state, options);
 }
 
 /**
- * Set intermediary text state
- * @param {HTMLElement} elementsDiv - Parent container 
+ * Set intermediary text via component interface
+ * @param {HTMLElement} elementsDiv - Parent container
  * @param {string} text - Intermediary text
  */
 export function setButtonIntermediaryState(elementsDiv, text) {
     const buttonWrapper = elementsDiv.querySelector('.download-btn-wrapper');
+    let component = buttonWrapper?._component;
     
-    if (!buttonWrapper) return;
+    // Self-healing: create component if missing (for cloned elements)
+    if (!component && buttonWrapper) {
+        component = createFallbackComponent(buttonWrapper, elementsDiv);
+        buttonWrapper._component = component;
+    }
     
-    const stateManager = stateManagers.get(buttonWrapper);
-    if (stateManager) {
-        stateManager.setIntermediaryState(text);
+    if (component) {
+        component.setIntermediaryText(text);
     }
 }
 
 /**
- * Restore button to original state
+ * Restore button to original state via component interface
  * @param {HTMLElement} elementsDiv - Parent container
  */
 export function restoreButtonState(elementsDiv) {
     const buttonWrapper = elementsDiv.querySelector('.download-btn-wrapper');
+    let component = buttonWrapper?._component;
     
-    if (!buttonWrapper) return;
+    // Self-healing: create component if missing (for cloned elements)
+    if (!component && buttonWrapper) {
+        component = createFallbackComponent(buttonWrapper, elementsDiv);
+        buttonWrapper._component = component;
+    }
     
-    const stateManager = stateManagers.get(buttonWrapper);
-    if (stateManager) {
-        stateManager.restoreOriginal();
+    if (component) {
+        component.updateState(BUTTON_STATES.DEFAULT);
     }
 }
 
 /**
- * Handle download initiation with immediate state change
- * @param {HTMLElement} elementsDiv - Parent container
- * @param {Object} videoData - Video metadata
- * @param {Function} cancelHandler - Cancellation handler function
- */
-export function handleDownloadWithStateChange(elementsDiv, videoData, cancelHandler) {
-    // Immediately set to starting state with cancel handler
-    setButtonState(elementsDiv, BUTTON_STATES.STARTING, {
-        text: 'Starting...',
-        handler: cancelHandler
-    });
-    
-    // Call original download handler
-    handleDownload(elementsDiv, videoData);
-}
-
-/**
- * Creates a download button with integrated data extraction
- * Optimized for UI creation flow where all components are available
+ * Create download button with optimized component architecture
  * @param {Object} video - Video object
  * @param {HTMLElement} elementsDiv - Parent container for the button
- * @param {HTMLElement} dropdown - Dropdown element reference (required during UI creation)
+ * @param {HTMLElement} dropdown - Dropdown element reference (not used but kept for compatibility)
  * @returns {Array} - Array containing [downloadBtn, menuBtn, buttonWrapper]
  */
 export function createDownloadButton(video, elementsDiv, dropdown) {
-    // Create button wrapper
-    const buttonWrapper = document.createElement('div');
-    buttonWrapper.className = 'download-btn-wrapper btn-default';
-    
-    // Create main download button
-    const downloadBtn = document.createElement('button');
-    downloadBtn.className = 'download-btn';
-    
-    // Add download icon and text
-    const iconSpan = document.createElement('span');
-    iconSpan.className = 'download-btn-icon';
-    iconSpan.innerHTML = `
-        <svg width="9" height="9" viewBox="0 0 9 9" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <g clip-path="url(#clip0_43_340)">
-                <path d="M5.0625 0.5625C5.0625 0.251367 4.81113 0 4.5 0C4.18887 0 3.9375 0.251367 3.9375 0.5625V4.82871L2.64727 3.53848C2.42754 3.31875 2.0707 3.31875 1.85098 3.53848C1.63125 3.7582 1.63125 4.11504 1.85098 4.33477L4.10098 6.58477C4.3207 6.80449 4.67754 6.80449 4.89727 6.58477L7.14727 4.33477C7.36699 4.11504 7.36699 3.7582 7.14727 3.53848C6.92754 3.31875 6.5707 3.31875 6.35098 3.53848L5.0625 4.82871V0.5625ZM1.125 6.1875C0.504492 6.1875 0 6.69199 0 7.3125V7.875C0 8.49551 0.504492 9 1.125 9H7.875C8.49551 9 9 8.49551 9 7.875V7.3125C9 6.69199 8.49551 6.1875 7.875 6.1875H6.09082L5.29453 6.98379C4.85508 7.42324 4.14316 7.42324 3.70371 6.98379L2.90918 6.1875H1.125ZM7.59375 7.17188C7.70564 7.17188 7.81294 7.21632 7.89206 7.29544C7.97118 7.37456 8.01562 7.48186 8.01562 7.59375C8.01562 7.70564 7.97118 7.81294 7.89206 7.89206C7.81294 7.97118 7.70564 8.01562 7.59375 8.01562C7.48186 8.01562 7.37456 7.97118 7.29544 7.89206C7.21632 7.81294 7.17188 7.70564 7.17188 7.59375C7.17188 7.48186 7.21632 7.37456 7.29544 7.29544C7.37456 7.21632 7.48186 7.17188 7.59375 7.17188Z" fill="#FAFAFA"/>
-            </g>
-            <defs>
-                <clipPath id="clip0_43_340">
-                    <path d="M0 0H9V9H0V0Z" fill="white"/>
-                </clipPath>
-            </defs>
-        </svg>
-    `;
-    const textSpan = document.createElement('span');
-    textSpan.textContent = 'Download';
-    downloadBtn.appendChild(iconSpan);
-    downloadBtn.appendChild(textSpan);
-    
-    // Create menu button (three dots) - ready for future options
-    const menuBtn = document.createElement('button');
-    menuBtn.className = 'download-menu-btn';
-    menuBtn.title = 'More options';
-    
-    // Add SVG dots
-    menuBtn.innerHTML = `
-        <svg width="10" height="16" viewBox="0 0 10 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <circle cx="5" cy="5" r="1" fill="#FAFAFA"/>
-            <circle cx="5" cy="8" r="1" fill="#FAFAFA"/>
-            <circle cx="5" cy="11" r="1" fill="#FAFAFA"/>
-        </svg>
-    `;
-    
-    // Add buttons to wrapper
-    buttonWrapper.appendChild(downloadBtn);
-    buttonWrapper.appendChild(menuBtn);
-    
-    // Create dropdown menu
-    const menuDropdown = createDownloadMenuDropdown();
-    buttonWrapper.appendChild(menuDropdown);
-    
-    // Add wrapper to parent
-    elementsDiv.appendChild(buttonWrapper);
-    
-    // Skip blob videos (no download capability)
-    if (video.type === 'blob') {
-        return [downloadBtn, menuBtn, buttonWrapper];
-    }
-    
-    // Set up menu button click handler
-    setupMenuButtonHandler(menuBtn, menuDropdown);
-    
-    // Set up streamlined click handler with direct data binding (use onclick to ensure only one handler)
-    const downloadHandler = async () => {
-        const videoData = createVideoMetadata(video);
-        extractDownloadData(videoData, elementsDiv);
-        
-        // Create cancel handler for immediate state switching
-        const cancelHandler = () => {
-            // Send cancel request - same logic for all cancel states
-            const cancelMessage = {
-                command: 'cancel-download',
-                downloadUrl: videoData.downloadUrl,
-                masterUrl: videoData.masterUrl || null,
-                selectedOptionOrigText: elementsDiv.querySelector('.selected-option')?.textContent || ''
-            };
-            import('../communication.js').then(({ sendPortMessage }) => {
-                sendPortMessage(cancelMessage);
-            });
-        };
-        
-        // Use new unified handler that immediately changes state
-        handleDownloadWithStateChange(elementsDiv, videoData, cancelHandler);
-    };
-    downloadBtn.onclick = downloadHandler;
-    // Store handler for later restoration
-    downloadBtn._downloadHandler = downloadHandler;
-    
-    return [downloadBtn, menuBtn, buttonWrapper];
-}
-
-/**
- * Unified data extraction for all video types
- * Uses dropdown reference directly since it's available during UI creation
- * @param {Object} videoData - Video metadata object to populate
- * @param {Object} video - Original video object
- * @param {HTMLElement} dropdown - Dropdown element reference
- */
-function extractDownloadData(videoData, elementsDiv) {
-    const selectedOption = elementsDiv.querySelector('.selected-option');
-
-    // Data extraction mapping by video type
-    const dataExtractors = {
-        hls: () => {
-            videoData.downloadUrl = selectedOption?.dataset.url;
-            videoData.fileSizeBytes = selectedOption?.dataset.filesize || null;
-        },
-        dash: () => {
-            videoData.downloadUrl = selectedOption?.dataset.url; // it's always dash manifest url
-            videoData.streamSelection = selectedOption?.dataset.trackMap || null;
-            videoData.defaultContainer = selectedOption?.dataset.defaultContainer || null;
-            videoData.fileSizeBytes = selectedOption?.dataset.totalfilesize || null;
-        },
-        direct: () => {
-            videoData.downloadUrl = selectedOption?.dataset.url; // it's always direct URL
-            videoData.fileSizeBytes = selectedOption?.dataset.filesize || null;
-        }
-    };
-    
-    // Execute type-specific extraction or default to direct
-    const extractor = dataExtractors[videoData.type] || dataExtractors.direct;
-    extractor();
-}
-
-/**
- * Create standard video metadata object for downloads
- * @param {Object} video - Video data
- * @returns {Object} - Video metadata
- */
-function createVideoMetadata(video) {
-    // Determine defaultContainer based on type
-    let defaultContainer = video.defaultContainer || null;
-    
-    // For HLS, always default to mp4 if not set
-    if (video.type === 'hls' && !defaultContainer) {
-        defaultContainer = 'mp4';
-    }
-    
-    return {
-        filename: video.title,
-        type: video.type,
-        defaultContainer: defaultContainer,
-        segmentCount: video.type === 'hls' ? video.variants?.[0].metaJS?.segmentCount : null,
-        duration: video.duration || null,
-        masterUrl: video.isMaster ? video.url : null,
-        pageUrl: video.pageUrl || null,
-        pageFavicon: video.pageFavicon || null,
-    };
-}
-
-/**
- * Create dropdown menu for download options
- * @returns {HTMLElement} - Dropdown element
- */
-function createDownloadMenuDropdown() {
-    const menuDropdown = document.createElement('div');
-    menuDropdown.className = 'download-menu-dropdown';
-    
-    // Add initial menu items (more will be added gradually)
-    const menuItems = [
-        {
-            icon: `<svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M2 1a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V2a1 1 0 0 0-1-1H2zM1 2a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V2z"/>
-                <path d="M10.97 4.97a.75.75 0 0 1-1.08 1.05l-3.99-4.99a.75.75 0 0 1 1.08-1.05l3.99 4.99z"/>
-            </svg>`,
-            text: 'Copy URL',
-            action: 'copy-url',
-            disabled: false
-        },
-        {
-            icon: `<svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M1 3.5A1.5 1.5 0 0 1 2.5 2h7A1.5 1.5 0 0 1 11 3.5v5A1.5 1.5 0 0 1 9.5 10h-7A1.5 1.5 0 0 1 1 8.5v-5zM2.5 3a.5.5 0 0 0-.5.5v5a.5.5 0 0 0 .5.5h7a.5.5 0 0 0 .5-.5v-5a.5.5 0 0 0-.5-.5h-7z"/>
-                <path d="M2 5.5a.5.5 0 0 1 .5-.5h7a.5.5 0 0 1 0 1h-7a.5.5 0 0 1-.5-.5zM2 7.5a.5.5 0 0 1 .5-.5h4a.5.5 0 0 1 0 1h-4a.5.5 0 0 1-.5-.5z"/>
-            </svg>`,
-            text: 'Video Info',
-            action: 'video-info',
-            disabled: false
-        }
-    ];
-    
-    menuItems.forEach(item => {
-        const menuItem = document.createElement('button');
-        menuItem.className = 'download-menu-item';
-        if (item.disabled) {
-            menuItem.disabled = true;
-        }
-        
-        menuItem.innerHTML = `${item.icon}<span>${item.text}</span>`;
-        menuItem.dataset.action = item.action;
-        
-        // Add click handler (will be expanded later)
-        menuItem.addEventListener('click', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            handleMenuItemClick(item.action, menuItem);
-            hideDropdown(menuDropdown);
-        });
-        
-        menuDropdown.appendChild(menuItem);
-    });
-    
-    return menuDropdown;
-}
-
-/**
- * Setup menu button click handler
- * @param {HTMLElement} menuBtn - Menu button element
- * @param {HTMLElement} menuDropdown - Dropdown element
- */
-function setupMenuButtonHandler(menuBtn, menuDropdown) {
-    menuBtn.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-
-        const isVisible = menuDropdown.classList.contains('show');
-        
-        if (isVisible) {
-            hideDropdown(menuDropdown);
-        } else {
-            showDropdown(menuDropdown);
-        }
-    });
-}
-
-/**
- * Show dropdown menu
- * @param {HTMLElement} menuDropdown - Dropdown element
- */
-function showDropdown(menuDropdown) {
-    // Hide any other open dropdowns first
-    document.querySelectorAll('.download-menu-dropdown.show').forEach(otherDropdown => {
-        if (otherDropdown !== menuDropdown) {
-            hideDropdown(otherDropdown);
-        }
-    });
-
-    menuDropdown.classList.add('show');
-    
-    // Add click outside handler
-    setTimeout(() => {
-        document.addEventListener('click', (e) => handleClickOutside(e, menuDropdown), { once: true });
-    }, 0);
-}
-
-/**
- * Hide dropdown menu
- * @param {HTMLElement} menuDropdown - Dropdown element
- */
-function hideDropdown(menuDropdown) {
-    menuDropdown.classList.remove('show');
-}
-
-/**
- * Handle clicks outside dropdown to close it
- * @param {Event} e - Click event
- * @param {HTMLElement} menuDropdown - Dropdown element
- */
-function handleClickOutside(e, menuDropdown) {
-    if (!menuDropdown.contains(e.target)) {
-        hideDropdown(menuDropdown);
-    } else {
-        // Re-add the listener if clicked inside dropdown
-        setTimeout(() => {
-            document.addEventListener('click', (e) => handleClickOutside(e, menuDropdown), { once: true });
-        }, 0);
-    }
-}
-
-/**
- * Handle menu item clicks
- * @param {string} action - Action identifier
- * @param {HTMLElement} menuItem - Menu item element
- */
-function handleMenuItemClick(action, menuItem) {
-    logger.log('Menu item clicked:', action);
-    
-    // TODO: Implement specific actions
-    switch (action) {
-        case 'copy-url':
-            // Will be implemented later
-            logger.log('Copy URL action');
-            break;
-        case 'video-info':
-            // Will be implemented later
-            logger.log('Video info action');
-            break;
-        default:
-            logger.warn('Unknown menu action:', action);
-    }
+    const component = new DownloadButtonComponent(video, elementsDiv);
+    return component.render();
 }
