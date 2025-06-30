@@ -1,7 +1,5 @@
 /**
- * @ai-guide-component CommandRegistry
- * @ai-guide-description Command registration and management system
- * @ai-guide-responsibilities
+ * CommandRegistry – Command registration and management system
  * - Maintains registry of available command implementations
  * - Maps command types to their handler classes
  * - Provides lookup mechanism for command resolution

@@ -1,7 +1,5 @@
 /**
- * @ai-guide-component Logger
- * @ai-guide-description Simple logging utility for application diagnostics
- * @ai-guide-responsibilities
+ * Logger – Simple logging utility for application diagnostics
  * - Provides centralized logging functionality
  * - Creates and manages log file storage
  * - Formats log messages with timestamps

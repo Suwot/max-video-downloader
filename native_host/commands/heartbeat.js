@@ -1,7 +1,5 @@
 /**
- * @ai-guide-component HeartbeatCommand
- * @ai-guide-description Connection status monitoring command
- * @ai-guide-responsibilities
+ * HeartbeatCommand – Connection status monitoring command
  * - Responds to periodic status check requests from the extension
  * - Verifies that the native host is alive and responsive
  * - Maintains persistent connection between extension and native host

@@ -1,7 +1,5 @@
 /**
- * @ai-guide-component CommandRunner
- * @ai-guide-description Orchestrates command execution for the native host.
- * @ai-guide-responsibilities
+ * CommandRunner – Orchestrates command execution for the native host
  * - Registers command handler classes keyed by command type.
  * - Delegates incoming messages to the correct command handler.
  * - Injects messaging and error handling dependencies into commands.

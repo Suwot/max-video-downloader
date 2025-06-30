@@ -1,7 +1,5 @@
 /**
- * @ai-guide-component NativeMessaging
- * @ai-guide-description Handles Chrome native messaging protocol implementation
- * @ai-guide-responsibilities
+ * NativeMessaging – Handles Chrome native messaging protocol implementation
  * - Implements Chrome's native messaging protocol (read/write messages)
  * - Handles message size limits and multi-part messages if needed
  * - Manages serialization/deserialization of messages

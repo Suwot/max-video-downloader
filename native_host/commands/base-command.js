@@ -1,7 +1,5 @@
 /**
- * @ai-guide-component BaseCommand
- * @ai-guide-description Foundation class for all native host commands
- * @ai-guide-responsibilities
+ * BaseCommand – Foundation class for all native host commands
  * - Provides common structure for all command implementations
  * - Manages messaging between native host and extension
  * - Offers standardized success/error/progress response methods

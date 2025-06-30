@@ -1,7 +1,5 @@
 /**
- * @ai-guide-component ServiceManager
- * @ai-guide-description Centralized service management and dependency injection
- * @ai-guide-responsibilities
+ * ServiceManager – Centralized service management and dependency injection
  * - Initializes and manages service lifecycle
  * - Provides dependency injection for services
  * - Ensures services are properly initialized before use

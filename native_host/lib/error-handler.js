@@ -1,7 +1,5 @@
 /**
- * @ai-guide-component ErrorHandler
- * @ai-guide-description Centralized error handling system for the native host
- * @ai-guide-responsibilities
+ * ErrorHandler – Centralized error handling system for the native host
  * - Provides structured error handling and reporting
  * - Standardizes error formats for extension communication
  * - Logs errors with appropriate detail levels

@@ -1,7 +1,5 @@
 /**
- * @ai-guide-component GeneratePreviewCommand
- * @ai-guide-description Video thumbnail generator
- * @ai-guide-responsibilities
+ * GeneratePreviewCommand – Video thumbnail generator
  * - Creates thumbnail previews from video URLs
  * - Uses FFmpeg to extract frames from remote videos
  * - Converts thumbnails to base64 data URLs

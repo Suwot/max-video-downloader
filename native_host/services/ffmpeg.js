@@ -1,7 +1,5 @@
 /**
- * @ai-guide-component FFmpegService
- * @ai-guide-description Core service for video processing using FFmpeg
- * @ai-guide-responsibilities
+ * FFmpegService – Core service for video processing using FFmpeg
  * - Manages FFmpeg binary location and execution
  * - Detects video type and format from URLs
  * - Handles video stream analysis and metadata extraction

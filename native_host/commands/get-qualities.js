@@ -1,7 +1,5 @@
 /**
- * @ai-guide-component GetQualitiesCommand
- * @ai-guide-description Video stream quality analyzer
- * @ai-guide-responsibilities
+ * GetQualitiesCommand – Video stream quality analyzer
  * - Analyzes video streams for available quality options
  * - Uses FFprobe to extract stream metadata
  * - Identifies resolution, bitrate, and codec information

@@ -1,7 +1,5 @@
 /**
- * @ai-guide-component ConfigService
- * @ai-guide-description Application configuration management service
- * @ai-guide-responsibilities
+ * ConfigService – Application configuration management service
  * - Manages persistent application settings
  * - Handles loading/saving configuration to disk
  * - Provides defaults for missing configuration options

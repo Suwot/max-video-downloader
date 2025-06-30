@@ -1,6 +1,5 @@
 /**
  * DownloadCommand – Central command class for orchestrating video/audio downloads using FFmpeg.
- * Responsibilities:
  * - Receives download/cancel requests from the extension and validates parameters.
  * - Determines the correct container format and output filename based on user input, media type, and source data.
  * - Constructs FFmpeg command-line arguments for HLS, DASH, and direct media, including support for HTTP headers and stream selection.

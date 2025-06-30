@@ -1,7 +1,5 @@
 /**
- * @ai-guide-component ResourceUtils
- * @ai-guide-description Utilities for system resources and environment management
- * @ai-guide-responsibilities
+ * ResourceUtils – Utilities for system resources and environment management
  * - Provides enhanced environment variables
  * - Manages application cache directory
  * - Ensures proper system paths are available
