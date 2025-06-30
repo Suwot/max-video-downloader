@@ -8,7 +8,8 @@ import { sendVideoUpdateToUI, cleanupAllVideos, dismissVideoFromTab } from '../p
 import { startDownload, cancelDownload, getActiveDownloadProgress, getActiveDownloadCount } from '../download/download-manager.js';
 import { createLogger } from '../../shared/utils/logger.js';
 import { clearPreviewCache, getCacheStats } from '../../shared/utils/preview-cache.js';
-import { clearAllHeaderCaches } from '../../shared/utils/headers-utils.js'
+import { clearAllHeaderCaches } from '../../shared/utils/headers-utils.js';
+import nativeHostService from './native-host-service.js';
 
 // Track all popup connections - simplified single map
 const popupPorts = new Map(); // key = portId, value = {port, tabId, url}
@@ -34,7 +35,7 @@ async function handlePortMessage(message, port, portId) {
     }
     
     // Define commands that don't require tab ID (global operations)
-    const globalCommands = ['clearCaches', 'getPreviewCacheStats', 'getDownloadProgress'];
+    const globalCommands = ['clearCaches', 'getPreviewCacheStats', 'getDownloadProgress', 'fileSystem'];
     
     // Commands that require tab ID validation (tab-specific operations)
     const tabSpecificCommands = ['getVideos', 'generatePreview', 'download'];
@@ -111,6 +112,22 @@ async function handlePortMessage(message, port, portId) {
                     stats: { count: 0, size: 0 },
                     error: error.message
                 });
+            }
+            break;
+            
+        case 'fileSystem':
+            // Handle file system operations through native host
+            try {
+                await nativeHostService.sendMessage({
+                    command: 'fileSystem',
+                    operation: message.operation,
+                    params: message.params
+                });
+                logger.debug(`File system operation completed: ${message.operation}`);
+            } catch (error) {
+                logger.error(`File system operation failed: ${message.operation}`, error);
+                // For these operations, we don't need to send error back to popup
+                // They are fire-and-forget UI operations
             }
             break;
             

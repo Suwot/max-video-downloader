@@ -477,13 +477,7 @@ async function addToHistoryStorage(progressData) {
         const result = await chrome.storage.local.get(['downloads_history']);
         const history = result.downloads_history || [];
         
-        // Add completion timestamp
-        const historyEntry = {
-            ...progressData,
-            completedAt: Date.now()
-        };
-        
-        history.unshift(historyEntry); // Add to beginning
+        history.unshift(progressData); // Add to beginning
         
         // Maintain history size limit
         if (history.length > MAX_DOWNLOAD_HISTORY_ITEMS) {
