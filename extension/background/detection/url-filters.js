@@ -17,7 +17,7 @@ const IGNORE_EXTENSIONS = [
     '.jpg', '.jpeg', '.png', '.gif', '.svg', '.ico', '.webp', '.avif', '.bmp',
     
     // Documents
-    '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.txt',
+    '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx',
     
     // Other web assets
     '.map', '.html', '.htm', '.asp', '.aspx', '.jsp', '.vtt',
