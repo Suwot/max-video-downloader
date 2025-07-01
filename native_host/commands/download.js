@@ -223,7 +223,9 @@ class DownloadCommand extends BaseCommand {
                 container,
                 audioOnly,
                 streamSelection,
-                headers
+                headers,
+                sourceAudioCodec: params.sourceAudioCodec || null,
+                sourceAudioBitrate: params.sourceAudioBitrate || null
             });
             
             logDebug('FFmpeg command:', ffmpegService.getFFmpegPath(), ffmpegArgs.join(' '));
@@ -243,7 +245,8 @@ class DownloadCommand extends BaseCommand {
                 pageUrl,
                 pageFavicon,
                 originalCommand,
-                isRedownload
+                isRedownload, 
+                audioOnly
             });
             
         } catch (err) {
@@ -272,16 +275,16 @@ class DownloadCommand extends BaseCommand {
      * @private
      */
     determineContainerFormat(params) {
-        const { preferredContainer, defaultContainer, type, audioOnly, downloadUrl } = params;
+        const { preferredContainer, defaultContainer, type, audioOnly, downloadUrl, sourceAudioCodec } = params;
         
         // 1. User override takes priority (future feature)
         if (preferredContainer && /^(mp4|webm|mkv|mp3|m4a)$/i.test(preferredContainer)) {
             return preferredContainer.toLowerCase();
         }
         
-        // 2. Audio-only mode - always use mp3
+        // 2. Audio-only mode - smart format selection based on source codec
         if (audioOnly) {
-            return 'mp3';
+            return this.determineAudioContainer(sourceAudioCodec);
         }
         
         // 3. Use defaultContainer from processing (DASH from UI, Direct from FFprobe)
@@ -308,6 +311,34 @@ class DownloadCommand extends BaseCommand {
     }
     
     /**
+     * Determine optimal audio container based on source codec
+     * @param {string} sourceAudioCodec - Source audio codec name (e.g., 'aac', 'mp3', 'opus')
+     * @returns {string} - Optimal container format
+     * @private
+     */
+    determineAudioContainer(sourceAudioCodec) {
+        if (!sourceAudioCodec) {
+            // No codec info available (HLS/DASH) - use universal MP3
+            logDebug('No source audio codec info - using universal MP3 format');
+            return 'mp3';
+        }
+        
+        const codec = sourceAudioCodec.toLowerCase();
+        
+        switch (codec) {
+            case 'aac':
+                logDebug('🎵 AAC source detected → M4A container (copy)');
+                return 'm4a';
+            case 'mp3':
+                logDebug('🎵 MP3 source detected → MP3 container (copy)');
+                return 'mp3';
+            default:
+                logDebug(`🎵 ${codec} source detected → MP3 container (convert)`);
+                return 'mp3'; // Convert other codecs to MP3 for universal compatibility
+        }
+    }
+
+    /**
      * Generate clean output filename
      * @private
      */
@@ -316,7 +347,7 @@ class DownloadCommand extends BaseCommand {
         let outputFilename = (filename ? filename.replace(/[?#].*$/, '') : 'audio');
         
         // For audio-only downloads, default to 'audio' if no filename
-        if (container === 'mp3' && (!filename || filename.trim() === '')) {
+        if ((container === 'm4a' || container === 'mp3') && (!filename || filename.trim() === '')) {
             outputFilename = 'audio';
         }
         
@@ -364,7 +395,9 @@ class DownloadCommand extends BaseCommand {
         container,
         audioOnly = false,
         streamSelection,
-        headers = {}
+        headers = {},
+        sourceAudioCodec = null,
+        sourceAudioBitrate = null
     }) {
         const args = [];
         
@@ -393,10 +426,25 @@ class DownloadCommand extends BaseCommand {
             args.push('-i', downloadUrl);
         }
         
-        // Stream selection
+        // Stream selection and codec configuration
         if (audioOnly) {
-            args.push('-map', '0:a');
-            logDebug('🎵 Audio-only mode enabled');
+            if (streamSelection && type === 'dash') {
+                // For DASH audio extraction, use the specific audio track from streamSelection
+                streamSelection.split(',').forEach(streamSpec => {
+                    args.push('-map', streamSpec);
+                });
+                logDebug('🎵 DASH audio-only mode with specific track:', streamSelection);
+            } else {
+                // For HLS/direct audio extraction, use specific first audio stream instead of generic mapping
+                args.push('-map', '0:a:0');  // Map specifically the first audio stream
+                logDebug('🎵 Audio-only mode enabled (HLS/direct) - mapping first audio stream');
+            }
+            
+            // Explicitly disable video and subtitle streams for audio-only output
+            args.push('-vn', '-sn');
+            
+            // Smart codec selection for audio-only
+            this.addAudioCodecArgs(args, container, sourceAudioCodec, sourceAudioBitrate);
         } 
         else if (streamSelection && type === 'dash') {
             // Parse stream selection string (e.g., "0:v:0,0:a:3,0:s:1") 
@@ -404,14 +452,20 @@ class DownloadCommand extends BaseCommand {
                 args.push('-map', streamSpec);
             });
             logDebug('🎯 Using stream selection:', streamSelection);
+            
+            // Default to copying all streams without re-encoding for regular downloads
+            args.push('-c', 'copy');
+        } else {
+            // Default to copying all streams without re-encoding for regular downloads
+            args.push('-c', 'copy');
         }
         
-        // Default to copying streams without re-encoding
-        args.push('-c', 'copy');
-        
         // Format-specific optimizations
-        if (type === 'hls') {
-            // Fix for certain audio streams commonly found in HLS
+        if (type === 'hls' && !audioOnly) {
+            // Fix for certain audio streams commonly found in HLS (only for regular video downloads)
+            args.push('-bsf:a', 'aac_adtstoasc');
+        } else if (audioOnly && container === 'm4a') {
+            // For audio-only AAC → M4A, apply the bitstream filter
             args.push('-bsf:a', 'aac_adtstoasc');
         }
         
@@ -426,6 +480,43 @@ class DownloadCommand extends BaseCommand {
         return args;
     }
     
+    /**
+     * Add appropriate audio codec arguments based on smart format selection
+     * @param {Array} args - FFmpeg arguments array
+     * @param {string} container - Output container format
+     * @param {string} sourceAudioCodec - Source audio codec
+     * @param {number} sourceAudioBitrate - Source audio bitrate in bps
+     * @private
+     */
+    addAudioCodecArgs(args, container, sourceAudioCodec, sourceAudioBitrate) {
+        const codec = sourceAudioCodec ? sourceAudioCodec.toLowerCase() : null;
+        
+        if (container === 'm4a' && codec === 'aac') {
+            // AAC → M4A: Copy without re-encoding (lossless, fast)
+            args.push('-c:a', 'copy');
+            logDebug('🎵 AAC → M4A: copying without re-encoding');
+        } else if (container === 'mp3' && codec === 'mp3') {
+            // MP3 → MP3: Copy without re-encoding (lossless, fast)
+            args.push('-c:a', 'copy');
+            logDebug('🎵 MP3 → MP3: copying without re-encoding');
+        } else {
+            // Other codecs → MP3: Re-encode with libmp3lame
+            args.push('-c:a', 'libmp3lame');
+            
+            // Use source bitrate if available, otherwise high-quality VBR
+            if (sourceAudioBitrate && sourceAudioBitrate > 0) {
+                // Convert from bps to kbps and cap at reasonable limits
+                const bitrateKbps = Math.min(Math.max(Math.round(sourceAudioBitrate / 1000), 64), 320);
+                args.push('-b:a', `${bitrateKbps}k`);
+                logDebug(`🎵 ${codec || 'unknown'} → MP3: re-encoding at ${bitrateKbps}kbps (matched source)`);
+            } else {
+                // High-quality VBR when no bitrate info available
+                args.push('-q:a', '2'); // ~190kbps VBR
+                logDebug(`🎵 ${codec || 'unknown'} → MP3: re-encoding with VBR quality 2`);
+            }
+        }
+    }
+
     /**
      * Probe media duration using ffprobe
      * @param {Object} ffmpegService - FFmpeg service instance
@@ -544,7 +635,8 @@ class DownloadCommand extends BaseCommand {
         pageUrl,
         pageFavicon,
         originalCommand,
-        isRedownload
+        isRedownload, 
+        audioOnly
     }) {
         return new Promise(async (resolve, reject) => {
             // Probe duration upfront if not provided to avoid race conditions
@@ -580,7 +672,8 @@ class DownloadCommand extends BaseCommand {
                 outputPath: uniqueOutput,
                 duration: finalDuration,
                 fileSizeBytes,
-                segmentCount
+                segmentCount,
+                audioOnly
             };
             
             logDebug('Initializing progress tracker with:', fileInfo);
@@ -641,7 +734,7 @@ class DownloadCommand extends BaseCommand {
                 const ffmpegFinalMessage = progressTracker.getFFmpegFinalMessage();
                 const derivedErrorMessage = progressTracker.getDerivedErrorMessage();
                 const downloadStats = progressTracker.getDownloadStats();
-                
+
                 // Determine termination reason using signal and exit code
                 const terminationInfo = this.analyzeProcessTermination(code, signal, processInfo?.wasCanceled);
                 logDebug(`FFmpeg process (PID: ${processInfo?.pid}) terminated after ${downloadDuration}ms:`, terminationInfo);
@@ -664,7 +757,8 @@ class DownloadCommand extends BaseCommand {
                         completedAt: Date.now(),
                         pageUrl,
                         pageFavicon,
-                        isRedownload
+                        isRedownload,
+                        audioOnly
                     });
                     return resolve({ 
                         success: false, 
@@ -691,7 +785,8 @@ class DownloadCommand extends BaseCommand {
                         completedAt: Date.now(),
                         pageUrl,
                         pageFavicon,
-                        isRedownload
+                        isRedownload,
+                        audioOnly
                     });
                     resolve({ 
                         success: true, 
@@ -718,7 +813,8 @@ class DownloadCommand extends BaseCommand {
                         completedAt: Date.now(),
                         pageUrl,
                         pageFavicon,
-                        isRedownload
+                        isRedownload,
+                        audioOnly
                     });
                     resolve({ 
                         success: false, 
@@ -751,7 +847,8 @@ class DownloadCommand extends BaseCommand {
                         pageUrl,
                         pageFavicon,
                         originalCommand,
-                        isRedownload
+                        isRedownload,
+                        audioOnly
                     });
                     reject(new Error(error));
                 }
@@ -768,14 +865,14 @@ class DownloadCommand extends BaseCommand {
                     const ffmpegFinalMessage = progressTracker.getFFmpegFinalMessage();
                     const derivedErrorMessage = progressTracker.getDerivedErrorMessage();
                     const downloadStats = progressTracker.getDownloadStats(); // Get stats even on spawn error
-                    
+
                     logDebug(`FFmpeg spawn error (PID: ${processInfo?.pid}) after ${downloadDuration}ms:`, err);
                     if (ffmpegFinalMessage) {
                         logDebug('FFmpeg final message:', ffmpegFinalMessage);
                     } else if (derivedErrorMessage) {
                         logDebug('Derived error message:', derivedErrorMessage);
                     }
-                    
+
                     this.sendError({
                         command: 'download-error',
                         message: err.message,
@@ -793,9 +890,10 @@ class DownloadCommand extends BaseCommand {
                         pageUrl,
                         pageFavicon,
                         originalCommand,
-                        isRedownload
+                        isRedownload,
+                        audioOnly
                     });
-                    
+
                     reject(err);
                 }
             });

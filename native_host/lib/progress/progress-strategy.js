@@ -23,11 +23,13 @@ class ProgressStrategy {
      * @param {number} options.duration Media duration in seconds
      * @param {number} options.fileSizeBytes File size in bytes (from Content-Length or fileSizeBytes)
      * @param {number} options.segmentCount Number of segments in the manifest (for HLS/DASH)
+     * @param {boolean} options.audioOnly Whether this is an audio-only download
      */
     constructor(options = {}) {
         this.onProgress = options.onProgress || (() => {});
         this.downloadUrl = options.downloadUrl || null;
         this.type = options.type || 'direct';
+        this.audioOnly = options.audioOnly || false;
         
         // Extract relevant metadata
         this.duration = options.duration || 0;
@@ -132,7 +134,11 @@ class ProgressStrategy {
         // Check type-specific requirements and set primary strategy for logging
         switch (this.type) {
             case 'direct':
-                if (this.fileSizeBytes > 0) {
+                // For audio-only downloads, prefer time-based strategy since file size represents the full video
+                if (this.audioOnly && this.duration > 0) {
+                    logDebug(`ProgressStrategy: Direct audio-only - time-based primary (${this.duration}s, ignoring video file size)`);
+                    this.primaryStrategy = 'duration';
+                } else if (this.fileSizeBytes > 0) {
                     logDebug(`ProgressStrategy: Direct media - size-based primary (${this.fileSizeBytes} bytes)`);
                     this.primaryStrategy = 'size';
                 } else if (this.duration > 0) {
@@ -201,10 +207,12 @@ class ProgressStrategy {
         
         switch (this.type) {
             case 'direct':
-                progress = this.calculateDirectProgress(downloaded, currentTime);
+                // Use strategy-locked calculation to respect the chosen primary strategy
+                progress = this.calculateStrategyProgress(currentTime, 0, downloaded);
                 progressInfo = { 
                     currentTime,
-                    totalDuration: this.duration || 0
+                    totalDuration: this.duration || 0,
+                    strategy: this.primaryStrategy
                 };
                 break;
                 
@@ -342,6 +350,15 @@ class ProgressStrategy {
                 return 0;
         }
     }
+    /**
+     * Legacy direct progress calculation with hardcoded priority (size → time)
+     * NOTE: This is no longer used in the main flow. Direct types now use calculateStrategyProgress()
+     * to respect the chosen primaryStrategy (important for audioOnly downloads).
+     * Kept for debugging or fallback scenarios.
+     * @param {number} downloadedBytes Bytes downloaded
+     * @param {number} currentTime Current playback time
+     * @returns {number} Progress percentage (0-100)
+     */
     calculateDirectProgress(downloadedBytes, currentTime) {
         // Strategy 1 (Primary): Size-based - most accurate for direct downloads
         if (this.fileSizeBytes > 0 && downloadedBytes > 0) {

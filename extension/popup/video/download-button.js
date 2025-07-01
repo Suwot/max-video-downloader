@@ -239,6 +239,18 @@ class DownloadButtonComponent {
         const selectedOption = this.elementsDiv.querySelector('.selected-option');
         const extractor = this.dataExtractors[videoData.type] || this.dataExtractors.direct;
         extractor(videoData, selectedOption);
+        
+        // Extract audio codec info for smart format selection (if available)
+        if (this.video.metaFFprobe?.audioCodec) {
+            videoData.sourceAudioCodec = this.video.metaFFprobe.audioCodec.name || null;
+            videoData.sourceAudioBitrate = this.video.metaFFprobe.audioBitrate || null;
+            logger.debug('Extracted audio codec info:', { 
+                codec: videoData.sourceAudioCodec, 
+                bitrate: videoData.sourceAudioBitrate 
+            });
+        } else {
+            logger.debug('No audio codec info available for this video type');
+        }
     }
 
     /**
@@ -418,9 +430,136 @@ class DownloadButtonComponent {
      * Handle menu item clicks
      * @param {string} action - Action identifier
      */
-    handleMenuItemClick(action) {
+    async handleMenuItemClick(action) {
         logger.debug('Menu item clicked:', action);
-        // TODO: Implement specific actions
+        
+        switch (action) {
+            case 'extract-audio':
+                await this.handleExtractAudio();
+                break;
+            case 'extract-subs':
+                // TODO: Implement subtitle extraction
+                break;
+            case 'download-as':
+                // TODO: Implement format selection
+                break;
+            case 'copy-url':
+                await this.handleCopyUrl();
+                break;
+            case 'download-convert':
+                // TODO: Implement download and convert
+                break;
+            default:
+                logger.debug('Unknown action:', action);
+        }
+    }
+
+    /**
+     * Handle audio extraction
+     */
+    async handleExtractAudio() {
+        const videoData = this.createVideoMetadata();
+        this.extractDownloadData(videoData);
+        
+        // Set audio-only flag
+        videoData.audioOnly = true;
+        
+        if (videoData.type === 'dash') {
+            await this.handleDashAudioExtraction(videoData);
+        } else {
+            // For HLS and direct videos, send single audio extraction command
+            await this.sendAudioExtractionCommand(videoData);
+        }
+    }
+
+    /**
+     * Handle DASH audio extraction with multi-track support
+     * @param {Object} videoData - Video metadata with streamSelection
+     */
+    async handleDashAudioExtraction(videoData) {
+        const streamSelection = videoData.streamSelection;
+        
+        if (!streamSelection) {
+            logger.debug('No stream selection found for DASH audio extraction');
+            await this.sendAudioExtractionCommand(videoData);
+            return;
+        }
+        
+        // Parse audio tracks from streamSelection (format: "0:v:11,0:a:0,0:a:1,0:s:0")
+        const audioTracks = streamSelection.split(',')
+            .filter(track => track.includes(':a:'))
+            .map(track => track.trim());
+        
+        logger.debug('Found audio tracks in DASH:', audioTracks);
+        
+        if (audioTracks.length === 0) {
+            logger.debug('No audio tracks found in selection, sending default audio extraction command for 0:a:0');
+
+            // If no audio tracks, fallback to sending the first audio track as default
+            videoData.streamSelection = '0:a:0';
+            await this.sendAudioExtractionCommand(videoData);
+            return;
+        }
+        
+        if (audioTracks.length === 1) {
+            // Single audio track - send as-is but audio-only
+            videoData.streamSelection = audioTracks[0];
+            await this.sendAudioExtractionCommand(videoData);
+        } else {
+            // Multiple audio tracks - send separate command for each
+            for (let i = 0; i < audioTracks.length; i++) {
+                const audioTrackData = { ...videoData };
+                audioTrackData.streamSelection = audioTracks[i];
+                
+                // Add track number to filename for uniqueness
+                const originalFilename = audioTrackData.filename || 'audio';
+                audioTrackData.filename = `${originalFilename}_audio${i + 1}`;
+                
+                logger.debug(`Sending audio extraction command ${i + 1}/${audioTracks.length}:`, audioTracks[i]);
+                await this.sendAudioExtractionCommand(audioTrackData);
+            }
+        }
+    }
+
+    /**
+     * Send audio extraction command
+     * @param {Object} videoData - Video metadata with audioOnly flag
+     */
+    async sendAudioExtractionCommand(videoData) {
+        const cancelHandler = () => this.sendCancelMessage(videoData);
+        this.updateState(BUTTON_STATES.STARTING, {
+            text: 'Extracting...',
+            handler: cancelHandler
+        });
+        
+        // Import and call download handler with audio-only data
+        const { handleDownload } = await import('./download-handler.js');
+        handleDownload(this.elementsDiv, videoData);
+    }
+
+    /**
+     * Handle URL copying
+     */
+    async handleCopyUrl() {
+        const videoData = this.createVideoMetadata();
+        this.extractDownloadData(videoData);
+        
+        const urlToCopy = this.elementsDiv.querySelector('.selected-option')?.dataset.url;
+        
+        if (urlToCopy) {
+            try {
+                await navigator.clipboard.writeText(urlToCopy);
+                logger.debug('URL copied to clipboard:', urlToCopy);
+                
+                // Show temporary feedback
+                this.setIntermediaryText('Copied!');
+                setTimeout(() => {
+                    this.updateState(BUTTON_STATES.DEFAULT);
+                }, 1500);
+            } catch (error) {
+                logger.error('Failed to copy URL:', error);
+            }
+        }
     }
 
     /**
