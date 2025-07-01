@@ -1089,7 +1089,7 @@ header .heading-row {
   font-size: var(--font-body);
   font-weight: 600;
   line-height: 1;
-  border-radius: 50%;
+  border-radius: 8px;
   -webkit-transition: all var(--transition-fast);
   transition: all var(--transition-fast);
 }
@@ -1717,8 +1717,8 @@ header .heading-row {
   cursor: not-allowed;
 }
 .download-menu-item svg {
-  width: 12px;
-  height: 12px;
+  width: 14px;
+  height: 14px;
   margin-right: 8px;
   -ms-flex-negative: 0;
       flex-shrink: 0;

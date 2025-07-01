@@ -586,7 +586,7 @@
     font-size: var(--font-body);
     font-weight: 600;
     line-height: 1;
-    border-radius: 50%;
+    border-radius: 8px;
     transition: all var(--transition-fast);
 
     .theme-dark & {
