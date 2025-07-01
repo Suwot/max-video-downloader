@@ -226,13 +226,14 @@ function createHistoryItemElement(progressData) {
         <div class="history-footer">
             ${statsHtml ? `<div class="download-stats">${statsHtml}</div>` : ''}
             <div class="history-actions">
-                ${progressData.command === 'download-success' && progressData.path ? `
-                    <button class="history-retry-btn" data-tooltip="Retry download">
+                <button class="history-retry-btn" data-tooltip="Retry download">
                         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-rotate-ccw w-3 h-3" aria-hidden="true">
                             <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path>
                             <path d="M3 3v5h5"></path>
                         </svg>
                     </button>
+                ${progressData.command === 'download-success' && progressData.path ? `
+                    
                     <button class="history-folder-btn" data-tooltip="Show in folder" data-file-path="${progressData.path}">
                         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-folder-open w-3 h-3" aria-hidden="true">
                             <path d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2"></path>
@@ -241,14 +242,6 @@ function createHistoryItemElement(progressData) {
                     <button class="history-play-btn" data-tooltip="Open file" data-file-path="${progressData.path}">
                         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-play w-3 h-3" aria-hidden="true">
                             <polygon points="6 3 20 12 6 21 6 3"></polygon>
-                        </svg>
-                    </button>
-                ` : ''}
-                ${progressData.command === 'download-error' && progressData.originalCommand ? `
-                    <button class="history-retry-btn" data-tooltip="Retry download">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-rotate-ccw w-3 h-3" aria-hidden="true">
-                            <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path>
-                            <path d="M3 3v5h5"></path>
                         </svg>
                     </button>
                 ` : ''}
