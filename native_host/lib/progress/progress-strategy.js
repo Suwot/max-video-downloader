@@ -60,6 +60,9 @@ class ProgressStrategy {
         this.ffmpegFinalMessage = null; // Store FFmpeg final message after progress=end (for all outcomes)
         this.progressEndSeen = false; // Track if we've seen progress=end
         
+        // For error line collection
+        this.collectedErrorLines = []; // Store error lines throughout the process
+        
         // Persistent state - accumulates all data over time
         this.currentState = {
             currentTime: 0,
@@ -456,6 +459,9 @@ class ProgressStrategy {
      * @param {string} output FFmpeg stdout/stderr output
      */
     processOutput(output) {
+        // Always collect error lines throughout the process for later use
+        this.collectErrorLines(output);
+        
         // Handle final completion status and extract stats
         const progressStatus = output.match(/progress=(\w+)/);
         if (progressStatus && progressStatus[1] === 'end') {
@@ -675,6 +681,45 @@ class ProgressStrategy {
         
         // Don't flush pending updates during cleanup - 
         // we've already sent final completion status if download finished successfully
+    }
+
+    /**
+     * Collect error lines from FFmpeg output for later use
+     * @param {string} output FFmpeg output line
+     */
+    collectErrorLines(output) {
+        const trimmedOutput = output.trim();
+        if (!trimmedOutput) return;
+        
+        // Split output into lines and process each line separately
+        const lines = trimmedOutput.split('\n');
+        
+        for (const line of lines) {
+            const trimmedLine = line.trim();
+            if (!trimmedLine) continue;
+            
+            // Collect lines starting with "Error" - these contain the most actionable information
+            if (trimmedLine.startsWith('Error')) {
+                // Avoid duplicates
+                if (!this.collectedErrorLines.includes(trimmedLine)) {
+                    this.collectedErrorLines.push(trimmedLine);
+                    logDebug('ProgressStrategy: Collected error line:', trimmedLine);
+                }
+            }
+        }
+    }
+    
+    /**
+     * Get derived error message from collected error lines
+     * @returns {string|null} Consolidated error message or null if no errors collected
+     */
+    getDerivedErrorMessage() {
+        if (!this.collectedErrorLines || this.collectedErrorLines.length === 0) {
+            return null;
+        }
+        
+        // Join all collected error lines with newlines
+        return this.collectedErrorLines.join('\n');
     }
 }
 

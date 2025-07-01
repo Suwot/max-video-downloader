@@ -639,6 +639,7 @@ class DownloadCommand extends BaseCommand {
                 const downloadDuration = processInfo?.startTime ? Date.now() - processInfo.startTime : null;
                 DownloadCommand.activeProcesses.delete(downloadUrl); // Remove from active processes on close
                 const ffmpegFinalMessage = progressTracker.getFFmpegFinalMessage();
+                const derivedErrorMessage = progressTracker.getDerivedErrorMessage();
                 const downloadStats = progressTracker.getDownloadStats();
                 
                 // Determine termination reason using signal and exit code
@@ -654,7 +655,7 @@ class DownloadCommand extends BaseCommand {
                         message: `Download was canceled (${terminationInfo.reason})`,
                         duration,
                         downloadStats: downloadStats || null,
-                        ffmpegFinalMessage: ffmpegFinalMessage || null,
+                        ffmpegFinalMessage: ffmpegFinalMessage || derivedErrorMessage || null,
                         terminationInfo,
                         processInfo: {
                             pid: processInfo?.pid,
@@ -729,6 +730,8 @@ class DownloadCommand extends BaseCommand {
                     logDebug('Download failed:', error);
                     if (ffmpegFinalMessage) {
                         logDebug('FFmpeg final message:', ffmpegFinalMessage);
+                    } else if (derivedErrorMessage) {
+                        logDebug('Derived error message:', derivedErrorMessage);
                     }
                     this.sendError({
                         command: 'download-error',
@@ -737,7 +740,7 @@ class DownloadCommand extends BaseCommand {
                         masterUrl,
                         type,
                         duration,
-                        ffmpegFinalMessage: ffmpegFinalMessage || null,
+                        ffmpegFinalMessage: ffmpegFinalMessage || derivedErrorMessage || null,
                         downloadStats: downloadStats || null, // Include stats in error message too
                         terminationInfo,
                         processInfo: {
@@ -763,11 +766,14 @@ class DownloadCommand extends BaseCommand {
                     DownloadCommand.activeProcesses.delete(downloadUrl); // Remove from active processes on error
                     progressTracker.cleanup();
                     const ffmpegFinalMessage = progressTracker.getFFmpegFinalMessage();
+                    const derivedErrorMessage = progressTracker.getDerivedErrorMessage();
                     const downloadStats = progressTracker.getDownloadStats(); // Get stats even on spawn error
                     
                     logDebug(`FFmpeg spawn error (PID: ${processInfo?.pid}) after ${downloadDuration}ms:`, err);
                     if (ffmpegFinalMessage) {
                         logDebug('FFmpeg final message:', ffmpegFinalMessage);
+                    } else if (derivedErrorMessage) {
+                        logDebug('Derived error message:', derivedErrorMessage);
                     }
                     
                     this.sendError({
@@ -777,7 +783,7 @@ class DownloadCommand extends BaseCommand {
                         masterUrl,
                         type,
                         duration,
-                        ffmpegFinalMessage: ffmpegFinalMessage || null,
+                        ffmpegFinalMessage: ffmpegFinalMessage || derivedErrorMessage || null,
                         downloadStats: downloadStats || null, // Include stats in spawn error too
                         processInfo: {
                             pid: processInfo?.pid,

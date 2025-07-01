@@ -175,6 +175,19 @@ class ProgressTracker {
     }
     
     /**
+     * Get derived error message from collected error lines
+     * @returns {string|null} Consolidated error message or null if no errors collected
+     */
+    getDerivedErrorMessage() {
+        if (!this.strategy || !this.strategy.getDerivedErrorMessage) {
+            return null;
+        }
+        
+        const derivedError = this.strategy.getDerivedErrorMessage();
+        return derivedError ? derivedError.trim() : null;
+    }
+    
+    /**
      * Clean up resources
      */
     cleanup() {
