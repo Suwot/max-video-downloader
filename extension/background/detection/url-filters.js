@@ -245,6 +245,7 @@ function shouldIgnoreForHeaderCapture(url) {
  */
 function shouldIgnoreForMediaDetection(url, metadata = null) {
     if (!url || typeof url !== 'string') {
+        logger.debug(`Filtering out: ${url} - Reason: URL is not a string or is empty`);
         return true;
     }
     
@@ -252,48 +253,51 @@ function shouldIgnoreForMediaDetection(url, metadata = null) {
         // Parse URL
         const analysis = analyzeUrl(url);
         if (!analysis) {
-            // Invalid URL, log and don't ignore to be safe
-            logger.debug(`Invalid URL for media detection: ${url}`);
+            logger.debug(`Invalid URL for media detection: ${url} - Reason: analyzeUrl returned null`);
             return false;
         }
         
         // Check domain against blacklist (fastest check)
         for (const domain of NON_MEDIA_DOMAINS) {
-            if (analysis.domain === domain || 
+            if (
+                analysis.domain === domain || 
                 analysis.domain.endsWith(`.${domain}`) || 
-                analysis.url.includes(domain)) {
+                analysis.url.includes(domain)
+            ) {
+                logger.debug(`Filtering out: ${url} - Reason: Domain matches NON_MEDIA_DOMAINS (${domain})`);
                 return true;
             }
         }
         
         // Check file extension if present
         if (analysis.extension && IGNORE_EXTENSIONS.includes(analysis.extension)) {
+            logger.debug(`Filtering out: ${url} - Reason: Extension "${analysis.extension}" is in IGNORE_EXTENSIONS`);
             return true;
         }
         
         // Check path patterns
-        if (IGNORE_PATH_PATTERNS.some(pattern => pattern.test(analysis.pathname))) {
+        const matchedPathPattern = IGNORE_PATH_PATTERNS.find(pattern => pattern.test(analysis.pathname));
+        if (matchedPathPattern) {
+            logger.debug(`Filtering out: ${url} - Reason: Path matches IGNORE_PATH_PATTERNS (${matchedPathPattern})`);
             return true;
         }
         
         // Check for range request parameters (partial content)
-        if (RANGE_REQUEST_PATTERNS.some(pattern => pattern.test(url))) {
+        const matchedRangePattern = RANGE_REQUEST_PATTERNS.find(pattern => pattern.test(url));
+        if (matchedRangePattern) {
+            logger.debug(`Filtering out: ${url} - Reason: URL matches RANGE_REQUEST_PATTERNS (${matchedRangePattern})`);
             return true;
         }
         
         // Check for media segments unless it's a manifest
         if (!analysis.isManifest && analysis.isSegment) {
+            logger.debug(`Filtering out: ${url} - Reason: Detected as segment and not a manifest`);
             return true;
         }
         
         // If we have metadata with content type, use it for additional filtering
         if (metadata && metadata.contentType) {
             const contentType = metadata.contentType.toLowerCase();
-            
-            // Skip tiny files that aren't manifests
-            if (!analysis.isManifest && metadata.contentLength && metadata.contentLength < 1024) {
-                return true;
-            }
             
             // Handle specific content types we know aren't media
             const nonMediaTypes = [
@@ -306,6 +310,7 @@ function shouldIgnoreForMediaDetection(url, metadata = null) {
                 if ((contentType.includes('xml') || contentType.includes('text/plain')) && analysis.isManifest) {
                     return false;
                 }
+                logger.debug(`Filtering out: ${url} - Reason: Content-Type "${contentType}" matches nonMediaTypes`);
                 return true;
             }
         }
