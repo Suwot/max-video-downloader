@@ -148,7 +148,7 @@ export function createVideoElement(video) {
 
         // Update UI counters - check if group becomes empty after removal
         const group = document.querySelector(`.video-type-group[data-video-type="${video.type}"]`);
-        const sectionCount = group.querySelector('.section-count');
+        const sectionCount = group.querySelector('.counter');
         const drawerCount = parseInt(sectionCount.textContent, 10);
         
         if (drawerCount > 1) {
@@ -164,7 +164,7 @@ export function createVideoElement(video) {
         }
 
         // update videos tab counter without state modifications
-        const tabCounter = document.querySelector('.tab-button[data-tab-id="videos-tab"] .tab-counter');
+        const tabCounter = document.querySelector('.tab-button[data-tab-id="videos-tab"] .counter');
         const tabCount = parseInt(tabCounter.textContent, 10); 
         tabCounter.textContent = tabCount > 1 ? String(tabCount - 1) : '';
 

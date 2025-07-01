@@ -537,43 +537,7 @@ header .heading-row {
   background-color: var(--color-green);
 }
 .tab-button[data-tab-id=settings-tab].active {
-  background-color: var(--color-yellow);
-}
-
-.tab-counter {
-  display: -webkit-inline-box;
-  display: -ms-inline-flexbox;
-  display: inline-flex;
-  -webkit-box-align: center;
-      -ms-flex-align: center;
-          align-items: center;
-  -webkit-box-pack: center;
-      -ms-flex-pack: center;
-          justify-content: center;
-  min-width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  padding: 0 4px;
-  font-size: var(--font-body);
-  font-weight: 600;
-  line-height: 1;
-  -webkit-transition: all var(--transition-fast);
-  transition: all var(--transition-fast);
-}
-.theme-dark .tab-counter {
-  background-color: rgba(255, 255, 255, 0.2);
-  color: var(--text-primary-dark);
-}
-.theme-light .tab-counter {
-  background-color: rgba(0, 0, 0, 0.1);
-  color: var(--text-primary-light);
-}
-.tab-button.active .tab-counter {
-  background-color: rgba(255, 255, 255, 0.3);
-  color: white;
-}
-.tab-counter:empty {
-  display: none;
+  background-color: var(--color-orange);
 }
 
 .custom-dropdown {
@@ -1109,19 +1073,40 @@ header .heading-row {
   gap: 8px;
 }
 
-.section-count {
-  border-radius: 12px;
-  padding: 1px 6px;
+.counter {
+  display: -webkit-inline-box;
+  display: -ms-inline-flexbox;
+  display: inline-flex;
+  -webkit-box-align: center;
+      -ms-flex-align: center;
+          align-items: center;
+  -webkit-box-pack: center;
+      -ms-flex-pack: center;
+          justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
   font-size: var(--font-body);
+  font-weight: 600;
+  line-height: 1;
+  border-radius: 50%;
+  -webkit-transition: all var(--transition-fast);
+  transition: all var(--transition-fast);
 }
-.theme-dark .section-count {
+.theme-dark .counter {
   background-color: rgba(255, 255, 255, 0.2);
+  color: var(--text-primary-dark);
 }
-.theme-light .section-count {
+.theme-light .counter {
   background-color: rgba(0, 0, 0, 0.1);
+  color: var(--text-primary-light);
 }
-.section-count:empty {
+.counter:empty {
   display: none;
+}
+.tab-button.active .counter {
+  background-color: rgba(255, 255, 255, 0.3);
+  color: white;
 }
 
 .section-content {

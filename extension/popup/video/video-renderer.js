@@ -18,7 +18,7 @@ export async function renderVideos() {
         container.querySelectorAll('.video-type-group').forEach(group => {
             group.style.display = 'none';
             // Clear count when hiding groups
-            const sectionCount = group.querySelector('.section-count');
+            const sectionCount = group.querySelector('.counter');
             if (sectionCount) {
                 sectionCount.textContent = '';
             }
@@ -43,7 +43,7 @@ export async function renderVideos() {
             group.style.display = 'block';
             
             // Update section count - simple textContent update
-            const sectionCount = group.querySelector('.section-count');
+            const sectionCount = group.querySelector('.counter');
             if (sectionCount) {
                 sectionCount.textContent = typeVideos.length;
             }
@@ -59,7 +59,7 @@ export async function renderVideos() {
         } else {
             // Hide group if no videos and clear count
             group.style.display = 'none';
-            const sectionCount = group.querySelector('.section-count');
+            const sectionCount = group.querySelector('.counter');
             if (sectionCount) {
                 sectionCount.textContent = '';
             }
@@ -124,7 +124,7 @@ export async function renderHistoryItems(fullRender = true) {
             }
             
             // Update section count (following same pattern as renderVideos)
-            const sectionCount = document.querySelector('.downloads-history-section .section-count');
+            const sectionCount = document.querySelector('.downloads-history-section .counter');
             if (sectionCount) {
                 sectionCount.textContent = history.length > 0 ? history.length : '';
             }
@@ -146,7 +146,7 @@ export async function renderHistoryItems(fullRender = true) {
             }
             
             // Update section count for incremental render
-            const sectionCount = document.querySelector('.downloads-history-section .section-count');
+            const sectionCount = document.querySelector('.downloads-history-section .counter');
             if (sectionCount) {
                 sectionCount.textContent = history.length > 0 ? history.length : '';
             }
@@ -433,7 +433,7 @@ async function deleteHistoryItem(completedAt) {
         }
         
         // Update section count after deletion (following same pattern as renderVideos)
-        const sectionCount = document.querySelector('.downloads-history-section .section-count');
+        const sectionCount = document.querySelector('.downloads-history-section .counter');
         if (sectionCount) {
             sectionCount.textContent = updatedHistory.length > 0 ? updatedHistory.length : '';
         }

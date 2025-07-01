@@ -572,22 +572,42 @@
     }
 }
 
-.section-count {
-    border-radius: 12px;
-    padding: 1px 6px;
+// =====================================================
+// UNIFIED COUNTER COMPONENT
+// =====================================================
+
+.counter {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
     font-size: var(--font-body);
+    font-weight: 600;
+    line-height: 1;
+    border-radius: 50%;
+    transition: all var(--transition-fast);
 
     .theme-dark & {
-        background-color: rgba(255,255,255,0.2);
+        background-color: rgba(255, 255, 255, 0.2);
+        color: var(--text-primary-dark);
     }
 
     .theme-light & {
-        background-color: rgba(0,0,0,0.1);
+        background-color: rgba(0, 0, 0, 0.1);
+        color: var(--text-primary-light);
     }
-    
+
     // Hide when empty
     &:empty {
         display: none;
+    }
+
+    // Context-specific styling via parent containers
+    .tab-button.active & {
+        background-color: rgba(255, 255, 255, 0.3);
+        color: white;
     }
 }
 

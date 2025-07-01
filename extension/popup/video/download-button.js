@@ -419,7 +419,7 @@ class DownloadButtonComponent {
      * @param {string} action - Action identifier
      */
     handleMenuItemClick(action) {
-        logger.log('Menu item clicked:', action);
+        logger.debug('Menu item clicked:', action);
         // TODO: Implement specific actions
     }
 

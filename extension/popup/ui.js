@@ -125,7 +125,7 @@ function switchTab(tabId) {
         content.classList.toggle('active', content.dataset.tabId === tabId);
     });
     
-    logger.log(`Switched to tab: ${tabId}`);
+    logger.debug(`Switched to tab: ${tabId}`);
 }
 
 // Export switchTab function for external use
@@ -137,11 +137,11 @@ export { switchTab };
 export function updateTabCounter(uiTabId) {
     if (uiTabId === 'videos-tab') {
         const count = getVideos().length;
-        const counter = document.querySelector(`[data-tab-id="${uiTabId}"] .tab-counter`);
+        const counter = document.querySelector(`.tab-button[data-tab-id="${uiTabId}"] .counter`);
         counter.textContent = count > 0 ? count : '';
     } else if (uiTabId === 'downloads-tab') {
         const count = downloadCounts.total;
-        const counter = document.querySelector(`[data-tab-id="${uiTabId}"] .tab-counter`);
+        const counter = document.querySelector(`.tab-button[data-tab-id="${uiTabId}"] .counter`);
         counter.textContent = count > 0 ? count : '';
     } else {
         logger.warn(`No counter update logic for tab: ${uiTabId}`);
