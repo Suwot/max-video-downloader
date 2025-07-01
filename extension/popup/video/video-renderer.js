@@ -201,12 +201,16 @@ function createHistoryItemElement(progressData) {
         ? `<div class="error-message">${progressData.ffmpegFinalMessage}</div>` 
         : '';
 
+    // Build flags icons HTML
+    const flagsHtml = buildFlagsHtml(progressData);
+
     historyItem.innerHTML = `
         <div class="history-header">
             <div class="completion-time">
                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-calendar-days w-3 h-3 flex-shrink-0" aria-hidden="true"><path d="M8 2v4"></path><path d="M16 2v4"></path><rect width="18" height="18" x="3" y="4" rx="2"></rect><path d="M3 10h18"></path><path d="M8 14h.01"></path><path d="M12 14h.01"></path><path d="M16 14h.01"></path><path d="M8 18h.01"></path><path d="M12 18h.01"></path><path d="M16 18h.01"></path></svg>
                 ${completedTime}
             </div>
+            ${flagsHtml ? `<div class="history-flags">${flagsHtml}</div>` : ''}
             <div class="page-info">
                 ${progressData.pageFavicon ? `<img class="favicon" src="${progressData.pageFavicon}" alt="">` : ''}
                 <a class="page-url" target="_blank" href="${progressData.pageUrl}" title="${pageTitle}">${pageHost}</a>
@@ -223,6 +227,12 @@ function createHistoryItemElement(progressData) {
             ${statsHtml ? `<div class="download-stats">${statsHtml}</div>` : ''}
             <div class="history-actions">
                 ${progressData.command === 'download-success' && progressData.path ? `
+                    <button class="history-retry-btn" data-tooltip="Retry download">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-rotate-ccw w-3 h-3" aria-hidden="true">
+                            <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path>
+                            <path d="M3 3v5h5"></path>
+                        </svg>
+                    </button>
                     <button class="history-folder-btn" data-tooltip="Show in folder" data-file-path="${progressData.path}">
                         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-folder-open w-3 h-3" aria-hidden="true">
                             <path d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2"></path>
@@ -245,6 +255,25 @@ function createHistoryItemElement(progressData) {
              </div>
         </div>
     `;
+// Build flags icons HTML for history item
+function buildFlagsHtml(progressData) {
+    const icons = [];
+    if (progressData.audioOnly) {
+        icons.push(`
+            <span class="history-flag-icon" data-tooltip="Extracted Audio">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-headphones w-3 h-3 flex-shrink-0 text-purple-500" aria-hidden="true"><path d="M3 14h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7a9 9 0 0 1 18 0v7a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3"></path></svg>
+            </span>
+        `);
+    }
+    if (progressData.isRedownload) {
+        icons.push(`
+            <span class="history-flag-icon" data-tooltip="Redownloaded">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-rotate-ccw w-3 h-3 flex-shrink-0 text-blue-500" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path></svg>
+            </span>
+        `);
+    }
+    return icons.join('');
+}
 
     // Add delete functionality
     const deleteBtn = historyItem.querySelector('.history-delete-btn');

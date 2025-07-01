@@ -1858,6 +1858,34 @@ header .heading-row {
   margin-bottom: 2px;
   gap: 4px;
 }
+.history-header .history-flags {
+  display: -webkit-box;
+  display: -ms-flexbox;
+  display: flex;
+  -webkit-box-align: center;
+      -ms-flex-align: center;
+          align-items: center;
+  gap: 6px;
+  margin-left: 4px;
+  margin-right: 4px;
+}
+.history-header .history-flag-icon {
+  display: -webkit-box;
+  display: -ms-flexbox;
+  display: flex;
+  -webkit-box-align: center;
+      -ms-flex-align: center;
+          align-items: center;
+  -webkit-box-pack: center;
+      -ms-flex-pack: center;
+          justify-content: center;
+}
+.history-header .history-flag-icon .text-purple-500 {
+  stroke: #a259e6;
+}
+.history-header .history-flag-icon .text-blue-500 {
+  stroke: #2196f3;
+}
 
 .history-footer {
   display: -webkit-box;
@@ -1954,7 +1982,6 @@ header .heading-row {
       -ms-flex-align: center;
           align-items: center;
   gap: 4px;
-  margin-right: auto;
 }
 .theme-dark .completion-time {
   color: var(--text-secondary-dark);
@@ -2003,6 +2030,7 @@ header .heading-row {
           align-items: center;
   gap: 4px;
   min-width: 0;
+  margin-left: auto;
 }
 .page-info .favicon {
   width: 12px;
