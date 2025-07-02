@@ -1734,7 +1734,7 @@ header .heading-row {
       -ms-flex-direction: column;
           flex-direction: column;
 }
-.downloads-container .active-downloads-section .video-item .dropdown-icon, .downloads-container .active-downloads-section .video-item .dismiss-button {
+.downloads-container .active-downloads-section .video-item .dropdown-icon, .downloads-container .active-downloads-section .video-item .dismiss-button, .downloads-container .active-downloads-section .video-item .options-container {
   display: none;
 }
 .downloads-container .active-downloads-section .video-item .selected-option {

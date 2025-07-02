@@ -153,6 +153,10 @@ class ProgressTracker {
         if (stats.muxingOverhead) {
             downloadStats.muxingOverhead = stats.muxingOverhead;
         }
+
+        if (stats.bitrateKbps) {
+            downloadStats.bitrateKbps = stats.bitrateKbps;
+        }
         
         return Object.keys(downloadStats).length ? downloadStats : null;
     }

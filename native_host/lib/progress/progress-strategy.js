@@ -490,13 +490,17 @@ class ProgressStrategy {
             const subtitleSizeMatch = output.match(/subtitle:(\d+)kB/);
             const totalSizeMatch = output.match(/size=\s*(\d+)\s*kB/);
             const overheadMatch = output.match(/muxing overhead:\s*([\d.]+)%/);
+
+            // Extract final bitrate (e.g., "bitrate= 131.5kbits/s" → 131500)
+            const bitrateMatch = output.match(/bitrate=\s*([\d.]+)\s*kbits\/s/);
             
             this.downloadStats = {
                 videoSize: videoSizeMatch ? parseInt(videoSizeMatch[1], 10) * 1024 : 0,
                 audioSize: audioSizeMatch ? parseInt(audioSizeMatch[1], 10) * 1024 : 0,
                 subtitleSize: subtitleSizeMatch ? parseInt(subtitleSizeMatch[1], 10) * 1024 : 0,
                 totalSize: totalSizeMatch ? parseInt(totalSizeMatch[1], 10) * 1024 : 0,
-                muxingOverhead: overheadMatch ? parseFloat(overheadMatch[1]) : 0
+                muxingOverhead: overheadMatch ? parseFloat(overheadMatch[1]) : 0,
+                bitrateKbps: bitrateMatch ? Math.round(parseFloat(bitrateMatch[1])) : null
             };
             
             logDebug('ProgressStrategy: Detected end of processing with stats:', this.downloadStats);

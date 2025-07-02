@@ -160,6 +160,8 @@ class DownloadCommand extends BaseCommand {
             streamSelection,
             masterUrl = null,
             headers = {},
+            sourceAudioCodec = null,
+            sourceAudioBitrate = null,
             // Progress tracking fields
             fileSizeBytes = null,
             duration = null,
@@ -189,7 +191,9 @@ class DownloadCommand extends BaseCommand {
             segmentCount,
             pageUrl,
             pageFavicon,
-            isRedownload
+            isRedownload,
+            sourceAudioCodec,
+            sourceAudioBitrate
         };
 
         logDebug('Starting download:', params);
@@ -224,8 +228,8 @@ class DownloadCommand extends BaseCommand {
                 audioOnly,
                 streamSelection,
                 headers,
-                sourceAudioCodec: params.sourceAudioCodec || null,
-                sourceAudioBitrate: params.sourceAudioBitrate || null
+                sourceAudioCodec,
+                sourceAudioBitrate
             });
             
             logDebug('FFmpeg command:', ffmpegService.getFFmpegPath(), ffmpegArgs.join(' '));
