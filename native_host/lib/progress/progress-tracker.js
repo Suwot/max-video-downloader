@@ -127,38 +127,7 @@ class ProgressTracker {
      * @returns {Object|null} Raw download statistics or null if not available
      */
     getDownloadStats() {
-        if (!this.strategy || !this.strategy.downloadStats) {
-            return null;
-        }
-        
-        const stats = this.strategy.downloadStats;
-        const downloadStats = {};
-        
-        if (stats.videoSize) {
-            downloadStats.videoSize = stats.videoSize;
-        }
-        
-        if (stats.audioSize) {
-            downloadStats.audioSize = stats.audioSize;
-        }
-        
-        if (stats.subtitleSize) {
-            downloadStats.subtitleSize = stats.subtitleSize;
-        }
-        
-        if (stats.totalSize) {
-            downloadStats.totalSize = stats.totalSize;
-        }
-        
-        if (stats.muxingOverhead) {
-            downloadStats.muxingOverhead = stats.muxingOverhead;
-        }
-
-        if (stats.bitrateKbps) {
-            downloadStats.bitrateKbps = stats.bitrateKbps;
-        }
-        
-        return Object.keys(downloadStats).length ? downloadStats : null;
+        return this.strategy?.downloadStats || null;
     }
     
     // FFmpeg final message or null if not available
