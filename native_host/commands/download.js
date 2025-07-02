@@ -785,6 +785,7 @@ class DownloadCommand extends BaseCommand {
                         completedAt: Date.now(),
                         pageUrl,
                         pageFavicon,
+                        originalCommand,
                         isRedownload,
                         audioOnly
                     });
