@@ -95,14 +95,14 @@ export async function startDownload(downloadRequest) {
     }
     
     // Start download immediately
-    startDownloadImmediately(downloadRequest);
+    await startDownloadImmediately(downloadRequest);
 }
 
 /**
  * Start download immediately (extracted from original startDownload logic)
  * @param {Object} downloadRequest - Complete download request
  */
-function startDownloadImmediately(downloadRequest) {
+async function startDownloadImmediately(downloadRequest) {
     const downloadId = downloadRequest.downloadUrl;
     
     // Add to active downloads Set for deduplication
@@ -136,14 +136,15 @@ function startDownloadImmediately(downloadRequest) {
     
     // Start download with progress tracking
     try {
-        nativeHostService.sendMessage(nativeHostMessage, (response) => {
+        const finalResult = await nativeHostService.sendMessage(nativeHostMessage, (response) => {
             handleDownloadProgress(downloadId, downloadRequest, response);
         });
         
-        logger.debug('🔄 Download initiated successfully:', downloadId);
-        
-        // Add to active downloads storage
-        addToActiveDownloadsStorage(downloadRequest);
+        if (finalResult?.success) {
+            logger.warn('🔄 Download succeeded:', downloadId, finalResult);
+        } else {
+            logger.error('🔄 Download failed:', downloadId, finalResult);
+        }
     } catch (error) {
         // Only handle communication errors, not download content errors
         logger.error('Failed to communicate with native host:', error);
@@ -188,7 +189,6 @@ async function handleDownloadProgress(downloadId, downloadRequest, response) {
 
         // Handle specific completion types
         if (response.command === 'download-error') {
-            logger.error('Download error:', downloadId, response.error);
             // Error details will be broadcast via the general broadcastData below
         } else if (response.command === 'download-canceled') {
             logger.debug('Download canceled:', downloadId);
@@ -362,7 +362,7 @@ export async function cancelDownload(cancelRequest) {
 /**
  * Process next download in queue when space becomes available
  */
-function processNextDownload() {
+async function processNextDownload() {
     if (downloadQueue.length === 0 || activeDownloads.size >= MAX_CONCURRENT_DOWNLOADS) {
         return;
     }
@@ -378,7 +378,7 @@ function processNextDownload() {
     activeDownloadProgress.delete(nextDownload.downloadUrl);
     
     // Start the download
-    startDownloadImmediately(nextDownload);
+    await startDownloadImmediately(nextDownload);
 }
 
 /**

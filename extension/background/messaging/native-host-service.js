@@ -6,7 +6,6 @@ export class NativeHostService {
         this.pendingMessages = new Map();
         this.reconnectTimer = null;
         this.heartbeatTimer = null;
-        // this.lastActivityTime = 0; // Track last response time
         this.hostName = 'com.mycompany.ffmpeg';
         this.RECONNECT_DELAY = 2000;
         this.HEARTBEAT_INTERVAL = 15000;
@@ -31,14 +30,6 @@ export class NativeHostService {
             this.port.onDisconnect.addListener(this.handleDisconnect.bind(this));
 
             this.heartbeatTimer = setInterval(() => this.sendHeartbeat(), this.HEARTBEAT_INTERVAL);
-            // Reset activity tracking and start conditional heartbeat
-            // this.lastActivityTime = Date.now();
-            // this.heartbeatTimer = setInterval(() => {
-            //     const timeSinceActivity = Date.now() - this.lastActivityTime;
-            //     if (timeSinceActivity >= this.HEARTBEAT_INTERVAL) {
-            //         this.sendHeartbeat();
-            //     }
-            // }, this.HEARTBEAT_INTERVAL);
             
             return true;
         } catch (error) {
@@ -69,19 +60,23 @@ export class NativeHostService {
     
     handleMessage(response) {
         console.log('Received native message:', response);
-        // this.lastActivityTime = Date.now(); // Track any activity from native host
         
         // Route to pending message handler if it exists
         if (response?.id && this.pendingMessages.has(response.id)) {
             const { resolve, reject, callback } = this.pendingMessages.get(response.id);
             
             if (response.error) {
-                // Notify callback first, then reject
+                // Handle communication/connection errors - these should reject the promise
                 if (callback) callback(response);
-                reject(new Error(response.error));
+                
+                const errorMessage = typeof response.error === 'string' 
+                    ? response.error 
+                    : response.error.message || JSON.stringify(response.error);
+                    
+                reject(new Error(errorMessage));
                 this.pendingMessages.delete(response.id);
             } else if (response.success !== undefined) {
-                // Final response - notify callback and resolve
+                // All final responses (success or failure) resolve the promise
                 if (callback) callback(response);
                 resolve(response);
                 this.pendingMessages.delete(response.id);

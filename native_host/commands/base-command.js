@@ -50,18 +50,28 @@ class BaseCommand {
      * Send error response
      */
     sendError(error, details = null) {
-        // Handle both string and object error formats
         if (typeof error === 'string') {
+            // Simple string error
             logDebug(`Command error: ${error}`, details);
             this.messaging.sendResponse({
                 error: error
             });
-        } else {
+        } else if (error && typeof error === 'object') {
             // Object format with detailed error information
-            logDebug(`Command error: ${error.message || error}`, error);
+            const errorMessage = error.message || error.error || 'Unknown error';
+            logDebug(`Command error: ${errorMessage}`, error);
+            
+            // Send clean error structure without nesting
             this.messaging.sendResponse({
-                error: error.message || error,
+                error: errorMessage,
+                command: error.command || 'error',
                 ...error
+            });
+        } else {
+            // Fallback for other types
+            logDebug(`Command error: ${error}`, details);
+            this.messaging.sendResponse({
+                error: String(error)
             });
         }
     }

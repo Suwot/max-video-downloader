@@ -255,21 +255,7 @@ class DownloadCommand extends BaseCommand {
             
         } catch (err) {
             logDebug('Download error:', err);
-            this.sendError({
-                command: 'download-error',
-                message: err.message,
-                downloadUrl,
-                masterUrl,
-                type,
-                ffmpegError: null,
-                downloadStats: null, // No stats available for early errors (before FFmpeg starts)
-                duration: null,
-                completedAt: Date.now(),
-                pageUrl,
-                pageFavicon,
-                originalCommand,
-                isRedownload
-            });
+            // Just throw the error - the promise rejection will handle it
             throw err;
         }
     }
@@ -730,11 +716,14 @@ class DownloadCommand extends BaseCommand {
             });
             
             ffmpeg.on('close', (code, signal) => {
+                // Guard against multiple event handling
+                if (hasError) return;
+                
                 progressTracker.cleanup();
                 const processInfo = DownloadCommand.activeProcesses.get(downloadUrl);
                 const duration = progressTracker.getDuration();
                 const downloadDuration = processInfo?.startTime ? Date.now() - processInfo.startTime : null;
-                DownloadCommand.activeProcesses.delete(downloadUrl); // Remove from active processes on close
+                DownloadCommand.activeProcesses.delete(downloadUrl);
                 const ffmpegFinalMessage = progressTracker.getFFmpegFinalMessage();
                 const derivedErrorMessage = progressTracker.getDerivedErrorMessage();
                 const downloadStats = progressTracker.getDownloadStats();
@@ -742,6 +731,7 @@ class DownloadCommand extends BaseCommand {
                 // Determine termination reason using signal and exit code
                 const terminationInfo = this.analyzeProcessTermination(code, signal, processInfo?.wasCanceled);
                 logDebug(`FFmpeg process (PID: ${processInfo?.pid}) terminated after ${downloadDuration}ms:`, terminationInfo);
+                
                 if (terminationInfo.wasCanceled) {
                     logDebug('Download was canceled by user.');
                     this.sendSuccess({
@@ -769,7 +759,8 @@ class DownloadCommand extends BaseCommand {
                         downloadStats
                     });
                 }
-                if (terminationInfo.isSuccess && !hasError) {
+                
+                if (terminationInfo.isSuccess) {
                     logDebug('Download completed successfully.');
                     this.sendSuccess({ 
                         command: 'download-success',
@@ -798,18 +789,29 @@ class DownloadCommand extends BaseCommand {
                         path: uniqueOutput,
                         downloadStats
                     });
-                } else if (terminationInfo.wasCanceled && !hasError) {
-                    // Handle signal-based cancellation detection
-                    logDebug(`Download was terminated (${terminationInfo.reason}).`);
+                } else {
+                    // Mark as error to prevent duplicate handling
+                    hasError = true;
+                    const errorMessage = `FFmpeg exited with code ${code}${signal ? ` (signal: ${signal})` : ''}`;
+                    logDebug('Download failed:', errorMessage);
+                    if (ffmpegFinalMessage) {
+                        logDebug('FFmpeg final message:', ffmpegFinalMessage);
+                    } else if (derivedErrorMessage) {
+                        logDebug('Derived error message:', derivedErrorMessage);
+                    }
+                    
+                    // Send error as success response with error details - this resolves the promise
                     this.sendSuccess({
-                        command: 'download-canceled',
+                        success: false,
+                        command: 'download-error',
+                        message: errorMessage,
+                        ffmpegOutput: errorOutput || null,
                         downloadUrl,
                         masterUrl,
                         type,
-                        message: `Download was canceled (${terminationInfo.reason})`,
                         duration,
+                        ffmpegFinalMessage: ffmpegFinalMessage || derivedErrorMessage || null,
                         downloadStats: downloadStats || null,
-                        ffmpegFinalMessage: ffmpegFinalMessage || null,
                         terminationInfo,
                         processInfo: {
                             pid: processInfo?.pid,
@@ -818,89 +820,68 @@ class DownloadCommand extends BaseCommand {
                         completedAt: Date.now(),
                         pageUrl,
                         pageFavicon,
+                        originalCommand,
                         isRedownload,
                         audioOnly
                     });
                     resolve({ 
                         success: false, 
-                        downloadStats
+                        downloadStats,
+                        error: errorMessage
                     });
-                } else if (!hasError) {
-                    hasError = true;
-                    const error = `FFmpeg exited with code ${code}${signal ? ` (signal: ${signal})` : ''}: ${errorOutput}`;
-                    logDebug('Download failed:', error);
-                    if (ffmpegFinalMessage) {
-                        logDebug('FFmpeg final message:', ffmpegFinalMessage);
-                    } else if (derivedErrorMessage) {
-                        logDebug('Derived error message:', derivedErrorMessage);
-                    }
-                    this.sendError({
-                        command: 'download-error',
-                        message: error,
-                        downloadUrl,
-                        masterUrl,
-                        type,
-                        duration,
-                        ffmpegFinalMessage: ffmpegFinalMessage || derivedErrorMessage || null,
-                        downloadStats: downloadStats || null, // Include stats in error message too
-                        terminationInfo,
-                        processInfo: {
-                            pid: processInfo?.pid,
-                            downloadDuration
-                        },
-                        completedAt: Date.now(),
-                        pageUrl,
-                        pageFavicon,
-                        originalCommand,
-                        isRedownload,
-                        audioOnly
-                    });
-                    reject(new Error(error));
                 }
             });
             
             ffmpeg.on('error', (err) => {
-                if (!hasError) {
-                    hasError = true;
-                    const processInfo = DownloadCommand.activeProcesses.get(downloadUrl);
-                    const downloadDuration = processInfo?.startTime ? Date.now() - processInfo.startTime : null;
-                    const duration = progressTracker.getDuration();
-                    DownloadCommand.activeProcesses.delete(downloadUrl); // Remove from active processes on error
-                    progressTracker.cleanup();
-                    const ffmpegFinalMessage = progressTracker.getFFmpegFinalMessage();
-                    const derivedErrorMessage = progressTracker.getDerivedErrorMessage();
-                    const downloadStats = progressTracker.getDownloadStats(); // Get stats even on spawn error
+                // Guard against multiple event handling
+                if (hasError) return;
+                
+                hasError = true;
+                const processInfo = DownloadCommand.activeProcesses.get(downloadUrl);
+                const downloadDuration = processInfo?.startTime ? Date.now() - processInfo.startTime : null;
+                const duration = progressTracker.getDuration();
+                DownloadCommand.activeProcesses.delete(downloadUrl);
+                progressTracker.cleanup();
+                const ffmpegFinalMessage = progressTracker.getFFmpegFinalMessage();
+                const derivedErrorMessage = progressTracker.getDerivedErrorMessage();
+                const downloadStats = progressTracker.getDownloadStats();
 
-                    logDebug(`FFmpeg spawn error (PID: ${processInfo?.pid}) after ${downloadDuration}ms:`, err);
-                    if (ffmpegFinalMessage) {
-                        logDebug('FFmpeg final message:', ffmpegFinalMessage);
-                    } else if (derivedErrorMessage) {
-                        logDebug('Derived error message:', derivedErrorMessage);
-                    }
-
-                    this.sendError({
-                        command: 'download-error',
-                        message: err.message,
-                        downloadUrl,
-                        masterUrl,
-                        type,
-                        duration,
-                        ffmpegFinalMessage: ffmpegFinalMessage || derivedErrorMessage || null,
-                        downloadStats: downloadStats || null, // Include stats in spawn error too
-                        processInfo: {
-                            pid: processInfo?.pid,
-                            downloadDuration
-                        },
-                        completedAt: Date.now(),
-                        pageUrl,
-                        pageFavicon,
-                        originalCommand,
-                        isRedownload,
-                        audioOnly
-                    });
-
-                    reject(err);
+                logDebug(`FFmpeg spawn error (PID: ${processInfo?.pid}) after ${downloadDuration}ms:`, err);
+                if (ffmpegFinalMessage) {
+                    logDebug('FFmpeg final message:', ffmpegFinalMessage);
+                } else if (derivedErrorMessage) {
+                    logDebug('Derived error message:', derivedErrorMessage);
                 }
+
+                // Send spawn error as success response with error details - this resolves the promise
+                this.sendSuccess({
+                    success: false,
+                    command: 'download-error',
+                    message: `FFmpeg spawn error: ${err.message}`,
+                    ffmpegOutput: null,
+                    downloadUrl,
+                    masterUrl,
+                    type,
+                    duration,
+                    ffmpegFinalMessage: ffmpegFinalMessage || derivedErrorMessage || null,
+                    downloadStats: downloadStats || null,
+                    processInfo: {
+                        pid: processInfo?.pid,
+                        downloadDuration
+                    },
+                    completedAt: Date.now(),
+                    pageUrl,
+                    pageFavicon,
+                    originalCommand,
+                    isRedownload,
+                    audioOnly
+                });
+
+                resolve({ 
+                    success: false, 
+                    downloadStats,
+                    error: `FFmpeg spawn error: ${err.message}`
+                });
             });
         });
     }
