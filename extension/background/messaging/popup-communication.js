@@ -92,9 +92,9 @@ async function handlePortMessage(message, port, portId) {
             
         case 'clearCaches':
             clearAllHeaderCaches(); 
-            cleanupAllVideos(); // everything from video-manager
+            cleanupAllVideos(); // Includes icon reset for all tabs
             await clearPreviewCache(); // Clear preview cache
-            logger.debug('Cleared all caches (video + headers + preview)');
+            logger.debug('Cleared all caches (video + headers + preview + icons)');
             
             // Send confirmation back to popup
             port.postMessage({

@@ -26,6 +26,10 @@ const variantMasterMap = new Map();
 // Map<tabId, Set<normalizedUrl>>
 const dismissedVideos = new Map();
 
+// Track tabs that have valid, displayable videos for icon management
+// Set<tabId> - if tab is in set, it has videos (colored icon)
+const tabsWithVideos = new Set();
+
 // Expose allDetectedVideos for debugging
 globalThis.allDetectedVideosInternal = allDetectedVideos;
 
@@ -641,6 +645,9 @@ function sendVideoUpdateToUI(tabId, singleVideoUrl = null, singleVideoObj = null
         }
     }
     
+    // Update tab icon when videos change
+    updateTabIcon(tabId);
+    
     // If popup is open, use direct port communication for efficient updates
     if (port) {
         try {
@@ -705,6 +712,80 @@ function sendVideoUpdateToUI(tabId, singleVideoUrl = null, singleVideoObj = null
     return false;
 }
 
+/**
+ * Update extension icon for a specific tab based on video availability
+ * @param {number} tabId - Tab ID to update icon for
+ */
+function updateTabIcon(tabId) {
+    if (!tabId || tabId < 0) return;
+    
+    // Check if tab has any valid, displayable videos
+    const hasValidVideos = hasDisplayableVideos(tabId);
+    const wasInSet = tabsWithVideos.has(tabId);
+    
+    // Only update if state changed
+    if (hasValidVideos === wasInSet) return;
+    
+    // Update set state
+    if (hasValidVideos) {
+        tabsWithVideos.add(tabId);
+    } else {
+        tabsWithVideos.delete(tabId);
+    }
+    
+    try {
+        if (hasValidVideos) {
+            // Set colored icon
+            chrome.action.setIcon({
+                tabId,
+                path: {
+                    "16": "../icons/16.png",
+                    "32": "../icons/32.png", 
+                    "48": "../icons/48.png",
+                    "128": "../icons/128.png"
+                }
+            });
+        } else {
+            // Set B&W icon
+            chrome.action.setIcon({
+                tabId,
+                path: {
+                    "16": "../icons/16-bw.png",
+                    "32": "../icons/32-bw.png",
+                    "48": "../icons/48-bw.png", 
+                    "128": "../icons/128-bw.png"
+                }
+            });
+        }
+        
+        logger.debug(`Tab ${tabId} icon updated: ${hasValidVideos ? 'colored' : 'B&W'}`);
+    } catch (error) {
+        logger.warn(`Failed to update icon for tab ${tabId}:`, error);
+    }
+}
+
+/**
+ * Check if tab has any valid, displayable videos
+ * @param {number} tabId - Tab ID to check
+ * @returns {boolean} True if tab has displayable videos
+ */
+function hasDisplayableVideos(tabId) {
+    const tabVideosMap = allDetectedVideos.get(tabId);
+    if (!tabVideosMap || tabVideosMap.size === 0) return false;
+    
+    // Check if any videos would be displayed by getVideosForDisplay logic
+    for (const video of tabVideosMap.values()) {
+        if (video.isValid && 
+            video.mediaType !== 'audio' &&
+            !(video.isVariant && video.hasKnownMaster) &&
+            !isVideoDismissed(tabId, video.normalizedUrl)) {
+            return true;
+        }
+    }
+    
+    return false;
+}
+
 // Clean up for tab
 function cleanupVideosForTab(tabId) {
     logger.debug(`Tab removed: ${tabId}`);
@@ -733,6 +814,24 @@ function cleanupVideosForTab(tabId) {
     // Clean up dismissed videos
     if (dismissedVideos.has(tabId)) {
         dismissedVideos.delete(tabId);
+    }
+    
+    // Clean up icon state and reset to B&W
+    if (tabsWithVideos.has(tabId)) {
+        tabsWithVideos.delete(tabId);
+        try {
+            chrome.action.setIcon({
+                tabId,
+                path: {
+                    "16": "../icons/16-bw.png",
+                    "32": "../icons/32-bw.png",
+                    "48": "../icons/48-bw.png",
+                    "128": "../icons/128-bw.png"
+                }
+            });
+        } catch (error) {
+            // Tab might already be closed, ignore error
+        }
     }
 }
 
@@ -893,6 +992,9 @@ function dismissVideoFromTab(tabId, url) {
     }
     dismissedVideos.get(tabId).add(url);
     logger.info(`Dismissed video ${url} for tab ${tabId}`);
+    
+    // Update icon after dismissing video
+    updateTabIcon(tabId);
 }
 
 // Restore a dismissed video for a tab (show in UI, allow processing)
@@ -939,11 +1041,30 @@ function getVideosForDisplay(tabId) {
 // function to cleanup both video maps: allDetectedVideos variantMasterMap – in global scope
 function cleanupAllVideos() {
     logger.debug('Cleaning up all detected videos');
+    
+    // Reset all tab icons to B&W before clearing
+    for (const tabId of tabsWithVideos) {
+        try {
+            chrome.action.setIcon({
+                tabId,
+                path: {
+                    "16": "../icons/16-bw.png",
+                    "32": "../icons/32-bw.png",
+                    "48": "../icons/48-bw.png",
+                    "128": "../icons/128-bw.png"
+                }
+            });
+        } catch (error) {
+            // Tab might be closed, ignore error
+        }
+    }
+    
     allDetectedVideos.clear();
     variantMasterMap.clear();
     videoProcessingPipeline.queue = [];
     videoProcessingPipeline.processing.clear();
     dismissedVideos.clear();
+    tabsWithVideos.clear();
     logger.info('All detected videos cleared');
 }
 
@@ -958,5 +1079,6 @@ export {
     initVideoManager,
     getVideoByUrl,
     dismissVideoFromTab,
-    restoreVideoInTab
+    restoreVideoInTab,
+    updateTabIcon
 };
