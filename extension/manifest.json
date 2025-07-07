@@ -29,14 +29,17 @@
   },
   "action": {
     "default_popup": "popup/popup.html",
+    "default_title": "Download videos from this page",
     "default_icon": {
-      "16": "icons/16.png",
-      "48": "icons/48.png",
-      "128": "icons/128.png"
+      "16": "icons/16-bw.png",
+      "32": "icons/32-bw.png",
+      "48": "icons/48-bw.png",
+      "128": "icons/128-bw.png"
     }
   },
   "icons": {
     "16": "icons/16.png",
+    "32": "icons/32.png",
     "48": "icons/48.png",
     "128": "icons/128.png"
   }
