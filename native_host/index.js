@@ -92,7 +92,6 @@ function registerCommands(commandRunner) {
  */
 async function processMessage(request, commandRunner) {
     const requestId = request.id;
-    logDebug('Processing message:', request, 'ID:', requestId);
     
     // Command type is in the request.command field
     const commandType = request.command;

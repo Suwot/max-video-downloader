@@ -61,6 +61,7 @@ class ProgressStrategy {
         this.downloadStats = null;
         this.ffmpegFinalMessage = null; // Store FFmpeg final message after progress=end (for all outcomes)
         this.progressEndSeen = false; // Track if we've seen progress=end
+        this.finalProcessedTime = null; // Store the final processed time from FFmpeg
         
         // For error line collection
         this.collectedErrorLines = []; // Store error lines throughout the process
@@ -479,6 +480,11 @@ class ProgressStrategy {
         // Always collect error lines throughout the process for later use
         this.collectErrorLines(output);
         
+        // Capture final processed time before progress=end (for partial downloads)
+        if (!this.progressEndSeen) {
+            this.captureFinalProcessedTime(output);
+        }
+        
         // Handle final completion status and extract stats
         const progressStatus = output.match(/progress=(\w+)/);
         if (progressStatus && progressStatus[1] === 'end') {
@@ -741,6 +747,46 @@ class ProgressStrategy {
         
         // Join all collected error lines with newlines
         return this.collectedErrorLines.join('\n');
+    }
+    
+    /**
+     * Capture the final processed time from FFmpeg progress output
+     * This continuously updates until progress=end is seen
+     * @param {string} output FFmpeg output
+     */
+    captureFinalProcessedTime(output) {
+        // Parse time information - use the most precise format available
+        const outTimeUs = output.match(/out_time_us=(\d+)/);
+        const outTimeMs = output.match(/out_time_ms=(\d+)/);
+        const outTimeMatch = output.match(/out_time=(\d+):(\d+):(\d+\.\d+)/);
+        
+        if (outTimeUs) {
+            const timeInMicroseconds = parseInt(outTimeUs[1], 10);
+            if (!isNaN(timeInMicroseconds) && timeInMicroseconds > 0) {
+                this.finalProcessedTime = timeInMicroseconds / 1000000;
+            }
+        } else if (outTimeMs) {
+            const timeInMilliseconds = parseInt(outTimeMs[1], 10);
+            if (!isNaN(timeInMilliseconds) && timeInMilliseconds > 0) {
+                this.finalProcessedTime = timeInMilliseconds / 1000;
+            }
+        } else if (outTimeMatch) {
+            const hours = parseInt(outTimeMatch[1], 10);
+            const minutes = parseInt(outTimeMatch[2], 10);
+            const seconds = parseFloat(outTimeMatch[3]);
+            const totalSeconds = hours * 3600 + minutes * 60 + seconds;
+            if (totalSeconds > 0) {
+                this.finalProcessedTime = totalSeconds;
+            }
+        }
+    }
+    
+    /**
+     * Get the final processed time (actual duration of processed content)
+     * @returns {number|null} Final processed time in seconds or null if not available
+     */
+    getFinalProcessedTime() {
+        return this.finalProcessedTime;
     }
 }
 

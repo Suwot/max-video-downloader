@@ -26,6 +26,9 @@ const ProgressTracker = require('../lib/progress/progress-tracker');
 class DownloadCommand extends BaseCommand {
     // Static Map shared across all instances for process tracking
     static activeProcesses = new Map();
+    
+    // Static Set to track canceled downloads (survives process cleanup)
+    static canceledDownloads = new Set();
 
     /**
      * Generate unique session ID for download
@@ -67,8 +70,9 @@ class DownloadCommand extends BaseCommand {
         const { ffmpegProcess, progressTracker, outputPath, sessionId } = processInfo;
         
         try {
-            // Mark as canceled before terminating FFmpeg process
-            processInfo.wasCanceled = true;
+            // Mark download as canceled in persistent set
+            DownloadCommand.canceledDownloads.add(downloadUrl);
+            logDebug('Added to canceled downloads set:', downloadUrl);
             
             // IMMEDIATELY remove from activeProcesses to prevent repeated cancels
             DownloadCommand.activeProcesses.delete(downloadUrl);
@@ -122,6 +126,12 @@ class DownloadCommand extends BaseCommand {
         } catch (error) {
             logDebug('Error during download cancellation:', error);
             logDebug('Cancel operation failed, but not sending error message to extension');
+        } finally {
+            // Clean up canceled downloads set after a delay to allow close event to process
+            setTimeout(() => {
+                DownloadCommand.canceledDownloads.delete(downloadUrl);
+                logDebug('Cleaned up canceled download from set:', downloadUrl);
+            }, 5000); // 5 second cleanup delay
         }
     }
 
@@ -751,7 +761,17 @@ class DownloadCommand extends BaseCommand {
                 
                 // Get process info before deletion (might be deleted in cancelDownload)
                 const processInfo = DownloadCommand.activeProcesses.get(downloadUrl);
-                const duration = progressTracker.getDuration();
+                const originalDuration = progressTracker.getDuration();
+                const finalProcessedDuration = progressTracker.getFinalProcessedDuration();
+                
+                // Use final processed duration if available (actual processed time), fallback to original
+                const duration = finalProcessedDuration || originalDuration;
+                
+                // Log duration information for debugging
+                if (finalProcessedDuration && originalDuration && Math.abs(finalProcessedDuration - originalDuration) > 1) {
+                    logDebug(`Duration difference: original=${originalDuration}s, processed=${finalProcessedDuration}s`);
+                }
+                
                 const downloadDuration = processInfo?.startTime ? Date.now() - processInfo.startTime : null;
                 
                 // Clean up activeProcesses if not already done
@@ -763,11 +783,11 @@ class DownloadCommand extends BaseCommand {
                 const derivedErrorMessage = progressTracker.getDerivedErrorMessage();
                 const downloadStats = progressTracker.getDownloadStats();
 
-                // Determine termination reason using signal and exit code
-                const terminationInfo = this.analyzeProcessTermination(code, signal, processInfo?.wasCanceled);
+                // Determine termination reason using signal, exit code, and output file verification
+                const terminationInfo = this.analyzeProcessTermination(code, signal, downloadUrl, uniqueOutput, type);
                 logDebug(`FFmpeg process (PID: ${processInfo?.pid}) terminated after ${downloadDuration}ms:`, terminationInfo);
                 
-                if (terminationInfo.wasCanceled) {
+                if (terminationInfo.wasCanceled && !terminationInfo.isPartialSuccess) {
                     logDebug('Download was canceled by user.');
                     // Don't send response here - cancellation response already sent by cancelDownload()
                     return resolve({ 
@@ -776,8 +796,10 @@ class DownloadCommand extends BaseCommand {
                     });
                 }
                 
-                if (terminationInfo.isSuccess) {
-                    logDebug('Download completed successfully.');
+                if (terminationInfo.isSuccess || terminationInfo.isPartialSuccess) {
+                    const isPartial = terminationInfo.isPartialSuccess || false;
+                    logDebug(isPartial ? 'Download completed partially (direct type).' : 'Download completed successfully.');
+                    
                     this.sendMessage({ 
                         command: 'download-success',
                         sessionId,
@@ -799,12 +821,14 @@ class DownloadCommand extends BaseCommand {
                         pageFavicon,
                         originalCommand,
                         isRedownload,
-                        audioOnly
+                        audioOnly,
+                        isPartial // Add partial flag for UI
                     }, { useMessageId: false }); // Event message, no response ID
                     resolve({ 
                         success: true, 
                         path: uniqueOutput,
-                        downloadStats
+                        downloadStats,
+                        isPartial
                     });
                 } else {
                     // Mark as error to prevent duplicate handling
@@ -864,6 +888,13 @@ class DownloadCommand extends BaseCommand {
                 const ffmpegFinalMessage = progressTracker.getFFmpegFinalMessage();
                 const derivedErrorMessage = progressTracker.getDerivedErrorMessage();
                 const downloadStats = progressTracker.getDownloadStats();
+                
+                // Get process info and calculate durations (same logic as close handler)
+                const processInfo = DownloadCommand.activeProcesses.get(downloadUrl);
+                const originalDuration = progressTracker.getDuration();
+                const finalProcessedDuration = progressTracker.getFinalProcessedDuration();
+                const duration = finalProcessedDuration || originalDuration;
+                const downloadDuration = processInfo?.startTime ? Date.now() - processInfo.startTime : null;
 
                 logDebug(`FFmpeg spawn error (PID: ${processInfo?.pid}) after ${downloadDuration}ms:`, err);
                 if (ffmpegFinalMessage) {
@@ -910,92 +941,127 @@ class DownloadCommand extends BaseCommand {
      * Analyze process termination to determine the exact reason
      * @param {number} exitCode - Process exit code
      * @param {string|null} signal - Termination signal (SIGTERM, SIGKILL, etc.)
-     * @param {boolean} wasCanceledFlag - Manual cancellation flag
+     * @param {string} downloadUrl - Download URL to check cancellation status
+     * @param {string} outputPath - Expected output file path
+     * @param {string} type - Media type ('hls', 'dash', 'direct')
      * @returns {Object} Termination analysis with reason, type, and flags
      * @private
      */
-    analyzeProcessTermination(exitCode, signal, wasCanceledFlag = false) {
-        // Signal-based detection (most reliable)
+    analyzeProcessTermination(exitCode, signal, downloadUrl, outputPath = null, type = null) {
+        const wasCanceled = DownloadCommand.canceledDownloads.has(downloadUrl);
+        const hasValidFile = outputPath && this.verifyDownloadCompletion(outputPath, type);
+        
+        logDebug('Termination analysis:', { exitCode, signal, wasCanceled, hasValidFile, type, outputPath });
+        
+        // Signal-based detection (most reliable for cancellation)
         if (signal) {
-            switch (signal) {
-                case 'SIGTERM':
-                    return {
-                        wasCanceled: true,
-                        isSuccess: false,
-                        reason: 'SIGTERM (graceful termination)',
-                        signal,
-                        exitCode,
-                        method: 'signal-detection'
-                    };
-                case 'SIGKILL':
-                    return {
-                        wasCanceled: true,
-                        isSuccess: false,
-                        reason: 'SIGKILL (force termination)',
-                        signal,
-                        exitCode,
-                        method: 'signal-detection'
-                    };
-                case 'SIGINT':
-                    return {
-                        wasCanceled: true,
-                        isSuccess: false,
-                        reason: 'SIGINT (interrupt)',
-                        signal,
-                        exitCode,
-                        method: 'signal-detection'
-                    };
-                default:
-                    return {
-                        wasCanceled: true,
-                        isSuccess: false,
-                        reason: `${signal} (unknown signal)`,
-                        signal,
-                        exitCode,
-                        method: 'signal-detection'
-                    };
+            return {
+                wasCanceled: true,
+                isSuccess: false,
+                isPartialSuccess: false,
+                reason: `${signal} (signal termination)`,
+                signal,
+                exitCode,
+                method: 'signal-detection'
+            };
+        }
+        
+        // Cancellation-based logic with file verification
+        if (wasCanceled) {
+            if (hasValidFile && type === 'direct') {
+                // Direct type with valid file after cancellation = partial success
+                return {
+                    wasCanceled: true,
+                    isSuccess: false,
+                    isPartialSuccess: true,
+                    reason: 'canceled but partial file is playable (direct type)',
+                    signal: null,
+                    exitCode,
+                    method: 'partial-success-detection'
+                };
+            } else {
+                // All other cancellation cases
+                return {
+                    wasCanceled: true,
+                    isSuccess: false,
+                    isPartialSuccess: false,
+                    reason: hasValidFile ? 'canceled with file cleanup' : 'canceled before file creation',
+                    signal: null,
+                    exitCode,
+                    method: 'cancellation-detection'
+                };
             }
         }
         
-        // Exit code based detection (fallback)
+        // Non-cancellation outcomes
         if (exitCode === 0) {
-            return {
-                wasCanceled: false,
-                isSuccess: true,
-                reason: 'successful completion',
-                signal: null,
-                exitCode,
-                method: 'exit-code'
-            };
-        } else if (exitCode === 255) {
-            // FFmpeg often returns 255 for SIGTERM
-            return {
-                wasCanceled: true,
-                isSuccess: false,
-                reason: 'exit code 255 (likely SIGTERM)',
-                signal: null,
-                exitCode,
-                method: 'exit-code'
-            };
-        } else if (wasCanceledFlag) {
-            // Manual flag detection (least reliable)
-            return {
-                wasCanceled: true,
-                isSuccess: false,
-                reason: 'manual cancellation flag',
-                signal: null,
-                exitCode,
-                method: 'manual-flag'
-            };
+            if (hasValidFile) {
+                return {
+                    wasCanceled: false,
+                    isSuccess: true,
+                    isPartialSuccess: false,
+                    reason: 'successful completion (verified)',
+                    signal: null,
+                    exitCode,
+                    method: 'file-verification'
+                };
+            } else {
+                return {
+                    wasCanceled: false,
+                    isSuccess: false,
+                    isPartialSuccess: false,
+                    reason: 'exit code 0 but no valid output file',
+                    signal: null,
+                    exitCode,
+                    method: 'file-verification'
+                };
+            }
         } else {
+            // Any non-zero exit code = error
             return {
                 wasCanceled: false,
                 isSuccess: false,
+                isPartialSuccess: false,
                 reason: `error exit code ${exitCode}`,
                 signal: null,
                 exitCode,
                 method: 'exit-code'
             };
+        }
+    }
+
+    /**
+     * Verify if download actually completed successfully by checking output file
+     * @param {string} outputPath - Path to the expected output file
+     * @param {string} type - Media type ('hls', 'dash', 'direct')
+     * @returns {boolean} - True if download appears to have completed successfully
+     * @private
+     */
+    verifyDownloadCompletion(outputPath, type) {
+        try {
+            if (!fs.existsSync(outputPath)) {
+                logDebug('Download verification: Output file does not exist');
+                return false;
+            }
+
+            const stats = fs.statSync(outputPath);
+            const fileSizeBytes = stats.size;
+            
+            // Minimum size threshold: 10KB for most media files
+            // Audio-only files might be smaller, but 10KB is reasonable minimum
+            const minSizeBytes = 10 * 1024; // 10KB
+            
+            if (fileSizeBytes < minSizeBytes) {
+                logDebug(`Download verification: File too small (${fileSizeBytes} bytes < ${minSizeBytes} bytes)`);
+                return false;
+            }
+            
+            logDebug(`Download verification: File exists with valid size (${fileSizeBytes} bytes)`);
+            return true;
+            
+        } catch (error) {
+            logDebug('Download verification error:', error.message);
+            return false;
         }
     }
 }

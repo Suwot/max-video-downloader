@@ -149,6 +149,16 @@ class ProgressTracker {
     }
     
     /**
+     * Get final processed duration from FFmpeg output (actual processed time)
+     * This represents the actual duration of content that was processed/downloaded,
+     * which may be different from the original duration for partial downloads
+     * @returns {number|null} Final processed duration in seconds or null if not available
+     */
+    getFinalProcessedDuration() {
+        return this.strategy?.getFinalProcessedTime() || null;
+    }
+    
+    /**
      * Get derived error message from collected error lines
      * @returns {string|null} Consolidated error message or null if no errors collected
      */
