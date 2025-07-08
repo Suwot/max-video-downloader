@@ -341,7 +341,7 @@ class VideoProcessingPipeline {
             // Apply header rule before sending to native host
             await applyHeaderRule(tabId, urlToUse);
             
-            // Direct call to NHS - no rate limiting wrapper needed
+            // Direct call to NHS - generates preview and expects response
             const response = await nativeHostService.sendMessage({
                 command: 'generatePreview',
                 url: urlToUse,
@@ -430,7 +430,7 @@ class VideoProcessingPipeline {
             // Apply header rule before sending to native host
             await applyHeaderRule(tabId, video.url);
 
-            // Direct call to NHS - no rate limiting wrapper needed
+            // Direct call to NHS - gets ffprobe data and expects response
             const response = await nativeHostService.sendMessage({
                 command: 'getQualities',
                 url: video.url,

@@ -43,7 +43,7 @@ class FileSystemCommand extends BaseCommand {
             }
         } catch (error) {
             logDebug(`FileSystem operation failed: ${operation}`, error);
-            this.sendError(error.message);
+            this.sendMessage({ error: error.message });
             return { error: error.message };
         }
     }
@@ -68,7 +68,7 @@ class FileSystemCommand extends BaseCommand {
         await this.executeCommand(command.cmd, command.args);
         
         const result = { success: true, operation: 'openFile', filePath };
-        this.sendSuccess(result);
+        this.sendMessage(result);
         return result;
     }
 
@@ -92,7 +92,7 @@ class FileSystemCommand extends BaseCommand {
         await this.executeCommand(command.cmd, command.args);
         
         const result = { success: true, operation: 'showInFolder', filePath };
-        this.sendSuccess(result);
+        this.sendMessage(result);
         return result;
     }
 
@@ -114,7 +114,7 @@ class FileSystemCommand extends BaseCommand {
         }
 
         const result = { success: true, operation: 'chooseDirectory', selectedPath };
-        this.sendSuccess(result);
+        this.sendMessage(result);
         return result;
     }
 
@@ -136,7 +136,7 @@ class FileSystemCommand extends BaseCommand {
         }
 
         const result = { success: true, operation: 'chooseSaveLocation', selectedPath, defaultName };
-        this.sendSuccess(result);
+        this.sendMessage(result);
         return result;
     }
 

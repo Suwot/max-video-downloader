@@ -17,6 +17,14 @@ class BaseCommand {
     constructor(messagingService) {
         this.messaging = messagingService;
         this.services = servicesManager;
+        this.currentMessageId = null;
+    }
+    
+    /**
+     * Set the current message ID for responses
+     */
+    setMessageId(messageId) {
+        this.currentMessageId = messageId;
     }
 
     /**
@@ -27,53 +35,18 @@ class BaseCommand {
     }
 
     /**
-     * Send progress update (rate-limited)
+     * Send a message (response or event) back to the extension
+     * @param {Object} message - The message to send
+     * @param {Object} options - Optional parameters
+     * @param {boolean} options.useMessageId - Whether to include the current message ID (default: true for responses)
      */
-    sendProgress(progress) {
-        this.messaging.sendResponse({
-            command: 'download-progress',
-            ...progress
-        });
-    }
-
-    /**
-     * Send success response
-     */
-    sendSuccess(data = {}) {
-        this.messaging.sendResponse({
-            success: true,
-            ...data
-        });
-    }
-
-    /**
-     * Send error response
-     */
-    sendError(error, details = null) {
-        if (typeof error === 'string') {
-            // Simple string error
-            logDebug(`Command error: ${error}`, details);
-            this.messaging.sendResponse({
-                error: error
-            });
-        } else if (error && typeof error === 'object') {
-            // Object format with detailed error information
-            const errorMessage = error.message || error.error || 'Unknown error';
-            logDebug(`Command error: ${errorMessage}`, error);
-            
-            // Send clean error structure without nesting
-            this.messaging.sendResponse({
-                error: errorMessage,
-                command: error.command || 'error',
-                ...error
-            });
-        } else {
-            // Fallback for other types
-            logDebug(`Command error: ${error}`, details);
-            this.messaging.sendResponse({
-                error: String(error)
-            });
-        }
+    sendMessage(message, options = {}) {
+        const { useMessageId = true } = options;
+        
+        // For responses, include the message ID; for events, don't
+        const messageId = useMessageId ? this.currentMessageId : null;
+        
+        this.messaging.sendMessage(message, messageId);
     }
     
     /**

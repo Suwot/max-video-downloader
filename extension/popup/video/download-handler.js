@@ -137,6 +137,7 @@ function updateSingleDownloadButtonState(elementsDiv, progressData = {}) {
     const cancelHandler = () => {
         const cancelMessage = {
             command: 'cancel-download',
+            type: progressData.type,
             downloadUrl: progressData.downloadUrl,
             masterUrl: progressData.masterUrl || null,
             selectedOptionOrigText: progressData.selectedOptionOrigText

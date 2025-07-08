@@ -4,6 +4,7 @@ export class NativeHostService {
         this.port = null;
         this.messageId = 0;
         this.pendingMessages = new Map();
+        this.eventListeners = new Map(); // For event-driven communication
         this.reconnectTimer = null;
         this.heartbeatTimer = null;
         this.hostName = 'com.mycompany.ffmpeg';
@@ -61,7 +62,14 @@ export class NativeHostService {
     handleMessage(response) {
         console.log('Received native message:', response);
         
-        // Route to pending message handler if it exists
+        // Handle event-driven messages (downloads and other events)
+        if (response?.command && !response?.id) {
+            // This is an event message, not a response to a promise-based request
+            this.handleEventMessage(response);
+            return;
+        }
+        
+        // Route to pending message handler if it exists (promise-based)
         if (response?.id && this.pendingMessages.has(response.id)) {
             const { resolve, reject, callback } = this.pendingMessages.get(response.id);
             
@@ -91,7 +99,61 @@ export class NativeHostService {
         console.warn('Received message without matching pending request:', response);
     }
     
-    async sendMessage(message, progressCallback = null) {
+    /**
+     * Handle event-driven messages (downloads, progress, etc.)
+     * @param {Object} event - Event message from native host
+     */
+    handleEventMessage(event) {
+        const { command, sessionId } = event;
+        
+        // Route to registered event listeners
+        if (this.eventListeners.has(command)) {
+            const listeners = this.eventListeners.get(command);
+            listeners.forEach(listener => {
+                try {
+                    listener(event);
+                } catch (error) {
+                    console.error(`Error in event listener for ${command}:`, error);
+                }
+            });
+        } else {
+            console.warn(`No event listeners registered for command: ${command}`);
+        }
+    }
+    
+    /**
+     * Register an event listener for a specific command
+     * @param {string} command - Command to listen for
+     * @param {Function} listener - Callback function
+     */
+    addEventListener(command, listener) {
+        if (!this.eventListeners.has(command)) {
+            this.eventListeners.set(command, new Set());
+        }
+        this.eventListeners.get(command).add(listener);
+    }
+    
+    /**
+     * Remove an event listener
+     * @param {string} command - Command to remove listener from
+     * @param {Function} listener - Callback function to remove
+     */
+    removeEventListener(command, listener) {
+        if (this.eventListeners.has(command)) {
+            this.eventListeners.get(command).delete(listener);
+        }
+    }
+    
+    async sendMessage(message, options = {}) {
+        const { expectResponse = true, progressCallback = null } = options;
+        
+        if (!expectResponse) {
+            // Fire-and-forget message
+            this.sendFireAndForget(message);
+            return;
+        }
+        
+        // Promise-based message with optional progress callback
         if (!this.port && !this.connect()) {
             throw new Error('Could not connect to native host');
         }
@@ -135,6 +197,29 @@ export class NativeHostService {
         });
     }
     
+    /**
+     * Send a fire-and-forget message (no response expected)
+     * @param {Object} message - Message to send
+     */
+    sendFireAndForget(message) {
+        if (!this.port && !this.connect()) {
+            console.error('Could not connect to native host for message:', message.command);
+            return;
+        }
+        
+        try {
+            this.port.postMessage(message);
+            console.log('Sent fire-and-forget message:', message.command, message);
+        } catch (error) {
+            console.error('Failed to send fire-and-forget message:', error);
+            
+            // Try to reconnect on send error
+            if (error.message.includes('port closed') || !this.port) {
+                this.connect();
+            }
+        }
+    }
+    
     async sendHeartbeat() {
         try {
             const response = await this.sendMessage({ command: 'heartbeat' });
@@ -159,6 +244,9 @@ export class NativeHostService {
             reject(new Error('Service disconnected'));
         }
         this.pendingMessages.clear();
+        
+        // Clear event listeners
+        this.eventListeners.clear();
     }
 }
 

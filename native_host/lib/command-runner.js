@@ -39,24 +39,17 @@ class CommandRunner {
         
         if (!this.commandRegistry.has(commandType)) {
             const error = `Unknown command: ${commandType}`;
-            this.messaging.sendResponse({ error }, requestId);
+            this.messaging.sendMessage({ error }, requestId);
             return { error };
         }
 
         try {
-            // Create a messaging proxy that will include the requestId in all responses
-            const messagingProxy = {
-                sendResponse: (response) => this.messaging.sendResponse(response, requestId),
-                // Proxy other methods directly
-                initialize: (...args) => this.messaging.initialize(...args),
-                handleIncomingData: (...args) => this.messaging.handleIncomingData(...args),
-                processMessages: (...args) => this.messaging.processMessages(...args),
-                startHeartbeatMonitor: (...args) => this.messaging.startHeartbeatMonitor(...args)
-            };
-
-            // Instantiate the command with the messaging proxy
+            // Instantiate the command directly with messaging service
             const CommandClass = this.commandRegistry.get(commandType);
-            const command = new CommandClass(messagingProxy);
+            const command = new CommandClass(this.messaging);
+            
+            // Set the message ID for proper response routing
+            command.setMessageId(requestId);
 
             // Execute the command
             return await command.execute(message);

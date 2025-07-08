@@ -32,7 +32,7 @@ class GeneratePreviewCommand extends BaseCommand {
         
         // Skip for blob URLs
         if (url.startsWith('blob:')) {
-            this.sendError('Cannot generate preview for blob URLs');
+            this.sendMessage('Cannot generate preview for blob URLs');
             return { error: 'Cannot generate preview for blob URLs' };
         }
         
@@ -53,7 +53,7 @@ class GeneratePreviewCommand extends BaseCommand {
                     if (ffmpeg && !ffmpeg.killed) {
                         ffmpeg.kill('SIGTERM');
                     }
-                    this.sendError('Preview generation timeout');
+                    this.sendMessage('Preview generation timeout');
                     reject(new Error('Preview generation timeout after 30 seconds'));
                 }, 30000); // 30 second timeout
                 
@@ -108,32 +108,32 @@ class GeneratePreviewCommand extends BaseCommand {
                             // Convert image to data URL
                             const imageBuffer = fs.readFileSync(previewPath);
                             const dataUrl = 'data:image/jpeg;base64,' + imageBuffer.toString('base64');
-                            this.sendSuccess({ previewUrl: dataUrl });
+                            this.sendMessage({ previewUrl: dataUrl, success: true });
                             // Clean up
                             fs.unlink(previewPath, (err) => {
                                 if (err) logDebug('Failed to delete preview file:', err);
                             });
                             resolve({ success: true, previewUrl: dataUrl });
                         } catch (err) {
-                            this.sendError('Failed to read preview file: ' + err.message);
+                            this.sendMessage('Failed to read preview file: ' + err.message);
                             reject(err);
                         }
                     } else {
                         const error = `Failed to generate preview. FFmpeg exited with code ${code}: ${errorOutput}`;
-                        this.sendError(error);
+                        this.sendMessage(error);
                         reject(new Error(error));
                     }
                 });
         
                 ffmpeg.on('error', (err) => {
                     clearTimeout(timeout);
-                    this.sendError(err.message);
+                    this.sendMessage(err.message);
                     reject(err);
                 });
             });
         } catch (err) {
             logDebug('Preview generation error:', err);
-            this.sendError(err.message);
+            this.sendMessage(err.message);
             return { error: err.message };
         }
     }

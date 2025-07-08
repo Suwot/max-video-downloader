@@ -21,7 +21,6 @@ const { logDebug } = require('./utils/logger');
 const servicesManager = require('./services');
 
 // Import command registry and commands
-const commandRegistry = require('./commands');
 const DownloadCommand = require('./commands/download');
 const GetQualitiesCommand = require('./commands/get-qualities');
 const GeneratePreviewCommand = require('./commands/generate-preview');
@@ -54,8 +53,8 @@ async function bootstrap() {
         // 3. Create command runner
         const commandRunner = new CommandRunner(messagingService, errorHandler);
         
-        // 4. Register all commands with registry and command runner
-        registerCommands(commandRunner, commandRegistry);
+        // 4. Register all commands with command runner
+        registerCommands(commandRunner);
         
         // 5. Initialize messaging with message handler function
         messagingService.initialize((request) => {
@@ -76,16 +75,8 @@ async function bootstrap() {
 /**
  * Register all command types with the command runner
  */
-function registerCommands(commandRunner, registry) {
-    // Register commands with registry
-    registry.registerCommand('download', DownloadCommand);
-    registry.registerCommand('cancel-download', DownloadCommand);
-    registry.registerCommand('getQualities', GetQualitiesCommand);
-    registry.registerCommand('generatePreview', GeneratePreviewCommand);
-    registry.registerCommand('heartbeat', HeartbeatCommand);
-    registry.registerCommand('fileSystem', FileSystemCommand);
-    
-    // Register the same commands with the command runner
+function registerCommands(commandRunner) {
+    // Register commands with command runner only
     commandRunner.registerCommand('download', DownloadCommand);
     commandRunner.registerCommand('cancel-download', DownloadCommand);
     commandRunner.registerCommand('getQualities', GetQualitiesCommand);
@@ -93,7 +84,7 @@ function registerCommands(commandRunner, registry) {
     commandRunner.registerCommand('heartbeat', HeartbeatCommand);
     commandRunner.registerCommand('fileSystem', FileSystemCommand);
     
-    logDebug('All commands registered');
+    logDebug('All commands registered with CommandRunner');
 }
 
 /**

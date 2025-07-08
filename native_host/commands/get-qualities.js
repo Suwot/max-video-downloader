@@ -38,7 +38,7 @@ class GetQualitiesCommand extends BaseCommand {
         // Skip for blob URLs
         if (url.startsWith('blob:')) {
             logDebug('❌ Cannot analyze blob URLs');
-            this.sendError('Cannot analyze blob URLs');
+            this.sendMessage('Cannot analyze blob URLs');
             return { error: 'Cannot analyze blob URLs' };
         }
         
@@ -226,31 +226,31 @@ class GetQualitiesCommand extends BaseCommand {
                             // Note: This ffprobe-derived metadata takes priority over JavaScript-parsed manifest data
                             // The video-manager.js handles merging with proper priority
                             
-                            this.sendSuccess({ streamInfo });
+                            this.sendMessage({ streamInfo, success: true });
                             logDebug('✅ Media analysis complete');
                             resolve({ success: true, streamInfo });
                             
                         } catch (error) {
                             logDebug('❌ Error parsing FFprobe output:', error);
-                            this.sendError('Failed to parse stream info');
+                            this.sendMessage('Failed to parse stream info');
                             resolve({ error: 'Failed to parse stream info' });
                         }
                     } else {
                         logDebug('❌ FFprobe failed with code:', code, 'Error:', errorOutput);
-                        this.sendError('Failed to analyze video');
+                        this.sendMessage('Failed to analyze video');
                         resolve({ error: 'Failed to analyze video' });
                     }
                 });
     
                 ffprobe.on('error', (err) => {
                     logDebug('❌ FFprobe spawn error:', err);
-                    this.sendError('Failed to start FFprobe: ' + err.message);
+                    this.sendMessage('Failed to start FFprobe: ' + err.message);
                     resolve({ error: 'Failed to start FFprobe: ' + err.message });
                 });
             });
         } catch (err) {
             logDebug('❌ GetQualities error:', err);
-            this.sendError(err.message);
+            this.sendMessage(err.message);
             return { error: err.message };
         }
     }

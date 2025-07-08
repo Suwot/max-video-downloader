@@ -286,6 +286,7 @@ class DownloadButtonComponent {
     sendCancelMessage(videoData) {
         const cancelMessage = {
             command: 'cancel-download',
+            type: videoData.type,
             downloadUrl: videoData.downloadUrl,
             masterUrl: videoData.masterUrl || null,
             selectedOptionOrigText: this.elementsDiv.querySelector('.selected-option')?.textContent || ''

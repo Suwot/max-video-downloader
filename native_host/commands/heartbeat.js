@@ -22,7 +22,7 @@ class HeartbeatCommand extends BaseCommand {
         logDebug('Received heartbeat');
         
         // Send simple heartbeat response to confirm host is alive
-        this.sendSuccess({ command: 'heartbeat', alive: true });
+        this.sendMessage({ command: 'heartbeat', alive: true, success: true });
 
         return { success: true, command: 'heartbeat', alive: true };
     }

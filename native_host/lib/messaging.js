@@ -17,8 +17,6 @@ class MessagingService {
         this.buffer = Buffer.alloc(0);
         this.processedMessages = new Set();
         this.messageTimeout = null;
-        this.lastResponseTime = 0;
-        this.MIN_RESPONSE_INTERVAL = 250; // Minimum 250ms between progress messages
         this.lastHeartbeatTime = Date.now();
         this.HEARTBEAT_INTERVAL = 15000; // 15 seconds
         this.pipeClosed = false; // Track if pipe is closed
@@ -112,17 +110,17 @@ class MessagingService {
                 }
             } catch (err) {
                 logDebug('Error parsing message:', err);
-                this.sendResponse({ error: 'Invalid message format' });
+                this.sendMessage({ error: 'Invalid message format' });
             }
         }
     }
 
     /**
-     * Send a response back to the extension
-     * @param {Object} message The response message to send
+     * Send a message back to the extension
+     * @param {Object} message The message to send
      * @param {string} requestId Optional ID to include in response for request tracking
      */
-    sendResponse(message, requestId = null) {
+    sendMessage(message, requestId = null) {
         // Prevent writes if pipe is already closed
         if (this.pipeClosed) {
             return;
@@ -130,43 +128,15 @@ class MessagingService {
         
         try {
             // Add ID to response if this is a reply to a specific request
-            const responseWithId = requestId ? { ...message, id: requestId } : message;
+            const messageWithId = requestId ? { ...message, id: requestId } : message;
             
-            // Only rate limit progress messages
-            const now = Date.now();
-            if (responseWithId.command === 'download-progress' && now - this.lastResponseTime < this.MIN_RESPONSE_INTERVAL) {
-                // For progress messages, only drop if very recent to avoid flooding
-                // But ensure significant changes always go through
-                const lastProgress = this.lastProgressSent || 0;
-                const currentProgress = responseWithId.progress || 0;
-                
-                // Always send if it's a significant change or at key milestones
-                if (Math.abs(currentProgress - lastProgress) >= 5 || 
-                    currentProgress % 10 === 0 ||
-                    currentProgress === 100) {
-                    // Important update - send it anyway
-                    logDebug(`Sending priority progress update: ${currentProgress}%`);
-                } else {
-                    // Otherwise, respect rate limiting
-                    return;
-                }
-            }
-            
-            // Update last progress sent if this is a progress message
-            if (responseWithId.command === 'download-progress') {
-                this.lastProgressSent = responseWithId.progress || 0;
-            }
-            
-            this.lastResponseTime = now;
-            
-            const messageStr = JSON.stringify(responseWithId);
-            const messageBuffer = Buffer.from(messageStr, 'utf8'); // Explicitly use UTF-8 encoding
+            const messageStr = JSON.stringify(messageWithId);
+            const messageBuffer = Buffer.from(messageStr, 'utf8');
             const header = Buffer.alloc(4);
             header.writeUInt32LE(messageBuffer.length, 0);
             
-            // Wrap in try-catch to handle potential write errors
+            // Write as a single operation to avoid interleaved writes
             try {
-                // Write as a single operation to avoid interleaved writes
                 const combined = Buffer.concat([header, messageBuffer]);
                 process.stdout.write(combined);
             } catch (writeErr) {
@@ -183,6 +153,14 @@ class MessagingService {
         } catch (err) {
             logDebug('Error preparing response:', err);
         }
+    }
+
+    /**
+     * Send an event message (fire-and-forget, no request ID)
+     * @param {Object} message The event message to send
+     */
+    sendEvent(message) {
+        this.sendMessage(message, null);
     }
 
     /**

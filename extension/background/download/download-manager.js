@@ -35,6 +35,12 @@ export async function initDownloadManager() {
     logger.info('Initializing download manager');
     
     try {
+        // Register event listeners for download events
+        nativeHostService.addEventListener('download-progress', handleDownloadEvent);
+        nativeHostService.addEventListener('download-success', handleDownloadEvent);
+        nativeHostService.addEventListener('download-error', handleDownloadEvent);
+        nativeHostService.addEventListener('download-canceled', handleDownloadEvent);
+        
         logger.info('Download manager initialized successfully');
         return true;
     } catch (error) {
@@ -134,36 +140,39 @@ async function startDownloadImmediately(downloadRequest) {
         logger.debug('🔄 Using preserved headers for re-download:', Object.keys(downloadRequest.headers || {}));
     }
     
-    // Start download with progress tracking
-    try {
-        const finalResult = await nativeHostService.sendMessage(nativeHostMessage, (response) => {
-            handleDownloadProgress(downloadId, downloadRequest, response);
-        });
-        
-        if (finalResult?.success) {
-            logger.warn('🔄 Download succeeded:', downloadId, finalResult);
-        } else {
-            logger.error('🔄 Download failed:', downloadId, finalResult);
-        }
-    } catch (error) {
-        // Only handle communication errors, not download content errors
-        logger.error('Failed to communicate with native host:', error);
-        
-        // Clean up failed download from active set
-        activeDownloads.delete(downloadId);
-        notifyDownloadCountChange();
-    }
+    // Send download command (fire-and-forget)
+    // All responses will come through event listeners
+    nativeHostService.sendMessage(nativeHostMessage, { expectResponse: false });
+    
+    logger.debug('Download command sent:', downloadId);
 }
 
-// Handle download progress updates and errors from native host
-async function handleDownloadProgress(downloadId, downloadRequest, response) {
-    // response can have one of 6 commands: download-progress, download-success, download-error, download-canceled, download-queued, download-unqueued
-
+/**
+ * Handle download events from native host (event-driven)
+ * @param {Object} event - Event from native host
+ */
+async function handleDownloadEvent(event) {
+    const { command, downloadUrl, sessionId } = event;
+    const downloadId = downloadUrl; // Use URL as unique ID
+    
+    logger.debug('Handling download event:', command, downloadId, sessionId);
+    
+    // Find the corresponding download request (needed for metadata)
+    let downloadRequest = null;
+    
+    // Try to find in active downloads storage
+    try {
+        const activeDownloads = await getActiveDownloadsStorage();
+        downloadRequest = activeDownloads.find(d => d.downloadUrl === downloadUrl);
+    } catch (error) {
+        logger.warn('Could not retrieve download request from storage:', error);
+    }
+    
     // Store progress in local map for UI restoration 
-    activeDownloadProgress.set(downloadId, response);
+    activeDownloadProgress.set(downloadId, event);
 
     // Handle completion/error/cancellation - clean up active tracking
-    if (['download-canceled', 'download-success', 'download-error'].includes(response.command)) {
+    if (['download-canceled', 'download-success', 'download-error'].includes(command)) {
         // Remove from active downloads Set
         activeDownloads.delete(downloadId);
         
@@ -171,13 +180,13 @@ async function handleDownloadProgress(downloadId, downloadRequest, response) {
         await removeFromActiveDownloadsStorage(downloadId);
         
         // Add to history storage for success/error only
-        if (response.command === 'download-success' || response.command === 'download-error') {
+        if (command === 'download-success' || command === 'download-error') {
             await addToHistoryStorage({
-                ...response,
-                downloadUrl: downloadRequest.downloadUrl,
-                masterUrl: downloadRequest.masterUrl || null,
-                filename: response.filename,
-                selectedOptionOrigText: downloadRequest.selectedOptionOrigText || null
+                ...event,
+                downloadUrl: downloadUrl,
+                masterUrl: downloadRequest?.masterUrl || null,
+                filename: event.filename,
+                selectedOptionOrigText: downloadRequest?.selectedOptionOrigText || null
             });
         }
         
@@ -188,9 +197,9 @@ async function handleDownloadProgress(downloadId, downloadRequest, response) {
         notifyDownloadCountChange();
 
         // Handle specific completion types
-        if (response.command === 'download-error') {
+        if (command === 'download-error') {
             // Error details will be broadcast via the general broadcastData below
-        } else if (response.command === 'download-canceled') {
+        } else if (command === 'download-canceled') {
             logger.debug('Download canceled:', downloadId);
             broadcastToPopups({
                 command: 'download-canceled',
@@ -199,26 +208,24 @@ async function handleDownloadProgress(downloadId, downloadRequest, response) {
                 filename: downloadRequest.filename,
                 selectedOptionOrigText: downloadRequest.selectedOptionOrigText || null
             });
-        } else if (response.command === 'download-success') {
+        } else if (command === 'download-success') {
             // Create completion notification
-            createCompletionNotification(downloadRequest.filename);
+            createCompletionNotification(event.filename || 'Unknown');
         }
-        
-        // Remove from active downloads storage
-        removeFromActiveDownloadsStorage(downloadId);
         
         // Process next download in queue after ANY completion (success, error, or cancellation)
         processNextDownload();
     }
 
     // Prepare broadcast data with completion flags for UI
-    const broadcastData = (['download-canceled', 'download-success', 'download-error'].includes(response.command))
-        ? { ...response, 
-            success: response.success, 
-            error: response.error,
-            selectedOptionOrigText: downloadRequest.selectedOptionOrigText || null
+    const broadcastData = (['download-canceled', 'download-success', 'download-error'].includes(command))
+        ? { 
+            ...event, 
+            success: event.success, 
+            error: event.error,
+            selectedOptionOrigText: downloadRequest?.selectedOptionOrigText || null
         }
-        : response;
+        : event;
 
     // Always notify UI with progress data via direct broadcast
     broadcastToPopups(broadcastData);
@@ -330,6 +337,7 @@ export async function cancelDownload(cancelRequest) {
         // Broadcast unqueue state to UI
         broadcastToPopups({
             command: 'download-unqueued',
+            type: cancelRequest.type,
             downloadUrl: downloadId,
             masterUrl: cancelRequest.masterUrl || null,
             filename: cancelRequest.filename || 'Unknown',
@@ -345,18 +353,14 @@ export async function cancelDownload(cancelRequest) {
     }
     
     // Send cancellation request to native host
-    try {
-        const response = await nativeHostService.sendMessage({
-            command: 'cancel-download',
-            downloadUrl: downloadId
-        });
-        
-        // Native host will send download-canceled message through progress handler
-        // No need to clean up here - let the normal completion flow handle it
-    } catch (error) {
-        // Only handle communication errors, not cancellation content errors
-        logger.error('Failed to communicate cancel request to native host:', error);
-    }
+    // Response will come through event listeners
+    nativeHostService.sendMessage({
+        command: 'cancel-download',
+        downloadUrl: downloadId,
+        type: cancelRequest.type
+    }, { expectResponse: false });
+    
+    logger.debug('Cancellation command sent:', downloadId);
 }
 
 /**
@@ -398,6 +402,20 @@ export function removeFromQueue(downloadUrl) {
     }
     
     return false;
+}
+
+/**
+ * Get active downloads from storage
+ * @returns {Promise<Array>} Array of active downloads
+ */
+async function getActiveDownloadsStorage() {
+    try {
+        const result = await chrome.storage.local.get(['downloads_active']);
+        return result.downloads_active || [];
+    } catch (error) {
+        logger.error('Error getting active downloads storage:', error);
+        return [];
+    }
 }
 
 /**
