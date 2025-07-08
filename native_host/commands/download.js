@@ -122,7 +122,14 @@ class DownloadCommand extends BaseCommand {
             
             logDebug('Download cancellation completed for:', downloadUrl);
             
-            // Send cancellation event
+            // For direct types, defer cancellation message to close handler
+            // The close handler will determine final outcome based on file existence
+            if (type === 'direct') {
+                logDebug('Direct type cancellation - deferring message to close handler');
+                return; // Let close handler send the final message
+            }
+            
+            // For HLS/DASH types, send immediate cancellation message
             this.sendMessage({
                 command: 'download-canceled',
                 sessionId,
@@ -809,7 +816,26 @@ class DownloadCommand extends BaseCommand {
                 
                 if (terminationInfo.wasCanceled && !terminationInfo.isPartialSuccess) {
                     logDebug('Download was canceled by user.');
-                    // Don't send response here - cancellation response already sent by cancelDownload()
+                    
+                    // For direct types, send cancellation message here (deferred from cancelDownload)
+                    if (type === 'direct') {
+                        this.sendMessage({
+                            command: 'download-canceled',
+                            sessionId,
+                            downloadUrl,
+                            duration,
+                            downloadStats: downloadStats || null,
+                            message: 'Download was canceled',
+                            completedAt: Date.now(),
+                            pageUrl,
+                            pageFavicon,
+                            originalCommand,
+                            isRedownload: effectiveProcessInfo?.isRedownload || false,
+                            audioOnly
+                        }, { useMessageId: false }); // Event message, no response ID
+                    }
+                    
+                    // Don't send additional response for HLS/DASH - already sent by cancelDownload()
                     return resolve({ 
                         success: false, 
                         downloadStats
@@ -1003,7 +1029,7 @@ class DownloadCommand extends BaseCommand {
                     method: 'partial-success-detection'
                 };
             } else {
-                // All other cancellation cases
+                // Direct type with no valid file OR non-direct types = cancellation
                 return {
                     wasCanceled: true,
                     isSuccess: false,
