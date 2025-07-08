@@ -29,6 +29,9 @@ class DownloadCommand extends BaseCommand {
     
     // Static Set to track canceled downloads (survives process cleanup)
     static canceledDownloads = new Set();
+    
+    // Static Map to store process metadata for canceled downloads (for partial success reporting)
+    static canceledProcessMetadata = new Map();
 
     /**
      * Generate unique session ID for download
@@ -73,6 +76,14 @@ class DownloadCommand extends BaseCommand {
             // Mark download as canceled in persistent set
             DownloadCommand.canceledDownloads.add(downloadUrl);
             logDebug('Added to canceled downloads set:', downloadUrl);
+            
+            // Store essential process info before deletion (for partial success detection)
+            DownloadCommand.canceledProcessMetadata.set(downloadUrl, {
+                startTime: processInfo.startTime,
+                pid: processInfo.pid,
+                isRedownload: processInfo.isRedownload,
+                sessionId: processInfo.sessionId
+            });
             
             // IMMEDIATELY remove from activeProcesses to prevent repeated cancels
             DownloadCommand.activeProcesses.delete(downloadUrl);
@@ -130,7 +141,8 @@ class DownloadCommand extends BaseCommand {
             // Clean up canceled downloads set after a delay to allow close event to process
             setTimeout(() => {
                 DownloadCommand.canceledDownloads.delete(downloadUrl);
-                logDebug('Cleaned up canceled download from set:', downloadUrl);
+                DownloadCommand.canceledProcessMetadata.delete(downloadUrl);
+                logDebug('Cleaned up canceled download from sets:', downloadUrl);
             }, 5000); // 5 second cleanup delay
         }
     }
@@ -188,6 +200,8 @@ class DownloadCommand extends BaseCommand {
             // Page context fields
             pageUrl = null,
             pageFavicon = null,
+            // UI context fields
+            selectedOptionOrigText = null,
             // Re-download flag
             isRedownload = false
         } = params;
@@ -213,6 +227,7 @@ class DownloadCommand extends BaseCommand {
             segmentCount,
             pageUrl,
             pageFavicon,
+            selectedOptionOrigText,
             isRedownload,
             sourceAudioCodec,
             sourceAudioBitrate,
@@ -761,6 +776,11 @@ class DownloadCommand extends BaseCommand {
                 
                 // Get process info before deletion (might be deleted in cancelDownload)
                 const processInfo = DownloadCommand.activeProcesses.get(downloadUrl);
+                const canceledMetadata = DownloadCommand.canceledProcessMetadata.get(downloadUrl);
+                
+                // Use process info from activeProcesses or from canceled metadata
+                const effectiveProcessInfo = processInfo || canceledMetadata;
+                
                 const originalDuration = progressTracker.getDuration();
                 const finalProcessedDuration = progressTracker.getFinalProcessedDuration();
                 
@@ -772,7 +792,7 @@ class DownloadCommand extends BaseCommand {
                     logDebug(`Duration difference: original=${originalDuration}s, processed=${finalProcessedDuration}s`);
                 }
                 
-                const downloadDuration = processInfo?.startTime ? Date.now() - processInfo.startTime : null;
+                const downloadDuration = effectiveProcessInfo?.startTime ? Date.now() - effectiveProcessInfo.startTime : null;
                 
                 // Clean up activeProcesses if not already done
                 if (DownloadCommand.activeProcesses.has(downloadUrl)) {
@@ -785,7 +805,7 @@ class DownloadCommand extends BaseCommand {
 
                 // Determine termination reason using signal, exit code, and output file verification
                 const terminationInfo = this.analyzeProcessTermination(code, signal, downloadUrl, uniqueOutput, type);
-                logDebug(`FFmpeg process (PID: ${processInfo?.pid}) terminated after ${downloadDuration}ms:`, terminationInfo);
+                logDebug(`FFmpeg process (PID: ${effectiveProcessInfo?.pid}) terminated after ${downloadDuration}ms:`, terminationInfo);
                 
                 if (terminationInfo.wasCanceled && !terminationInfo.isPartialSuccess) {
                     logDebug('Download was canceled by user.');
@@ -813,7 +833,7 @@ class DownloadCommand extends BaseCommand {
                         ffmpegFinalMessage: ffmpegFinalMessage || null,
                         terminationInfo,
                         processInfo: {
-                            pid: processInfo?.pid,
+                            pid: effectiveProcessInfo?.pid,
                             downloadDuration
                         },
                         completedAt: Date.now(),
@@ -856,7 +876,7 @@ class DownloadCommand extends BaseCommand {
                         downloadStats: downloadStats || null,
                         terminationInfo,
                         processInfo: {
-                            pid: processInfo?.pid,
+                            pid: effectiveProcessInfo?.pid,
                             downloadDuration
                         },
                         completedAt: Date.now(),
@@ -891,12 +911,15 @@ class DownloadCommand extends BaseCommand {
                 
                 // Get process info and calculate durations (same logic as close handler)
                 const processInfo = DownloadCommand.activeProcesses.get(downloadUrl);
+                const canceledMetadata = DownloadCommand.canceledProcessMetadata.get(downloadUrl);
+                const effectiveProcessInfo = processInfo || canceledMetadata;
+                
                 const originalDuration = progressTracker.getDuration();
                 const finalProcessedDuration = progressTracker.getFinalProcessedDuration();
                 const duration = finalProcessedDuration || originalDuration;
-                const downloadDuration = processInfo?.startTime ? Date.now() - processInfo.startTime : null;
+                const downloadDuration = effectiveProcessInfo?.startTime ? Date.now() - effectiveProcessInfo.startTime : null;
 
-                logDebug(`FFmpeg spawn error (PID: ${processInfo?.pid}) after ${downloadDuration}ms:`, err);
+                logDebug(`FFmpeg spawn error (PID: ${effectiveProcessInfo?.pid}) after ${downloadDuration}ms:`, err);
                 if (ffmpegFinalMessage) {
                     logDebug('FFmpeg final message:', ffmpegFinalMessage);
                 } else if (derivedErrorMessage) {
@@ -917,7 +940,7 @@ class DownloadCommand extends BaseCommand {
                     ffmpegFinalMessage: ffmpegFinalMessage || derivedErrorMessage || null,
                     downloadStats: downloadStats || null,
                     processInfo: {
-                        pid: processInfo?.pid,
+                        pid: effectiveProcessInfo?.pid,
                         downloadDuration
                     },
                     completedAt: Date.now(),

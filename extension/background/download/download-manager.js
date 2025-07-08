@@ -186,7 +186,7 @@ async function handleDownloadEvent(event) {
                 downloadUrl: downloadUrl,
                 masterUrl: downloadRequest?.masterUrl || null,
                 filename: event.filename,
-                selectedOptionOrigText: downloadRequest?.selectedOptionOrigText || null
+                selectedOptionOrigText: event.originalCommand.selectedOptionOrigText || null
             });
         }
         
