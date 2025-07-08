@@ -163,7 +163,9 @@ export async function renderHistoryItems(fullRender = true) {
  */
 function createHistoryItemElement(progressData) {
     const historyItem = document.createElement('div');
-    historyItem.className = `history-item history-${progressData.command === 'download-success' ? 'success' : 'error'}`;
+    // create status variable to determine class
+    const status = progressData.command === 'download-success' ? (progressData.isPartial ? 'partial' : 'success') : 'error';
+    historyItem.className = `history-item history-${status}`;
     historyItem.setAttribute('data-completion', progressData.completedAt);
 
     // Format completion time
@@ -251,6 +253,13 @@ function createHistoryItemElement(progressData) {
 // Build flags icons HTML for history item
 function buildFlagsHtml(progressData) {
     const icons = [];
+    if (progressData.isPartial) {
+        icons.push(`
+            <span class="history-flag-icon" data-tooltip="Partial Download">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-file-x2 lucide-file-x-2 w-3 h-3 flex-shrink-0 text-orange-500" aria-hidden="true"><path d="M4 22h14a2 2 0 0 0 2-2V7l-5-5H6a2 2 0 0 0-2 2v4"></path><path d="M14 2v4a2 2 0 0 0 2 2h4"></path><path d="m8 12.5-5 5"></path><path d="m3 12.5 5 5"></path></svg>
+            </span>
+        `);
+    }
     if (progressData.audioOnly) {
         icons.push(`
             <span class="history-flag-icon" data-tooltip="Extracted Audio">

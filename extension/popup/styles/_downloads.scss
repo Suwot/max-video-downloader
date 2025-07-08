@@ -50,7 +50,7 @@
             border-left: 3px solid var(--color-red);
         }
         
-        &.history-canceled {
+        &.history-partial {
             border-left: 3px solid var(--color-orange);
         }
     }
@@ -117,26 +117,6 @@
         background-color: var(--bg-element-light);
         border: var(--border-primary-light);
     }
-
-    &.history-success {
-        .theme-dark & {
-            border-left: 3px solid var(--color-green);
-        }
-        
-        .theme-light & {
-            border-left: 3px solid var(--color-green);
-        }
-    }
-
-    &.history-error {
-        .theme-dark & {
-            border-left: 3px solid var(--color-red);
-        }
-        
-        .theme-light & {
-            border-left: 3px solid var(--color-red);
-        }
-    }
 }
 
 .history-header {
@@ -153,6 +133,7 @@
         margin-left: 4px;
         margin-right: 4px;
     }
+
     .history-flag-icon {
         display: flex;
         align-items: center;
@@ -162,7 +143,10 @@
             stroke: #a259e6;
         }
         .text-blue-500 {
-            stroke: #2196f3;
+            stroke: var(--color-blue);
+        }
+        .text-orange-500 {
+            stroke: var(--color-orange);
         }
     }
 }
