@@ -41,6 +41,9 @@ export async function initDownloadManager() {
         nativeHostService.addEventListener('download-error', handleDownloadEvent);
         nativeHostService.addEventListener('download-canceled', handleDownloadEvent);
         
+        // Initialize badge icon - restore count from storage or clear
+        await restoreBadgeFromStorage();
+        
         logger.info('Download manager initialized successfully');
         return true;
     } catch (error) {
@@ -283,7 +286,7 @@ export function getActiveDownloadCount() {
 }
 
 /**
- * Notify all popups about download count changes
+ * Notify all popups about download count changes and update badge icon
  */
 function notifyDownloadCountChange() {
     const counts = getActiveDownloadCount();
@@ -291,6 +294,10 @@ function notifyDownloadCountChange() {
         command: 'downloadCountUpdated',
         counts: counts
     });
+    
+    // Update badge icon with total count
+    updateBadgeIcon(counts.total);
+    
     logger.debug('Download count updated:', counts);
 }
 
@@ -402,6 +409,42 @@ export function removeFromQueue(downloadUrl) {
     }
     
     return false;
+}
+
+/**
+ * Update extension badge icon with download count
+ * @param {number} count - Total number of active + queued downloads
+ */
+function updateBadgeIcon(count) {
+    try {
+        if (count === 0) {
+            // Clear badge when no downloads
+            chrome.action.setBadgeText({ text: '' });
+        } else {
+            // Show count on gray background
+            chrome.action.setBadgeText({ text: count.toString() });
+            chrome.action.setBadgeBackgroundColor({ color: '#444444' }); // Dark gray for white text contrast
+        }
+        logger.debug('Badge icon updated with count:', count);
+    } catch (error) {
+        logger.error('Error updating badge icon:', error);
+    }
+}
+
+/**
+ * Restore badge count from storage on extension startup
+ */
+async function restoreBadgeFromStorage() {
+    try {
+        const activeDownloads = await getActiveDownloadsStorage();
+        const count = activeDownloads.length;
+        updateBadgeIcon(count);
+        logger.debug('Badge restored from storage with count:', count);
+    } catch (error) {
+        logger.error('Error restoring badge from storage:', error);
+        // Fallback to clear badge
+        updateBadgeIcon(0);
+    }
 }
 
 /**
