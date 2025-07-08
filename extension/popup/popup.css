@@ -2100,15 +2100,15 @@ header .heading-row {
   display: inline-block;
   font-weight: 500;
   padding: 2px 6px;
-  border-radius: 10px;
+  border-radius: 6px;
 }
 .theme-dark .download-stats .type-badge {
-  background-color: var(--text-primary-dark);
-  color: var(--bg-secondary-dark);
+  color: var(--text-secondary-dark);
+  border: 1px solid var(--text-secondary-dark);
 }
 .theme-light .download-stats .type-badge {
-  background-color: var(--text-primary-light);
-  color: var(--bg-secondary-light);
+  color: var(--text-secondary-light);
+  border: 1px solid var(--text-secondary-light);
 }
 .download-stats .filesize {
   display: -webkit-box;
