@@ -362,28 +362,37 @@ class DownloadCommand extends BaseCommand {
     }
     
     /**
-     * Resolves output path and ensures uniqueness
+     * Resolves output path and ensures uniqueness across both disk and active downloads
      * @private
      */
     resolveOutputPath(filename, savePath) {
         // Default to Desktop if no savePath or if it's "Desktop"
         const defaultDir = path.join(process.env.HOME || os.homedir(), 'Desktop');
         const targetDir = (!savePath || savePath === 'Desktop') ? defaultDir : savePath;
-        
+
         // Join directory and filename
         let outputPath = path.join(targetDir, filename);
-        
-        // Ensure uniqueness
+
+        // Helper to check if output path is in use by any active download
+        const isPathInUse = (candidatePath) => {
+            for (const proc of DownloadCommand.activeProcesses.values()) {
+                if (proc && proc.outputPath === candidatePath) {
+                    return true;
+                }
+            }
+            return false;
+        };
+
+        // Ensure uniqueness across both disk and active downloads
         let counter = 1;
         let uniqueOutput = outputPath;
-        
-        while (fs.existsSync(uniqueOutput)) {
+        while (fs.existsSync(uniqueOutput) || isPathInUse(uniqueOutput)) {
             const ext = path.extname(outputPath);
             const base = outputPath.slice(0, -ext.length);
             uniqueOutput = `${base} (${counter})${ext}`;
             counter++;
         }
-        
+
         logDebug('Output file will be:', uniqueOutput);
         return uniqueOutput;
     }
