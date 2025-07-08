@@ -23,8 +23,7 @@ function initTabTracking() {
         // Listen for tab removal events
         chrome.tabs.onRemoved.addListener((tabId) => {
             logger.debug('Tab removed:', tabId);
-            
-            cleanupVideosForTab(tabId); // Cleanup videos and playlists (includes icon reset)
+            cleanupVideosForTab(tabId, false); // Cleanup videos and playlists (includes icon reset)
             cleanupMPDContextForTab(tabId); // Cleanup DASH context if applicable
             cleanupHeadersForTab(tabId); // Clear any init request headers
             cleanupHeaderRulesForTab(tabId); // Clear any header rules per tab

@@ -787,7 +787,7 @@ function hasDisplayableVideos(tabId) {
 }
 
 // Clean up for tab
-function cleanupVideosForTab(tabId) {
+function cleanupVideosForTab(tabId, resetIcon = true) {
     logger.debug(`Tab removed: ${tabId}`);
 
     if (videoProcessingPipeline.queue.length > 0) {
@@ -819,18 +819,21 @@ function cleanupVideosForTab(tabId) {
     // Clean up icon state and reset to B&W
     if (tabsWithVideos.has(tabId)) {
         tabsWithVideos.delete(tabId);
-        try {
-            chrome.action.setIcon({
-                tabId,
-                path: {
-                    "16": "../icons/16-bw.png",
-                    "32": "../icons/32-bw.png",
-                    "48": "../icons/48-bw.png",
-                    "128": "../icons/128-bw.png"
-                }
-            });
-        } catch (error) {
-            // Tab might already be closed, ignore error
+
+        if (resetIcon) {
+            try {
+                chrome.action.setIcon({
+                    tabId,
+                    path: {
+                        "16": "../icons/16-bw.png",
+                        "32": "../icons/32-bw.png",
+                        "48": "../icons/48-bw.png",
+                        "128": "../icons/128-bw.png"
+                    }
+                });
+            } catch (error) {
+                // Tab might already be closed, ignore error
+            }
         }
     }
 }
