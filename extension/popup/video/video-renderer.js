@@ -358,14 +358,14 @@ function buildStatsHtml(progressData) {
     
     // Quality or bitrate (white circle)
     if (progressData.audioOnly && progressData.downloadStats?.bitrateKbps) {
-        // For audio-only, show bitrate in kbp/s
-        const bitrateKbps = Math.round(progressData.downloadStats.bitrateKbps);
+        const kbps = Math.round(progressData.downloadStats.bitrateKbps);
+        const unit = kbps >= 1000 ? `${(kbps / 1000).toFixed(2)} Mbps` : `${kbps} kbps`;
         stats.push(`
             <span class="quality">
                 <svg width="4" height="4" viewBox="0 0 6 6" fill="none">
                     <circle cx="3" cy="3" r="3" fill="var(--text-primary-dark)"/>
                 </svg>
-                ${bitrateKbps} kbps
+                ${unit}
             </span>
         `);
     } else if (progressData.selectedOptionOrigText) {
