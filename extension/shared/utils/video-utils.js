@@ -115,3 +115,11 @@ export function getFilenameFromUrl(url) {
         return 'video';
     }
 }
+
+// formats bitrate in kbps or Mbps
+export function formatBitrate(kbps) {
+    if (typeof kbps !== 'number' || isNaN(kbps)) return 'Unknown';
+    if (kbps < 0) return 'Invalid';
+
+    return kbps >= 1000 ? `${(kbps / 1000).toFixed(2)} Mbps` : `${kbps} kbps`;
+}

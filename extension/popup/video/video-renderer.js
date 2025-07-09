@@ -1,7 +1,7 @@
 import { getVideos, getTabId } from '../state.js';
 import { sendPortMessage } from '../communication.js';
 import { createLogger } from '../../shared/utils/logger.js';
-import { formatSize, formatDuration } from '../../shared/utils/video-utils.js';
+import { formatSize, formatDuration, formatBitrate } from '../../shared/utils/video-utils.js';
 import { createVideoElement } from './video-item.js';
 
 const logger = createLogger('Video Renderer');
@@ -358,14 +358,13 @@ function buildStatsHtml(progressData) {
     
     // Quality or bitrate (white circle)
     if (progressData.audioOnly && progressData.downloadStats?.bitrateKbps) {
-        const kbps = Math.round(progressData.downloadStats.bitrateKbps);
-        const unit = kbps >= 1000 ? `${(kbps / 1000).toFixed(2)} Mbps` : `${kbps} kbps`;
+        const bitrate = formatBitrate(progressData.downloadStats.bitrateKbps);
         stats.push(`
             <span class="quality">
                 <svg width="4" height="4" viewBox="0 0 6 6" fill="none">
                     <circle cx="3" cy="3" r="3" fill="var(--text-primary-dark)"/>
                 </svg>
-                ${unit}
+                ${bitrate}
             </span>
         `);
     } else if (progressData.selectedOptionOrigText) {
