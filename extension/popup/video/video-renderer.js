@@ -170,7 +170,7 @@ function createHistoryItemElement(progressData) {
 
     // Format completion time
     const completedTime = progressData.completedAt ? 
-        new Date(progressData.completedAt).toLocaleDateString('en-US', {
+        new Date(progressData.completedAt).toLocaleString(undefined, {
             month: 'short',
             day: 'numeric',
             hour: '2-digit',
