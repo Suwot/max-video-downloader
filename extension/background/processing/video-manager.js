@@ -577,7 +577,8 @@ function handleVariantMasterRelationships(tabId, variants, masterUrl) {
             updateVideo('handleVariantMasterRelationships', tabId, variantUrl, {
                 hasKnownMaster: true,
                 masterUrl: masterUrl,
-                isVariant: true
+                isVariant: true,
+                validForDisplay: false
             });
             logger.debug(`Updated existing standalone variant ${variantUrl} with master info`);
         }
@@ -863,10 +864,30 @@ function addDetectedVideo(tabId, videoInfo) {
     if (videoInfo.type === 'hls' && variantMasterMap.has(tabId)) {
         const tabVariantMap = variantMasterMap.get(tabId);
         if (tabVariantMap.has(normalizedUrl)) {
-            videoInfo.isVariant = true;
-            videoInfo.hasKnownMaster = true;
-            videoInfo.masterUrl = tabVariantMap.get(normalizedUrl);
-            logger.debug(`HLS variant detected: ${normalizedUrl} is a variant of master ${videoInfo.masterUrl}`);
+            logger.debug(`Known HLS variant detected: ${normalizedUrl}. Master ${videoInfo.masterUrl} (stored in map, skipping processing and UI update)`);
+
+            // Initialize tab's video collection if it doesn't exist
+            if (!allDetectedVideos.has(tabId)) {
+                allDetectedVideos.set(tabId, new Map());
+            }
+            const tabMap = allDetectedVideos.get(tabId);
+            // Only add if not already present
+            if (!tabMap.has(normalizedUrl)) {
+                const newVideo = {
+                    ...videoInfo,
+                    isVariant: true,
+                    hasKnownMaster: true,
+                    masterUrl: tabVariantMap.get(normalizedUrl),
+                    validForDisplay: false,
+                    normalizedUrl,
+                    isBeingProcessed: false,
+                    title: videoInfo.metadata?.filename || getFilenameFromUrl(videoInfo.url),
+                    isValid: true // it's a known variant, so we consider it valid
+                };
+                updateVideo('addDetectedVideo-knownVariant', tabId, normalizedUrl, newVideo, true);
+            }
+            // Do not enqueue for processing or update UI
+            return false;
         }
     }
     
@@ -883,58 +904,6 @@ function addDetectedVideo(tabId, videoInfo) {
     
     // Check if this is a duplicate
     if (tabMap.has(normalizedUrl)) {
-        // Special handling for direct video types to merge metadata
-        if (videoInfo.type === 'direct') {
-            const existingVideo = tabMap.get(normalizedUrl);
-            logger.debug(`Duplicate direct video found from ${sourceOfVideo}. Checking for metadata updates...`);
-            
-            // Track if we made any updates
-            let updatesApplied = false;
-            const updates = {};
-            
-            // Merge metadata if present in the new detection
-            if (videoInfo.metadata && Object.keys(videoInfo.metadata).length > 0) {
-                logger.debug(`Updating metadata for existing direct video: ${normalizedUrl}`);
-                updates.metadata = {
-                    ...(existingVideo.metadata || {}),
-                    ...videoInfo.metadata
-                };
-                updatesApplied = true;
-            }
-
-            // Update mediaType if it's set in the new detection
-            if (videoInfo.mediaType) {
-                updates.mediaType = videoInfo.mediaType;
-                updatesApplied = true;
-            }
-
-            // Update originalContainer if it's set in the new detection but missing in the existing one
-            if (videoInfo.originalContainer && 
-                (!existingVideo.originalContainer || existingVideo.originalContainer === 'null')) {
-                logger.debug(`Updating originalContainer for existing direct video: ${normalizedUrl}`);
-                updates.originalContainer = videoInfo.originalContainer;
-                updatesApplied = true;
-
-                // NEW: If type is unknown, update to 'direct'
-                if (existingVideo.type === 'unknown') {
-                    logger.debug(`Updating type to 'direct' for video with known originalContainer: ${normalizedUrl}`);
-                    updates.type = 'direct';
-                }
-            }
-            
-            // If we have updates to apply, update the video
-            if (updatesApplied) {
-                const updatedVideo = updateVideo('addDetectedVideo-update', tabId, normalizedUrl, updates);
-                
-                // Notify UI of the update
-                if (updatedVideo) {
-                    sendVideoUpdateToUI(tabId, normalizedUrl, updatedVideo);
-                }
-                
-                return 'updated';
-            }
-        }
-        
         // For non-direct videos or when no updates needed
         const existingVideo = tabMap.get(normalizedUrl);
         logger.debug(`Duplicate video detection from ${sourceOfVideo}. URL: ${videoInfo.url}, Existing timestamp: ${existingVideo.timestampDetected}, New timestamp: ${videoInfo.timestampDetected}`);
@@ -945,7 +914,6 @@ function addDetectedVideo(tabId, videoInfo) {
     const newVideo = {
         ...videoInfo,
         normalizedUrl,
-        tabId,
         isBeingProcessed: false,
         title: videoInfo.metadata?.filename || getFilenameFromUrl(videoInfo.url),
         // Set isValid: true for direct videos immediately

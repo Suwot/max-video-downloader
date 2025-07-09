@@ -26,11 +26,13 @@ const dashSegmentPathCache = new Map();
 async function getTabUrl(tabId) {
     try {
         const tab = await chrome.tabs.get(tabId);
+        // logger.debug(`Retrieved tab info for ${tabId}:`, tab);
         return {
-            url: tab.url || null,
-            title: tab.title || null,
-            favIconUrl: tab.favIconUrl || null,
-            incognito: tab.incognito || false
+            pageUrl: tab.url || null,
+            pageTitle: tab.title || null,
+            pageFavicon: tab.favIconUrl || null,
+            incognito: tab.incognito || false,
+            windowId: tab.windowId || null
         };
     } catch (error) {
         logger.debug(`Could not get URL for tab ${tabId}:`, error.message);
@@ -56,10 +58,8 @@ function addVideoWithCommonProcessing(tabId, url, videoInfo, metadata, source, t
         type: videoInfo.type,
         source,
         timestampDetected: metadata?.timestampDetected || Date.now(),
-        ...(tabInfo?.url && { pageUrl: tabInfo.url }),
-        ...(tabInfo?.title && { pageTitle: tabInfo.title }),
-        ...(tabInfo?.favIconUrl && { pageFavicon: tabInfo.favIconUrl }),
-        ...(tabInfo?.incognito && { incognito: tabInfo.incognito }),
+        tabId,
+        ...(tabInfo || {}),
         ...(metadata && { metadata }),
         ...(videoInfo.mediaType && { mediaType: videoInfo.mediaType }),
         ...(videoInfo.originalContainer && { originalContainer: videoInfo.originalContainer }),
@@ -75,13 +75,13 @@ function addVideoWithCommonProcessing(tabId, url, videoInfo, metadata, source, t
  * @param {string} url - The URL to process
  * @param {Object} metadata - Optional metadata from response headers
  */
-export async function processWebRequest(tabId, url, metadata = null) {
+export async function processWebRequest(details, metadata = null) {
+    const { tabId, url } = details;
+
     if (tabId < 0 || !url) return;
 
     // First check if we should ignore this URL
-    if (shouldIgnoreForMediaDetection(url, metadata)) {
-        return;
-    }
+    if (shouldIgnoreForMediaDetection(url, metadata)) return;
     logger.debug(`Processing video URL after ShouldIgnoreForMediaDetection: ${url} with metadata:`, metadata);
     
     // Get tab URL for page context tracking
@@ -234,7 +234,7 @@ function setupWebRequestListener() {
                 contentDisposition: null,
                 filename: null,
                 supportsRanges: false,
-                timestampDetected: Date.now()
+                timestampDetected: Math.round(details.timeStamp)
             };
             
             // Process important headers
@@ -292,10 +292,10 @@ function setupWebRequestListener() {
                 }
             }
 
-            // logger.debug(`Received headers for URL:`, details);
+            // logger.debug(`Found NEW URL with headers:`, details);
 
             // Call the video detector with the metadata (async, but don't await to avoid blocking)
-            processWebRequest(details.tabId, details.url, metadata).catch(error => {
+            processWebRequest(details, metadata).catch(error => {
                 logger.debug('Error in processWebRequest:', error);
             });
         },
@@ -361,16 +361,4 @@ function shouldSkipBasedOnContentRange(contentRange, url) {
         logger.debug(`Skipping partial Content-Range request: ${contentRange} (${(coverage * 100).toFixed(1)}% coverage, starts at ${start}) for URL: ${url}`);
         return true; // Skip
     }
-}
-
-/**
- * Get detection statistics (for debugging)
- */
-export function getDetectionStats() {
-    return {
-        tabsWithMpd: tabsWithMpd.size,
-        dashSegmentPathCache: dashSegmentPathCache.size,
-        tabsTracked: Array.from(tabsWithMpd.keys()),
-        segmentCacheTabsTracked: Array.from(dashSegmentPathCache.keys())
-    };
 }
