@@ -4,6 +4,7 @@
  */
 
 import { createLogger } from '../../shared/utils/logger.js';
+import { sendPortMessage } from '../communication.js';
 
 const logger = createLogger('Download Button Component');
 
@@ -259,6 +260,7 @@ class DownloadButtonComponent {
     extractHlsData(videoData, selectedOption) {
         videoData.downloadUrl = selectedOption?.dataset.url;
         videoData.fileSizeBytes = selectedOption?.dataset.filesize || null;
+        videoData.selectedOptionOrigText = selectedOption?.textContent || null;
     }
 
     /**
@@ -269,6 +271,7 @@ class DownloadButtonComponent {
         videoData.streamSelection = selectedOption?.dataset.trackMap || null;
         videoData.defaultContainer = selectedOption?.dataset.defaultContainer || null;
         videoData.fileSizeBytes = selectedOption?.dataset.totalfilesize || null;
+        videoData.selectedOptionOrigText = selectedOption?.textContent || null;
     }
 
     /**
@@ -277,6 +280,7 @@ class DownloadButtonComponent {
     extractDirectData(videoData, selectedOption) {
         videoData.downloadUrl = selectedOption?.dataset.url;
         videoData.fileSizeBytes = selectedOption?.dataset.filesize || null;
+        videoData.selectedOptionOrigText = selectedOption?.textContent || null;
     }
 
     /**
@@ -289,12 +293,10 @@ class DownloadButtonComponent {
             type: videoData.type,
             downloadUrl: videoData.downloadUrl,
             masterUrl: videoData.masterUrl || null,
-            selectedOptionOrigText: this.elementsDiv.querySelector('.selected-option')?.textContent || ''
+            selectedOptionOrigText: videoData.selectedOptionOrigText
         };
         
-        import('../communication.js').then(({ sendPortMessage }) => {
-            sendPortMessage(cancelMessage);
-        });
+        sendPortMessage(cancelMessage);
     }
 
     /**
