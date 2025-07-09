@@ -1403,17 +1403,6 @@ header .heading-row {
   color: #999;
 }
 
-.blob-warning {
-  font-size: var(--font-badge);
-  margin-bottom: 4px;
-}
-.theme-dark .blob-warning {
-  color: #ff6b6b;
-}
-.theme-light .blob-warning {
-  color: #D32F2F;
-}
-
 .download-group {
   display: -webkit-box;
   display: -ms-flexbox;

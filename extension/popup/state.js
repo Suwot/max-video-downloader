@@ -17,7 +17,6 @@ const DEFAULT_GROUP_STATES = {
     hls: false,      // expanded by default
     dash: false,     // expanded by default  
     direct: false,   // expanded by default
-    blob: true,      // collapsed by default
     unknown: false,  // expanded by default
 };
 

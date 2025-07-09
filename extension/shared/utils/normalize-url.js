@@ -12,48 +12,6 @@ export function normalizeUrl(url) {
     // Quick return for empty URLs
     if (!url) return url;
     
-    // For blob URLs, use a special normalization method
-    if (url.startsWith('blob:')) {
-        try {
-            // Extract the origin to help identify the source page
-            const urlObj = new URL(url);
-            const origin = urlObj.origin;
-            
-            // For blob URLs from the same origin, use just the origin plus a hash 
-            // to identify them as "same kind of blob URL from this page"
-            // We'll append the mime type too if we can extract it from search params
-            let mimeTypeIndicator = '';
-            if (url.includes('mime=') || url.includes('type=')) {
-                const searchParams = new URLSearchParams(urlObj.search);
-                const mime = searchParams.get('mime') || searchParams.get('type') || '';
-                if (mime) {
-                    // Just use the main MIME type part (video/mp4 -> video)
-                    const mainType = mime.split('/')[0];
-                    mimeTypeIndicator = `-${mainType}`;
-                }
-            }
-            
-            // If it's a video player blob, try to get a more specific identifier
-            const playerIndicators = [
-                'youtube', 'vimeo', 'dailymotion', 'jwplayer', 'player', 'video', 'media'
-            ];
-            
-            let playerIndicator = '';
-            const lowerUrl = url.toLowerCase();
-            for (const indicator of playerIndicators) {
-                if (lowerUrl.includes(indicator)) {
-                    playerIndicator = `-${indicator}`;
-                    break;
-                }
-            }
-            
-            return `${origin}-blob${mimeTypeIndicator}${playerIndicator}`;
-        } catch (e) {
-            console.error('Error normalizing blob URL:', e);
-            return url; // Return original if we can't normalize it
-        }
-    }
-    
     try {
         const urlObj = new URL(url);
         

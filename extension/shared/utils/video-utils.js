@@ -81,10 +81,6 @@ export function formatTime(seconds) {
  * @returns {string} Extracted filename without extension
  */
 export function getFilenameFromUrl(url) {
-    if (url.startsWith('blob:')) {
-            return 'blob_video';
-        }
-
     try {
         const urlObj = new URL(url);
         let filename = urlObj.pathname.split('/').pop() || '';

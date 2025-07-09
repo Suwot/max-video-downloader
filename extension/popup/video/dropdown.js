@@ -86,7 +86,7 @@ export function createCustomDropdown(video, onChange = null) {
         // Initialize selected display
         updateSelectedDisplay(selectedDisplay, initialSelection, type);
     } else {
-        // HLS, Direct, Blob use simple options
+        // HLS and Direct use simple options
         const variants = video.variants && video.variants.length > 0 ? video.variants : [video];
         const initialSelection = variants[0];
         
@@ -195,7 +195,7 @@ function createSimpleOptions(container, variants, initialSelection, onSelect) {
                 option.dataset.filesize = variant.metaJS.estimatedFileSizeBytes;
             }
         } else {
-            // For direct/blob, use contentLength with fallback to estimatedFileSizeBytes
+            // For direct, use contentLength with fallback to estimatedFileSizeBytes
             const filesize = variant.metadata?.contentLength || 
                             variant.metaFFprobe?.sizeBytes || 
                             variant.metaFFprobe?.estimatedFileSizeBytes;
@@ -522,7 +522,7 @@ function getFormattedCodecs(media, type) {
         return media.codecs.split('.')[0];
     }
     
-    // For direct/blob videos
+    // For direct videos
     const videoCodec = media.metaFFprobe?.videoCodec?.name || null;
     const audioCodec = media.metaFFprobe?.audioCodec?.name || null;
     const audioChannels = media.metaFFprobe?.audioCodec?.channels ? 
@@ -540,7 +540,7 @@ function getFormattedCodecs(media, type) {
 /**
  * Format the displayed label for a variant
  * @param {Object} variant - Variant data
- * @param {string} [type='direct'] - Media type ('hls', 'direct', 'blob')
+ * @param {string} [type='direct'] - Media type ('hls', 'direct')
  * @returns {string} Formatted label
  */
 function formatVariantLabel(variant, type = 'direct') {
@@ -564,7 +564,7 @@ function formatVariantLabel(variant, type = 'direct') {
             .filter(Boolean)
             .join(' • ') || 'Unknown Quality';
     } else {
-        // Direct/blob video formatting
+        // Direct video formatting
         const res = variant.standardizedResolution || null;
         const fps = variant.metaFFprobe?.fps || null;
         const formattedResolution = res ? 
@@ -717,7 +717,7 @@ function updateSelectedDisplay(display, selection, type) {
                 display.dataset.filesize = selection.metaJS.estimatedFileSizeBytes;
             }
         } else {
-            // For direct/blob, use contentLength with fallback to estimatedFileSizeBytes
+            // For direct, use contentLength with fallback to estimatedFileSizeBytes
             const filesize = selection.metadata?.contentLength || 
                             selection.metaFFprobe?.sizeBytes || 
                             selection.metaFFprobe?.estimatedFileSizeBytes;

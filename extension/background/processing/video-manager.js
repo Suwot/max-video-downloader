@@ -51,7 +51,7 @@ class VideoProcessingPipeline {
      * Enqueue a video for processing
      * @param {number} tabId - Tab ID
      * @param {string} normalizedUrl - Normalized video URL
-     * @param {string} videoType - Type of video (hls, dash, direct, blob)
+     * @param {string} videoType - Type of video (hls, dash, direct)
      */
     enqueue(tabId, normalizedUrl, videoType) {
         // Skip if dismissed
@@ -97,9 +97,7 @@ class VideoProcessingPipeline {
             updateVideoStatus(tabId, normalizedUrl, 'processing');
             
             // Route to appropriate processor based on type
-            if (videoType === 'blob') {
-                await this.processBlobVideo(tabId, normalizedUrl);
-            } else if (videoType === 'hls') {
+            if (videoType === 'hls') {
                 await this.processHlsVideo(tabId, normalizedUrl);
             } else if (videoType === 'dash') {
                 await this.processDashVideo(tabId, normalizedUrl);
@@ -117,32 +115,6 @@ class VideoProcessingPipeline {
             this.processing.delete(normalizedUrl);
             // Process next item in queue
             this.processNext();
-        }
-    }
-    
-    /**
-     * Process a blob video (simple status update)
-     * @param {number} tabId - Tab ID
-     * @param {string} normalizedUrl - Normalized video URL
-     */
-    async processBlobVideo(tabId, normalizedUrl) {
-        logger.debug(`Processing blob video: ${normalizedUrl}`);
-        
-        const updatedVideo = updateVideo('processBlobVideo', tabId, normalizedUrl, {
-            mediaInfo: { 
-                isBlob: true, 
-                type: 'blob', 
-                format: 'blob', 
-                container: 'blob',
-                hasVideo: null,
-                hasAudio: null
-            },
-            isFullyParsed: true,
-            isValid: true
-        });
-        
-        if (updatedVideo) {
-            sendVideoUpdateToUI(tabId, normalizedUrl, { ...updatedVideo, _sendFullList: true });
         }
     }
     
@@ -386,12 +358,14 @@ class VideoProcessingPipeline {
             if (container.includes('webm') || container.includes('matroska')) return 'webm';
             if (container.includes('mkv')) return 'mkv';
             if (container.includes('mov')) return 'mp4'; // MOV -> MP4 for compatibility
+            logger.warn('Unrecognized FFprobe container:', { container, video, streamInfo });
         }
         
         // 2. Use headers content-type
         if (video.metadata?.contentType) {
             if (video.metadata.contentType.includes('mp4')) return 'mp4';
             if (video.metadata.contentType.includes('webm')) return 'webm';
+            logger.warn('Unrecognized contentType for container:', { contentType: video.metadata.contentType, video });
         }
         
         // 3. URL detection fallback
@@ -399,9 +373,11 @@ class VideoProcessingPipeline {
             const container = video.originalContainer.toLowerCase();
             if (['mp4', 'webm', 'mkv'].includes(container)) return container;
             if (['mov', 'm4v'].includes(container)) return 'mp4';
+            logger.warn('Unrecognized originalContainer:', { originalContainer: video.originalContainer, video });
         }
         
         // 4. Final fallback
+        logger.warn('Falling back to default container "mp4":', { video, streamInfo });
         return 'mp4';
     }
 

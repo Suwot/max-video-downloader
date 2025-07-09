@@ -497,7 +497,6 @@ export function groupVideosByType(videos) {
         hls: [],
         dash: [],
         direct: [],
-        blob: [],
         unknown: []
     };
 
@@ -512,8 +511,6 @@ export function groupVideosByType(videos) {
             groups.hls.push(video);
         } else if (type === 'dash') {
             groups.dash.push(video);
-        } else if (type === 'blob') {
-            groups.blob.push(video);
         } else if (type === 'direct') {
             groups.direct.push(video);
         } else {

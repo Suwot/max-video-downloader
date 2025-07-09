@@ -93,12 +93,6 @@ export function createVideoElement(video) {
             showHoverPreview(previewUrl, event);
         });
         previewContainer.addEventListener('mouseleave', hideHoverPreview);
-    } else {
-        // No preview available yet, keep loader or show placeholder
-        if (video.type === 'blob' && !video.poster) {
-            previewImage.classList.add('loaded');
-            loader.style.display = 'none';
-        }
     }
     
     // Create info column
@@ -132,19 +126,11 @@ export function createVideoElement(video) {
     dismissButton.title = 'Dismiss';
     dismissButton.addEventListener('click', () => {
         // Send dismiss command to background
-        if (video.type === 'blob') {
-            sendPortMessage({
-                command: 'dismissVideo',
-                tabId: video.tabId,
-                url: video.normalizedUrl
-            });
-        } else {
-            sendPortMessage({
-                command: 'dismissVideo',
-                tabId: video.tabId,
-                url: video.url
-            });
-        }
+        sendPortMessage({
+            command: 'dismissVideo',
+            tabId: video.tabId,
+            url: video.url
+        });
 
         // Update UI counters - check if group becomes empty after removal
         const group = document.querySelector(`.video-type-group[data-video-type="${video.type}"]`);
@@ -171,16 +157,7 @@ export function createVideoElement(video) {
     });
     
     titleRow.append(title, dismissButton);
-
-    // For blob URLs, add warning about potential limitations
-    if (video.type === 'blob') {
-        const blobWarning = document.createElement('div');
-        blobWarning.className = 'blob-warning';
-        blobWarning.textContent = 'Blob URL: for debug only';
-        infoColumn.append(titleRow, blobWarning);
-    } else {
-        infoColumn.append(titleRow);
-    }
+    infoColumn.append(titleRow);
     
     // Create type specific interactive elements
     const downloadActions = createDownloadActions(video);
@@ -201,7 +178,7 @@ function createDownloadActions(video) {
     const elementsDiv = document.createElement('div');
     elementsDiv.className = 'download-group';
     
-    // Create dropdown (handles all video types: HLS, DASH, Direct, Blob)
+    // Create dropdown (handles all video types: HLS, DASH, Direct)
     const dropdown = createCustomDropdown(video);
     
     elementsDiv.appendChild(dropdown);

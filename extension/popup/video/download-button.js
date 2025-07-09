@@ -98,11 +98,6 @@ class DownloadButtonComponent {
         // Store component reference on wrapper for external access
         this.buttonWrapper._component = this;
         
-        // Skip setup for blob videos
-        if (this.video.type === 'blob') {
-            return [this.downloadBtn, this.menuBtn, this.buttonWrapper];
-        }
-        
         // Setup event handlers
         this.setupEventHandlers();
         

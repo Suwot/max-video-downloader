@@ -48,7 +48,6 @@ const initialState = {
             hls: false,
             dash: false,
             direct: false,
-            blob: true,
             unknown: false
         },
         lastRefresh: null
