@@ -758,7 +758,7 @@ function updateTabIcon(tabId) {
 
 // Clean up for tab
 function cleanupVideosForTab(tabId, resetIcon = true) {
-    logger.debug(`Tab removed: ${tabId}`);
+    logger.debug(`Cleaning up videos for tab ${tabId}`);
 
     if (videoProcessingPipeline.queue.length > 0) {
         const originalCount = videoProcessingPipeline.queue.length;
@@ -767,7 +767,7 @@ function cleanupVideosForTab(tabId, resetIcon = true) {
         );
         const removedCount = originalCount - videoProcessingPipeline.queue.length;
         if (removedCount > 0) {
-        logger.debug(`Removed ${removedCount} queued items for closed tab ${tabId}`);
+        logger.debug(`Removed ${removedCount} queued items for tab ${tabId}`);
         }
     }
     
@@ -816,19 +816,6 @@ async function initVideoManager() {
     logger.info('Initializing video manager service');
     
     try {        
-        // Listen for page navigation to clear videos
-        chrome.webNavigation.onCommitted.addListener((details) => {
-            // Only clear for main frame navigation (not iframes)
-            // And only for actual navigation events, not history state updates or other non-navigation events
-            if (details.frameId === 0 && 
-                details.transitionType !== 'auto_subframe' && 
-                details.transitionQualifiers.indexOf('from_address_bar') !== -1) {
-                
-                logger.debug(`Navigation with transitionType: ${details.transitionType}, clearing tab ${details.tabId}`);
-                cleanupVideosForTab(details.tabId);
-            }
-        });
-        
         // Initialize maps for tracking videos
         globalThis.allDetectedVideosInternal = allDetectedVideos;
         
