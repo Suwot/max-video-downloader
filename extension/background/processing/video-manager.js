@@ -540,12 +540,28 @@ function updateVideo(functionName, tabId, normalizedUrl, updates, replace = fals
         const currentVideo = tabMap.get(normalizedUrl);
         updatedVideo = { ...currentVideo, ...updates };
     }
-    
+    // Always recalculate validForDisplay
+    updatedVideo.validForDisplay = calculateValidForDisplay(updatedVideo);
     // Set the value in the map
     tabMap.set(normalizedUrl, updatedVideo);
     logger.debug(`Video updated by ${functionName}: ${normalizedUrl}`, updatedVideo);
-    
     return updatedVideo;
+}
+
+/**
+ * Calculate if a video is valid for display in the UI
+ * @param {Object} video - Video object
+ * @returns {boolean}
+ */
+function calculateValidForDisplay(video) {
+    if (!video || !video.isValid) return false;
+    if (video.type === 'hls') {
+        // Only standalone variants without known masters, or master playlists
+        if (video.isVariant && video.hasKnownMaster) return false;
+        return true;
+    }
+    // For dash and direct, only if isValid
+    return true;
 }
 
 /**
@@ -577,8 +593,7 @@ function handleVariantMasterRelationships(tabId, variants, masterUrl) {
             updateVideo('handleVariantMasterRelationships', tabId, variantUrl, {
                 hasKnownMaster: true,
                 masterUrl: masterUrl,
-                isVariant: true,
-                validForDisplay: false
+                isVariant: true
             });
             logger.debug(`Updated existing standalone variant ${variantUrl} with master info`);
         }
@@ -860,7 +875,7 @@ function addDetectedVideo(tabId, videoInfo) {
     // Normalize URL for deduplication
     const normalizedUrl = normalizeUrl(videoInfo.url);
 
-    // Check if this HLS is a known variant
+    // Check if this HLS is a known variant and don't process it, just store in a map with enriched info about its master
     if (videoInfo.type === 'hls' && variantMasterMap.has(tabId)) {
         const tabVariantMap = variantMasterMap.get(tabId);
         if (tabVariantMap.has(normalizedUrl)) {
@@ -878,16 +893,16 @@ function addDetectedVideo(tabId, videoInfo) {
                     isVariant: true,
                     hasKnownMaster: true,
                     masterUrl: tabVariantMap.get(normalizedUrl),
-                    validForDisplay: false,
                     normalizedUrl,
                     isBeingProcessed: false,
                     title: videoInfo.metadata?.filename || getFilenameFromUrl(videoInfo.url),
                     isValid: true // it's a known variant, so we consider it valid
                 };
+                // validForDisplay will be set by updateVideo
                 updateVideo('addDetectedVideo-knownVariant', tabId, normalizedUrl, newVideo, true);
             }
             // Do not enqueue for processing or update UI
-            return false;
+            return;
         }
     }
     
@@ -907,7 +922,7 @@ function addDetectedVideo(tabId, videoInfo) {
         // For non-direct videos or when no updates needed
         const existingVideo = tabMap.get(normalizedUrl);
         logger.debug(`Duplicate video detection from ${sourceOfVideo}. URL: ${videoInfo.url}, Existing timestamp: ${existingVideo.timestampDetected}, New timestamp: ${videoInfo.timestampDetected}`);
-        return false;
+        return;
     }
     
     // Add to tab's collection with basic info
@@ -919,17 +934,17 @@ function addDetectedVideo(tabId, videoInfo) {
         // Set isValid: true for direct videos immediately
         ...(videoInfo.type === 'direct' ? { isValid: true } : {})
     };
-    
+    // validForDisplay will be set by updateVideo
     updateVideo('addDetectedVideo', tabId, normalizedUrl, newVideo, true);
     logger.debug(`Added new video to detection map: ${videoInfo.url} (type: ${videoInfo.type}, source: ${sourceOfVideo})`);
 
     // Directly enqueue for processing with our unified pipeline
     videoProcessingPipeline.enqueue(tabId, normalizedUrl, newVideo.type);
-    
+
     // Broadcast initial state to UI with unified approach
     sendVideoUpdateToUI(tabId);
-    
-    return true;
+
+    return;
 }
 
 // Dismiss a video for a tab (hide from UI, skip processing)
@@ -966,22 +981,9 @@ function isVideoDismissed(tabId, url) {
 function getVideosForDisplay(tabId) {
     const tabVideosMap = allDetectedVideos.get(tabId);
     if (!tabVideosMap) return [];
-    
-    const now = Date.now();
-    
-    // Create array directly from values() instead of entries()
+
     return Array.from(tabVideosMap.values())
-        .filter(video =>
-            !(video.isVariant && video.hasKnownMaster) &&
-            video.isValid &&
-            video.mediaType !== 'audio' &&
-            !isVideoDismissed(tabId, video.normalizedUrl)
-        )
-        .map(video => ({
-            ...video,
-            timestampLastProcessed: now,
-            ...(video.poster ? { poster: video.poster } : {})
-        }))
+        .filter(video => video.validForDisplay && !isVideoDismissed(tabId, video.normalizedUrl))
         .sort((a, b) => b.timestampDetected - a.timestampDetected);
 }
 
