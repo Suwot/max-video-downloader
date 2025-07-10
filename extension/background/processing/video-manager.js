@@ -712,7 +712,7 @@ function updateTabIcon(tabId) {
     if (!tabId || tabId < 0) return;
     
     // Check if tab has any valid, displayable videos
-    const hasValidVideos = hasDisplayableVideos(tabId);
+    const hasValidVideos = getVideosForDisplay(tabId).length > 0;
     const wasInSet = tabsWithVideos.has(tabId);
     
     // Only update if state changed
@@ -754,28 +754,6 @@ function updateTabIcon(tabId) {
     } catch (error) {
         logger.warn(`Failed to update icon for tab ${tabId}:`, error);
     }
-}
-
-/**
- * Check if tab has any valid, displayable videos
- * @param {number} tabId - Tab ID to check
- * @returns {boolean} True if tab has displayable videos
- */
-function hasDisplayableVideos(tabId) {
-    const tabVideosMap = allDetectedVideos.get(tabId);
-    if (!tabVideosMap || tabVideosMap.size === 0) return false;
-    
-    // Check if any videos would be displayed by getVideosForDisplay logic
-    for (const video of tabVideosMap.values()) {
-        if (video.isValid && 
-            video.mediaType !== 'audio' &&
-            !(video.isVariant && video.hasKnownMaster) &&
-            !isVideoDismissed(tabId, video.normalizedUrl)) {
-            return true;
-        }
-    }
-    
-    return false;
 }
 
 // Clean up for tab
