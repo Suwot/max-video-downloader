@@ -14,7 +14,7 @@ import {
     validateManifestType
 } from './parser-utils.js';
 import { createLogger } from '../../shared/utils/logger.js';
-import { getVideoByUrl } from './video-manager.js';
+import { getVideoByUrl } from './video-store.js';
 import { standardizeResolution } from '../../shared/utils/video-utils.js';
 import { propagateHeaders } from '../../shared/utils/headers-utils.js';
 

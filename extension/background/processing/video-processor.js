@@ -1,40 +1,28 @@
 /**
- * Video Manager Service
- * Manages video detection, metadata, and tracking across tabs
+ * Video Processing Pipeline
+ * Manages the flow of videos from detection through processing to UI display
  */
 
-// Add static imports at the top
 import { normalizeUrl } from '../../shared/utils/normalize-url.js';
-import nativeHostService from '../messaging/native-host-service.js';
-import { getActivePopupPortForTab } from '../messaging/popup-communication.js';
+import { createLogger } from '../../shared/utils/logger.js';
+import { getFilenameFromUrl,standardizeResolution } from '../../shared/utils/video-utils.js';
+import { getRequestHeaders, applyHeaderRule } from '../../shared/utils/headers-utils.js';
+import { getPreview, storePreview } from '../../shared/utils/preview-cache.js';
 import { parseHlsManifest, extractHlsVariantUrls } from './hls-parser.js';
 import { parseDashManifest } from './dash-parser.js';
-import { getRequestHeaders, applyHeaderRule } from '../../shared/utils/headers-utils.js';
-import { createLogger } from '../../shared/utils/logger.js';
-import { getPreview, storePreview } from '../../shared/utils/preview-cache.js';
-import { standardizeResolution, getFilenameFromUrl, calculateValidForDisplay } from '../../shared/utils/video-utils.js';
+import nativeHostService from '../messaging/native-host-service.js';
+import { 
+    getVideo, 
+    getVideoByUrl, 
+    updateVideo, 
+    handleVariantMasterRelationships,
+    isVideoDismissed,
+    getVideosForDisplay
+} from './video-store.js';
+import { sendVideoUpdateToUI } from '../messaging/popup-communication.js';
 
-// Central store for all detected videos, keyed by tab ID, then normalized URL
-// Map<tabId, Map<normalizedUrl, videoInfo>>
-const allDetectedVideos = new Map();
-
-// Track relationships between variants and their master playlists
-// Map<tabId, Map<normalizedVariantUrl, masterUrl>>
-const variantMasterMap = new Map();
-
-// Track dismissed videos per tab
-// Map<tabId, Set<normalizedUrl>>
-const dismissedVideos = new Map();
-
-// Track tabs that have valid, displayable videos for icon management
-// Set<tabId> - if tab is in set, it has videos (colored icon)
-const tabsWithVideos = new Set();
-
-// Expose allDetectedVideos for debugging
-globalThis.allDetectedVideosInternal = allDetectedVideos;
-
-// Create a logger instance for the Video Manager module
-const logger = createLogger('Video Manager');
+// Create a logger instance for the Video Processing Pipeline module
+const logger = createLogger('Video Processor');
 
 /**
  * Unified video processing pipeline
@@ -164,7 +152,7 @@ class VideoProcessingPipeline {
                 await this.generateVideoPreview(tabId, normalizedUrl, headers, firstVariant.url);
             }
             
-            // Notify UI of complete update using unified approach
+            // Notify UI directly
             sendVideoUpdateToUI(tabId, normalizedUrl, { ...(updatedVideo || {}), _sendFullList: true });
         } else {
             // Update with error information
@@ -296,8 +284,7 @@ class VideoProcessingPipeline {
             if (cachedPreview) {
                 logger.debug(`Using cached preview for: ${normalizedUrl}`);
                 const updatedVideo = updateVideo('generateVideoPreview-cache', tabId, normalizedUrl, {
-                    previewUrl: cachedPreview,
-                    fromCache: true
+                    previewUrl: cachedPreview
                 });
                 
                 if (updatedVideo) {
@@ -454,6 +441,29 @@ class VideoProcessingPipeline {
             // Do NOT set isValid: false here, just log
         }
     }
+
+    /**
+     * Clean up processing queue for a specific tab
+     * @param {number} tabId - Tab ID
+     */
+    cleanupProcessingQueueForTab(tabId) {
+        if (this.queue.length > 0) {
+            const originalCount = this.queue.length;
+            this.queue = this.queue.filter(item => item.tabId !== tabId);
+            const removedCount = originalCount - this.queue.length;
+            if (removedCount > 0) {
+                logger.debug(`Removed ${removedCount} queued items for tab ${tabId}`);
+            }
+        }
+    }
+
+    /**
+     * Clear all processing queues
+     */
+    clearAll() {
+        this.queue = [];
+        this.processing.clear();
+    }
 }
 
 // Create the singleton instance
@@ -467,356 +477,38 @@ const videoProcessingPipeline = new VideoProcessingPipeline();
  * @param {string} [errorMessage] - Optional error message
  */
 function updateVideoStatus(tabId, normalizedUrl, status, errorMessage = null) {
-  const updates = { isBeingProcessed: status === 'processing' };
-  
-  if (status === 'error' && errorMessage) {
-    updates.error = errorMessage;
-  }
-  
-  const updatedVideo = updateVideo(`updateVideoStatus-${status}`, tabId, normalizedUrl, updates);
-  
-  if (updatedVideo) {
-    // Use the unified approach for updates
-    sendVideoUpdateToUI(tabId, normalizedUrl, updatedVideo);
-  }
-}
-
-/**
- * Helper function to get a video from store
- * @param {number} tabId - Tab ID
- * @param {string} normalizedUrl - Normalized video URL
- * @returns {Object|null} Video object or null if not found
- */
-function getVideo(tabId, normalizedUrl) {
-  const tabMap = allDetectedVideos.get(tabId);
-  return tabMap ? tabMap.get(normalizedUrl) : null;
-}
-
-/**
- * Get a video by URL from any tab
- * @param {string} url - The URL of the video to find
- * @returns {Object|null} Video object or null if not found
- */
-function getVideoByUrl(url) {
-    try {
-        const normalizedUrl = normalizeUrl(url);
-        
-        // Search through all tabs
-        for (const [tabId, urlMap] of allDetectedVideos.entries()) {
-            if (urlMap instanceof Map && urlMap.has(normalizedUrl)) {
-                return urlMap.get(normalizedUrl);
-            }
-        }
-        
-        return null;
-    } catch (err) {
-        logger.error(`Error in getVideoByUrl: ${err.message}`);
-        return null;
+    const updates = { isBeingProcessed: status === 'processing' };
+    
+    if (status === 'error' && errorMessage) {
+        updates.error = errorMessage;
+    }
+    
+    const updatedVideo = updateVideo(`updateVideoStatus-${status}`, tabId, normalizedUrl, updates);
+    
+    if (updatedVideo) {
+        // Notify UI directly
+        sendVideoUpdateToUI(tabId, normalizedUrl, updatedVideo);
     }
 }
 
 /**
- * Single entry point for all video updates with proper logging
- * @param {string} functionName - Function making the update
- * @param {number} tabId - Tab ID
- * @param {string} normalizedUrl - Video URL
- * @param {Object} updates - Fields to update (or complete object)
- * @param {boolean} [replace=false] - If true, replace the entire object instead of merging
- * @returns {Object|null} - Updated video object or null if video not found
- */
-function updateVideo(functionName, tabId, normalizedUrl, updates, replace = false) {
-    const tabMap = allDetectedVideos.get(tabId);
-    if (!tabMap) return null;
-    
-    // For replace mode, only check if tabMap exists
-    // For update mode, also check if the video exists
-    if (!replace && !tabMap.has(normalizedUrl)) return null;
-    
-    // Create updated video object
-    let updatedVideo;
-    if (replace) {
-        updatedVideo = { ...updates };
-    } else {
-        const currentVideo = tabMap.get(normalizedUrl);
-        updatedVideo = { ...currentVideo, ...updates };
-    }
-    // Always recalculate validForDisplay
-    updatedVideo.validForDisplay = calculateValidForDisplay(updatedVideo);
-    // Set the value in the map
-    tabMap.set(normalizedUrl, updatedVideo);
-    logger.debug(`Video updated by ${functionName}: ${normalizedUrl}`, updatedVideo);
-    return updatedVideo;
-}
-
-/**
- * Track and update variant-master relationships
- * @param {number} tabId - Tab ID
- * @param {Array} variants - Array of variant objects
- * @param {string} masterUrl - The normalized master URL
- */
-function handleVariantMasterRelationships(tabId, variants, masterUrl) {
-    if (!variantMasterMap.has(tabId)) {
-        variantMasterMap.set(tabId, new Map());
-    }
-    
-    const tabVariantMap = variantMasterMap.get(tabId);
-    const tabVideos = allDetectedVideos.get(tabId);
-    
-    if (!tabVideos) return;
-    
-    // Process each variant
-    for (const variant of variants) {
-        const variantUrl = variant.normalizedUrl;
-        
-        // Update the variant-master relationship map
-        tabVariantMap.set(variantUrl, masterUrl);
-        logger.debug(`Tracked variant ${variantUrl} as belonging to master ${masterUrl}`);
-        
-        // If this variant exists as standalone, update it
-        if (tabVideos.has(variantUrl)) {
-            updateVideo('handleVariantMasterRelationships', tabId, variantUrl, {
-                hasKnownMaster: true,
-                masterUrl: masterUrl,
-                isVariant: true
-            });
-            logger.debug(`Updated existing standalone variant ${variantUrl} with master info`);
-        }
-    }
-}
-
-/**
- * Prepare video object for transmission
- * Creates a clean deep copy to ensure all properties are transmitted
- * @param {Object} video - The video object
- * @returns {Object} - Cleaned video object ready for transmission
- */
-function prepareVideoForTransmission(video) {
-    return {
-        ...video,
-        // Force a deep clone of complex objects to ensure all properties are transmitted
-        metaFFprobe: video.metaFFprobe ? JSON.parse(JSON.stringify(video.metaFFprobe)) : null,
-        metaJS: video.metaJS ? JSON.parse(JSON.stringify(video.metaJS)) : null,
-        ...(video.variants ? { variants: JSON.parse(JSON.stringify(video.variants)) } : {}),
-        // Add a marker so we can track which videos have been processed
-        _processedByVideoManager: true
-    };
-}
-
-/**
- * Unified function to send video updates to UI
- * Will automatically use the best available method
- * @param {number} tabId - Tab ID
- * @param {string} [singleVideoUrl] - Optional URL of a specific video to update
- * @param {Object} [singleVideoObj] - Optional video object to update (if provided with URL)
- */
-function sendVideoUpdateToUI(tabId, singleVideoUrl = null, singleVideoObj = null) {
-    // Get the port first to see if popup is open
-    const port = getActivePopupPortForTab(tabId);
-    
-    // If we have a specific video URL but no object, try to get it
-    if (singleVideoUrl && !singleVideoObj) {
-        const video = getVideo(tabId, singleVideoUrl);
-        if (video) {
-            singleVideoObj = video;
-        }
-    }
-    
-    // Update tab icon when videos change
-    updateTabIcon(tabId);
-    
-    // If popup is open, use direct port communication for efficient updates
-    if (port) {
-        try {
-            // If we have a specific video object, send just that update
-            if (singleVideoUrl && singleVideoObj) {
-                logger.debug(`Sending single video update via port for: ${singleVideoUrl}`);
-                port.postMessage({
-                    command: 'videoUpdated',
-                    url: singleVideoUrl,
-                    video: prepareVideoForTransmission(singleVideoObj)
-                });
-            }
-            
-            // Only for specific lifecycle events (like initializing) or when requested,
-            // we send the full list to ensure the popup is synchronized
-            if (!singleVideoUrl || singleVideoObj?._sendFullList) {
-                const processedVideos = getVideosForDisplay(tabId);
-                logger.info(`Sending full video list (${processedVideos.length} videos) via port for tab ${tabId}`);
-                
-                if (processedVideos.length > 0) {
-                    port.postMessage({
-                        command: 'videoStateUpdated',
-                        tabId: tabId,
-                        videos: processedVideos
-                    });
-                }
-            }
-            
-            // Return success if we sent via port
-            return true;
-        } catch (e) {
-            logger.debug(`Error sending update via port: ${e.message}, falling back to runtime message`);
-            // Fall through to broadcast method
-        }
-    } else {
-        // No port means popup isn't open, so we only update the maps for when popup opens later
-        logger.debug(`No active popup for tab ${tabId}, updates will be shown when popup opens`);
-        return false;
-    }
-    
-    // As fallback only for full list updates, not individual video updates
-    // This ensures any future opened popup gets the latest state
-    if (!singleVideoUrl || singleVideoObj?._sendFullList) {
-        try {
-            const processedVideos = getVideosForDisplay(tabId);
-            logger.debug(`Sending full list via runtime message for tab ${tabId} (fallback)`);
-            
-            chrome.runtime.sendMessage({
-                command: 'videoStateUpdated',
-                tabId: tabId,
-                videos: processedVideos
-            });
-            
-            return true;
-        } catch (e) {
-            // Ignore errors for sendMessage, as the popup might not be open
-            logger.debug('Error sending video update message (popup may not be open):', e.message);
-            return false;
-        }
-    }
-    
-    return false;
-}
-
-/**
- * Update extension icon for a specific tab based on video availability
- * @param {number} tabId - Tab ID to update icon for
- */
-function updateTabIcon(tabId) {
-    if (!tabId || tabId < 0) return;
-    
-    // Check if tab has any valid, displayable videos
-    const hasValidVideos = getVideosForDisplay(tabId).length > 0;
-    
-    try {
-        if (hasValidVideos) {
-            tabsWithVideos.add(tabId);
-            // Set colored icon
-            chrome.action.setIcon({
-                tabId,
-                path: {
-                    "16": "../icons/16.png",
-                    "32": "../icons/32.png", 
-                    "48": "../icons/48.png",
-                    "128": "../icons/128.png"
-                }
-            });
-        } else {
-            tabsWithVideos.delete(tabId);
-            // Set B&W icon
-            chrome.action.setIcon({
-                tabId,
-                path: {
-                    "16": "../icons/16-bw.png",
-                    "32": "../icons/32-bw.png",
-                    "48": "../icons/48-bw.png", 
-                    "128": "../icons/128-bw.png"
-                }
-            });
-        }
-        
-        logger.debug(`Tab ${tabId} icon updated: ${hasValidVideos ? 'colored' : 'B&W'}`);
-    } catch (error) {
-        logger.warn(`Failed to update icon for tab ${tabId}:`, error);
-    }
-}
-
-// Clean up for tab
-function cleanupVideosForTab(tabId, resetIcon = true) {
-    logger.debug(`Cleaning up videos for tab ${tabId}`);
-
-    if (videoProcessingPipeline.queue.length > 0) {
-        const originalCount = videoProcessingPipeline.queue.length;
-        videoProcessingPipeline.queue = videoProcessingPipeline.queue.filter(
-        item => item.tabId !== tabId
-        );
-        const removedCount = originalCount - videoProcessingPipeline.queue.length;
-        if (removedCount > 0) {
-        logger.debug(`Removed ${removedCount} queued items for tab ${tabId}`);
-        }
-    }
-    
-    // Clear videos from allDetectedVideos
-    if (allDetectedVideos.has(tabId)) {
-        allDetectedVideos.delete(tabId);
-    }
-    
-    // Clean up variant-master relationships
-    if (variantMasterMap.has(tabId)) {
-        variantMasterMap.delete(tabId);
-    }
-    
-    // Clean up dismissed videos
-    if (dismissedVideos.has(tabId)) {
-        dismissedVideos.delete(tabId);
-    }
-    
-    // Clean up icon state and reset to B&W
-    if (tabsWithVideos.has(tabId)) {
-        tabsWithVideos.delete(tabId);
-
-        if (resetIcon) {
-            try {
-                chrome.action.setIcon({
-                    tabId,
-                    path: {
-                        "16": "../icons/16-bw.png",
-                        "32": "../icons/32-bw.png",
-                        "48": "../icons/48-bw.png",
-                        "128": "../icons/128-bw.png"
-                    }
-                });
-            } catch (error) {
-                // Tab might already be closed, ignore error
-            }
-        }
-    }
-}
-
-/**
- * Initialize video manager service
- * @returns {Promise<boolean>} Success status
- */
-async function initVideoManager() {
-    logger.info('Initializing video manager service');
-    
-    try {        
-        // Initialize maps for tracking videos
-        globalThis.allDetectedVideosInternal = allDetectedVideos;
-        
-        logger.info('Video manager service initialized');
-        return true;
-    } catch (error) {
-        logger.error('Failed to initialize video manager:', error);
-        return false;
-    }
-}
-
-/**
- * Add detected video to the central tracking map
- * This is the first step in the video processing pipeline
+ * Add detected video to the central tracking map and enqueue for processing
+ * This is the main entry point for video processing orchestration
  * @param {number} tabId - The tab ID where the video was detected
  * @param {Object} videoInfo - Information about the detected video
  * @returns {boolean|string} - True if this is a new video, 'updated' if an existing video was updated, false otherwise
  */
 function addDetectedVideo(tabId, videoInfo) {
-
     logger.debug(`Received video for Tab ${tabId}, with this info:`, videoInfo);
     // Normalize URL for deduplication
     const normalizedUrl = normalizeUrl(videoInfo.url);
 
+    // Get access to internal maps via globalThis
+    const allDetectedVideos = globalThis.allDetectedVideosInternal;
+    const variantMasterMap = globalThis.variantMasterMapInternal;
+    
     // Check if this HLS is a known variant and don't process it, just store in a map with enriched info about its master
-    if (videoInfo.type === 'hls' && variantMasterMap.has(tabId)) {
+    if (videoInfo.type === 'hls' && variantMasterMap?.has(tabId)) {
         const tabVariantMap = variantMasterMap.get(tabId);
         if (tabVariantMap.has(normalizedUrl)) {
             logger.debug(`Known HLS variant detected: ${normalizedUrl}. Master ${videoInfo.masterUrl} (stored in map, skipping processing and UI update)`);
@@ -905,96 +597,17 @@ function addDetectedVideo(tabId, videoInfo) {
     updateVideo('addDetectedVideo', tabId, normalizedUrl, newVideo, true);
     logger.debug(`Added new video to detection map: ${videoInfo.url} (type: ${videoInfo.type}, source: ${sourceOfVideo})`);
 
-    // Directly enqueue for processing with our unified pipeline
+    // Enqueue for processing
     videoProcessingPipeline.enqueue(tabId, normalizedUrl, newVideo.type);
-
-    // Broadcast initial state to UI with unified approach
+    
+    // Send initial state to UI
     sendVideoUpdateToUI(tabId);
-
-    return;
-}
-
-// Dismiss a video for a tab (hide from UI, skip processing)
-function dismissVideoFromTab(tabId, url) {
-    if (!dismissedVideos.has(tabId)) {
-        dismissedVideos.set(tabId, new Set());
-    }
-    dismissedVideos.get(tabId).add(url);
-    logger.info(`Dismissed video ${url} for tab ${tabId}`);
     
-    // Update icon after dismissing video
-    updateTabIcon(tabId);
+    return true;
 }
-
-// Restore a dismissed video for a tab (show in UI, allow processing)
-function restoreVideoInTab(tabId, url) {
-    if (dismissedVideos.has(tabId)) {
-        dismissedVideos.get(tabId).delete(url);
-        logger.info(`Restored video ${url} for tab ${tabId}`);
-        sendVideoUpdateToUI(tabId); // Refresh UI
-    }
-}
-
-// Checks if a video is dismissed for a tab
-function isVideoDismissed(tabId, url) {
-    return dismissedVideos.has(tabId) && dismissedVideos.get(tabId).has(url);
-}
-
-/**
- * Get videos for UI display with efficient filtering
- * @param {number} tabId - Tab ID
- * @returns {Array} Filtered and processed videos
- */
-function getVideosForDisplay(tabId) {
-    const tabVideosMap = allDetectedVideos.get(tabId);
-    if (!tabVideosMap) return [];
-
-    return Array.from(tabVideosMap.values())
-        .filter(video => video.validForDisplay && !isVideoDismissed(tabId, video.normalizedUrl))
-        .sort((a, b) => b.timestampDetected - a.timestampDetected);
-}
-
-// function to cleanup both video maps: allDetectedVideos variantMasterMap – in global scope
-function cleanupAllVideos() {
-    logger.debug('Cleaning up all detected videos');
-    
-    // Reset all tab icons to B&W before clearing
-    for (const tabId of tabsWithVideos) {
-        try {
-            chrome.action.setIcon({
-                tabId,
-                path: {
-                    "16": "../icons/16-bw.png",
-                    "32": "../icons/32-bw.png",
-                    "48": "../icons/48-bw.png",
-                    "128": "../icons/128-bw.png"
-                }
-            });
-        } catch (error) {
-            // Tab might be closed, ignore error
-        }
-    }
-    
-    allDetectedVideos.clear();
-    variantMasterMap.clear();
-    videoProcessingPipeline.queue = [];
-    videoProcessingPipeline.processing.clear();
-    dismissedVideos.clear();
-    tabsWithVideos.clear();
-    logger.info('All detected videos cleared');
-}
-
 
 export {
-    addDetectedVideo,
-    sendVideoUpdateToUI,
-    cleanupVideosForTab,
-    cleanupAllVideos,
-    normalizeUrl,
-    getVideosForDisplay,
-    initVideoManager,
-    getVideoByUrl,
-    dismissVideoFromTab,
-    restoreVideoInTab,
-    updateTabIcon
+    videoProcessingPipeline,
+    updateVideoStatus,
+    addDetectedVideo
 };

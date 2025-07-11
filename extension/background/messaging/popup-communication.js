@@ -4,12 +4,13 @@
  */
 
 // Add static imports at the top
-import { sendVideoUpdateToUI, cleanupAllVideos, dismissVideoFromTab } from '../processing/video-manager.js';
 import { startDownload, cancelDownload, getActiveDownloadProgress, getActiveDownloadCount } from '../download/download-manager.js';
 import { createLogger } from '../../shared/utils/logger.js';
 import { clearPreviewCache, getCacheStats } from '../../shared/utils/preview-cache.js';
 import { clearAllHeaderCaches } from '../../shared/utils/headers-utils.js';
+import { getVideosForDisplay, getVideo, dismissVideoFromTab, cleanupAllVideos } from '../processing/video-store.js';
 import nativeHostService from './native-host-service.js';
+import { updateTabIcon } from '../state/tab-tracker.js';
 
 // Track all popup connections - simplified single map
 const popupPorts = new Map(); // key = portId, value = {port, tabId, url}
@@ -77,6 +78,7 @@ async function handlePortMessage(message, port, portId) {
         case 'dismissVideo':
             // Dismiss the video for this tab
             dismissVideoFromTab(message.tabId, message.url);
+            updateTabIcon(message.tabId);
             break;
             
         case 'download':
@@ -213,6 +215,92 @@ function getActivePopupPortForTab(tabId) {
 }
 
 /**
+ * Unified function to send video updates to UI
+ * Will automatically use the best available method
+ * @param {number} tabId - Tab ID
+ * @param {string} [singleVideoUrl] - Optional URL of a specific video to update
+ * @param {Object} [singleVideoObj] - Optional video object to update (if provided with URL)
+ */
+function sendVideoUpdateToUI(tabId, singleVideoUrl = null, singleVideoObj = null) {
+    // Get the port first to see if popup is open
+    const port = getActivePopupPortForTab(tabId);
+
+    // If we have a specific video URL but no object, try to get it
+    if (singleVideoUrl && !singleVideoObj) {
+        const video = getVideo(tabId, singleVideoUrl);
+        if (video) {
+            singleVideoObj = video;
+        }
+    }
+
+    // Update tab icon when videos change - delegate to tab tracker
+    updateTabIcon(tabId);
+
+    // If popup is open, use direct port communication for efficient updates
+    if (port) {
+        try {
+            // If we have a specific video object, send just that update
+            if (singleVideoUrl && singleVideoObj) {
+                logger.debug(`Sending single video update via port for: ${singleVideoUrl}`);
+                port.postMessage({
+                    command: 'videoUpdated',
+                    url: singleVideoUrl,
+                    video: JSON.parse(JSON.stringify(singleVideoObj))
+                });
+            }
+
+            // Only for specific lifecycle events (like initializing) or when requested,
+            // we send the full list to ensure the popup is synchronized
+            if (!singleVideoUrl || singleVideoObj?._sendFullList) {
+                const processedVideos = getVideosForDisplay(tabId);
+                logger.info(`Sending full video list (${processedVideos.length} videos) via port for tab ${tabId}`);
+
+                if (processedVideos.length > 0) {
+                    port.postMessage({
+                        command: 'videoStateUpdated',
+                        tabId: tabId,
+                        videos: processedVideos
+                    });
+                }
+            }
+
+            // Return success if we sent via port
+            return true;
+        } catch (e) {
+            logger.debug(`Error sending update via port: ${e.message}, falling back to runtime message`);
+            // Fall through to broadcast method
+        }
+    } else {
+        // No port means popup isn't open, so we only update the maps for when popup opens later
+        logger.debug(`No active popup for tab ${tabId}, updates will be shown when popup opens`);
+        return false;
+    }
+
+    // As fallback only for full list updates, not individual video updates
+    // This ensures any future opened popup gets the latest state
+    if (!singleVideoUrl || singleVideoObj?._sendFullList) {
+        try {
+            const processedVideos = getVideosForDisplay(tabId);
+            logger.debug(`Sending full list via runtime message for tab ${tabId} (fallback)`);
+
+            chrome.runtime.sendMessage({
+                command: 'videoStateUpdated',
+                tabId: tabId,
+                videos: processedVideos
+            });
+
+            return true;
+        } catch (e) {
+            // Ignore errors for sendMessage, as the popup might not be open
+            logger.debug('Error sending video update message (popup may not be open):', e.message);
+            return false;
+        }
+    }
+
+    return false;
+}
+
+/**
  * Initialize the UI communication service
  */
 
@@ -236,5 +324,7 @@ export {
     setupPopupPort,
     handlePortMessage,
     broadcastToPopups,
-    getActivePopupPortForTab
+    getActivePopupPortForTab,
+    sendVideoUpdateToUI,
+    dismissVideoFromTab
 };
