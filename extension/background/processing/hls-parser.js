@@ -168,6 +168,7 @@ function extractHlsEncryptionInfo(content) {
 
 /**
  * Parse HLS master playlist content to extract variant information
+ * Uses shared variant entry extraction logic for consistency and minimal codebase
  * 
  * @param {string} content - The playlist content
  * @param {string} baseUrl - Base URL for resolving relative paths
@@ -175,75 +176,50 @@ function extractHlsEncryptionInfo(content) {
  * @returns {Object} Object containing variants array and playlist info
  */
 function parseHlsMaster(content, baseUrl, masterUrl) {
-    const variants = [];
-    const lines = content.split(/\r?\n/);
-    
-    let currentStreamInf = null;
-
     // Extract the HLS version from the master playlist
     const version = extractHlsVersion(content);
     logger.debug(`HLS master playlist version: ${version}`);
-    
-    logger.debug(`Processing master playlist with ${lines.length} lines`);
-    logger.debug(`First few lines: ${lines.slice(0, 3).join('\n')}`);
-    
-    for (let i = 0; i < lines.length; i++) {
-        const line = lines[i].trim();
-        
-        // Process EXT-X-STREAM-INF line (variant declaration)
-        if (line.startsWith('#EXT-X-STREAM-INF:')) {
-            logger.debug(`Found STREAM-INF: ${line}`);
-            currentStreamInf = parseStreamInf(line);
-            logger.debug(`Parsed stream info: ${JSON.stringify(currentStreamInf)}`);
-        } 
-        // Process URI line following STREAM-INF
-        else if (currentStreamInf && line && !line.startsWith('#')) {
-            logger.debug(`Found variant URI: ${line}`);
-            
-            // Resolve the variant URL
-            const variantUrl = resolveUrl(baseUrl, line);
-            logger.debug(`Resolved variant URL: ${variantUrl}`);
-            
-            // Create a variant entry with all extracted information
-            const variant = {
-                url: variantUrl,
-                normalizedUrl: normalizeUrl(variantUrl),
-                masterUrl: masterUrl,
-                hasKnownMaster: true,
-                type: 'hls',
-                isVariant: true,
-                metaJS: {
-                    bandwidth: currentStreamInf.bandwidth,
-                    averageBandwidth: currentStreamInf.averageBandwidth,
-                    codecs: currentStreamInf.codecs,
-                    resolution: currentStreamInf.resolution,
-                    width: currentStreamInf.width,
-                    height: currentStreamInf.height,
-                    standardizedResolution: currentStreamInf.height ? standardizeResolution(currentStreamInf.height) : null,
-                    fps: currentStreamInf.fps,
-                    hasVideo: currentStreamInf.hasVideo,
-                    hasAudio: currentStreamInf.hasAudio,
-                    isAudioOnly: currentStreamInf.isAudioOnly
-                },
-                source: 'parseHlsMaster()',
-                timestampDetected: Date.now()
-            };
-            
-            variants.push(variant);
-            logger.debug(`Added variant: ${JSON.stringify(variant)}`);
-            currentStreamInf = null;
-        }
-    }
-    
+    logger.debug(`Processing master playlist with ${content.split(/\r?\n/).length} lines`);
+    logger.debug(`First few lines: ${content.split(/\r?\n/).slice(0, 3).join('\n')}`);
+
+    // Use the unified variant entry extraction
+    const variantEntries = extractMasterVariantEntries(content, baseUrl, masterUrl);
+
+    // Build variant objects
+    const variants = variantEntries.map(entry => {
+        return {
+            url: entry.url,
+            normalizedUrl: entry.normalizedUrl,
+            masterUrl: masterUrl,
+            hasKnownMaster: true,
+            type: 'hls',
+            isVariant: true,
+            metaJS: {
+                bandwidth: entry.streamInf.bandwidth,
+                averageBandwidth: entry.streamInf.averageBandwidth,
+                codecs: entry.streamInf.codecs,
+                resolution: entry.streamInf.resolution,
+                width: entry.streamInf.width,
+                height: entry.streamInf.height,
+                standardizedResolution: entry.streamInf.height ? standardizeResolution(entry.streamInf.height) : null,
+                fps: entry.streamInf.fps,
+                hasVideo: entry.streamInf.hasVideo,
+                hasAudio: entry.streamInf.hasAudio,
+                isAudioOnly: entry.streamInf.isAudioOnly
+            },
+            source: 'parseHlsMaster()',
+            timestampDetected: Date.now()
+        };
+    });
+
     logger.debug(`Total variants found in master: ${variants.length}`);
-    
+
     // Filter out audio-only variants
     const filteredVariants = variants.filter(variant => !variant.metaJS.isAudioOnly);
-    
     if (variants.length !== filteredVariants.length) {
         logger.debug(`Filtered out ${variants.length - filteredVariants.length} audio-only variants`);
     }
-    
+
     // Sort variants by bandwidth (highest first for best quality)
     if (filteredVariants.length > 0) {
         filteredVariants.sort((a, b) => {
@@ -251,11 +227,10 @@ function parseHlsMaster(content, baseUrl, masterUrl) {
             const bBandwidth = b.metaJS.averageBandwidth || b.metaJS.bandwidth || 0;
             return bBandwidth - aBandwidth;
         });
-        
         logger.debug(`Variants sorted by bandwidth, highest: ${filteredVariants[0].metaJS.bandwidth}`);
     }
-    
-    return { 
+
+    return {
         variants: filteredVariants,
         status: 'success',
         version: version
@@ -642,6 +617,7 @@ function extractHlsVersion(content) {
 
 /**
  * Extract variant URLs from HLS master playlist for deduplication
+ * Uses shared variant entry extraction logic for consistency
  * @param {string} url - URL of the HLS master playlist
  * @param {Object} [headers] - Optional request headers
  * @returns {Promise<Array<string>>} Array of normalized variant URLs
@@ -649,32 +625,27 @@ function extractHlsVersion(content) {
 export async function extractHlsVariantUrls(url, headers = null, tabId) {
     try {
         logger.debug(`Extracting variant URLs from master: ${url}`);
-        
         // Fetch the master playlist content
         const fetchResult = await fetchManifest(url, {
             headers,
             maxRetries: 2,
             tabId: tabId
         });
-        
         if (!fetchResult.ok) {
             logger.warn(`Failed to fetch master playlist for variant extraction: ${fetchResult.status}`);
             return [];
         }
-        
         // Quick validation that this is an HLS master playlist
         const content = fetchResult.content;
         if (!content.includes('#EXTM3U') || !content.includes('#EXT-X-STREAM-INF')) {
             logger.warn(`Content is not an HLS master playlist`);
             return [];
         }
-        
         const baseUrl = getBaseDirectory(url);
         const normalizedMasterUrl = normalizeUrl(url);
-        
-        // Extract variant URLs using the lightweight function
-        return extractVariantUrls(content, baseUrl, normalizedMasterUrl);
-        
+        // Use the unified variant entry extraction and return only normalized URLs
+        const variantEntries = extractMasterVariantEntries(content, baseUrl, normalizedMasterUrl);
+        return variantEntries.map(entry => entry.normalizedUrl);
     } catch (error) {
         logger.error(`Error extracting variant URLs from ${url}: ${error.message}`);
         return [];
@@ -682,36 +653,34 @@ export async function extractHlsVariantUrls(url, headers = null, tabId) {
 }
 
 /**
- * Lightweight extraction of variant URLs from HLS master playlist content
- * Used for updating variant-master mappings when encountering duplicate masters
+ * Unified extraction of variant entries from HLS master playlist content
+ * Returns array of objects: { url, normalizedUrl, streamInf }
+ * Used by both parseHlsMaster and extractHlsVariantUrls for minimal codebase
  * @param {string} content - The master playlist content
  * @param {string} baseUrl - Base URL for resolving relative paths
  * @param {string} masterUrl - The master playlist URL (normalized)
- * @returns {Array<string>} Array of normalized variant URLs
+ * @returns {Array<Object>} Array of variant entry objects
  */
-function extractVariantUrls(content, baseUrl, masterUrl) {
-    const variantUrls = [];
+function extractMasterVariantEntries(content, baseUrl, masterUrl) {
+    const entries = [];
     const lines = content.split(/\r?\n/);
-    
-    let expectingVariantUrl = false;
-    
+    let currentStreamInf = null;
     for (let i = 0; i < lines.length; i++) {
         const line = lines[i].trim();
-        
-        // Look for EXT-X-STREAM-INF lines
         if (line.startsWith('#EXT-X-STREAM-INF:')) {
-            expectingVariantUrl = true;
-        } 
-        // Process URI line following STREAM-INF
-        else if (expectingVariantUrl && line && !line.startsWith('#')) {
-            // Resolve and normalize the variant URL
+            currentStreamInf = parseStreamInf(line);
+        } else if (currentStreamInf && line && !line.startsWith('#')) {
             const variantUrl = resolveUrl(baseUrl, line);
             const normalizedVariantUrl = normalizeUrl(variantUrl);
-            variantUrls.push(normalizedVariantUrl);
-            expectingVariantUrl = false;
+            entries.push({
+                url: variantUrl,
+                normalizedUrl: normalizedVariantUrl,
+                streamInf: currentStreamInf,
+                masterUrl: masterUrl
+            });
+            currentStreamInf = null;
         }
     }
-    
-    logger.debug(`Extracted ${variantUrls.length} variant URLs from master playlist`);
-    return variantUrls;
+    logger.debug(`Extracted ${entries.length} variant entries from master playlist`);
+    return entries;
 }
