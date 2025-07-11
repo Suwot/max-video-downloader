@@ -7,7 +7,7 @@
 import { normalizeUrl } from '../../shared/utils/normalize-url.js';
 import nativeHostService from '../messaging/native-host-service.js';
 import { getActivePopupPortForTab } from '../messaging/popup-communication.js';
-import { parseHlsManifest } from './hls-parser.js';
+import { parseHlsManifest, extractHlsVariantUrls } from './hls-parser.js';
 import { parseDashManifest } from './dash-parser.js';
 import { getRequestHeaders, applyHeaderRule } from '../../shared/utils/headers-utils.js';
 import { createLogger } from '../../shared/utils/logger.js';
@@ -713,20 +713,10 @@ function updateTabIcon(tabId) {
     
     // Check if tab has any valid, displayable videos
     const hasValidVideos = getVideosForDisplay(tabId).length > 0;
-    const wasInSet = tabsWithVideos.has(tabId);
-    
-    // Only update if state changed
-    if (hasValidVideos === wasInSet) return;
-    
-    // Update set state
-    if (hasValidVideos) {
-        tabsWithVideos.add(tabId);
-    } else {
-        tabsWithVideos.delete(tabId);
-    }
     
     try {
         if (hasValidVideos) {
+            tabsWithVideos.add(tabId);
             // Set colored icon
             chrome.action.setIcon({
                 tabId,
@@ -738,6 +728,7 @@ function updateTabIcon(tabId) {
                 }
             });
         } else {
+            tabsWithVideos.delete(tabId);
             // Set B&W icon
             chrome.action.setIcon({
                 tabId,
@@ -884,8 +875,35 @@ function addDetectedVideo(tabId, videoInfo) {
     
     // Check if this is a duplicate
     if (tabMap.has(normalizedUrl)) {
-        // For non-direct videos or when no updates needed
         const existingVideo = tabMap.get(normalizedUrl);
+        
+        // Special handling for HLS master playlists: extract new variant URLs for deduplication
+        if (videoInfo.type === 'hls' && existingVideo.isMaster) {
+            logger.debug(`Duplicate HLS master detected: ${normalizedUrl}. Extracting new variant URLs for deduplication.`);
+            
+            // Extract variant URLs asynchronously without blocking the main flow
+            extractHlsVariantUrls(videoInfo.url, getRequestHeaders(tabId, videoInfo.url), tabId)
+                .then(variantUrls => {
+                    if (variantUrls.length > 0) {
+                        // Update variant-master map with new URLs
+                        if (!variantMasterMap.has(tabId)) {
+                            variantMasterMap.set(tabId, new Map());
+                        }
+                        const tabVariantMap = variantMasterMap.get(tabId);
+                        
+                        for (const variantUrl of variantUrls) {
+                            tabVariantMap.set(variantUrl, normalizedUrl);
+                            logger.debug(`Updated variant-master mapping: ${variantUrl} -> ${normalizedUrl}`);
+                        }
+                        
+                        logger.debug(`Updated ${variantUrls.length} variant URLs for duplicate master ${normalizedUrl}`);
+                    }
+                })
+                .catch(error => {
+                    logger.warn(`Failed to extract variant URLs for duplicate master ${normalizedUrl}:`, error.message);
+                });
+        }
+        
         logger.debug(`Duplicate video detection from ${sourceOfVideo}. URL: ${videoInfo.url}, Existing timestamp: ${existingVideo.timestampDetected}, New timestamp: ${videoInfo.timestampDetected}`);
         return;
     }

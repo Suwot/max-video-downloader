@@ -639,3 +639,79 @@ function extractHlsVersion(content) {
     // If no version tag is present, the specification states it defaults to version 1
     return 1;
 }
+
+/**
+ * Extract variant URLs from HLS master playlist for deduplication
+ * @param {string} url - URL of the HLS master playlist
+ * @param {Object} [headers] - Optional request headers
+ * @returns {Promise<Array<string>>} Array of normalized variant URLs
+ */
+export async function extractHlsVariantUrls(url, headers = null, tabId) {
+    try {
+        logger.debug(`Extracting variant URLs from master: ${url}`);
+        
+        // Fetch the master playlist content
+        const fetchResult = await fetchManifest(url, {
+            headers,
+            maxRetries: 2,
+            tabId: tabId
+        });
+        
+        if (!fetchResult.ok) {
+            logger.warn(`Failed to fetch master playlist for variant extraction: ${fetchResult.status}`);
+            return [];
+        }
+        
+        // Quick validation that this is an HLS master playlist
+        const content = fetchResult.content;
+        if (!content.includes('#EXTM3U') || !content.includes('#EXT-X-STREAM-INF')) {
+            logger.warn(`Content is not an HLS master playlist`);
+            return [];
+        }
+        
+        const baseUrl = getBaseDirectory(url);
+        const normalizedMasterUrl = normalizeUrl(url);
+        
+        // Extract variant URLs using the lightweight function
+        return extractVariantUrls(content, baseUrl, normalizedMasterUrl);
+        
+    } catch (error) {
+        logger.error(`Error extracting variant URLs from ${url}: ${error.message}`);
+        return [];
+    }
+}
+
+/**
+ * Lightweight extraction of variant URLs from HLS master playlist content
+ * Used for updating variant-master mappings when encountering duplicate masters
+ * @param {string} content - The master playlist content
+ * @param {string} baseUrl - Base URL for resolving relative paths
+ * @param {string} masterUrl - The master playlist URL (normalized)
+ * @returns {Array<string>} Array of normalized variant URLs
+ */
+function extractVariantUrls(content, baseUrl, masterUrl) {
+    const variantUrls = [];
+    const lines = content.split(/\r?\n/);
+    
+    let expectingVariantUrl = false;
+    
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+        
+        // Look for EXT-X-STREAM-INF lines
+        if (line.startsWith('#EXT-X-STREAM-INF:')) {
+            expectingVariantUrl = true;
+        } 
+        // Process URI line following STREAM-INF
+        else if (expectingVariantUrl && line && !line.startsWith('#')) {
+            // Resolve and normalize the variant URL
+            const variantUrl = resolveUrl(baseUrl, line);
+            const normalizedVariantUrl = normalizeUrl(variantUrl);
+            variantUrls.push(normalizedVariantUrl);
+            expectingVariantUrl = false;
+        }
+    }
+    
+    logger.debug(`Extracted ${variantUrls.length} variant URLs from master playlist`);
+    return variantUrls;
+}
