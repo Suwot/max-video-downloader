@@ -119,3 +119,19 @@ export function formatBitrate(kbps) {
 
     return kbps >= 1000 ? `${(kbps / 1000).toFixed(2)} Mbps` : `${kbps} kbps`;
 }
+
+/**
+ * Calculate if a video is valid for display in the UI
+ * @param {Object} video - Video object
+ * @returns {boolean}
+ */
+export function calculateValidForDisplay(video) {
+    if (!video || !video.isValid) return false;
+    if (video.type === 'hls') {
+        // Only standalone variants without known masters, or master playlists
+        if (video.isVariant && video.hasKnownMaster) return false;
+        return true;
+    }
+    // For dash and direct, only if isValid
+    return true;
+}

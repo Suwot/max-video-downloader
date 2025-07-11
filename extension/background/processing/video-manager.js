@@ -12,7 +12,7 @@ import { parseDashManifest } from './dash-parser.js';
 import { getRequestHeaders, applyHeaderRule } from '../../shared/utils/headers-utils.js';
 import { createLogger } from '../../shared/utils/logger.js';
 import { getPreview, storePreview } from '../../shared/utils/preview-cache.js';
-import { standardizeResolution, getFilenameFromUrl } from '../../shared/utils/video-utils.js';
+import { standardizeResolution, getFilenameFromUrl, calculateValidForDisplay } from '../../shared/utils/video-utils.js';
 
 // Central store for all detected videos, keyed by tab ID, then normalized URL
 // Map<tabId, Map<normalizedUrl, videoInfo>>
@@ -546,22 +546,6 @@ function updateVideo(functionName, tabId, normalizedUrl, updates, replace = fals
     tabMap.set(normalizedUrl, updatedVideo);
     logger.debug(`Video updated by ${functionName}: ${normalizedUrl}`, updatedVideo);
     return updatedVideo;
-}
-
-/**
- * Calculate if a video is valid for display in the UI
- * @param {Object} video - Video object
- * @returns {boolean}
- */
-function calculateValidForDisplay(video) {
-    if (!video || !video.isValid) return false;
-    if (video.type === 'hls') {
-        // Only standalone variants without known masters, or master playlists
-        if (video.isVariant && video.hasKnownMaster) return false;
-        return true;
-    }
-    // For dash and direct, only if isValid
-    return true;
 }
 
 /**
