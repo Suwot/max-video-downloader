@@ -8,6 +8,7 @@ import { createLogger } from '../../shared/utils/logger.js';
 import { cleanupHeadersForTab, cleanupHeaderRulesForTab } from '../../shared/utils/headers-utils.js'
 import { cleanupMPDContextForTab } from '../detection/video-detector.js'
 import { cleanupVideosForTab, getVideosForDisplay } from '../processing/video-store.js';
+import { cleanupProcessingQueueForTab } from '../processing/video-processor.js';
 
 // Create a logger instance for the Tab Tracker module
 const logger = createLogger('Tab Tracker');
@@ -110,6 +111,7 @@ function initTabTracking() {
         chrome.tabs.onRemoved.addListener((tabId) => {
             logger.debug('Tab removed:', tabId);
             cleanupVideosForTab(tabId, false); // Cleanup videos and playlists (includes icon reset)
+            cleanupProcessingQueueForTab(tabId); // Clear any queued processing items
             cleanupMPDContextForTab(tabId); // Cleanup DASH context if applicable
             cleanupHeadersForTab(tabId); // Clear any init request headers
             cleanupHeaderRulesForTab(tabId); // Clear any header rules per tab
