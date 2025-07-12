@@ -102,3 +102,25 @@ async function processMessage(request, commandRunner) {
 
 // Start the application
 bootstrap();
+
+// Handle uncaught exceptions
+process.on('uncaughtException', (err) => {
+    logDebug('Uncaught exception:', err);
+    process.exit(1);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+    logDebug('Unhandled rejection at:', promise, 'reason:', reason);
+    process.exit(1);
+});
+
+// Handle process signals
+process.on('SIGINT', () => {
+    logDebug('Received SIGINT, exiting gracefully');
+    process.exit(0);
+});
+
+process.on('SIGTERM', () => {
+    logDebug('Received SIGTERM, exiting gracefully');
+    process.exit(0);
+});

@@ -9,7 +9,7 @@ export class NativeHostService {
         this.heartbeatTimer = null;
         this.hostName = 'com.mycompany.ffmpeg';
         this.RECONNECT_DELAY = 2000;
-        this.HEARTBEAT_INTERVAL = 15000;
+        this.HEARTBEAT_INTERVAL = 15000; // Match native host: 15 seconds
         
         this.connect();
     }
@@ -223,8 +223,8 @@ export class NativeHostService {
     async sendHeartbeat() {
         try {
             const response = await this.sendMessage({ command: 'heartbeat' });
-            if (!response?.alive) {
-                console.error('Invalid heartbeat response, disconnecting');
+            if (!response?.success || !response?.alive) {
+                console.error('Invalid heartbeat response:', response);
                 if (this.port) this.port.disconnect();
             }
         } catch (error) {

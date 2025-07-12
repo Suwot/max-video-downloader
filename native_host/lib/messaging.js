@@ -15,8 +15,6 @@ const { logDebug } = require('../utils/logger');
 class MessagingService {
     constructor() {
         this.buffer = Buffer.alloc(0);
-        this.processedMessages = new Set();
-        this.messageTimeout = null;
         this.lastHeartbeatTime = Date.now();
         this.HEARTBEAT_INTERVAL = 15000; // 15 seconds
         this.pipeClosed = false; // Track if pipe is closed
@@ -31,6 +29,17 @@ class MessagingService {
         
         // Set up stdin data handler
         process.stdin.on('data', (data) => this.handleIncomingData(data));
+        
+        // Enhanced error handling for stdin
+        process.stdin.on('error', (err) => {
+            logDebug(`STDIN ERROR: ${err.code} - ${err.message}`);
+            process.exit(1);
+        });
+        
+        process.stdin.on('end', () => {
+            logDebug('STDIN ended - extension disconnected');
+            process.exit(0);
+        });
         
         // Enhanced error handling for stdout
         process.stdout.on('error', (err) => {
@@ -57,15 +66,8 @@ class MessagingService {
     handleIncomingData(data) {
         this.buffer = Buffer.concat([this.buffer, data]);
         
-        // Clear any existing timeout
-        if (this.messageTimeout) {
-            clearTimeout(this.messageTimeout);
-        }
-        
-        // Set a new timeout to process messages
-        this.messageTimeout = setTimeout(() => {
-            this.processMessages();
-        }, 50); // Wait 50ms to collect all message parts
+        // Process messages immediately when we have complete message(s)
+        this.processMessages();
     }
 
     /**
@@ -74,28 +76,18 @@ class MessagingService {
     processMessages() {
         while (this.buffer.length >= 4) {
             const length = this.buffer.readUInt32LE(0);
-            if (this.buffer.length < length + 4) break;
+            
+            // Check if we have the complete message
+            if (this.buffer.length < length + 4) {
+                logDebug(`Incomplete message: need ${length + 4} bytes, have ${this.buffer.length}`);
+                break;
+            }
             
             const message = this.buffer.slice(4, length + 4);
             this.buffer = this.buffer.slice(length + 4);
             
             try {
                 const request = JSON.parse(message);
-                const messageId = JSON.stringify(request); // Use the message content as ID
-                
-                // Skip if we've already processed this message
-                if (this.processedMessages.has(messageId)) {
-                    continue;
-                }
-                
-                // Add to processed messages
-                this.processedMessages.add(messageId);
-                
-                // Clear old messages after 1 second
-                setTimeout(() => {
-                    this.processedMessages.delete(messageId);
-                }, 1000);
-                
                 logDebug('Processing message:', request);
                 
                 // Update heartbeat time for any message
@@ -109,7 +101,8 @@ class MessagingService {
                     this.messageHandler(request, requestId);
                 }
             } catch (err) {
-                logDebug('Error parsing message:', err);
+                logDebug('Error parsing message:', err.message);
+                logDebug('Message content:', message.toString('utf8'));
                 this.sendMessage({ error: 'Invalid message format' });
             }
         }
@@ -169,8 +162,11 @@ class MessagingService {
     startHeartbeatMonitor() {
         setInterval(() => {
             const now = Date.now();
-            if (now - this.lastHeartbeatTime > this.HEARTBEAT_INTERVAL * 2) {
-                logDebug('No heartbeat received for too long, exiting...');
+            const timeSinceHeartbeat = now - this.lastHeartbeatTime;
+            
+            // Exit if no heartbeat received for 3x the interval (45 seconds)
+            if (timeSinceHeartbeat > this.HEARTBEAT_INTERVAL * 3) {
+                logDebug(`No heartbeat received for ${timeSinceHeartbeat}ms, exiting...`);
                 process.exit(1);
             }
         }, this.HEARTBEAT_INTERVAL);
