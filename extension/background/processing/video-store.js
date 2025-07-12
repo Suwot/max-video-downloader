@@ -228,6 +228,27 @@ function getVideosForDisplay(tabId) {
 }
 
 /**
+ * Get video counts by type for a tab (only validForDisplay videos)
+ * @param {number} tabId - Tab ID
+ * @returns {Object} { hls, dash, direct, unknown, total }
+ */
+function getVideoTypeCounts(tabId) {
+    const tabVideosMap = allDetectedVideos.get(tabId);
+    const counts = { hls: 0, dash: 0, direct: 0, unknown: 0, total: 0 };
+    if (!tabVideosMap) return counts;
+    for (const video of tabVideosMap.values()) {
+        if (!video.validForDisplay) continue;
+        if (video.type && counts.hasOwnProperty(video.type)) {
+            counts[video.type]++;
+        } else {
+            counts.unknown++;
+        }
+        counts.total++;
+    }
+    return counts;
+}
+
+/**
  * Clean up videos for a specific tab
  * @param {number} tabId - Tab ID
  */
@@ -295,6 +316,7 @@ export {
     getVideo,
     getVideoByUrl,
     updateVideo,
+    getVideoTypeCounts,
 
     // Variant-master relationships
     handleVariantMasterRelationships,

@@ -134,17 +134,38 @@ export { switchTab };
 /**
  * Update tab counter badge
  */
-export function updateTabCounter(uiTabId) {
-    if (uiTabId === 'videos-tab') {
-        const count = getVideos().length;
-        const counter = document.querySelector(`.tab-button[data-tab-id="${uiTabId}"] .counter`);
-        counter.textContent = count > 0 ? count : '';
-    } else if (uiTabId === 'downloads-tab') {
-        const count = downloadCounts.total;
-        const counter = document.querySelector(`.tab-button[data-tab-id="${uiTabId}"] .counter`);
-        counter.textContent = count > 0 ? count : '';
-    } else {
-        logger.warn(`No counter update logic for tab: ${uiTabId}`);
+
+/**
+ * Unified UI counters update function
+ * @param {Object} params - { videos, downloads }
+ *   videos: { hls, dash, direct, unknown, total } (optional)
+ *   downloads: { total } (optional)
+ */
+export function updateUICounters(params = {}) {
+    // Videos tab counters
+    if (params.videos) {
+        const counts = params.videos;
+        // Main tab counter
+        const tabCounter = document.querySelector('.tab-button[data-tab-id="videos-tab"] .counter');
+        if (tabCounter) {
+            tabCounter.textContent = counts.total > 0 ? String(counts.total) : '';
+        }
+        // Per-group counters
+        const types = ['hls', 'dash', 'direct', 'unknown'];
+        types.forEach(type => {
+            const group = document.querySelector(`#videos-list .video-type-group[data-video-type="${type}"] .counter`);
+            if (group) {
+                group.textContent = counts[type] > 0 ? String(counts[type]) : '';
+            }
+        });
+    }
+    // Downloads tab counter
+    if (params.downloads) {
+        const count = params.downloads.total;
+        const tabCounter = document.querySelector('.tab-button[data-tab-id="downloads-tab"] .counter');
+        if (tabCounter) {
+            tabCounter.textContent = count > 0 ? String(count) : '';
+        }
     }
 }
 

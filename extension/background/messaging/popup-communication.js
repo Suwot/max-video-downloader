@@ -8,7 +8,7 @@ import { startDownload, cancelDownload, getActiveDownloadProgress, getActiveDown
 import { createLogger } from '../../shared/utils/logger.js';
 import { clearPreviewCache, getCacheStats } from '../../shared/utils/preview-cache.js';
 import { clearAllHeaderCaches } from '../../shared/utils/headers-utils.js';
-import { getVideosForDisplay, getVideo, dismissVideoFromTab, cleanupAllVideos } from '../processing/video-store.js';
+import { getVideosForDisplay, getVideo, dismissVideoFromTab, cleanupAllVideos, getVideoTypeCounts } from '../processing/video-store.js';
 import nativeHostService from './native-host-service.js';
 import { updateTabIcon } from '../state/tab-tracker.js';
 
@@ -82,6 +82,15 @@ async function handlePortMessage(message, port, portId) {
             // Dismiss the video for this tab
             dismissVideoFromTab(message.tabId, message.url);
             updateTabIcon(message.tabId);
+            // Send updated counters after dismissal
+            {
+                const videoCounts = getVideoTypeCounts(message.tabId);
+                port.postMessage({
+                    command: 'update-ui-counters',
+                    tabId: message.tabId,
+                    counts: videoCounts
+                });
+            }
             break;
             
         case 'download':
@@ -239,6 +248,14 @@ function sendVideoUpdateToUI(tabId, action = 'full-refresh', videoUrl = null, vi
     }
 
     try {
+        // Always send updated counters with every update
+        const videoCounts = getVideoTypeCounts(tabId);
+        port.postMessage({
+            command: 'update-ui-counters',
+            tabId,
+            counts: videoCounts
+        });
+
         // Handle different action types
         switch (action) {
             case 'add':
@@ -254,7 +271,6 @@ function sendVideoUpdateToUI(tabId, action = 'full-refresh', videoUrl = null, vi
                     return true;
                 }
                 break;
-                
             case 'remove':
                 if (videoUrl) {
                     port.postMessage({
@@ -266,7 +282,6 @@ function sendVideoUpdateToUI(tabId, action = 'full-refresh', videoUrl = null, vi
                     return true;
                 }
                 break;
-                
             case 'full-refresh':
                 const processedVideos = getVideosForDisplay(tabId);
                 logger.debug(`Sending full refresh with ${processedVideos.length} videos for tab ${tabId}`);
@@ -278,10 +293,8 @@ function sendVideoUpdateToUI(tabId, action = 'full-refresh', videoUrl = null, vi
                 });
                 return true;
         }
-        
         logger.warn(`Invalid action or missing parameters for sendVideoUpdateToUI: ${action}`);
         return false;
-        
     } catch (error) {
         logger.error(`Error sending video update: ${error.message}`);
         return false;

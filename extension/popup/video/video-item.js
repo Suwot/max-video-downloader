@@ -131,29 +131,7 @@ export function createVideoElement(video) {
             tabId: video.tabId,
             url: video.url
         });
-
-        // Update UI counters - check if group becomes empty after removal
-        const group = document.querySelector(`.video-type-group[data-video-type="${video.type}"]`);
-        const sectionCount = group.querySelector('.counter');
-        const drawerCount = parseInt(sectionCount.textContent, 10);
-        
-        if (drawerCount > 1) {
-            sectionCount.textContent = String(drawerCount - 1); // Update the count if needed
-            element.remove(); // Just remove this video item
-        } else {
-            element.remove();
-            group.style.display = 'none'; // hide the group if only one left
-
-            const isLastVideo = document.querySelectorAll('.video-item').length === 0;
-            const initMessage = document.querySelector('#videos-list .initial-message');
-            isLastVideo ? initMessage.style.display = 'flex' : initMessage.style.display = 'none';
-        }
-
-        // update videos tab counter without state modifications
-        const tabCounter = document.querySelector('.tab-button[data-tab-id="videos-tab"] .counter');
-        const tabCount = parseInt(tabCounter.textContent, 10); 
-        tabCounter.textContent = tabCount > 1 ? String(tabCount - 1) : '';
-
+        // UI counters will be updated by background message
     });
     
     titleRow.append(title, dismissButton);

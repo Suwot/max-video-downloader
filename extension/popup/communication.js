@@ -8,7 +8,7 @@ import { createLogger } from '../shared/utils/logger.js';
 import { updateDownloadProgress } from './video/download-handler.js';
 import { renderVideos, addVideoToUI, updateVideoInUI, removeVideoFromUI } from './video/video-renderer.js';
 import { setVideos, updateVideo, clearVideos, getVideos } from './state.js';
-import { updateTabCounter } from './ui.js';
+import { updateUICounters } from './ui.js';
 
 const logger = createLogger('Communication');
 
@@ -63,16 +63,20 @@ async function handleIncomingMessage(message) {
             await handleVideoStateUpdate(message);
             break;
 
+        case 'update-ui-counters':
+            updateUICounters({ videos: message.counts });
+            break;
+
         case 'cachesCleared':
             clearVideos();
             await renderVideos();
-            updateTabCounter('videos-tab');
+            updateUICounters({ videos: { hls: 0, dash: 0, direct: 0, unknown: 0, total: 0 } });
             break;
-            
+
         case 'previewCacheStats':
             updateCacheStatsDisplay(message.stats);
             break;
-            
+
         case 'download-progress':
         case 'download-success':
         case 'download-error':
@@ -81,14 +85,14 @@ async function handleIncomingMessage(message) {
         case 'download-unqueued':
             updateDownloadProgress(message);
             break;
-            
+
         case 'downloadCountUpdated':
             if (message.counts) {
                 downloadCounts = message.counts;
-                updateTabCounter('downloads-tab');
+                updateUICounters({ downloads: message.counts });
             }
             break;
-            
+
         default:
             logger.warn('Unknown message command:', message.command);
     }
@@ -108,7 +112,6 @@ async function handleVideoStateUpdate(message) {
                     updateVideo(message.videoUrl, message.video);
                     // Add to UI
                     await addVideoToUI(message.video);
-                    updateTabCounter('videos-tab');
                 }
                 break;
                 
@@ -126,7 +129,6 @@ async function handleVideoStateUpdate(message) {
                     // Remove from UI first
                     await removeVideoFromUI(message.videoUrl);
                     // Note: We don't remove from state as it might be needed for restoration
-                    updateTabCounter('videos-tab');
                 }
                 break;
                 
@@ -134,7 +136,6 @@ async function handleVideoStateUpdate(message) {
                 if (message.videos) {
                     setVideos(message.videos);
                     await renderVideos();
-                    updateTabCounter('videos-tab');
                 }
                 break;
                 
@@ -147,7 +148,6 @@ async function handleVideoStateUpdate(message) {
         if (message.videos) {
             setVideos(message.videos);
             await renderVideos();
-            updateTabCounter('videos-tab');
         }
     }
 }
