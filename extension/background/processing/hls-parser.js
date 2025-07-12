@@ -212,7 +212,51 @@ function parseHlsMaster(content, baseUrl, masterUrl) {
         };
     });
 
-    logger.debug(`Total variants found in master: ${variants.length}`);
+    // --- Subtitle and closed caption track detection ---
+    // Parse #EXT-X-MEDIA:TYPE=SUBTITLES and TYPE=CLOSED-CAPTIONS lines
+    const subtitleTracks = [];
+    const closedCaptions = [];
+    const lines = content.split(/\r?\n/);
+    for (const line of lines) {
+        if (line.startsWith('#EXT-X-MEDIA:')) {
+            // Parse attributes
+            const attrPattern = /([A-Z0-9\-]+)=(("[^"]*")|([^,]*))/g;
+            let match;
+            const attrs = {};
+            while ((match = attrPattern.exec(line)) !== null) {
+                const key = match[1];
+                let value = match[3] || match[4] || '';
+                if (value.startsWith('"') && value.endsWith('"')) {
+                    value = value.slice(1, -1);
+                }
+                attrs[key] = value;
+            }
+            if (/TYPE=SUBTITLES/.test(line)) {
+                subtitleTracks.push({
+                    groupId: attrs['GROUP-ID'] || null,
+                    name: attrs['NAME'] || null,
+                    language: attrs['LANGUAGE'] || null,
+                    url: attrs['URI'] ? resolveUrl(baseUrl, attrs['URI']) : null,
+                    default: attrs['DEFAULT'] === 'YES',
+                    autoselect: attrs['AUTOSELECT'] === 'YES',
+                    forced: attrs['FORCED'] === 'YES',
+                    characteristics: attrs['CHARACTERISTICS'] || null,
+                    instreamId: attrs['INSTREAM-ID'] || null
+                });
+            } else if (/TYPE=CLOSED-CAPTIONS/.test(line)) {
+                closedCaptions.push({
+                    groupId: attrs['GROUP-ID'] || null,
+                    name: attrs['NAME'] || null,
+                    language: attrs['LANGUAGE'] || null,
+                    instreamId: attrs['INSTREAM-ID'] || null,
+                    default: attrs['DEFAULT'] === 'YES',
+                    autoselect: attrs['AUTOSELECT'] === 'YES',
+                    characteristics: attrs['CHARACTERISTICS'] || null
+                });
+            }
+        }
+    }
+    logger.debug(`Found ${subtitleTracks.length} subtitle track(s) and ${closedCaptions.length} closed caption track(s) in HLS master: ${masterUrl}`);
 
     // Filter out audio-only variants
     const filteredVariants = variants.filter(variant => !variant.metaJS.isAudioOnly);
@@ -232,6 +276,8 @@ function parseHlsMaster(content, baseUrl, masterUrl) {
 
     return {
         variants: filteredVariants,
+        subtitles: subtitleTracks,
+        closedCaptions: closedCaptions,
         status: 'success',
         version: version
     };
@@ -413,26 +459,30 @@ export async function parseHlsManifest(url, headers = null, tabId) {
         let isEncrypted = false;
         let encryptionType = null;
         let version = null; 
-        
+        let subtitles = [];
+        let closedCaptions = [];
+
         if (isMaster) {
-            // Parse the master playlist to extract variant URLs
+            // Parse the master playlist to extract variant URLs, subtitle tracks, and closed captions
             logger.debug(`Parsing HLS master playlist content: ${content.substring(0, 100)}...`);
             const masterParseResult = parseHlsMaster(content, baseUrl, url);
 
             // Store version from master playlist
             version = masterParseResult.version;
-            
+            subtitles = masterParseResult.subtitles || [];
+            closedCaptions = masterParseResult.closedCaptions || [];
+
             if (masterParseResult.variants && masterParseResult.variants.length > 0) {
                 // Get basic variant information
                 const basicVariants = masterParseResult.variants;
                 logger.debug(`Found ${basicVariants.length} basic variants in master playlist`);
-                
+
                 // Propagate headers from master URL to variant URLs
                 if (tabId && headers) {
                     try {
                         // Collect all variant URLs
                         const variantUrls = basicVariants.map(variant => variant.url);
-                        
+
                         // Call propagateHeaders with master URL and all variant URLs
                         const propagated = propagateHeaders(tabId, url, variantUrls);
                         logger.debug(`Header propagation from master to variants: ${propagated ? 'successful' : 'failed'}`);
@@ -440,22 +490,22 @@ export async function parseHlsManifest(url, headers = null, tabId) {
                         logger.error(`Error propagating headers: ${error.message}`);
                     }
                 }
-                
+
                 // Prepare variants array with basic info
                 variants = [...basicVariants];
-                
+
                 // Try to fetch the highest quality variant first
                 let variantInfo = null;
                 let processedVariantIndex = 0;
-                
+
                 // Try highest quality first, then fall back to others if needed
                 while (!variantInfo && processedVariantIndex < Math.min(3, basicVariants.length)) {
                     try {
                         const currentVariant = basicVariants[processedVariantIndex];
                         logger.debug(`Processing variant ${processedVariantIndex+1}: ${currentVariant.url}`);
-                        
+
                         variantInfo = await parseHlsVariant(currentVariant.url, headers, tabId);
-                        
+
                         if (variantInfo) {
                             logger.debug(`Successfully fetched variant ${processedVariantIndex+1}`);
                             break;
@@ -463,10 +513,10 @@ export async function parseHlsManifest(url, headers = null, tabId) {
                     } catch (error) {
                         logger.warn(`Failed to fetch variant ${processedVariantIndex+1}: ${error.message}`);
                     }
-                    
+
                     processedVariantIndex++;
                 }
-                
+
                 if (variantInfo) {
                     // Extract metadata for all variants from this one
                     duration = variantInfo.duration;
@@ -474,12 +524,12 @@ export async function parseHlsManifest(url, headers = null, tabId) {
                     encryptionType = variantInfo.encryptionType;
                     const isLive = variantInfo.isLive || false;
                     const segmentCount = variantInfo.segmentCount;
-                    
+
                     // Apply this metadata to all variants
                     variants = variants.map(variant => {
                         // Create a new variant object with detailed information
                         const updatedVariant = {...variant};
-                        
+
                         // Apply metadata from the processed variant
                         updatedVariant.metaJS.duration = duration;
                         updatedVariant.metaJS.isLive = isLive;
@@ -487,12 +537,12 @@ export async function parseHlsManifest(url, headers = null, tabId) {
                         updatedVariant.metaJS.encryptionType = encryptionType;
                         updatedVariant.metaJS.segmentCount = segmentCount;
                         updatedVariant.metaJS.version = variantInfo.version || version;
-                        
+
                         // Distinguish the actually fetched variant
                         if (variant.url === basicVariants[processedVariantIndex].url) {
                             updatedVariant.metaJS.directlyFetched = true;
                         }
-                        
+
                         // Calculate estimated file size based on bandwidth and duration
                         if (duration !== null && duration >= 0) {
                             const effectiveBandwidth = updatedVariant.metaJS.averageBandwidth || updatedVariant.metaJS.bandwidth;
@@ -501,7 +551,7 @@ export async function parseHlsManifest(url, headers = null, tabId) {
                                 duration
                             );
                         }
-                        
+
                         return updatedVariant;
                     });
                 } else {
@@ -555,7 +605,7 @@ export async function parseHlsManifest(url, headers = null, tabId) {
         
         // Set the full parse timestamp
         const timestampFP = Date.now();
-        
+
         // Construct the full result
         const result = {
             url: url,
@@ -571,10 +621,12 @@ export async function parseHlsManifest(url, headers = null, tabId) {
             encryptionType: encryptionType,
             version: version,
             variants: variants,
+            subtitles: subtitles,
+            closedCaptions: closedCaptions,
             status: 'success'
         };
-        
-        logger.info(`Successfully parsed HLS: found ${variants.length} variants`);
+
+        logger.info(`Successfully parsed HLS: found ${variants.length} variants, ${subtitles.length} subtitle tracks, ${closedCaptions.length} closed caption tracks`);
         return result;
     } catch (error) {
         logger.error(`Error parsing HLS: ${error.message}`);

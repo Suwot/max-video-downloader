@@ -128,18 +128,20 @@ async function processHlsVideo(tabId, normalizedUrl) {
             version: hlsResult.version, 
             isEncrypted: hlsResult.isEncrypted,
             encryptionType: hlsResult.encryptionType,
+            subtitles: hlsResult.subtitles || [],
+            closedCaptions: hlsResult.closedCaptions || [],
             isLightParsed: true,
             isFullParsed: true,
             timestampLP: hlsResult.timestampLP,
             timestampFP: hlsResult.timestampFP
         };
-        
+
         updateVideo('processHlsVideo', tabId, normalizedUrl, hlsUpdates);
-        
+
         // Track variant-master relationships if this is a master playlist
         if (hlsResult.isMaster && hlsResult.variants?.length > 0) {
             handleVariantMasterRelationships(tabId, hlsResult.variants, normalizedUrl);
-            
+
             // Generate preview for the master using the first variant as source
             const firstVariant = hlsResult.variants[0];
             await generateVideoPreview(tabId, normalizedUrl, headers, firstVariant.url);
