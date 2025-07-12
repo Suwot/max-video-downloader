@@ -105,6 +105,7 @@ async function handlePortMessage(message, port, portId) {
             break;
             
         case 'clearCaches':
+            updateTabIcon();
             clearAllHeaderCaches(); 
             cleanupAllVideos(); // Includes icon reset for all tabs
             await clearPreviewCache(); // Clear preview cache

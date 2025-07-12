@@ -265,8 +265,6 @@ function cleanupVideosForTab(tabId) {
         variantMasterMap.delete(tabId);
     }
     
-
-    
     // Clean up icon state
     if (tabsWithVideos.has(tabId)) {
         tabsWithVideos.delete(tabId);

@@ -57,11 +57,31 @@ function shouldCleanupOnNavigation(tabId, newUrl) {
 }
 
 /**
- * Update extension icon for a specific tab based on video availability
- * @param {number} tabId - Tab ID to update icon for
+ * Update extension icon for a specific tab or reset all icons if no tabId is provided
+ * @param {number} [tabId] - Tab ID to update icon for; if omitted, resets all tracked tabs
  */
 function updateTabIcon(tabId) {
-    if (!tabId || tabId < 0) return;
+    // If no tabId is provided, reset all icons for tabs with videos
+    if (typeof tabId === 'undefined') {
+        for (const id of tabsWithVideos) {
+            try {
+                chrome.action.setIcon({
+                    tabId: id,
+                    path: {
+                        "16": "../icons/16-bw.png",
+                        "32": "../icons/32-bw.png",
+                        "48": "../icons/48-bw.png",
+                        "128": "../icons/128-bw.png"
+                    }
+                });
+                logger.debug(`Tab ${id} icon reset to B&W (global reset)`);
+            } catch (error) {
+                logger.warn(`Failed to reset icon for tab ${id}:`, error);
+            }
+        }
+        tabsWithVideos.clear();
+        return;
+    }
 
     // Use statically imported getVideosForDisplay
     const hasValidVideos = getVideosForDisplay(tabId).length > 0;
