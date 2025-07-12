@@ -102,7 +102,8 @@ class GetQualitiesCommand extends BaseCommand {
                             const info = JSON.parse(output);
                             const videoStream = info.streams.find(s => s.codec_type === 'video');
                             const audioStream = info.streams.find(s => s.codec_type === 'audio');
-                            
+                            const subtitleStreams = info.streams.filter(s => s.codec_type === 'subtitle');
+
                             const streamInfo = {
                                 format: info.format?.format_name || 'unknown',
                                 container: info.format?.format_long_name || 'unknown',
@@ -110,10 +111,10 @@ class GetQualitiesCommand extends BaseCommand {
                                 inputUrl: url,
                                 analyzeUrl: analyzeUrl
                             };
-    
+
                             logDebug('📊 Media analysis results:');
                             logDebug(`Container: ${streamInfo.container}`);
-                            
+
                             // Video stream info
                             if (videoStream) {
                                 streamInfo.width = parseInt(videoStream.width) || null;
@@ -127,7 +128,7 @@ class GetQualitiesCommand extends BaseCommand {
                                     colorSpace: videoStream.color_space || null,
                                     bitDepth: videoStream.bits_per_raw_sample || null
                                 };
-                                
+
                                 // Calculate framerate
                                 let fps = null;
                                 try {
@@ -142,12 +143,12 @@ class GetQualitiesCommand extends BaseCommand {
                                     logDebug('⚠️ Error parsing framerate:', e);
                                 }
                                 streamInfo.fps = fps;
-    
+
                                 // Get video bitrate
                                 if (videoStream.bit_rate) {
                                     streamInfo.videoBitrate = parseInt(videoStream.bit_rate);
                                 }
-                                
+
                                 logDebug('🎬 Video stream:', {
                                     codec: streamInfo.videoCodec.name,
                                     resolution: `${streamInfo.width}x${streamInfo.height}`,
@@ -158,7 +159,7 @@ class GetQualitiesCommand extends BaseCommand {
                                 streamInfo.hasVideo = false;
                                 logDebug('ℹ️ No video stream found');
                             }
-                            
+
                             // Audio stream info
                             if (audioStream) {
                                 streamInfo.hasAudio = true;
@@ -171,11 +172,11 @@ class GetQualitiesCommand extends BaseCommand {
                                     channelLayout: audioStream.channel_layout || null,
                                     bitDepth: audioStream.bits_per_raw_sample || null
                                 };
-                                
+
                                 if (audioStream.bit_rate) {
                                     streamInfo.audioBitrate = parseInt(audioStream.bit_rate);
                                 }
-                                
+
                                 logDebug('🔊 Audio stream:', {
                                     codec: streamInfo.audioCodec.name,
                                     channels: streamInfo.audioCodec.channels,
@@ -186,12 +187,29 @@ class GetQualitiesCommand extends BaseCommand {
                                 streamInfo.hasAudio = false;
                                 logDebug('ℹ️ No audio stream found');
                             }
-                            
+
+                            // Subtitle stream info
+                            if (subtitleStreams && subtitleStreams.length > 0) {
+                                streamInfo.hasSubtitles = true;
+                                streamInfo.subtitles = subtitleStreams.map(sub => ({
+                                    index: sub.index,
+                                    codec: sub.codec_name || 'unknown',
+                                    language: (sub.tags && (sub.tags.language || sub.tags.LANGUAGE)) || null,
+                                    title: (sub.tags && (sub.tags.title || sub.tags.TITLE)) || null,
+                                    disposition: sub.disposition || {},
+                                }));
+                                logDebug(`📝 Found ${subtitleStreams.length} subtitle stream(s):`, streamInfo.subtitles);
+                            } else {
+                                streamInfo.hasSubtitles = false;
+                                streamInfo.subtitles = [];
+                                logDebug('ℹ️ No subtitle streams found');
+                            }
+
                             // Total bitrate from format if available
                             if (info.format.bit_rate) {
                                 streamInfo.totalBitrate = parseInt(info.format.bit_rate);
                             }
-                            
+
                             // Duration if available
                             if (info.format.duration) {
                                 streamInfo.duration = Math.round(parseFloat(info.format.duration));
@@ -204,14 +222,14 @@ class GetQualitiesCommand extends BaseCommand {
                                     logDebug(`⏱️ Duration: ${minutes}:${seconds.toString().padStart(2, '0')}`);
                                 }
                             }
-                            
+
                             // File size if available
                             if (info.format.size) {
                                 streamInfo.sizeBytes = parseInt(info.format.size);
                                 const sizeMB = (streamInfo.sizeBytes / (1024 * 1024)).toFixed(1);
                                 logDebug(`📦 Size: ${sizeMB}MB`);
                             }
-                            
+
                             // Calculate estimated size based on bitrate and duration if exact size not available
                             if (streamInfo.totalBitrate && streamInfo.duration) {
                                 // Formula: (bitrate in bps * duration in seconds) / 8 = bytes
@@ -219,13 +237,13 @@ class GetQualitiesCommand extends BaseCommand {
                                 const sizeMB = (streamInfo.estimatedFileSizeBytes / (1024 * 1024)).toFixed(1);
                                 logDebug(`📊 Estimated size: ${sizeMB}MB (based on bitrate × duration)`);
                             }
-                            
+
                             // Mark as fully parsed
                             streamInfo.isFullyParsed = true;
-                            
+
                             // Note: This ffprobe-derived metadata takes priority over JavaScript-parsed manifest data
                             // The video-manager.js handles merging with proper priority
-                            
+
                             this.sendMessage({ streamInfo, success: true });
                             logDebug('✅ Media analysis complete');
                             resolve({ success: true, streamInfo });
