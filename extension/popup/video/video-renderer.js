@@ -520,3 +520,118 @@ export function groupVideosByType(videos) {
     
     return groups;
 }
+
+/**
+ * Add a new video to the UI (prepend to appropriate group)
+ * @param {Object} video - Video object to add
+ */
+export async function addVideoToUI(video) {
+    try {
+        const container = document.getElementById('videos-list');
+        const group = container.querySelector(`[data-video-type="${video.type}"]`);
+        
+        if (!group) {
+            logger.warn(`No group found for video type: ${video.type}`);
+            return;
+        }
+        
+        // Hide initial message if it's shown
+        const initialMessage = container.querySelector('.initial-message');
+        if (initialMessage) {
+            initialMessage.style.display = 'none';
+        }
+        
+        // Show the group
+        group.style.display = 'block';
+        
+        // Get the videos container within the group
+        const groupBody = group.querySelector('.section-content');
+        if (!groupBody) {
+            logger.warn(`No section content found for video type: ${video.type}`);
+            return;
+        }
+        
+        // Create video element
+        const videoElement = createVideoElement(video);
+        
+        // Prepend to the group (newest first)
+        groupBody.insertBefore(videoElement, groupBody.firstChild);
+        
+        logger.debug(`Added video to UI: ${video.normalizedUrl}`);
+        
+    } catch (error) {
+        logger.error('Error adding video to UI:', error);
+    }
+}
+
+/**
+ * Update an existing video in the UI
+ * @param {string} videoUrl - Video URL to update
+ * @param {Object} video - Updated video object
+ */
+export async function updateVideoInUI(videoUrl, video) {
+    try {
+        const container = document.getElementById('videos-list');
+        const existingElement = container.querySelector(`.video-item[data-url="${videoUrl}"]`);
+        
+        if (!existingElement) {
+            logger.debug(`Video element not found for update: ${videoUrl}, adding instead`);
+            await addVideoToUI(video);
+            return;
+        }
+        
+        // Create new element
+        const newElement = createVideoElement(video);
+        
+        // Replace the existing element
+        existingElement.parentNode.replaceChild(newElement, existingElement);
+        
+        logger.debug(`Updated video in UI: ${videoUrl}`);
+        
+    } catch (error) {
+        logger.error('Error updating video in UI:', error);
+    }
+}
+
+/**
+ * Remove a video from the UI
+ * @param {string} videoUrl - Video URL to remove
+ */
+export async function removeVideoFromUI(videoUrl) {
+    try {
+        const container = document.getElementById('videos-list');
+        const existingElement = container.querySelector(`.video-item[data-url="${videoUrl}"]`);
+        
+        if (!existingElement) {
+            logger.debug(`Video element not found for removal: ${videoUrl}`);
+            return;
+        }
+        
+        const group = existingElement.closest('.video-type-group');
+        existingElement.remove();
+        
+        // Check if group is now empty
+        if (group) {
+            const groupBody = group.querySelector('.section-content');
+            if (groupBody && groupBody.children.length === 0) {
+                group.style.display = 'none';
+            }
+        }
+        
+        // Check if all groups are empty and show initial message
+        const allGroups = container.querySelectorAll('.video-type-group');
+        const hasVisibleGroups = Array.from(allGroups).some(g => g.style.display !== 'none');
+        
+        if (!hasVisibleGroups) {
+            const initialMessage = container.querySelector('.initial-message');
+            if (initialMessage) {
+                initialMessage.style.display = 'flex';
+            }
+        }
+        
+        logger.debug(`Removed video from UI: ${videoUrl}`);
+        
+    } catch (error) {
+        logger.error('Error removing video from UI:', error);
+    }
+}

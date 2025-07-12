@@ -6,7 +6,7 @@
 
 import { createLogger } from '../shared/utils/logger.js';
 import { updateDownloadProgress } from './video/download-handler.js';
-import { renderVideos } from './video/video-renderer.js';
+import { renderVideos, addVideoToUI, updateVideoInUI, removeVideoFromUI } from './video/video-renderer.js';
 import { setVideos, updateVideo, clearVideos, getVideos } from './state.js';
 import { updateTabCounter } from './ui.js';
 
@@ -55,32 +55,18 @@ function connect() {
 /**
  * Handle messages from background script
  */
-function handleIncomingMessage(message) {
+async function handleIncomingMessage(message) {
     logger.debug('Received message:', message.command);
     
     switch (message.command) {
-        case 'videoStateUpdated':
-            if (message.videos) {
-                setVideos(message.videos);
-                renderVideos().catch(error => {
-                    logger.error('Error rendering videos:', error);
-                });
-                updateTabCounter('videos-tab'); // Update counter on full video list update
-            }
+        case 'videos-state-update':
+            await handleVideoStateUpdate(message);
             break;
-            
-        case 'videoUpdated':
-            if (message.url && message.video) {
-                updateVideo(message.url, message.video);
-            }
-            break;
-            
+
         case 'cachesCleared':
             clearVideos();
-            renderVideos().catch(error => {
-                logger.error('Error rendering videos after cache clear:', error);
-            });
-            updateTabCounter('videos-tab'); // Update counter after clearing cache
+            await renderVideos();
+            updateTabCounter('videos-tab');
             break;
             
         case 'previewCacheStats':
@@ -105,6 +91,64 @@ function handleIncomingMessage(message) {
             
         default:
             logger.warn('Unknown message command:', message.command);
+    }
+}
+
+/**
+ * Handle action-based video state updates
+ */
+async function handleVideoStateUpdate(message) {
+    logger.debug(`Delegated '${message.action}' action for video: ${message.videoUrl}`);
+
+    try {
+        switch (message.action) {
+            case 'add':
+                if (message.video) {
+                    // Update state first
+                    updateVideo(message.videoUrl, message.video);
+                    // Add to UI
+                    await addVideoToUI(message.video);
+                    updateTabCounter('videos-tab');
+                }
+                break;
+                
+            case 'update':
+                if (message.video) {
+                    // Update state first
+                    updateVideo(message.videoUrl, message.video);
+                    // Update in UI
+                    await updateVideoInUI(message.videoUrl, message.video);
+                }
+                break;
+                
+            case 'remove':
+                if (message.videoUrl) {
+                    // Remove from UI first
+                    await removeVideoFromUI(message.videoUrl);
+                    // Note: We don't remove from state as it might be needed for restoration
+                    updateTabCounter('videos-tab');
+                }
+                break;
+                
+            case 'full-refresh':
+                if (message.videos) {
+                    setVideos(message.videos);
+                    await renderVideos();
+                    updateTabCounter('videos-tab');
+                }
+                break;
+                
+            default:
+                logger.warn('Unknown video state action:', message.action);
+        }
+    } catch (error) {
+        logger.error('Error handling video state update:', error);
+        // Fallback to full refresh on error
+        if (message.videos) {
+            setVideos(message.videos);
+            await renderVideos();
+            updateTabCounter('videos-tab');
+        }
     }
 }
 

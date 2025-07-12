@@ -6,6 +6,7 @@
 import { normalizeUrl } from '../../shared/utils/normalize-url.js';
 import { createLogger } from '../../shared/utils/logger.js';
 import { calculateValidForDisplay } from '../../shared/utils/video-utils.js';
+import { sendVideoStateChange } from '../messaging/popup-communication.js';
 
 // Create a logger instance for the Video Store module
 const logger = createLogger('Video Store');
@@ -66,35 +67,64 @@ function getVideoByUrl(url) {
 }
 
 /**
- * Single entry point for all video updates with proper logging
+ * Single entry point for all video updates with proper logging and action detection
  * @param {string} functionName - Function making the update
  * @param {number} tabId - Tab ID
  * @param {string} normalizedUrl - Video URL
  * @param {Object} updates - Fields to update (or complete object)
  * @param {boolean} [replace=false] - If true, replace the entire object instead of merging
+ * @param {boolean} [sendToUI=true] - If true, automatically send UI updates
  * @returns {Object|null} - Updated video object or null if video not found
  */
-function updateVideo(functionName, tabId, normalizedUrl, updates, replace = false) {
+function updateVideo(functionName, tabId, normalizedUrl, updates, replace = false, sendToUI = true) {
     const tabMap = allDetectedVideos.get(tabId);
     if (!tabMap) return null;
     
+    // Track existence and display state before update
+    const existed = tabMap.has(normalizedUrl);
+    const previousVideo = existed ? tabMap.get(normalizedUrl) : null;
+    const wasValidForDisplay = previousVideo?.validForDisplay || false;
+    
     // For replace mode, only check if tabMap exists
     // For update mode, also check if the video exists
-    if (!replace && !tabMap.has(normalizedUrl)) return null;
+    if (!replace && !existed) return null;
     
     // Create updated video object
     let updatedVideo;
     if (replace) {
         updatedVideo = { ...updates };
     } else {
-        const currentVideo = tabMap.get(normalizedUrl);
-        updatedVideo = { ...currentVideo, ...updates };
+        updatedVideo = { ...previousVideo, ...updates };
     }
+    
     // Always recalculate validForDisplay
     updatedVideo.validForDisplay = calculateValidForDisplay(updatedVideo);
+    
     // Set the value in the map
     tabMap.set(normalizedUrl, updatedVideo);
-    logger.debug(`Video updated by ${functionName}: ${normalizedUrl}`, updatedVideo);
+
+    // Determine action based on validForDisplay state transitions only
+    let action = 'update';
+    const nowValidForDisplay = updatedVideo.validForDisplay;
+
+    if (!wasValidForDisplay && nowValidForDisplay) {
+        action = 'add';
+    } else if (wasValidForDisplay && !nowValidForDisplay) {
+        action = 'remove';
+    } else if (wasValidForDisplay && nowValidForDisplay) {
+        action = 'update';
+    } else {    
+        // Both false/undefined - no UI change needed
+        sendToUI = false;
+    }
+
+    logger.debug(`Updated video with action: '${action}' by ${functionName}, for URL: ${normalizedUrl}, ${sendToUI ? 'SENT to UI' : 'NOT SENT to UI'}`, updatedVideo);
+
+    // Send UI update if requested
+    if (sendToUI) {
+        sendVideoStateChange(tabId, normalizedUrl, { updatedVideo, action });
+    }
+
     return updatedVideo;
 }
 
@@ -103,6 +133,7 @@ function updateVideo(functionName, tabId, normalizedUrl, updates, replace = fals
  * @param {number} tabId - Tab ID
  * @param {Array} variants - Array of variant objects
  * @param {string} masterUrl - The normalized master URL
+ * @returns {Array} Array of updated video objects for variants that were changed
  */
 function handleVariantMasterRelationships(tabId, variants, masterUrl) {
     if (!variantMasterMap.has(tabId)) {
@@ -112,7 +143,9 @@ function handleVariantMasterRelationships(tabId, variants, masterUrl) {
     const tabVariantMap = variantMasterMap.get(tabId);
     const tabVideos = allDetectedVideos.get(tabId);
     
-    if (!tabVideos) return;
+    if (!tabVideos) return [];
+    
+    const updatedVideos = [];
     
     // Process each variant
     for (const variant of variants) {
@@ -124,14 +157,19 @@ function handleVariantMasterRelationships(tabId, variants, masterUrl) {
         
         // If this variant exists as standalone, update it
         if (tabVideos.has(variantUrl)) {
-            updateVideo('handleVariantMasterRelationships', tabId, variantUrl, {
+            const updatedVideo = updateVideo('handleVariantMasterRelationships', tabId, variantUrl, {
                 hasKnownMaster: true,
                 masterUrl: masterUrl,
                 isVariant: true
             });
-            logger.debug(`Updated existing standalone variant ${variantUrl} with master info`);
+            if (updatedVideo) {
+                logger.debug(`Updated existing standalone variant ${variantUrl} with master info`);
+                updatedVideos.push({ variantUrl, updatedVideo });
+            }
         }
     }
+    
+    return updatedVideos;
 }
 
 /**
