@@ -16,7 +16,6 @@ import {
     getVideoByUrl, 
     updateVideo, 
     handleVariantMasterRelationships,
-    isVideoDismissed,
     getVideosForDisplay
 } from './video-store.js';
 
@@ -36,7 +35,8 @@ const MAX_CONCURRENT = 8; // Reduced since NHS handles connection management
  */
 function enqueue(tabId, normalizedUrl, videoType) {
     // Skip if dismissed
-    if (isVideoDismissed(tabId, normalizedUrl)) {
+    const video = getVideo(tabId, normalizedUrl);
+    if (video?.timestampDismissed) {
         logger.debug(`Not enqueueing dismissed video: ${normalizedUrl}`);
         return;
     }

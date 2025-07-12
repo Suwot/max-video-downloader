@@ -244,7 +244,6 @@ function sendVideoUpdateToUI(tabId, action = 'full-refresh', videoUrl = null, vi
             case 'add':
             case 'update':
                 if (videoUrl && videoData) {
-                    logger.debug(`Sending '${action}' update for video: ${videoUrl}`);
                     port.postMessage({
                         command: 'videos-state-update',
                         action: action,
@@ -258,7 +257,6 @@ function sendVideoUpdateToUI(tabId, action = 'full-refresh', videoUrl = null, vi
                 
             case 'remove':
                 if (videoUrl) {
-                    logger.debug(`Sending remove update for video: ${videoUrl}`);
                     port.postMessage({
                         command: 'videos-state-update',
                         action: 'remove',

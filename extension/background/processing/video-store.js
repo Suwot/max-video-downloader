@@ -19,9 +19,7 @@ const allDetectedVideos = new Map();
 // Map<tabId, Map<normalizedVariantUrl, masterUrl>>
 const variantMasterMap = new Map();
 
-// Track dismissed videos per tab
-// Map<tabId, Set<normalizedUrl>>
-const dismissedVideos = new Map();
+
 
 // Track tabs that have valid, displayable videos for icon management
 // Set<tabId> - if tab is in set, it has videos (colored icon)
@@ -30,7 +28,6 @@ const tabsWithVideos = new Set();
 // Expose internal maps for debugging and pipeline access
 globalThis.allDetectedVideosInternal = allDetectedVideos;
 globalThis.variantMasterMapInternal = variantMasterMap;
-globalThis.dismissedVideosInternal = dismissedVideos;
 
 /**
  * Helper function to get a video from store
@@ -79,16 +76,16 @@ function getVideoByUrl(url) {
 function updateVideo(functionName, tabId, normalizedUrl, updates, replace = false, sendToUI = true) {
     const tabMap = allDetectedVideos.get(tabId);
     if (!tabMap) return null;
-    
+
     // Track existence and display state before update
     const existed = tabMap.has(normalizedUrl);
     const previousVideo = existed ? tabMap.get(normalizedUrl) : null;
     const wasValidForDisplay = previousVideo?.validForDisplay || false;
-    
+
     // For replace mode, only check if tabMap exists
     // For update mode, also check if the video exists
     if (!replace && !existed) return null;
-    
+
     // Create updated video object
     let updatedVideo;
     if (replace) {
@@ -96,10 +93,15 @@ function updateVideo(functionName, tabId, normalizedUrl, updates, replace = fals
     } else {
         updatedVideo = { ...previousVideo, ...updates };
     }
-    
-    // Always recalculate validForDisplay
-    updatedVideo.validForDisplay = calculateValidForDisplay(updatedVideo);
-    
+
+    // If video is dismissed, always force validForDisplay to false
+    if (updatedVideo.timestampDismissed) {
+        updatedVideo.validForDisplay = false;
+    } else {
+        // Only allow validForDisplay to be true if not dismissed
+        updatedVideo.validForDisplay = calculateValidForDisplay(updatedVideo);
+    }
+
     // Set the value in the map
     tabMap.set(normalizedUrl, updatedVideo);
 
@@ -113,7 +115,7 @@ function updateVideo(functionName, tabId, normalizedUrl, updates, replace = fals
         action = 'remove';
     } else if (wasValidForDisplay && nowValidForDisplay) {
         action = 'update';
-    } else {    
+    } else {
         // Both false/undefined - no UI change needed
         sendToUI = false;
     }
@@ -172,18 +174,24 @@ function handleVariantMasterRelationships(tabId, variants, masterUrl) {
     return updatedVideos;
 }
 
+
 /**
  * Dismiss a video for a tab (hide from UI, skip processing)
  * @param {number} tabId - Tab ID
  * @param {string} url - Video URL
  */
 function dismissVideoFromTab(tabId, url) {
-    if (!dismissedVideos.has(tabId)) {
-        dismissedVideos.set(tabId, new Set());
-    }
-    dismissedVideos.get(tabId).add(url);
+    const tabMap = allDetectedVideos.get(tabId);
+    if (!tabMap) return;
+    const normalizedUrl = normalizeUrl(url);
+    if (!tabMap.has(normalizedUrl)) return;
+    updateVideo('dismissVideoFromTab', tabId, normalizedUrl, {
+        timestampDismissed: Date.now(),
+        validForDisplay: false
+    });
     logger.info(`Dismissed video ${url} for tab ${tabId}`);
 }
+
 
 /**
  * Restore a dismissed video for a tab (show in UI, allow processing)
@@ -191,20 +199,19 @@ function dismissVideoFromTab(tabId, url) {
  * @param {string} url - Video URL
  */
 function restoreVideoInTab(tabId, url) {
-    if (dismissedVideos.has(tabId)) {
-        dismissedVideos.get(tabId).delete(url);
-        logger.info(`Restored video ${url} for tab ${tabId}`);
-    }
-}
-
-/**
- * Checks if a video is dismissed for a tab
- * @param {number} tabId - Tab ID
- * @param {string} url - Video URL
- * @returns {boolean} True if dismissed
- */
-function isVideoDismissed(tabId, url) {
-    return dismissedVideos.has(tabId) && dismissedVideos.get(tabId).has(url);
+    const tabMap = allDetectedVideos.get(tabId);
+    if (!tabMap) return;
+    const normalizedUrl = normalizeUrl(url);
+    if (!tabMap.has(normalizedUrl)) return;
+    const video = tabMap.get(normalizedUrl);
+    // Only restore if it was dismissed
+    if (!video.timestampDismissed) return;
+    // Remove timestampDismissed and re-evaluate validForDisplay
+    const updated = { ...video };
+    delete updated.timestampDismissed;
+    // validForDisplay will be recalculated in updateVideo
+    updateVideo('restoreVideoInTab', tabId, normalizedUrl, updated, true);
+    logger.info(`Restored video ${url} for tab ${tabId}`);
 }
 
 /**
@@ -215,9 +222,8 @@ function isVideoDismissed(tabId, url) {
 function getVideosForDisplay(tabId) {
     const tabVideosMap = allDetectedVideos.get(tabId);
     if (!tabVideosMap) return [];
-
     return Array.from(tabVideosMap.values())
-        .filter(video => video.validForDisplay && !isVideoDismissed(tabId, video.normalizedUrl))
+        .filter(video => video.validForDisplay)
         .sort((a, b) => b.timestampDetected - a.timestampDetected);
 }
 
@@ -238,10 +244,7 @@ function cleanupVideosForTab(tabId) {
         variantMasterMap.delete(tabId);
     }
     
-    // Clean up dismissed videos
-    if (dismissedVideos.has(tabId)) {
-        dismissedVideos.delete(tabId);
-    }
+
     
     // Clean up icon state
     if (tabsWithVideos.has(tabId)) {
@@ -257,7 +260,7 @@ function cleanupAllVideos() {
     
     allDetectedVideos.clear();
     variantMasterMap.clear();
-    dismissedVideos.clear();
+
     tabsWithVideos.clear();
     logger.info('All detected videos cleared');
 }
@@ -292,20 +295,19 @@ export {
     getVideo,
     getVideoByUrl,
     updateVideo,
-    
+
     // Variant-master relationships
     handleVariantMasterRelationships,
-    
+
     // Video dismissal
     dismissVideoFromTab,
     restoreVideoInTab,
-    isVideoDismissed,
-    
+
     // Display and cleanup
     getVideosForDisplay,
     cleanupVideosForTab,
     cleanupAllVideos,
-    
+
     // Tab tracking
     hasVideosInTab,
     addTabWithVideos,
