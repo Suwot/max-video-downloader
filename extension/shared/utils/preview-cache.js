@@ -10,6 +10,7 @@ const DB_VERSION = 1;
 
 // Create a logger instance
 import { createLogger } from "./logger.js";
+import { broadcastToPopups } from "../../background/messaging/popup-communication.js";
 const logger = createLogger("Preview Cache");
 
 /**
@@ -77,6 +78,9 @@ async function storePreview(url, previewDataUrl) {
         reject(event.target.error);
       };
     });
+
+    // Send updated cache stats to popups
+    sendCacheStatsUpdate();
   } catch (error) {
     logger.error("Failed to store preview in cache:", error);
     // Fail gracefully - don't let caching errors disrupt the app
@@ -153,6 +157,9 @@ async function clearPreviewCache() {
       };
     });
 
+    // Send updated cache stats to popups
+    sendCacheStatsUpdate();
+
     return true;
   } catch (error) {
     logger.error("Failed to clear preview cache:", error);
@@ -200,6 +207,22 @@ async function getCacheStats() {
   } catch (error) {
     logger.error("Failed to get cache stats:", error);
     return { count: 0, size: 0 };
+  }
+}
+
+/**
+ * Send cache stats to all connected popups
+ */
+async function sendCacheStatsUpdate() {
+  try {
+    const stats = await getCacheStats();
+    broadcastToPopups({
+      command: 'previewCacheStats',
+      stats: stats
+    });
+
+  } catch (error) {
+    logger.error("Failed to send cache stats update:", error);
   }
 }
 

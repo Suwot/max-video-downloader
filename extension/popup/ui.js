@@ -50,15 +50,9 @@ function createClearCacheButton() {
         try {
             sendPortMessage({ command: 'clearCaches' });
             cacheStats.textContent = 'Cache cleared!';
-            setTimeout(() => {
-                sendPortMessage({ command: 'getPreviewCacheStats' });
-            }, 2000);
         } catch (error) {
             logger.error('Error clearing cache:', error);
             cacheStats.textContent = 'Failed to clear cache';
-            setTimeout(() => {
-                sendPortMessage({ command: 'getPreviewCacheStats' });
-            }, 2000);
         } finally {
             button.disabled = false;
         }

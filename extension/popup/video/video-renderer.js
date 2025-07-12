@@ -67,7 +67,6 @@ export async function renderVideos() {
     }
 
     // Request cache stats and download progress restoration
-    sendPortMessage({ command: 'getPreviewCacheStats' });    
     sendPortMessage({ command: 'getDownloadProgress' }); // Restore download progress during rerender
 
     // Add CSS for the extracted badge and timestamp if it doesn't exist
