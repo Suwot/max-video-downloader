@@ -117,24 +117,43 @@ async function processHlsVideo(tabId, normalizedUrl) {
     const hlsResult = await parseHlsManifest(video.url, headers, tabId);
     
     if (hlsResult.status === 'success') {
-        // Update video with all HLS parsing results at once
-        const hlsUpdates = {
-            isValid: true,
-            type: 'hls',
-            isMaster: hlsResult.isMaster,
-            isVariant: hlsResult.isVariant,
-            variants: hlsResult.variants,
-            duration: hlsResult.duration,
-            version: hlsResult.version, 
-            isEncrypted: hlsResult.isEncrypted,
-            encryptionType: hlsResult.encryptionType,
-            subtitles: hlsResult.subtitles || [],
-            closedCaptions: hlsResult.closedCaptions || [],
-            isLightParsed: true,
-            isFullParsed: true,
-            timestampLP: hlsResult.timestampLP,
-            timestampFP: hlsResult.timestampFP
-        };
+        let hlsUpdates;
+        if (hlsResult.isMaster) {
+            hlsUpdates = {
+                isValid: true,
+                type: 'hls',
+                isMaster: true,
+                isVariant: false,
+                variants: hlsResult.variants,
+                duration: hlsResult.duration,
+                version: hlsResult.version,
+                isEncrypted: hlsResult.isEncrypted,
+                encryptionType: hlsResult.encryptionType,
+                audioTracks: hlsResult.audioTracks || [],
+                subtitles: hlsResult.subtitles || [],
+                closedCaptions: hlsResult.closedCaptions || [],
+                hasMediaGroups: hlsResult.hasMediaGroups || false,
+                isLightParsed: true,
+                isFullParsed: true,
+                timestampLP: hlsResult.timestampLP,
+                timestampFP: hlsResult.timestampFP
+            };
+        } else {
+            hlsUpdates = {
+                isValid: true,
+                type: 'hls',
+                isMaster: false,
+                isVariant: true,
+                duration: hlsResult.duration,
+                version: hlsResult.version,
+                isEncrypted: hlsResult.isEncrypted,
+                encryptionType: hlsResult.encryptionType,
+                isLightParsed: true,
+                isFullParsed: true,
+                timestampLP: hlsResult.timestampLP,
+                timestampFP: hlsResult.timestampFP
+            };
+        }
 
         updateVideo('processHlsVideo', tabId, normalizedUrl, hlsUpdates);
 

@@ -205,15 +205,20 @@ function parseHlsMaster(content, baseUrl, masterUrl) {
                 fps: entry.streamInf.fps,
                 hasVideo: entry.streamInf.hasVideo,
                 hasAudio: entry.streamInf.hasAudio,
-                isAudioOnly: entry.streamInf.isAudioOnly
+                isAudioOnly: entry.streamInf.isAudioOnly,
+                audioGroup: entry.streamInf.audioGroup,
+                videoGroup: entry.streamInf.videoGroup,
+                subtitleGroup: entry.streamInf.subtitleGroup,
+                ccGroup: entry.streamInf.ccGroup
             },
             source: 'parseHlsMaster()',
             timestampDetected: Date.now()
         };
     });
 
-    // --- Subtitle and closed caption track detection ---
-    // Parse #EXT-X-MEDIA:TYPE=SUBTITLES and TYPE=CLOSED-CAPTIONS lines
+    // --- Audio, subtitle and closed caption track detection ---
+    // Parse #EXT-X-MEDIA:TYPE=AUDIO, TYPE=SUBTITLES and TYPE=CLOSED-CAPTIONS lines
+    const audioTracks = [];
     const subtitleTracks = [];
     const closedCaptions = [];
     const lines = content.split(/\r?\n/);
@@ -231,7 +236,19 @@ function parseHlsMaster(content, baseUrl, masterUrl) {
                 }
                 attrs[key] = value;
             }
-            if (/TYPE=SUBTITLES/.test(line)) {
+            if (/TYPE=AUDIO/.test(line)) {
+                audioTracks.push({
+                    groupId: attrs['GROUP-ID'] || null,
+                    name: attrs['NAME'] || null,
+                    language: attrs['LANGUAGE'] || null,
+                    url: attrs['URI'] ? resolveUrl(baseUrl, attrs['URI']) : null,
+                    default: attrs['DEFAULT'] === 'YES',
+                    autoselect: attrs['AUTOSELECT'] === 'YES',
+                    characteristics: attrs['CHARACTERISTICS'] || null,
+                    channels: attrs['CHANNELS'] || null,
+                    assocLanguage: attrs['ASSOC-LANGUAGE'] || null
+                });
+            } else if (/TYPE=SUBTITLES/.test(line)) {
                 subtitleTracks.push({
                     groupId: attrs['GROUP-ID'] || null,
                     name: attrs['NAME'] || null,
@@ -256,7 +273,7 @@ function parseHlsMaster(content, baseUrl, masterUrl) {
             }
         }
     }
-    logger.debug(`Found ${subtitleTracks.length} subtitle track(s) and ${closedCaptions.length} closed caption track(s) in HLS master: ${masterUrl}`);
+    logger.debug(`Found ${audioTracks.length} audio track(s), ${subtitleTracks.length} subtitle track(s) and ${closedCaptions.length} closed caption track(s) in HLS master: ${masterUrl}`);
 
     // Filter out audio-only variants
     const filteredVariants = variants.filter(variant => !variant.metaJS.isAudioOnly);
@@ -276,8 +293,10 @@ function parseHlsMaster(content, baseUrl, masterUrl) {
 
     return {
         variants: filteredVariants,
+        audioTracks: audioTracks,
         subtitles: subtitleTracks,
         closedCaptions: closedCaptions,
+        hasMediaGroups: audioTracks.length > 0 || subtitleTracks.length > 0 || closedCaptions.length > 0,
         status: 'success',
         version: version
     };
@@ -305,7 +324,11 @@ function parseStreamInf(line) {
         fps: null,
         hasAudio: null,
         hasVideo: null,
-        isAudioOnly: false // Default to false, will be set based on codecs
+        isAudioOnly: false, // Default to false, will be set based on codecs
+        audioGroup: null,
+        videoGroup: null,
+        subtitleGroup: null,
+        ccGroup: null
     };
     
     // Pattern for parsing attribute expressions, handling quoted values properly
@@ -347,6 +370,18 @@ function parseStreamInf(line) {
             case 'FRAME-RATE':
                 result.fps = Math.round(parseFloat(value));
                 break;
+            case 'AUDIO':
+                result.audioGroup = value;
+                break;
+            case 'VIDEO':
+                result.videoGroup = value;
+                break;
+            case 'SUBTITLES':
+                result.subtitleGroup = value;
+                break;
+            case 'CLOSED-CAPTIONS':
+                result.ccGroup = value === 'NONE' ? null : value;
+                break;
         }
     }
     
@@ -371,7 +406,11 @@ export async function parseHlsManifest(url, headers = null, tabId) {
             isValid: false,
             isMaster: false,
             isVariant: false,
-            variants: []
+            variants: [],
+            audioTracks: [],
+            subtitles: [],
+            closedCaptions: [],
+            hasMediaGroups: false
         };
     }
     
@@ -402,7 +441,11 @@ export async function parseHlsManifest(url, headers = null, tabId) {
                 timestampLP,
                 isMaster: false,
                 isVariant: false,
-                variants: []
+                variants: [],
+                audioTracks: [],
+                subtitles: [],
+                closedCaptions: [],
+                hasMediaGroups: false
             };
         }
         
@@ -433,7 +476,11 @@ export async function parseHlsManifest(url, headers = null, tabId) {
                     timestampLP,
                     isMaster: false,
                     isVariant: false, 
-                    variants: []
+                    variants: [],
+                    audioTracks: [],
+                    subtitles: [],
+                    closedCaptions: [],
+                    hasMediaGroups: false
                 };
             }
             
@@ -461,6 +508,8 @@ export async function parseHlsManifest(url, headers = null, tabId) {
         let version = null; 
         let subtitles = [];
         let closedCaptions = [];
+        let audioTracks = [];
+        let hasMediaGroups = false;
 
         if (isMaster) {
             // Parse the master playlist to extract variant URLs, subtitle tracks, and closed captions
@@ -471,6 +520,8 @@ export async function parseHlsManifest(url, headers = null, tabId) {
             version = masterParseResult.version;
             subtitles = masterParseResult.subtitles || [];
             closedCaptions = masterParseResult.closedCaptions || [];
+            audioTracks = masterParseResult.audioTracks || [];
+            hasMediaGroups = masterParseResult.hasMediaGroups || false;
 
             if (masterParseResult.variants && masterParseResult.variants.length > 0) {
                 // Get basic variant information
@@ -621,12 +672,14 @@ export async function parseHlsManifest(url, headers = null, tabId) {
             encryptionType: encryptionType,
             version: version,
             variants: variants,
+            audioTracks: audioTracks,
             subtitles: subtitles,
             closedCaptions: closedCaptions,
+            hasMediaGroups: hasMediaGroups,
             status: 'success'
         };
 
-        logger.info(`Successfully parsed HLS: found ${variants.length} variants, ${subtitles.length} subtitle tracks, ${closedCaptions.length} closed caption tracks`);
+        logger.info(`Successfully parsed HLS: found ${variants.length} variants, ${audioTracks.length} audio tracks, ${subtitles.length} subtitle tracks, ${closedCaptions.length} closed caption tracks`);
         return result;
     } catch (error) {
         logger.error(`Error parsing HLS: ${error.message}`);
@@ -637,7 +690,11 @@ export async function parseHlsManifest(url, headers = null, tabId) {
             timestampLP: Date.now(),
             isMaster: false,
             isVariant: false,
-            variants: []
+            variants: [],
+            audioTracks: [],
+            subtitles: [],
+            closedCaptions: [],
+            hasMediaGroups: false
         };
     } finally {
         // Clean up
