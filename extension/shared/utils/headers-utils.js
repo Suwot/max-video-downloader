@@ -9,8 +9,8 @@ import { shouldIgnoreForHeaderCapture } from '../../background/detection/url-fil
 // Create a logger instance for the headers utilities
 const logger = createLogger('Headers Utils');
 
-// Store headers by tab, then by URL 
-// Map<tabId, Map<url, headers>>
+// Store headers by tab, then by requestId
+// Map<tabId, Map<requestId, headers>>
 const tabHeadersStore = new Map();
 
 // Track active rules by tab ID, then URL
@@ -53,7 +53,7 @@ function extractHeaders(requestHeaders) {
 }
 
 /**
- * Captures request headers from onSendHeaders and stores by tab and URL
+ * Captures request headers from onSendHeaders and stores by tab and requestId
  * @param {Object} details - Request details from webRequest API
  */
 function captureRequestHeaders(details) {
@@ -61,21 +61,21 @@ function captureRequestHeaders(details) {
     if (details.tabId <= 0 || shouldIgnoreForHeaderCapture(details.url)) {
         return;
     }
-    
+    if (!details.requestId) {
+        logger.warn('No requestId in details, cannot store headers');
+        return;
+    }
     try {
         // Extract headers
         const headers = extractHeaders(details.requestHeaders);
-        logger.debug(`Captured headers for ${details.url} in tab ${details.tabId}`, headers);
+        logger.debug(`Captured headers for requestId ${details.requestId} in tab ${details.tabId}`, headers);
         if (!headers) return;
-        
-        // Store in tab-URL structure
+        // Store in tab-requestId structure
         if (!tabHeadersStore.has(details.tabId)) {
             tabHeadersStore.set(details.tabId, new Map());
         }
-        
-        const tabUrls = tabHeadersStore.get(details.tabId);
-        tabUrls.set(details.url, headers);
-        
+        const tabRequests = tabHeadersStore.get(details.tabId);
+        tabRequests.set(details.requestId, headers);
     } catch (e) {
         logger.warn('Error capturing headers:', e);
     }
@@ -102,33 +102,29 @@ function formatHeaders(headers) {
 }
 
 /**
- * Get request headers for a URL
+ * Get request headers for a requestId
  * @param {number} tabId - Tab ID for context
- * @param {string} url - URL to get headers for
+ * @param {string} requestId - requestId to get headers for
  * @returns {Object|null} Headers object or null if not found
  */
-function getRequestHeaders(tabId, url) {
-    if (!url || !tabId || tabId <= 0) {
-        logger.warn(`Invalid request for headers - tabId: ${tabId}, url: ${url}`);
+function getRequestHeaders(tabId, requestId) {
+    if (!requestId || !tabId || tabId <= 0) {
+        logger.warn(`Invalid request for headers - tabId: ${tabId}, requestId: ${requestId}`);
         return null;
     }
-    
     try {
         if (tabHeadersStore.has(tabId)) {
-            const tabUrls = tabHeadersStore.get(tabId);
-            
-            if (tabUrls.has(url)) {
-                return formatHeaders(tabUrls.get(url));
+            const tabRequests = tabHeadersStore.get(tabId);
+            if (tabRequests.has(requestId)) {
+                return formatHeaders(tabRequests.get(requestId));
             }
-            
-            logger.debug(`No headers found for ${url} in tab ${tabId}`);
+            logger.debug(`No headers found for requestId ${requestId} in tab ${tabId}`);
         } else {
             logger.warn(`No headers data for tab ${tabId}`);
         }
-        
         return null;
     } catch (e) {
-        logger.error(`Error getting headers for ${url}:`, e);
+        logger.error(`Error getting headers for requestId ${requestId}:`, e);
         return null;
     }
 }
@@ -308,37 +304,36 @@ function generateRuleId() {
 
 /**
  * Apply declarativeNetRequest rule for a URL to ensure headers are set
- * @param {number} tabId - Tab ID for context
+ * @param {number} tabId - Tab ID for context (for rule tracking)
  * @param {string} url - URL to apply rule for
+ * @param {Object} headers - Headers to set (already formatted)
  * @returns {Promise<boolean>} Success status
  */
-async function applyHeaderRule(tabId, url) {
+async function applyDNRRule(tabId, url, headers) {
     if (!chrome.declarativeNetRequest) {
         logger.error('declarativeNetRequest API not available');
         return false;
     }
-    
+
     // Initialize tab rules if needed
     if (!activeRules.has(tabId)) {
         activeRules.set(tabId, new Map());
     }
-    
+
     const tabRules = activeRules.get(tabId);
-    
+
     // If rule already exists for this URL in this tab, don't create another one
     if (tabRules.has(url)) {
         logger.debug(`Rule already exists for ${url} in tab ${tabId}`);
         return true;
     }
-    
+
     try {
-        // Get headers for this URL
-        const headers = getRequestHeaders(tabId, url);
-        if (!headers) {
-            logger.warn(`No headers available for ${url} in tab ${tabId}`);
+        if (!headers || Object.keys(headers).length === 0) {
+            logger.warn(`No headers provided for ${url} in tab ${tabId}`);
             return false;
         }
-        
+
         // Transform headers to DNR format
         const headerRules = [];
         for (const [name, value] of Object.entries(headers)) {
@@ -348,16 +343,16 @@ async function applyHeaderRule(tabId, url) {
                 value: value
             });
         }
-        
+
         // Create URL pattern (exact URL or with wildcard for query params)
         let urlPattern = url;
         if (url.includes('?')) {
             urlPattern = url.split('?')[0] + '*';
         }
-        
+
         // Create unique rule ID
         const ruleId = generateRuleId();
-        
+
         // Create the rule
         const rule = {
             id: ruleId,
@@ -371,85 +366,18 @@ async function applyHeaderRule(tabId, url) {
                 resourceTypes: ['xmlhttprequest', 'media', 'other']
             }
         };
-        
+
         // Apply rule
         await chrome.declarativeNetRequest.updateSessionRules({
             addRules: [rule]
         });
-        
+
         // Store rule ID for cleanup (in tab-specific map)
         tabRules.set(url, ruleId);
         logger.debug(`Applied header rule ${ruleId} for ${url} in tab ${tabId}`);
         return true;
     } catch (e) {
         logger.error(`Error applying header rule for ${url} in tab ${tabId}:`, e);
-        return false;
-    }
-}
-
-/**
- * Propagate headers from one URL to other URLs in the same tab context
- * Useful for HLS variants derived from master playlists
- * 
- * @param {number} tabId - Tab ID context
- * @param {string} sourceUrl - URL to copy headers from
- * @param {Array<string>} targetUrls - URLs to copy headers to
- * @returns {boolean} Success status
- */
-function propagateHeaders(tabId, sourceUrl, targetUrls) {
-    if (!tabId || tabId <= 0) {
-        logger.error(`Invalid tabId ${tabId} for header propagation`);
-        return false;
-    }
-    
-    if (!sourceUrl || !targetUrls || !Array.isArray(targetUrls) || targetUrls.length === 0) {
-        logger.error('Invalid source or target URLs for header propagation');
-        return false;
-    }
-    
-    try {
-        // Check if we have the source tab in our store
-        if (!tabHeadersStore.has(tabId)) {
-            logger.warn(`No headers data for tab ${tabId}`);
-            return false;
-        }
-        
-        // Get the tab's URL map
-        const tabUrls = tabHeadersStore.get(tabId);
-        
-        // Check if we have headers for the source URL
-        if (!tabUrls.has(sourceUrl)) {
-            logger.warn(`No headers found for source URL: ${sourceUrl}`);
-            return false;
-        }
-        
-        // Get the source headers
-        const sourceHeaders = tabUrls.get(sourceUrl);
-        
-        // Copy headers to each target URL
-        let propagatedCount = 0;
-        for (const targetUrl of targetUrls) {
-            // Skip if target already has headers
-            if (tabUrls.has(targetUrl)) {
-                logger.debug(`Target URL already has headers: ${targetUrl}`);
-                continue;
-            }
-            
-            // Clone the headers to avoid reference issues
-            const clonedHeaders = {...sourceHeaders};
-            
-            // Update timestamp to current time
-            clonedHeaders.timestamp = Date.now();
-            
-            // Store in the tab's URL map
-            tabUrls.set(targetUrl, clonedHeaders);
-            propagatedCount++;
-        }
-        
-        logger.debug(`Propagated headers from ${sourceUrl} to ${propagatedCount} target URLs`);
-        return propagatedCount > 0;
-    } catch (e) {
-        logger.error(`Error propagating headers: ${e.message}`);
         return false;
     }
 }
@@ -464,6 +392,5 @@ export {
     clearAllHeaderRules,
     clearAllHeaderCaches,
     getHeadersStats,
-    applyHeaderRule,
-    propagateHeaders
+    applyDNRRule
 };

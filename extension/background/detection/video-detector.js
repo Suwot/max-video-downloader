@@ -1,6 +1,7 @@
 import { createLogger } from '../../shared/utils/logger.js';
 import { shouldIgnoreForMediaDetection } from './url-filters.js';
 import { addDetectedVideo } from '../processing/video-processor.js';
+import { getRequestHeaders } from '../../shared/utils/headers-utils.js';
 import { identifyVideoType, identifyVideoTypeFromMime, extractExpiryInfo, isMediaSegment } from './video-type-identifier.js';
 
 // Create a logger instance for video detection
@@ -49,10 +50,9 @@ async function getTabUrl(tabId) {
  * @param {string} source - Detection source identifier
  * @param {Object|null} tabInfo - Tab information (url, title, favIconUrl, incognito)
  */
-function addVideoWithCommonProcessing(tabId, url, videoInfo, metadata, source, tabInfo = null) {
+function addVideoWithCommonProcessing(tabId, url, videoInfo, metadata, source, tabInfo = null, requestId = null) {
     // Extract expiry info once
     const expiryInfo = extractExpiryInfo(url);
-    
     const videoData = {
         url,
         type: videoInfo.type,
@@ -65,7 +65,13 @@ function addVideoWithCommonProcessing(tabId, url, videoInfo, metadata, source, t
         ...(videoInfo.originalContainer && { originalContainer: videoInfo.originalContainer }),
         ...(expiryInfo && { expiryInfo })
     };
-    
+    // Attach headers if requestId is provided
+    if (requestId) {
+        const headers = getRequestHeaders(tabId, requestId);
+        if (headers) {
+            videoData.headers = headers;
+        }
+    }
     addDetectedVideo(tabId, videoData);
 }
 
@@ -76,29 +82,29 @@ function addVideoWithCommonProcessing(tabId, url, videoInfo, metadata, source, t
  * @param {Object} metadata - Optional metadata from response headers
  */
 export async function processWebRequest(details, metadata = null) {
-    const { tabId, url } = details;
+    const { tabId, url, requestId } = details;
 
     if (tabId < 0 || !url) return;
 
     // First check if we should ignore this URL
     if (shouldIgnoreForMediaDetection(url, metadata)) return;
     logger.debug(`Processing video URL after ShouldIgnoreForMediaDetection: ${url} with metadata:`, metadata);
-    
+
     // Get tab URL for page context tracking
     const tabInfo = await getTabUrl(tabId);
-    
+
     // Try MIME type detection first (most reliable)
     if (metadata?.contentType) {
         const mimeTypeInfo = identifyVideoTypeFromMime(metadata.contentType, url);
-        
+
         if (mimeTypeInfo) {
             // Handle DASH manifest detection
             if (mimeTypeInfo.type === 'dash') {
                 tabsWithMpd.set(tabId, Date.now());
-                addVideoWithCommonProcessing(tabId, url, mimeTypeInfo, metadata, `BG_webRequest_mime_${mimeTypeInfo.type}`, tabInfo);
+                addVideoWithCommonProcessing(tabId, url, mimeTypeInfo, metadata, `BG_webRequest_mime_${mimeTypeInfo.type}`, tabInfo, requestId);
                 return;
             }
-            
+
             // Handle direct video/audio files with additional filtering
             if (mimeTypeInfo.type === 'direct') {
                 // Skip small files
@@ -106,26 +112,26 @@ export async function processWebRequest(details, metadata = null) {
                     logger.debug(`Skipping small media file (${metadata.contentLength} bytes): ${url}`);
                     return;
                 }
-                
+
                 // Skip media segments
                 const hasMpdContext = tabsWithMpd.has(tabId);
                 const segmentPaths = dashSegmentPathCache.get(tabId);
-                
+
                 if (isMediaSegment(url, metadata.contentType, hasMpdContext, segmentPaths)) {
                     logger.debug(`Skipping media segment: ${url}`);
                     return;
                 }
             }
-            
-            addVideoWithCommonProcessing(tabId, url, mimeTypeInfo, metadata, `BG_webRequest_mime_${mimeTypeInfo.type}`, tabInfo);
+
+            addVideoWithCommonProcessing(tabId, url, mimeTypeInfo, metadata, `BG_webRequest_mime_${mimeTypeInfo.type}`, tabInfo, requestId);
             return;
         }
     }
-    
+
     // Fallback to URL-based detection
     const videoInfo = identifyVideoType(url);
     if (videoInfo) {
-        addVideoWithCommonProcessing(tabId, url, videoInfo, metadata, `BG_webRequest_${videoInfo.type}`, tabInfo);
+        addVideoWithCommonProcessing(tabId, url, videoInfo, metadata, `BG_webRequest_${videoInfo.type}`, tabInfo, requestId);
     }
 }
 

@@ -4,7 +4,7 @@
  */
 
 import { normalizeUrl, getBaseDirectory } from '../../shared/utils/normalize-url.js';
-import { getRequestHeaders, applyHeaderRule } from '../../shared/utils/headers-utils.js';
+import { applyDNRRule } from '../../shared/utils/headers-utils.js';
 import { createLogger } from '../../shared/utils/logger.js';
 
 const logger = createLogger('Parser Utils');
@@ -132,27 +132,24 @@ export async function fetchManifest(url, options = {}) {
     let attempt = 0;
     let lastError = null;
     let ruleApplied = false;
-    
-    // Get appropriate headers
-    const requestHeaders = headers || getRequestHeaders(tabId, url);
 
     // Configure range header if needed
     if (rangeBytes) {
-        if (requestHeaders) {
-            requestHeaders['Range'] = `bytes=0-${rangeBytes - 1}`;
+        if (headers) {
+            headers['Range'] = `bytes=0-${rangeBytes - 1}`;
         }
         logger.debug(`Fetching ${fetchMode} of ${url}`);
     } else {
         // Remove any Range header to ensure we get the full content
-        if (requestHeaders && requestHeaders['Range']) {
-            delete requestHeaders['Range'];
+        if (headers && headers['Range']) {
+            delete headers['Range'];
         }
         logger.debug(`Fetching ${fetchMode} of ${url}`);
     }
     
     // Use declarativeNetRequest if possible (tabId > 0 and not in a native host context)
     if (tabId > 0 && typeof chrome !== 'undefined' && chrome.declarativeNetRequest) {
-        try { ruleApplied = await applyHeaderRule(tabId, url); } 
+        try { ruleApplied = await applyDNRRule(tabId, url, headers); } 
         catch (e) { logger.error('Error applying header rule:', e); }
     }
     
@@ -173,8 +170,8 @@ export async function fetchManifest(url, options = {}) {
                 };
                 
                 // Only pass headers directly if we're not using declarativeNetRequest
-                if (!ruleApplied && requestHeaders) {
-                    fetchOptions.headers = requestHeaders;
+                if (!ruleApplied && headers) {
+                    fetchOptions.headers = headers;
                 }
                 
                 const response = await fetch(url, fetchOptions);
@@ -293,7 +290,7 @@ export async function validateManifestType(url, headers = null, existingMetadata
     try {
         logger.debug(`Checking manifest type for ${url}`);
         
-        const reqHeaders = headers || getRequestHeaders(null, url);
+        const reqHeaders = headers;
         let contentLength = null;
         let supportsRanges = false;
         let fullContent = null;

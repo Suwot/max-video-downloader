@@ -6,7 +6,6 @@
 
 import { createLogger } from '../../shared/utils/logger.js';
 import nativeHostService from '../messaging/native-host-service.js';
-import { getRequestHeaders } from '../../shared/utils/headers-utils.js';
 import { broadcastToPopups } from '../messaging/popup-communication.js';
 
 const logger = createLogger('Download Manager');
@@ -134,9 +133,7 @@ async function startDownloadImmediately(downloadRequest) {
         ...downloadRequest,
         command: 'download',
         // For re-downloads, use existing headers; for new downloads, get fresh headers
-        headers: downloadRequest.isRedownload && downloadRequest.headers ? 
-            downloadRequest.headers : 
-            (getRequestHeaders(downloadRequest.tabId || -1, downloadRequest.downloadUrl) || {})
+        headers: downloadRequest.headers
     };
     
     if (downloadRequest.isRedownload) {

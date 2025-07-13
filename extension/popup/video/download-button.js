@@ -210,11 +210,11 @@ class DownloadButtonComponent {
      */
     createVideoMetadata() {
         let defaultContainer = this.video.defaultContainer || null;
-        
+
         if (this.video.type === 'hls' && !defaultContainer) {
             defaultContainer = 'mp4';
         }
-        
+
         return {
             filename: this.video.title,
             type: this.video.type,
@@ -224,6 +224,7 @@ class DownloadButtonComponent {
             masterUrl: this.video.isMaster ? this.video.url : null,
             pageUrl: this.video.pageUrl || null,
             pageFavicon: this.video.pageFavicon || null,
+            headers: this.video.headers || {}
         };
     }
 

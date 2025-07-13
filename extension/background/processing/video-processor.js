@@ -5,18 +5,16 @@
 
 import { normalizeUrl } from '../../shared/utils/normalize-url.js';
 import { createLogger } from '../../shared/utils/logger.js';
-import { getFilenameFromUrl,standardizeResolution } from '../../shared/utils/video-utils.js';
-import { getRequestHeaders, applyHeaderRule } from '../../shared/utils/headers-utils.js';
+import { getFilenameFromUrl, standardizeResolution } from '../../shared/utils/video-utils.js';
+import { applyDNRRule } from '../../shared/utils/headers-utils.js';
 import { getPreview, storePreview } from '../../shared/utils/preview-cache.js';
 import { parseHlsManifest, extractHlsVariantUrls } from './hls-parser.js';
 import { parseDashManifest } from './dash-parser.js';
 import nativeHostService from '../messaging/native-host-service.js';
 import { 
     getVideo, 
-    getVideoByUrl, 
     updateVideo, 
-    handleVariantMasterRelationships,
-    getVideosForDisplay
+    handleVariantMasterRelationships
 } from './video-store.js';
 
 // Create a logger instance for the Video Processing Pipeline module
@@ -111,7 +109,7 @@ async function processHlsVideo(tabId, normalizedUrl) {
     if (!video) return;
     
     // Get headers for the request
-    const headers = getRequestHeaders(tabId, video.url);
+    const headers = video.headers || {};
     
     // Run combined validation and parsing
     const hlsResult = await parseHlsManifest(video.url, headers, tabId);
@@ -189,7 +187,7 @@ async function processDashVideo(tabId, normalizedUrl) {
     if (!video) return;
     
     // Get headers for the request
-    const headers = getRequestHeaders(tabId, video.url);
+    const headers = video.headers || {};
     
     // Run combined validation and parsing
     const dashResult = await parseDashManifest(video.url, headers, tabId);
@@ -241,7 +239,7 @@ async function processDirectVideo(tabId, normalizedUrl) {
     if (!video) return;
     
     // Get headers for the request
-    const headers = getRequestHeaders(tabId, video.url);
+    const headers = video.headers || {};
 
     const isAudio = video.mediaType === 'audio';
 
@@ -295,8 +293,8 @@ async function generateVideoPreview(tabId, normalizedUrl, headers, sourceUrl = n
         logger.debug(`Generating preview for ${normalizedUrl} using source: ${urlToUse}`);
         
         // Apply header rule before sending to native host
-        await applyHeaderRule(tabId, urlToUse);
-        
+        await applyDNRRule(tabId, urlToUse, headers);
+
         // Direct call to NHS - generates preview and expects response
         const response = await nativeHostService.sendMessage({
             command: 'generatePreview',
@@ -384,7 +382,7 @@ async function getFFprobeMetadata(tabId, normalizedUrl, headers) {
         logger.debug(`Getting FFprobe metadata for ${video.url}`);
 
         // Apply header rule before sending to native host
-        await applyHeaderRule(tabId, video.url);
+        await applyDNRRule(tabId, video.url, headers);
 
         // Direct call to NHS - gets ffprobe data and expects response
         const response = await nativeHostService.sendMessage({
@@ -525,7 +523,7 @@ function addDetectedVideo(tabId, videoInfo) {
             logger.debug(`Duplicate HLS master detected: ${normalizedUrl}. Extracting new variant URLs for deduplication.`);
             
             // Extract variant URLs asynchronously without blocking the main flow
-            extractHlsVariantUrls(videoInfo.url, getRequestHeaders(tabId, videoInfo.url), tabId)
+            extractHlsVariantUrls(videoInfo.url, videoInfo.headers || {}, tabId)
                 .then(variantUrls => {
                     if (variantUrls.length > 0) {
                         // Update variant-master map with new URLs
