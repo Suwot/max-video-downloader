@@ -190,7 +190,7 @@ class GetQualitiesCommand extends BaseCommand {
 
                             // Subtitle stream info
                             if (subtitleStreams && subtitleStreams.length > 0) {
-                                streamInfo.hasSubtitles = true;
+                                streamInfo.hasSubs = true;
                                 streamInfo.subtitles = subtitleStreams.map(sub => ({
                                     index: sub.index,
                                     codec: sub.codec_name || 'unknown',
@@ -200,7 +200,7 @@ class GetQualitiesCommand extends BaseCommand {
                                 }));
                                 logDebug(`📝 Found ${subtitleStreams.length} subtitle stream(s):`, streamInfo.subtitles);
                             } else {
-                                streamInfo.hasSubtitles = false;
+                                streamInfo.hasSubs = false;
                                 streamInfo.subtitles = [];
                                 logDebug('ℹ️ No subtitle streams found');
                             }
