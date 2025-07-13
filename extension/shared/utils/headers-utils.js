@@ -9,9 +9,9 @@ import { shouldIgnoreForHeaderCapture } from '../../background/detection/url-fil
 // Create a logger instance for the headers utilities
 const logger = createLogger('Headers Utils');
 
-// Store headers by tab, then by requestId
-// Map<tabId, Map<requestId, headers>>
-const tabHeadersStore = new Map();
+// Store headers by requestId
+// Map<requestId, headers>
+const requestHeadersStore = new Map();
 
 // Track active rules by tab ID, then URL
 // Map<tabId, Map<url, ruleId>>
@@ -57,8 +57,8 @@ function extractHeaders(requestHeaders) {
  * @param {Object} details - Request details from webRequest API
  */
 function captureRequestHeaders(details) {
-    // Skip if no tabId (extension requests) or if URL should be ignored
-    if (details.tabId <= 0 || shouldIgnoreForHeaderCapture(details.url)) {
+    // Skip if should be ignored or missing requestId
+    if (shouldIgnoreForHeaderCapture(details.url)) {
         return;
     }
     if (!details.requestId) {
@@ -68,14 +68,10 @@ function captureRequestHeaders(details) {
     try {
         // Extract headers
         const headers = extractHeaders(details.requestHeaders);
-        logger.debug(`Captured headers for requestId ${details.requestId} in tab ${details.tabId}`, headers);
+        logger.debug(`Captured headers for requestId ${details.requestId}`, headers);
         if (!headers) return;
-        // Store in tab-requestId structure
-        if (!tabHeadersStore.has(details.tabId)) {
-            tabHeadersStore.set(details.tabId, new Map());
-        }
-        const tabRequests = tabHeadersStore.get(details.tabId);
-        tabRequests.set(details.requestId, headers);
+        // Store by requestId only
+        requestHeadersStore.set(details.requestId, headers);
     } catch (e) {
         logger.warn('Error capturing headers:', e);
     }
@@ -103,25 +99,19 @@ function formatHeaders(headers) {
 
 /**
  * Get request headers for a requestId
- * @param {number} tabId - Tab ID for context
  * @param {string} requestId - requestId to get headers for
  * @returns {Object|null} Headers object or null if not found
  */
-function getRequestHeaders(tabId, requestId) {
-    if (!requestId || !tabId || tabId <= 0) {
-        logger.warn(`Invalid request for headers - tabId: ${tabId}, requestId: ${requestId}`);
+function getRequestHeaders(requestId) {
+    if (!requestId) {
+        logger.warn(`Invalid request for headers - requestId: ${requestId}`);
         return null;
     }
     try {
-        if (tabHeadersStore.has(tabId)) {
-            const tabRequests = tabHeadersStore.get(tabId);
-            if (tabRequests.has(requestId)) {
-                return formatHeaders(tabRequests.get(requestId));
-            }
-            logger.debug(`No headers found for requestId ${requestId} in tab ${tabId}`);
-        } else {
-            logger.warn(`No headers data for tab ${tabId}`);
+        if (requestHeadersStore.has(requestId)) {
+            return formatHeaders(requestHeadersStore.get(requestId));
         }
+        logger.debug(`No headers found for requestId ${requestId}`);
         return null;
     } catch (e) {
         logger.error(`Error getting headers for requestId ${requestId}:`, e);
@@ -173,16 +163,6 @@ async function initHeaderTracking() {
     }
 }
 
-/**
- * Clear headers for a specific tab
- * @param {number} tabId - Tab ID to clear headers for
- */
-function cleanupHeadersForTab(tabId) {
-    if (tabHeadersStore.has(tabId)) {
-        tabHeadersStore.delete(tabId);
-        logger.debug(`Cleared headers for tab ${tabId}`);
-    }
-}
 
 /**
  * Clear header rules for a specific tab
@@ -227,7 +207,7 @@ function clearAllHeaderCaches() {
  * Clear all stored headers
  */
 function clearAllHeaders() {
-    tabHeadersStore.clear();
+    requestHeadersStore.clear();
     logger.debug('All headers cleared');
 }
 
@@ -269,19 +249,12 @@ async function clearAllHeaderRules() {
  * @returns {Object} Stats object with counts
  */
 function getHeadersStats() {
-    let totalUrls = 0;
-    for (const [tabId, urls] of tabHeadersStore.entries()) {
-        totalUrls += urls.size;
-    }
-    
     let totalRules = 0;
     for (const [tabId, rules] of activeRules.entries()) {
         totalRules += rules.size;
     }
-    
     return {
-        tabsTracked: tabHeadersStore.size,
-        totalUrlsTracked: totalUrls,
+        requestsTracked: requestHeadersStore.size,
         activeRules: totalRules
     };
 }
@@ -382,15 +355,25 @@ async function applyDNRRule(tabId, url, headers) {
     }
 }
 
+/**
+ * Remove headers for a specific requestId
+ * @param {string} requestId - requestId to remove
+ */
+function removeHeadersByRequestId(requestId) {
+    if (!requestId) return;
+    requestHeadersStore.delete(requestId);
+    logger.debug(`Removed headers for requestId ${requestId}`);
+}
+
 // Export functions
 export {
     initHeaderTracking,
     getRequestHeaders,
-    cleanupHeadersForTab,
     cleanupHeaderRulesForTab,
     clearAllHeaders,
     clearAllHeaderRules,
     clearAllHeaderCaches,
     getHeadersStats,
-    applyDNRRule
+    applyDNRRule,
+    removeHeadersByRequestId
 };

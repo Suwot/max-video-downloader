@@ -1,7 +1,7 @@
 import { createLogger } from '../../shared/utils/logger.js';
 import { shouldIgnoreForMediaDetection } from './url-filters.js';
 import { addDetectedVideo } from '../processing/video-processor.js';
-import { getRequestHeaders } from '../../shared/utils/headers-utils.js';
+import { getRequestHeaders, removeHeadersByRequestId } from '../../shared/utils/headers-utils.js';
 import { identifyVideoType, identifyVideoTypeFromMime, extractExpiryInfo, isMediaSegment } from './video-type-identifier.js';
 
 // Create a logger instance for video detection
@@ -65,13 +65,17 @@ function addVideoWithCommonProcessing(tabId, url, videoInfo, metadata, source, t
         ...(videoInfo.originalContainer && { originalContainer: videoInfo.originalContainer }),
         ...(expiryInfo && { expiryInfo })
     };
+    
     // Attach headers if requestId is provided
     if (requestId) {
-        const headers = getRequestHeaders(tabId, requestId);
+        const headers = getRequestHeaders(requestId);
         if (headers) {
             videoData.headers = headers;
+        } else {
+            logger.debug(`No headers found for requestId: ${requestId}`);
         }
     }
+    
     addDetectedVideo(tabId, videoData);
 }
 
@@ -80,14 +84,19 @@ function addVideoWithCommonProcessing(tabId, url, videoInfo, metadata, source, t
  * @param {number} tabId - Tab ID where request originated
  * @param {string} url - The URL to process
  * @param {Object} metadata - Optional metadata from response headers
+ * @param {string} requestId - Request ID for header cleanup (handled by caller)
  */
 export async function processWebRequest(details, metadata = null) {
     const { tabId, url, requestId } = details;
 
-    if (tabId < 0 || !url) return;
+    if (tabId < 0 || !url) {
+        return;
+    }
 
     // First check if we should ignore this URL
-    if (shouldIgnoreForMediaDetection(url, metadata)) return;
+    if (shouldIgnoreForMediaDetection(url, metadata)) {
+        return;
+    }
     logger.debug(`Processing video URL after ShouldIgnoreForMediaDetection: ${url} with metadata:`, metadata);
 
     // Get tab URL for page context tracking
@@ -230,6 +239,13 @@ export function initVideoDetector() {
 function setupWebRequestListener() {
     chrome.webRequest.onHeadersReceived.addListener(
         function (details) {
+            // Centralized cleanup - ensure headers are always cleaned up
+            const cleanupHeaders = () => {
+                if (details.requestId) {
+                    removeHeadersByRequestId(details.requestId);
+                }
+            };
+
             // Extract all relevant headers into a metadata object
             const metadata = {
                 contentType: null,
@@ -244,15 +260,16 @@ function setupWebRequestListener() {
             };
             
             // Process important headers
+            let shouldSkipRequest = false;
             for (const header of details.responseHeaders) {
                 const headerName = header.name.toLowerCase();
-                
                 switch(headerName) {
                     case 'content-range':
                         // Parse Content-Range to determine if this is a legitimate video or just a segment
                         const shouldSkip = shouldSkipBasedOnContentRange(header.value, details.url);
                         if (shouldSkip) {
-                            return;
+                            shouldSkipRequest = true;
+                            break;
                         }
                         metadata.contentRange = header.value;
                         break;
@@ -297,16 +314,36 @@ function setupWebRequestListener() {
                         break;
                 }
             }
-
-            // logger.debug(`Found NEW URL with headers:`, details);
-
+            
+            // Early cleanup if we should skip this request
+            if (shouldSkipRequest) {
+                cleanupHeaders();
+                return;
+            }
+            
             // Call the video detector with the metadata (async, but don't await to avoid blocking)
-            processWebRequest(details, metadata).catch(error => {
-                logger.debug('Error in processWebRequest:', error);
-            });
+            processWebRequest(details, metadata)
+                .catch(error => {
+                    logger.debug('Error in processWebRequest:', error);
+                })
+                .finally(() => {
+                    // Always cleanup headers after processing, regardless of success/failure
+                    cleanupHeaders();
+                });
         },
         { urls: ["<all_urls>"], types: ["xmlhttprequest", "other", "media"] },
         ["responseHeaders"]
+    );
+
+    // Clean up headers for failed requests
+    chrome.webRequest.onErrorOccurred.addListener(
+        function(details) {
+            if (details && details.requestId) {
+                removeHeadersByRequestId(details.requestId);
+                logger.debug(`Cleaned up headers for failed requestId: ${details.requestId}`);
+            }
+        },
+        { urls: ["<all_urls>"], types: ["xmlhttprequest", "other", "media"] }
     );
 }
 

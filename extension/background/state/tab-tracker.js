@@ -5,7 +5,7 @@
 
 // Add static imports at the top
 import { createLogger } from '../../shared/utils/logger.js';
-import { cleanupHeadersForTab, cleanupHeaderRulesForTab } from '../../shared/utils/headers-utils.js'
+import { cleanupHeaderRulesForTab } from '../../shared/utils/headers-utils.js'
 import { cleanupMPDContextForTab } from '../detection/video-detector.js'
 import { cleanupVideosForTab, getVideosForDisplay } from '../processing/video-store.js';
 import { cleanupProcessingQueueForTab } from '../processing/video-processor.js';
@@ -133,7 +133,6 @@ function initTabTracking() {
             cleanupVideosForTab(tabId, false); // Cleanup videos and playlists (includes icon reset)
             cleanupProcessingQueueForTab(tabId); // Clear any queued processing items
             cleanupMPDContextForTab(tabId); // Cleanup DASH context if applicable
-            cleanupHeadersForTab(tabId); // Clear any init request headers
             cleanupHeaderRulesForTab(tabId); // Clear any header rules per tab
             
             // Clean up domain tracking
