@@ -32,8 +32,9 @@ class GeneratePreviewCommand extends BaseCommand {
         
         // Skip for blob URLs
         if (url.startsWith('blob:')) {
-            this.sendMessage('Cannot generate preview for blob URLs');
-            return { error: 'Cannot generate preview for blob URLs' };
+            const error = 'Cannot generate preview for blob URLs';
+            this.sendMessage({ error: error });
+            return { error: error };
         }
         
         // Log received headers
@@ -47,14 +48,17 @@ class GeneratePreviewCommand extends BaseCommand {
             
             return new Promise((resolve, reject) => {
                 const previewPath = path.join(process.env.HOME || os.homedir(), '.cache', 'video-preview-' + Date.now() + '.jpg');
+                let ffmpeg = null;
                 
                 // Set a timeout to prevent hanging
                 const timeout = setTimeout(() => {
                     if (ffmpeg && !ffmpeg.killed) {
+                        logDebug('Killing FFmpeg process due to timeout');
                         ffmpeg.kill('SIGTERM');
                     }
-                    this.sendMessage('Preview generation timeout');
-                    reject(new Error('Preview generation timeout after 30 seconds'));
+                    const timeoutError = new Error('Preview generation timeout after 30 seconds');
+                    this.sendMessage({ error: timeoutError.message });
+                    reject(timeoutError);
                 }, 30000); // 30 second timeout
                 
                 // Calculate ideal timestamp based on duration if available
@@ -93,7 +97,7 @@ class GeneratePreviewCommand extends BaseCommand {
                     previewPath
                 ]);
                 
-                const ffmpeg = spawn(ffmpegService.getFFmpegPath(), ffmpegArgs, { env: getFullEnv() });
+                ffmpeg = spawn(ffmpegService.getFFmpegPath(), ffmpegArgs, { env: getFullEnv() });
         
                 let errorOutput = '';
         
@@ -115,25 +119,28 @@ class GeneratePreviewCommand extends BaseCommand {
                             });
                             resolve({ success: true, previewUrl: dataUrl });
                         } catch (err) {
-                            this.sendMessage('Failed to read preview file: ' + err.message);
+                            logDebug('Failed to read preview file:', err);
+                            this.sendMessage({ error: 'Failed to read preview file: ' + err.message });
                             reject(err);
                         }
                     } else {
                         const error = `Failed to generate preview. FFmpeg exited with code ${code}: ${errorOutput}`;
-                        this.sendMessage(error);
+                        logDebug('FFmpeg preview generation failed:', error);
+                        this.sendMessage({ error: error });
                         reject(new Error(error));
                     }
                 });
         
                 ffmpeg.on('error', (err) => {
                     clearTimeout(timeout);
-                    this.sendMessage(err.message);
+                    logDebug('FFmpeg process error:', err);
+                    this.sendMessage({ error: err.message });
                     reject(err);
                 });
             });
         } catch (err) {
             logDebug('Preview generation error:', err);
-            this.sendMessage(err.message);
+            this.sendMessage({ error: err.message });
             return { error: err.message };
         }
     }

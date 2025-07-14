@@ -24,12 +24,12 @@ class ErrorHandler {
 
     handleUncaughtException(err) {
         logDebug('Uncaught Exception:', err);
-        this.messaging.sendResponse({ error: `Uncaught Exception: ${err.message}` });
+        this.messaging.sendMessage({ error: `Uncaught Exception: ${err.message}` });
     }
 
     handleUnhandledRejection(err) {
         logDebug('Unhandled Rejection:', err);
-        this.messaging.sendResponse({ error: `Unhandled Rejection: ${err.message}` });
+        this.messaging.sendMessage({ error: `Unhandled Rejection: ${err.message}` });
     }
 
     /**
@@ -41,7 +41,7 @@ class ErrorHandler {
     handleCommandError(err, commandName, requestId = null) {
         const errorMessage = `Error executing ${commandName || 'command'}: ${err.message}`;
         logDebug(errorMessage);
-        this.messaging.sendResponse({ error: errorMessage }, requestId);
+        this.messaging.sendMessage({ error: errorMessage }, requestId);
         return { error: errorMessage };
     }
     
@@ -52,7 +52,7 @@ class ErrorHandler {
      */
     handleMessageError(err, requestId = null) {
         logDebug('Error in message handling:', err);
-        this.messaging.sendResponse({ error: err.message }, requestId);
+        this.messaging.sendMessage({ error: err.message }, requestId);
         return { error: err.message };
     }
 }

@@ -59,8 +59,8 @@ async function bootstrap() {
         // 5. Initialize messaging with message handler function
         messagingService.initialize((request) => {
             processMessage(request, commandRunner).catch(err => {
-                logDebug('Error in message processing:', err);
-                messagingService.sendResponse({ error: err.message });
+                logDebug('Error in message processing:', err.message || err);
+                messagingService.sendMessage({ error: err.message || 'Unknown error' }, request.id);
             });
         });
         
