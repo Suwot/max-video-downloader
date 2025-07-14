@@ -530,7 +530,7 @@ export async function addVideoToUI(video) {
         const group = container.querySelector(`[data-video-type="${video.type}"]`);
         
         if (!group) {
-            logger.warn(`No group found for video type: ${video.type}`);
+            logger.warn(`[ADD] No group found for video type: ${video.type}`);
             return;
         }
         
@@ -546,7 +546,7 @@ export async function addVideoToUI(video) {
         // Get the videos container within the group
         const groupBody = group.querySelector('.section-content');
         if (!groupBody) {
-            logger.warn(`No section content found for video type: ${video.type}`);
+            logger.warn(`[ADD] No section content found for video type: ${video.type}`);
             return;
         }
         
@@ -556,10 +556,10 @@ export async function addVideoToUI(video) {
         // Prepend to the group (newest first)
         groupBody.insertBefore(videoElement, groupBody.firstChild);
         
-        logger.debug(`Added video to UI: ${video.normalizedUrl}`);
+        logger.debug(`[ADD] Added video to UI: ${video.normalizedUrl}`);
         
     } catch (error) {
-        logger.error('Error adding video to UI:', error);
+        logger.error('[ADD] Error adding video to UI:', error);
     }
 }
 
@@ -574,7 +574,7 @@ export async function updateVideoInUI(videoUrl, video) {
         const existingElement = container.querySelector(`.video-item[data-url="${videoUrl}"]`);
         
         if (!existingElement) {
-            logger.debug(`Video element not found for update: ${videoUrl}, adding instead`);
+            logger.debug(`[UPD] Video element not found for update: ${videoUrl}, adding instead`);
             await addVideoToUI(video);
             return;
         }
@@ -585,10 +585,10 @@ export async function updateVideoInUI(videoUrl, video) {
         // Replace the existing element
         existingElement.parentNode.replaceChild(newElement, existingElement);
         
-        logger.debug(`Updated video in UI: ${videoUrl}`);
+        logger.debug(`[UPD] Updated video in UI: ${videoUrl}`);
         
     } catch (error) {
-        logger.error('Error updating video in UI:', error);
+        logger.error('[UPD] Error updating video in UI:', error);
     }
 }
 
@@ -602,7 +602,7 @@ export async function removeVideoFromUI(videoUrl) {
         const existingElement = container.querySelector(`.video-item[data-url="${videoUrl}"]`);
         
         if (!existingElement) {
-            logger.debug(`Video element not found for removal: ${videoUrl}`);
+            logger.debug(`[RM] Video element not found for removal: ${videoUrl}`);
             return;
         }
         
@@ -628,9 +628,9 @@ export async function removeVideoFromUI(videoUrl) {
             }
         }
         
-        logger.debug(`Removed video from UI: ${videoUrl}`);
+        logger.debug(`[RM] Removed video from UI: ${videoUrl}`);
         
     } catch (error) {
-        logger.error('Error removing video from UI:', error);
+        logger.error('[RM] Error removing video from UI:', error);
     }
 }
