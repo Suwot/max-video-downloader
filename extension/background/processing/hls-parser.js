@@ -294,7 +294,7 @@ function parseHlsMaster(content, baseUrl, masterUrl) {
     return {
         variants: filteredVariants,
         audioTracks: audioTracks,
-        subtitles: subtitleTracks,
+        subtitleTracks: subtitleTracks,
         closedCaptions: closedCaptions,
         hasMediaGroups: audioTracks.length > 0 || subtitleTracks.length > 0 || closedCaptions.length > 0,
         status: 'success',
@@ -406,7 +406,7 @@ export async function parseHlsManifest(url, headers = null, tabId) {
             isVariant: false,
             variants: [],
             audioTracks: [],
-            subtitles: [],
+            subtitleTracks: [],
             closedCaptions: [],
             hasMediaGroups: false
         };
@@ -441,7 +441,7 @@ export async function parseHlsManifest(url, headers = null, tabId) {
                 isVariant: false,
                 variants: [],
                 audioTracks: [],
-                subtitles: [],
+                subtitleTracks: [],
                 closedCaptions: [],
                 hasMediaGroups: false
             };
@@ -476,7 +476,7 @@ export async function parseHlsManifest(url, headers = null, tabId) {
                     isVariant: false, 
                     variants: [],
                     audioTracks: [],
-                    subtitles: [],
+                    subtitleTracks: [],
                     closedCaptions: [],
                     hasMediaGroups: false
                 };
@@ -504,7 +504,7 @@ export async function parseHlsManifest(url, headers = null, tabId) {
         let isEncrypted = false;
         let encryptionType = null;
         let version = null; 
-        let subtitles = [];
+        let subtitleTracks = [];
         let closedCaptions = [];
         let audioTracks = [];
         let hasMediaGroups = false;
@@ -516,7 +516,7 @@ export async function parseHlsManifest(url, headers = null, tabId) {
 
             // Store version from master playlist
             version = masterParseResult.version;
-            subtitles = masterParseResult.subtitles || [];
+            subtitleTracks = masterParseResult.subtitleTracks || [];
             closedCaptions = masterParseResult.closedCaptions || [];
             audioTracks = masterParseResult.audioTracks || [];
             hasMediaGroups = masterParseResult.hasMediaGroups || false;
@@ -679,13 +679,13 @@ export async function parseHlsManifest(url, headers = null, tabId) {
             version: version,
             variants: variants,
             audioTracks: audioTracks,
-            subtitles: subtitles,
+            subtitleTracks: subtitleTracks,
             closedCaptions: closedCaptions,
             hasMediaGroups: hasMediaGroups,
             status: 'success'
         };
 
-        logger.info(`Successfully parsed HLS: found ${variants.length} variants, ${audioTracks.length} audio tracks, ${subtitles.length} subtitle tracks, ${closedCaptions.length} closed caption tracks`);
+        logger.info(`Successfully parsed HLS: found ${variants.length} variants, ${audioTracks.length} audio tracks, ${subtitleTracks.length} subtitle tracks, ${closedCaptions.length} closed caption tracks`);
         return result;
     } catch (error) {
         logger.error(`Error parsing HLS: ${error.message}`);
@@ -698,7 +698,7 @@ export async function parseHlsManifest(url, headers = null, tabId) {
             isVariant: false,
             variants: [],
             audioTracks: [],
-            subtitles: [],
+            subtitleTracks: [],
             closedCaptions: [],
             hasMediaGroups: false
         };
@@ -805,7 +805,7 @@ function extractMasterVariantEntries(content, baseUrl, masterUrl) {
  * @param {string} url - URL of the HLS master playlist
  * @param {Object} [headers] - Optional request headers
  * @param {number} tabId - Tab ID
- * @returns {Promise<Object>} Object containing arrays of normalized URLs for variants, audioTracks, and subtitles
+ * @returns {Promise<Object>} Object containing arrays of normalized URLs for variants, audioTracks, and subtitleTracks
  */
 export async function extractHlsMediaUrls(url, headers = null, tabId) {
     try {
@@ -818,13 +818,13 @@ export async function extractHlsMediaUrls(url, headers = null, tabId) {
         });
         if (!fetchResult.ok) {
             logger.warn(`Failed to fetch master playlist for media URL extraction: ${fetchResult.status}`);
-            return { variants: [], audioTracks: [], subtitles: [] };
+            return { variants: [], audioTracks: [], subtitleTracks: [] };
         }
         // Quick validation that this is an HLS master playlist
         const content = fetchResult.content;
         if (!content.includes('#EXTM3U') || !content.includes('#EXT-X-STREAM-INF')) {
             logger.warn(`Content is not an HLS master playlist`);
-            return { variants: [], audioTracks: [], subtitles: [] };
+            return { variants: [], audioTracks: [], subtitleTracks: [] };
         }
         const baseUrl = getBaseDirectory(url);
         const normalizedMasterUrl = normalizeUrl(url);
@@ -867,10 +867,10 @@ export async function extractHlsMediaUrls(url, headers = null, tabId) {
         return { 
             variants: variantUrls, 
             audioTracks: audioUrls, 
-            subtitles: subtitleUrls 
+            subtitleTracks: subtitleUrls 
         };
     } catch (error) {
         logger.error(`Error extracting media URLs from ${url}: ${error.message}`);
-        return { variants: [], audioTracks: [], subtitles: [] };
+        return { variants: [], audioTracks: [], subtitleTracks: [] };
     }
 }

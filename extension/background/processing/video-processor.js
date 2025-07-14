@@ -128,7 +128,7 @@ async function processHlsVideo(tabId, normalizedUrl) {
                 isEncrypted: hlsResult.isEncrypted,
                 encryptionType: hlsResult.encryptionType,
                 audioTracks: hlsResult.audioTracks || [],
-                subtitles: hlsResult.subtitles || [],
+                subtitleTracks: hlsResult.subtitleTracks || [],
                 closedCaptions: hlsResult.closedCaptions || [],
                 hasMediaGroups: hlsResult.hasMediaGroups || false,
                 isLightParsed: true,
@@ -161,7 +161,7 @@ async function processHlsVideo(tabId, normalizedUrl) {
                 tabId, 
                 hlsResult.variants, 
                 hlsResult.audioTracks || [], 
-                hlsResult.subtitles || [], 
+                hlsResult.subtitleTracks || [], 
                 normalizedUrl
             );
 
@@ -413,7 +413,6 @@ async function getFFprobeMetadata(tabId, normalizedUrl, headers) {
                 isValid,
                 metaFFprobe: streamInfo,
                 duration: streamInfo.duration,
-                isFullyParsed: true,
                 standardizedResolution: standardizedRes,
                 estimatedFileSizeBytes: streamInfo.estimatedFileSizeBytes || video.fileSize,
                 fileSize: streamInfo.sizeBytes || null,
@@ -522,20 +521,20 @@ function addDetectedVideo(tabId, videoInfo) {
         if (videoInfo.type === 'hls' && existingVideo.isMaster) {
             logger.debug(`Duplicate HLS master detected: ${normalizedUrl}. Extracting all media URLs for comprehensive deduplication.`);
             
-            // Extract all media URLs (variants, audio tracks, subtitles) asynchronously without blocking the main flow
+            // Extract all media URLs (variants, audio tracks, subtitle tracks) asynchronously without blocking the main flow
             extractHlsMediaUrls(videoInfo.url, videoInfo.headers || {}, tabId)
                 .then(mediaUrls => {
-                    const totalUrls = mediaUrls.variants.length + mediaUrls.audioTracks.length + mediaUrls.subtitles.length;
+                    const totalUrls = mediaUrls.variants.length + mediaUrls.audioTracks.length + mediaUrls.subtitleTracks.length;
                     if (totalUrls > 0) {
                         // Convert URL arrays to objects format expected by handleVariantMasterRelationships
                         const variants = mediaUrls.variants.map(url => ({ normalizedUrl: url }));
                         const audioTracks = mediaUrls.audioTracks.map(url => ({ normalizedUrl: url }));
-                        const subtitles = mediaUrls.subtitles.map(url => ({ normalizedUrl: url }));
+                        const subtitleTracks = mediaUrls.subtitleTracks.map(url => ({ normalizedUrl: url }));
                         
                         // Use existing handleVariantMasterRelationships function for consistent processing
-                        handleVariantMasterRelationships(tabId, variants, audioTracks, subtitles, normalizedUrl);
-                        
-                        logger.debug(`Updated ${totalUrls} media URLs for duplicate master ${normalizedUrl} (${mediaUrls.variants.length} variants, ${mediaUrls.audioTracks.length} audio tracks, ${mediaUrls.subtitles.length} subtitles)`);
+                        handleVariantMasterRelationships(tabId, variants, audioTracks, subtitleTracks, normalizedUrl);
+
+                        logger.debug(`Updated ${totalUrls} media URLs for duplicate master ${normalizedUrl} (${mediaUrls.variants.length} variants, ${mediaUrls.audioTracks.length} audio tracks, ${mediaUrls.subtitleTracks.length} subtitle tracks)`);
                     }
                 })
                 .catch(error => {
