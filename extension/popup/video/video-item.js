@@ -12,7 +12,7 @@ import { sendPortMessage } from '../communication.js';
 export function createVideoElement(video) {
     const element = document.createElement('div');
     element.className = 'video-item';
-    element.dataset.url = video.url;
+    element.dataset.url = video.normalizedUrl;
 
     // Create preview column
     const previewColumn = document.createElement('div');
