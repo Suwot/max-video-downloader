@@ -533,29 +533,13 @@ function addDetectedVideo(tabId, videoInfo) {
                 .then(mediaUrls => {
                     const totalUrls = mediaUrls.variants.length + mediaUrls.audioTracks.length + mediaUrls.subtitles.length;
                     if (totalUrls > 0) {
-                        // Update variant-master map with all media URLs
-                        if (!variantMasterMap.has(tabId)) {
-                            variantMasterMap.set(tabId, new Map());
-                        }
-                        const tabVariantMap = variantMasterMap.get(tabId);
+                        // Convert URL arrays to objects format expected by handleVariantMasterRelationships
+                        const variants = mediaUrls.variants.map(url => ({ normalizedUrl: url }));
+                        const audioTracks = mediaUrls.audioTracks.map(url => ({ normalizedUrl: url }));
+                        const subtitles = mediaUrls.subtitles.map(url => ({ normalizedUrl: url }));
                         
-                        // Add all variant URLs
-                        for (const variantUrl of mediaUrls.variants) {
-                            tabVariantMap.set(variantUrl, normalizedUrl);
-                            logger.debug(`Updated variant-master mapping: ${variantUrl} -> ${normalizedUrl}`);
-                        }
-                        
-                        // Add all audio track URLs
-                        for (const audioUrl of mediaUrls.audioTracks) {
-                            tabVariantMap.set(audioUrl, normalizedUrl);
-                            logger.debug(`Updated audio-master mapping: ${audioUrl} -> ${normalizedUrl}`);
-                        }
-                        
-                        // Add all subtitle URLs
-                        for (const subtitleUrl of mediaUrls.subtitles) {
-                            tabVariantMap.set(subtitleUrl, normalizedUrl);
-                            logger.debug(`Updated subtitle-master mapping: ${subtitleUrl} -> ${normalizedUrl}`);
-                        }
+                        // Use existing handleVariantMasterRelationships function for consistent processing
+                        handleVariantMasterRelationships(tabId, variants, audioTracks, subtitles, normalizedUrl);
                         
                         logger.debug(`Updated ${totalUrls} media URLs for duplicate master ${normalizedUrl} (${mediaUrls.variants.length} variants, ${mediaUrls.audioTracks.length} audio tracks, ${mediaUrls.subtitles.length} subtitles)`);
                     }

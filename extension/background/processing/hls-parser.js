@@ -202,9 +202,8 @@ function parseHlsMaster(content, baseUrl, masterUrl) {
                 height: entry.streamInf.height,
                 standardizedResolution: entry.streamInf.height ? standardizeResolution(entry.streamInf.height) : null,
                 fps: entry.streamInf.fps,
-                hasVideo: entry.streamInf.hasVideo,
-                hasAudio: entry.streamInf.hasAudio,
-                isAudioOnly: entry.streamInf.isAudioOnly,
+                hasVideoCodec: entry.streamInf.hasVideoCodec,
+                hasAudioCodec: entry.streamInf.hasAudioCodec,
                 audioGroup: entry.streamInf.audioGroup,
                 videoGroup: entry.streamInf.videoGroup,
                 subtitleGroup: entry.streamInf.subtitleGroup,
@@ -277,7 +276,7 @@ function parseHlsMaster(content, baseUrl, masterUrl) {
     logger.debug(`Found ${audioTracks.length} audio track(s), ${subtitleTracks.length} subtitle track(s) and ${closedCaptions.length} closed caption track(s) in HLS master: ${masterUrl}`);
 
     // Filter out audio-only variants
-    const filteredVariants = variants.filter(variant => !variant.metaJS.isAudioOnly);
+    const filteredVariants = variants.filter(variant => !(!variant.metaJS.hasVideoCodec && variant.metaJS.hasAudioCodec));
     if (variants.length !== filteredVariants.length) {
         logger.debug(`Filtered out ${variants.length - filteredVariants.length} audio-only variants`);
     }
@@ -323,9 +322,8 @@ function parseStreamInf(line) {
         width: null,
         height: null,
         fps: null,
-        hasAudio: null,
-        hasVideo: null,
-        isAudioOnly: false, // Default to false, will be set based on codecs
+        hasAudioCodec: null,
+        hasVideoCodec: null,
         audioGroup: null,
         videoGroup: null,
         subtitleGroup: null,
@@ -356,9 +354,8 @@ function parseStreamInf(line) {
                     const hasVideoCodec = /avc1|hvc1|hev1|vp\d|av01/.test(value);
                     const hasAudioCodec = /mp4a|ac-3|ec-3|mp3/.test(value);
 
-                    if (hasAudioCodec) {result.hasAudio = true;}
-                    if (hasVideoCodec) {result.hasVideo = true;}
-                    result.isAudioOnly = !hasVideoCodec && hasAudioCodec;
+                    if (hasAudioCodec) {result.hasAudioCodec = true;}
+                    if (hasVideoCodec) {result.hasVideoCodec = true;}
                 }
                 break;
             case 'RESOLUTION':
