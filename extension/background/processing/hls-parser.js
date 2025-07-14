@@ -570,7 +570,7 @@ export async function parseHlsManifest(url, headers = null, tabId) {
                     const isLive = variantInfo.isLive || false;
                     const segmentCount = variantInfo.segmentCount;
 
-                    // Apply this metadata to all variants
+                    // Apply this metadata to all video variants
                     variants = variants.map(variant => {
                         // Create a new variant object with detailed information
                         const updatedVariant = {...variant};
@@ -599,6 +599,21 @@ export async function parseHlsManifest(url, headers = null, tabId) {
 
                         return updatedVariant;
                     });
+
+                    // --- Propagate metadata to all audio tracks with a URL ---
+                    // Only propagate universally relevant fields for audio tracks
+                    // (duration, isLive, version). Others require parsing the audio playlist itself.
+                    audioTracks = audioTracks.map(track => {
+                        if (track.url) {
+                            const updatedTrack = { ...track };
+                            updatedTrack.duration = duration;
+                            updatedTrack.isLive = isLive;
+                            updatedTrack.version = variantInfo.version || version;
+                            return updatedTrack;
+                        }
+                        return track;
+                    });
+                    logger.debug(`Propagated duration, isLive, and version to ${audioTracks.filter(t => t.url).length} audio track(s)`);
                 } else {
                     // If all fetches failed, return basic variants
                     logger.warn('Failed to fetch any variant for metadata extraction');
