@@ -41,6 +41,7 @@ class DownloadButtonComponent {
     constructor(video, elementsDiv) {
         // Cache all DOM references
         this.video = video;
+        this.type = video.type;
         this.elementsDiv = elementsDiv;
         this.buttonWrapper = null;
         this.downloadBtn = null;
@@ -356,9 +357,12 @@ class DownloadButtonComponent {
     createMenuDropdown() {
         const menuDropdown = document.createElement('div');
         menuDropdown.className = 'download-menu-dropdown';
-        
-        const menuItems = [
-            {
+
+        const menuItems = [];
+
+        // Conditionally add menu items
+        if (this.hasAudio()) {
+            menuItems.push({
                 icon: `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-audio-lines w-3 h-3" aria-hidden="true">
                     <path d="M2 10v3"></path>
                     <path d="M6 6v11"></path>
@@ -369,15 +373,21 @@ class DownloadButtonComponent {
                 </svg>`,
                 text: 'Extract Audio',
                 action: 'extract-audio'
-            },
-            {
+            });
+        }
+
+        if (this.hasSubs()) {
+            menuItems.push({
                 icon: `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-captions w-3 h-3" aria-hidden="true">
                     <rect width="18" height="14" x="3" y="5" rx="2" ry="2"></rect>
                     <path d="M7 15h4M15 15h2M7 11h2M13 11h4"></path>
                 </svg>`,
                 text: 'Extract Subs',
                 action: 'extract-subs'
-            },
+            });
+        }
+
+        menuItems.push(
             {
                 icon: `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-file-down w-3 h-3" aria-hidden="true">
                     <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
@@ -404,25 +414,58 @@ class DownloadButtonComponent {
                 text: 'Download and Convert',
                 action: 'download-convert'
             }
-        ];
-        
+        );
+
         menuItems.forEach(item => {
             const menuItem = document.createElement('button');
             menuItem.className = 'download-menu-item';
             menuItem.innerHTML = `${item.icon}<span>${item.text}</span>`;
             menuItem.dataset.action = item.action;
-            
+
             menuItem.addEventListener('click', (e) => {
                 e.preventDefault();
                 e.stopPropagation();
                 this.handleMenuItemClick(item.action);
                 this.hideMenuDropdown();
             });
-            
+
             menuDropdown.appendChild(menuItem);
         });
-        
+
         return menuDropdown;
+    }
+
+    /**
+     * Check if video has audio track(s)
+     * @returns {boolean}
+     */
+    hasAudio() {
+        if (this.type === 'hls') {
+            if (this.video.isMaster) {
+                return this.video.audioTracks?.length > 0 || this.video.variants[0]?.metaJS?.hasAudioCodec;
+            } else {
+                return true; // assume audio exists in a variant, we don't know without ffprobe
+            }
+        } else if (this.type === 'direct') {
+            return this.video.metaFFprobe?.hasAudio === true;
+        } else if (this.type === 'dash') {
+            return this.video.audioTracks?.length > 0;
+        }
+        return false;
+    }
+
+    /**
+     * Check if video has subtitles
+     * @returns {boolean}
+     */
+    hasSubs() {
+        if (this.type === 'hls' || this.type === 'dash') {
+            return this.video.subtitleTracks?.length > 0;
+        }
+        if (this.type === 'direct') {
+            return this.video.metaFFprobe?.hasSubs === true;
+        }
+        return false;
     }
 
     /**
