@@ -379,12 +379,6 @@ async function getFFprobeMetadata(tabId, normalizedUrl, headers) {
             return;
         }
 
-        // Skip if already has metadata
-        if (video.isFullyParsed) {
-            logger.debug(`Video ${video.url} is already fully parsed, skipping FFprobe`);
-            return;
-        }
-
         logger.debug(`Getting FFprobe metadata for ${video.url}`);
 
         // Apply header rule before sending to native host
@@ -394,7 +388,7 @@ async function getFFprobeMetadata(tabId, normalizedUrl, headers) {
         const response = await nativeHostService.sendMessage({
             command: 'getQualities',
             url: video.url,
-            mediaType: 'direct',
+            type: video.type || 'direct',
             headers: headers
         });
 

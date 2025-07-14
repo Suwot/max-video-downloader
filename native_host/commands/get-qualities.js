@@ -21,19 +21,19 @@ class GetQualitiesCommand extends BaseCommand {
      * Execute the getQualities command
      * @param {Object} params Command parameters
      * @param {string} params.url Video URL to analyze
-     * @param {string} [params.mediaType] Media type: 'hls', 'dash', 'direct'
+     * @param {string} [params.type] Media type: 'hls', 'dash', 'direct'
      * @param {string} [params.representationId] For DASH: specific representation ID
      * @param {Object} [params.headers] HTTP headers for requests
      */
     async execute(params) {
         const { 
             url, 
-            mediaType = 'direct', 
+            type, 
             representationId = null,
             headers = {}
         } = params;
         
-        logDebug(`🎥 Analyzing media from: ${url} (type: ${mediaType})`);
+        logDebug(`🎥 Analyzing media from: ${url} (type: ${type})`);
         
         // Skip for blob URLs
         if (url.startsWith('blob:')) {
@@ -75,7 +75,7 @@ class GetQualitiesCommand extends BaseCommand {
                 
                 // Handle DASH-specific representation selection
                 let analyzeUrl = url;
-                if (mediaType === 'dash' && representationId) {
+                if (type === 'dash' && representationId) {
                     analyzeUrl = `${url}#${representationId}`;
                     logDebug(`🎯 Targeting specific DASH representation: ${representationId}`);
                 }
@@ -107,7 +107,7 @@ class GetQualitiesCommand extends BaseCommand {
                             const streamInfo = {
                                 format: info.format?.format_name || 'unknown',
                                 container: info.format?.format_long_name || 'unknown',
-                                mediaType: mediaType,
+                                type: type,
                                 inputUrl: url,
                                 analyzeUrl: analyzeUrl
                             };
@@ -237,12 +237,6 @@ class GetQualitiesCommand extends BaseCommand {
                                 const sizeMB = (streamInfo.estimatedFileSizeBytes / (1024 * 1024)).toFixed(1);
                                 logDebug(`📊 Estimated size: ${sizeMB}MB (based on bitrate × duration)`);
                             }
-
-                            // Mark as fully parsed
-                            streamInfo.isFullyParsed = true;
-
-                            // Note: This ffprobe-derived metadata takes priority over JavaScript-parsed manifest data
-                            // The video-manager.js handles merging with proper priority
 
                             this.sendMessage({ streamInfo, success: true });
                             logDebug('✅ Media analysis complete');
