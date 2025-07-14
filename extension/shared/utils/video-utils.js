@@ -129,7 +129,7 @@ export function calculateValidForDisplay(video) {
     if (!video || !video.isValid) return false;
     if (video.type === 'hls') {
         // Only standalone variants without known masters, or master playlists
-        if (video.isVariant && video.hasKnownMaster) return false;
+        if ((video.isVariant || video.isAudioTrack || video.isSubtitleTrack) && video.hasKnownMaster) return false;
         return true;
     }
     // For dash and direct, only if isValid

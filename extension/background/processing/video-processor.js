@@ -8,7 +8,7 @@ import { createLogger } from '../../shared/utils/logger.js';
 import { getFilenameFromUrl, standardizeResolution } from '../../shared/utils/video-utils.js';
 import { applyDNRRule } from '../../shared/utils/headers-utils.js';
 import { getPreview, storePreview } from '../../shared/utils/preview-cache.js';
-import { parseHlsManifest, extractHlsVariantUrls } from './hls-parser.js';
+import { parseHlsManifest, extractHlsMediaUrls } from './hls-parser.js';
 import { parseDashManifest } from './dash-parser.js';
 import nativeHostService from '../messaging/native-host-service.js';
 import { 
@@ -157,7 +157,13 @@ async function processHlsVideo(tabId, normalizedUrl) {
 
         // Track variant-master relationships if this is a master playlist
         if (hlsResult.isMaster && hlsResult.variants?.length > 0) {
-            handleVariantMasterRelationships(tabId, hlsResult.variants, normalizedUrl);
+            handleVariantMasterRelationships(
+                tabId, 
+                hlsResult.variants, 
+                hlsResult.audioTracks || [], 
+                hlsResult.subtitles || [], 
+                normalizedUrl
+            );
 
             // Generate preview for the master using the first variant as source
             const firstVariant = hlsResult.variants[0];
@@ -471,11 +477,11 @@ function addDetectedVideo(tabId, videoInfo) {
     const allDetectedVideos = globalThis.allDetectedVideosInternal;
     const variantMasterMap = globalThis.variantMasterMapInternal;
     
-    // Check if this HLS is a known variant and don't process it, just store in a map with enriched info about its master
+    // Check if this HLS is a known media item (variant, audio track, or subtitle) and don't process it, just store in a map with enriched info about its master
     if (videoInfo.type === 'hls' && variantMasterMap?.has(tabId)) {
         const tabVariantMap = variantMasterMap.get(tabId);
         if (tabVariantMap.has(normalizedUrl)) {
-            logger.debug(`Known HLS variant detected: ${normalizedUrl}. Master ${tabVariantMap.get(normalizedUrl)} (stored in map, skipping processing and UI update)`);
+            logger.debug(`Known HLS media item detected: ${normalizedUrl}. Master ${tabVariantMap.get(normalizedUrl)} (stored in map, skipping processing and UI update)`);
 
             // Initialize tab's video collection if it doesn't exist
             if (!allDetectedVideos.has(tabId)) {
@@ -486,17 +492,17 @@ function addDetectedVideo(tabId, videoInfo) {
             if (!tabMap.has(normalizedUrl)) {
                 const newVideo = {
                     ...videoInfo,
-                    isVariant: true,
+                    isVariant: true, // Generic flag for any media item from a master
                     hasKnownMaster: true,
                     masterUrl: tabVariantMap.get(normalizedUrl),
                     normalizedUrl,
                     isBeingProcessed: false,
                     title: videoInfo.metadata?.filename || getFilenameFromUrl(videoInfo.url),
-                    isValid: true // it's a known variant, so we consider it valid
+                    isValid: true // it's a known media item, so we consider it valid
                 };
                 // validForDisplay will be set by updateVideo
-                updateVideo('addDetectedVideo-knownVariant', tabId, normalizedUrl, newVideo, true, false);
-                // Note: No UI update for known variants as they're filtered out from display
+                updateVideo('addDetectedVideo-knownMediaItem', tabId, normalizedUrl, newVideo, true, false);
+                // Note: No UI update for known media items as they're filtered out from display
             }
             // Do not enqueue for processing or update UI
             return;
@@ -518,30 +524,44 @@ function addDetectedVideo(tabId, videoInfo) {
     if (tabMap.has(normalizedUrl)) {
         const existingVideo = tabMap.get(normalizedUrl);
         
-        // Special handling for HLS master playlists: extract new variant URLs for deduplication
+        // Special handling for HLS master playlists: extract all media URLs for comprehensive deduplication
         if (videoInfo.type === 'hls' && existingVideo.isMaster) {
-            logger.debug(`Duplicate HLS master detected: ${normalizedUrl}. Extracting new variant URLs for deduplication.`);
+            logger.debug(`Duplicate HLS master detected: ${normalizedUrl}. Extracting all media URLs for comprehensive deduplication.`);
             
-            // Extract variant URLs asynchronously without blocking the main flow
-            extractHlsVariantUrls(videoInfo.url, videoInfo.headers || {}, tabId)
-                .then(variantUrls => {
-                    if (variantUrls.length > 0) {
-                        // Update variant-master map with new URLs
+            // Extract all media URLs (variants, audio tracks, subtitles) asynchronously without blocking the main flow
+            extractHlsMediaUrls(videoInfo.url, videoInfo.headers || {}, tabId)
+                .then(mediaUrls => {
+                    const totalUrls = mediaUrls.variants.length + mediaUrls.audioTracks.length + mediaUrls.subtitles.length;
+                    if (totalUrls > 0) {
+                        // Update variant-master map with all media URLs
                         if (!variantMasterMap.has(tabId)) {
                             variantMasterMap.set(tabId, new Map());
                         }
                         const tabVariantMap = variantMasterMap.get(tabId);
                         
-                        for (const variantUrl of variantUrls) {
+                        // Add all variant URLs
+                        for (const variantUrl of mediaUrls.variants) {
                             tabVariantMap.set(variantUrl, normalizedUrl);
                             logger.debug(`Updated variant-master mapping: ${variantUrl} -> ${normalizedUrl}`);
                         }
                         
-                        logger.debug(`Updated ${variantUrls.length} variant URLs for duplicate master ${normalizedUrl}`);
+                        // Add all audio track URLs
+                        for (const audioUrl of mediaUrls.audioTracks) {
+                            tabVariantMap.set(audioUrl, normalizedUrl);
+                            logger.debug(`Updated audio-master mapping: ${audioUrl} -> ${normalizedUrl}`);
+                        }
+                        
+                        // Add all subtitle URLs
+                        for (const subtitleUrl of mediaUrls.subtitles) {
+                            tabVariantMap.set(subtitleUrl, normalizedUrl);
+                            logger.debug(`Updated subtitle-master mapping: ${subtitleUrl} -> ${normalizedUrl}`);
+                        }
+                        
+                        logger.debug(`Updated ${totalUrls} media URLs for duplicate master ${normalizedUrl} (${mediaUrls.variants.length} variants, ${mediaUrls.audioTracks.length} audio tracks, ${mediaUrls.subtitles.length} subtitles)`);
                     }
                 })
                 .catch(error => {
-                    logger.warn(`Failed to extract variant URLs for duplicate master ${normalizedUrl}:`, error.message);
+                    logger.warn(`Failed to extract media URLs for duplicate master ${normalizedUrl}:`, error.message);
                 });
         }
         

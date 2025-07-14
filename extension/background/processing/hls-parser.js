@@ -241,6 +241,7 @@ function parseHlsMaster(content, baseUrl, masterUrl) {
                     name: attrs['NAME'] || null,
                     language: attrs['LANGUAGE'] || null,
                     url: attrs['URI'] ? resolveUrl(baseUrl, attrs['URI']) : null,
+                    normalizedUrl: attrs['URI'] ? normalizeUrl(resolveUrl(baseUrl, attrs['URI'])) : null,
                     default: attrs['DEFAULT'] === 'YES',
                     autoselect: attrs['AUTOSELECT'] === 'YES',
                     characteristics: attrs['CHARACTERISTICS'] || null,
@@ -253,6 +254,7 @@ function parseHlsMaster(content, baseUrl, masterUrl) {
                     name: attrs['NAME'] || null,
                     language: attrs['LANGUAGE'] || null,
                     url: attrs['URI'] ? resolveUrl(baseUrl, attrs['URI']) : null,
+                    normalizedUrl: attrs['URI'] ? normalizeUrl(resolveUrl(baseUrl, attrs['URI'])) : null,
                     default: attrs['DEFAULT'] === 'YES',
                     autoselect: attrs['AUTOSELECT'] === 'YES',
                     forced: attrs['FORCED'] === 'YES',
@@ -784,4 +786,79 @@ function extractMasterVariantEntries(content, baseUrl, masterUrl) {
     }
     logger.debug(`Extracted ${entries.length} variant entries from master playlist`);
     return entries;
+}
+
+/**
+ * Extract all media URLs from HLS master playlist for comprehensive deduplication
+ * @param {string} url - URL of the HLS master playlist
+ * @param {Object} [headers] - Optional request headers
+ * @param {number} tabId - Tab ID
+ * @returns {Promise<Object>} Object containing arrays of normalized URLs for variants, audioTracks, and subtitles
+ */
+export async function extractHlsMediaUrls(url, headers = null, tabId) {
+    try {
+        logger.debug(`Extracting all media URLs from master: ${url}`);
+        // Fetch the master playlist content
+        const fetchResult = await fetchManifest(url, {
+            headers,
+            maxRetries: 2,
+            tabId: tabId
+        });
+        if (!fetchResult.ok) {
+            logger.warn(`Failed to fetch master playlist for media URL extraction: ${fetchResult.status}`);
+            return { variants: [], audioTracks: [], subtitles: [] };
+        }
+        // Quick validation that this is an HLS master playlist
+        const content = fetchResult.content;
+        if (!content.includes('#EXTM3U') || !content.includes('#EXT-X-STREAM-INF')) {
+            logger.warn(`Content is not an HLS master playlist`);
+            return { variants: [], audioTracks: [], subtitles: [] };
+        }
+        const baseUrl = getBaseDirectory(url);
+        const normalizedMasterUrl = normalizeUrl(url);
+        
+        // Extract variants
+        const variantEntries = extractMasterVariantEntries(content, baseUrl, normalizedMasterUrl);
+        const variantUrls = variantEntries.map(entry => entry.normalizedUrl);
+        
+        // Extract audio tracks and subtitles from #EXT-X-MEDIA lines
+        const audioUrls = [];
+        const subtitleUrls = [];
+        const lines = content.split(/\r?\n/);
+        
+        for (const line of lines) {
+            if (line.startsWith('#EXT-X-MEDIA:')) {
+                // Parse attributes
+                const attrPattern = /([A-Z0-9\-]+)=(("[^"]*")|([^,]*))/g;
+                let match;
+                const attrs = {};
+                while ((match = attrPattern.exec(line)) !== null) {
+                    const key = match[1];
+                    let value = match[3] || match[4] || '';
+                    if (value.startsWith('"') && value.endsWith('"')) {
+                        value = value.slice(1, -1);
+                    }
+                    attrs[key] = value;
+                }
+                
+                if (/TYPE=AUDIO/.test(line) && attrs['URI']) {
+                    const audioUrl = resolveUrl(baseUrl, attrs['URI']);
+                    audioUrls.push(normalizeUrl(audioUrl));
+                } else if (/TYPE=SUBTITLES/.test(line) && attrs['URI']) {
+                    const subtitleUrl = resolveUrl(baseUrl, attrs['URI']);
+                    subtitleUrls.push(normalizeUrl(subtitleUrl));
+                }
+            }
+        }
+        
+        logger.debug(`Extracted ${variantUrls.length} variant URLs, ${audioUrls.length} audio URLs, ${subtitleUrls.length} subtitle URLs`);
+        return { 
+            variants: variantUrls, 
+            audioTracks: audioUrls, 
+            subtitles: subtitleUrls 
+        };
+    } catch (error) {
+        logger.error(`Error extracting media URLs from ${url}: ${error.message}`);
+        return { variants: [], audioTracks: [], subtitles: [] };
+    }
 }

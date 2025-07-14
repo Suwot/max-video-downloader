@@ -131,13 +131,15 @@ function updateVideo(functionName, tabId, normalizedUrl, updates, replace = fals
 }
 
 /**
- * Track and update variant-master relationships
+ * Track and update variant-master relationships for variants, audio tracks, and subtitles
  * @param {number} tabId - Tab ID
  * @param {Array} variants - Array of variant objects
+ * @param {Array} audioTracks - Array of audio track objects
+ * @param {Array} subtitles - Array of subtitle track objects
  * @param {string} masterUrl - The normalized master URL
- * @returns {Array} Array of updated video objects for variants that were changed
+ * @returns {Array} Array of updated video objects for items that were changed
  */
-function handleVariantMasterRelationships(tabId, variants, masterUrl) {
+function handleVariantMasterRelationships(tabId, variants, audioTracks, subtitles, masterUrl) {
     if (!variantMasterMap.has(tabId)) {
         variantMasterMap.set(tabId, new Map());
     }
@@ -149,27 +151,40 @@ function handleVariantMasterRelationships(tabId, variants, masterUrl) {
     
     const updatedVideos = [];
     
-    // Process each variant
-    for (const variant of variants) {
-        const variantUrl = variant.normalizedUrl;
-        
-        // Update the variant-master relationship map
-        tabVariantMap.set(variantUrl, masterUrl);
-        logger.debug(`Tracked variant ${variantUrl} as belonging to master ${masterUrl}`);
-        
-        // If this variant exists as standalone, update it
-        if (tabVideos.has(variantUrl)) {
-            const updatedVideo = updateVideo('handleVariantMasterRelationships', tabId, variantUrl, {
-                hasKnownMaster: true,
-                masterUrl: masterUrl,
-                isVariant: true
-            });
-            if (updatedVideo) {
-                logger.debug(`Updated existing standalone variant ${variantUrl} with master info`);
-                updatedVideos.push({ variantUrl, updatedVideo });
+    // Helper function to process media items with URLs
+    const processMediaItems = (items, itemType) => {
+        for (const item of items) {
+            if (!item.normalizedUrl) continue; // Skip items without URLs
+            
+            // Update the variant-master relationship map
+            tabVariantMap.set(item.normalizedUrl, masterUrl);
+            logger.debug(`Tracked ${itemType} ${item.normalizedUrl} as belonging to master ${masterUrl}`);
+            
+            // If this item exists as standalone, update it
+            if (tabVideos.has(item.normalizedUrl)) {
+                const updatedVideo = updateVideo('handleVariantMasterRelationships', tabId, item.normalizedUrl, {
+                    hasKnownMaster: true,
+                    masterUrl: masterUrl,
+                    isVariant: itemType === 'variant', // Only variants are marked as isVariant
+                    isAudioTrack: itemType === 'audio',
+                    isSubtitleTrack: itemType === 'subtitle'
+                });
+                if (updatedVideo) {
+                    logger.debug(`Updated existing standalone ${itemType} ${item.normalizedUrl} with master info`);
+                    updatedVideos.push({ url: item.normalizedUrl, updatedVideo, type: itemType });
+                }
             }
         }
-    }
+    };
+    
+    // Process variants
+    processMediaItems(variants, 'variant');
+    
+    // Process audio tracks
+    processMediaItems(audioTracks, 'audio');
+    
+    // Process subtitles
+    processMediaItems(subtitles, 'subtitle');
     
     return updatedVideos;
 }
