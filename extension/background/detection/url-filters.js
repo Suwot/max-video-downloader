@@ -23,7 +23,7 @@ const IGNORE_EXTENSIONS = [
     '.map', '.html', '.htm', '.asp', '.aspx', '.jsp', '.vtt',
 
     // Media segments (not complete files)
-    '.ts', '.m4s', '.m4v', '.m4a',
+    '.ts', '.m4s', '.m4v', '.m4a', '.cmfa', '.cmfv',
 
     // audio formats
     '.mp3', '.aac', '.ogg', '.opus', '.flac', '.wav', '.m4b', '.m4p', '.wma', '.aiff',
