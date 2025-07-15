@@ -124,18 +124,28 @@ class FileSystemCommand extends BaseCommand {
      */
     async chooseSaveLocation(params) {
         const { defaultName = 'file', title = 'Save As' } = params;
-        
+
         const command = this.getChooseSaveLocationCommand(defaultName, title);
         const output = await this.executeCommand(command.cmd, command.args, true);
-        
+
         // Parse output to get selected path
         const selectedPath = this.parseDialogOutput(output, 'file');
-        
+
         if (!selectedPath) {
             throw new Error('No save location selected');
         }
 
-        const result = { success: true, operation: 'chooseSaveLocation', selectedPath, defaultName };
+        // Always return path, directory, and filename for clarity
+        const directory = path.dirname(selectedPath);
+        const filename = path.basename(selectedPath);
+        const result = {
+            success: true,
+            operation: 'chooseSaveLocation',
+            path: selectedPath,
+            directory,
+            filename,
+            defaultName
+        };
         this.sendMessage(result);
         return result;
     }
@@ -171,10 +181,8 @@ class FileSystemCommand extends BaseCommand {
      */
     getChooseDirectoryCommand(title) {
         if (process.platform === 'darwin') {
-            const script = `tell application "System Events"
-                set chosenFolder to choose folder with prompt "${title}"
-                return POSIX path of chosenFolder
-            end tell`;
+            const script = `set chosenFolder to choose folder with prompt "${title}"
+return POSIX path of chosenFolder`;
             return { cmd: 'osascript', args: ['-e', script] };
         } else if (process.platform === 'win32') {
             const script = `Add-Type -AssemblyName System.Windows.Forms; 
@@ -193,10 +201,8 @@ class FileSystemCommand extends BaseCommand {
      */
     getChooseSaveLocationCommand(defaultName, title) {
         if (process.platform === 'darwin') {
-            const script = `tell application "System Events"
-                set chosenFile to choose file name with prompt "${title}" default name "${defaultName}"
-                return POSIX path of chosenFile
-            end tell`;
+            const script = `set chosenFile to choose file name with prompt "${title}" default name "${defaultName}"
+return POSIX path of chosenFile`;
             return { cmd: 'osascript', args: ['-e', script] };
         } else if (process.platform === 'win32') {
             const script = `Add-Type -AssemblyName System.Windows.Forms; 

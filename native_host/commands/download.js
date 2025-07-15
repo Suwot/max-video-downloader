@@ -82,7 +82,8 @@ class DownloadCommand extends BaseCommand {
                 startTime: processInfo.startTime,
                 pid: processInfo.pid,
                 isRedownload: processInfo.isRedownload,
-                sessionId: processInfo.sessionId
+                sessionId: processInfo.sessionId,
+                headers: processInfo.headers || null
             });
             
             // IMMEDIATELY remove from activeProcesses to prevent repeated cancels
@@ -138,7 +139,8 @@ class DownloadCommand extends BaseCommand {
                 downloadStats: progressTracker.getDownloadStats() || null,
                 message: 'Download was canceled',
                 completedAt: Date.now(),
-                isRedownload: processInfo.isRedownload || false
+                isRedownload: processInfo.isRedownload || false,
+                headers: processInfo.headers || null
             }, { useMessageId: false }); // Event message, no response ID
             
         } catch (error) {
@@ -756,7 +758,8 @@ class DownloadCommand extends BaseCommand {
                 startTime: downloadStartTime,
                 pid: ffmpeg.pid,
                 isRedownload,
-                sessionId
+                sessionId,
+                headers: headers || null
             });
             
             logDebug('Added process to activeProcesses Map. Total processes:', DownloadCommand.activeProcesses.size);
@@ -831,7 +834,8 @@ class DownloadCommand extends BaseCommand {
                             pageFavicon,
                             originalCommand,
                             isRedownload: effectiveProcessInfo?.isRedownload || false,
-                            audioOnly
+                            audioOnly,
+                            headers: effectiveProcessInfo?.headers || null
                         }, { useMessageId: false }); // Event message, no response ID
                     }
                     
@@ -868,7 +872,8 @@ class DownloadCommand extends BaseCommand {
                         originalCommand,
                         isRedownload,
                         audioOnly,
-                        isPartial // Add partial flag for UI
+                        isPartial, // Add partial flag for UI
+                        headers: effectiveProcessInfo?.headers || null
                     }, { useMessageId: false }); // Event message, no response ID
                     resolve({ 
                         success: true, 
@@ -910,7 +915,8 @@ class DownloadCommand extends BaseCommand {
                         pageFavicon,
                         originalCommand,
                         isRedownload,
-                        audioOnly
+                        audioOnly,
+                        headers: effectiveProcessInfo?.headers || null
                     }, { useMessageId: false }); // Event message, no response ID
                     resolve({ 
                         success: false, 
@@ -974,7 +980,8 @@ class DownloadCommand extends BaseCommand {
                     pageFavicon,
                     originalCommand,
                     isRedownload,
-                    audioOnly
+                    audioOnly,
+                    headers: effectiveProcessInfo?.headers || null
                 }, { useMessageId: false }); // Event message, no response ID
 
                 resolve({ 

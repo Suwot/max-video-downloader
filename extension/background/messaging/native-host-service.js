@@ -172,8 +172,9 @@ export class NativeHostService {
             
             // Set timeout based on command type
             const isLongRunning = ['download'].includes(message.command);
-            const timeout = isLongRunning ? 3600000 : 30000; // 1 hour vs 30 seconds
-            
+            const isFileSystemCommand = message.command === 'fileSystem';
+            const timeout = isLongRunning ? 3600000 : (isFileSystemCommand ? 300000 : 30000); // 1 hour vs 5 minutes vs 30 seconds
+
             setTimeout(() => {
                 if (this.pendingMessages.has(id)) {
                     const { reject } = this.pendingMessages.get(id);

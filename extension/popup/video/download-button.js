@@ -5,6 +5,7 @@
 
 import { createLogger } from '../../shared/utils/logger.js';
 import { sendPortMessage } from '../communication.js';
+import { handleDownload } from './download-handler.js';
 
 const logger = createLogger('Download Button Component');
 
@@ -120,8 +121,6 @@ class DownloadButtonComponent {
                 handler: cancelHandler
             });
             
-            // Import and call download handler
-            const { handleDownload } = await import('./download-handler.js');
             handleDownload(this.elementsDiv, videoData);
         };
         
@@ -217,6 +216,7 @@ class DownloadButtonComponent {
         }
 
         return {
+            tabId: this.video.tabId,
             filename: this.video.title,
             type: this.video.type,
             defaultContainer: defaultContainer,
@@ -483,7 +483,7 @@ class DownloadButtonComponent {
                 // TODO: Implement subtitle extraction
                 break;
             case 'download-as':
-                // TODO: Implement format selection
+                await this.handleDownloadAs();
                 break;
             case 'copy-url':
                 await this.handleCopyUrl();
@@ -574,8 +574,6 @@ class DownloadButtonComponent {
             handler: cancelHandler
         });
         
-        // Import and call download handler with audio-only data
-        const { handleDownload } = await import('./download-handler.js');
         handleDownload(this.elementsDiv, videoData);
     }
 
@@ -604,6 +602,33 @@ class DownloadButtonComponent {
         }
     }
 
+    /**
+     * Handle Download As functionality
+     */
+    async handleDownloadAs() {
+        const videoData = this.createVideoMetadata();
+        this.extractDownloadData(videoData);
+        
+        // Show temporary feedback
+        this.setIntermediaryText('Choosing...');
+        
+        try {
+            // Create default filename based on video title and format
+            const defaultFilename = `${videoData.filename || 'video'}.${videoData.defaultContainer || 'mp4'}`;
+            
+            // Send regular download command with choosePath flag
+            await handleDownload(this.elementsDiv, {
+                ...videoData,
+                choosePath: true,
+                defaultFilename: defaultFilename
+            });
+            
+        } catch (error) {
+            logger.error('Failed to trigger Download As:', error);
+            this.updateState(BUTTON_STATES.DEFAULT);
+        }
+    }
+    
     /**
      * Cleanup component resources
      */

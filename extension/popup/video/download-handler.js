@@ -5,7 +5,6 @@
 
 import { createLogger } from '../../shared/utils/logger.js';
 import { sendPortMessage } from '../communication.js';
-import { getTabId } from '../state.js';
 import { showError } from '../ui.js';
 import { formatSize, formatTime } from '../../shared/utils/video-utils.js';
 import { renderHistoryItems } from './video-renderer.js';
@@ -25,10 +24,6 @@ export async function handleDownload(elementsDiv, videoData = {}) {
     logger.debug('Initiating download for:', videoData.downloadUrl);
     
     try {     
-        // Get current tab ID
-        const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-        const tabId = tabs[0]?.id || -1;
-
         // Store original text for restoration
         const isDash = elementsDiv.querySelector('[data-type="dash"]');
         const dropdownOption = isDash ?
@@ -36,10 +31,8 @@ export async function handleDownload(elementsDiv, videoData = {}) {
             elementsDiv.querySelector('.dropdown-option.selected .label');
         const selectedOptionOrigText = dropdownOption ? dropdownOption.textContent : '';
 
-        const currentTabId = getTabId();
         const downloadMessage = {
             command: 'download',
-            tabId: currentTabId,
             selectedOptionOrigText,
             ...videoData  // Spread all videoData properties instead of manual mapping
         };

@@ -61,6 +61,13 @@ export async function startDownload(downloadRequest) {
     
     logger.debug('Starting download:', downloadId);
     
+    // Check if this is a "download as" request that needs filesystem dialog
+    if (downloadRequest.choosePath) {
+        logger.debug('Download As request - handling filesystem dialog first');
+        await handleDownloadAsFlow(downloadRequest);
+        return;
+    }
+    
     // Simple deduplication check - active downloads or queued downloads
     if (activeDownloads.has(downloadId) || downloadQueue.find(req => req.downloadUrl === downloadId)) {
         logger.debug('Download already active or queued:', downloadId);
@@ -127,22 +134,13 @@ async function startDownloadImmediately(downloadRequest) {
     // Create Chrome notification
     createDownloadNotification(downloadRequest.filename);
     
-    // Prepare native host message using object spread for all fields,
-    // only overriding command and headers which need transformation
-    const nativeHostMessage = {
-        ...downloadRequest,
-        command: 'download',
-        // For re-downloads, use existing headers; for new downloads, get fresh headers
-        headers: downloadRequest.headers
-    };
-    
     if (downloadRequest.isRedownload) {
         logger.debug('🔄 Using preserved headers for re-download:', Object.keys(downloadRequest.headers || {}));
     }
     
     // Send download command (fire-and-forget)
     // All responses will come through event listeners
-    nativeHostService.sendMessage(nativeHostMessage, { expectResponse: false });
+    nativeHostService.sendMessage(downloadRequest, { expectResponse: false });
     
     logger.debug('Download command sent:', downloadId);
 }
@@ -553,5 +551,70 @@ async function addToHistoryStorage(progressData) {
         logger.debug('Added to history storage:', progressData.downloadUrl, progressData.command);
     } catch (error) {
         logger.error('Error adding to history storage:', error);
+    }
+}
+
+/**
+ * Handle download-as flow: filesystem dialog first, then download
+ * @param {Object} downloadRequest - Download request with choosePath flag
+ */
+async function handleDownloadAsFlow(downloadRequest) {
+    const downloadId = downloadRequest.downloadUrl;
+    
+    try {
+        logger.debug(`Handling 'Download As' flow for:`, downloadId);
+
+        // Send filesystem request to native host
+        const filesystemResponse = await nativeHostService.sendMessage({
+            command: 'fileSystem',
+            operation: 'chooseSaveLocation',
+            params: {
+                defaultName: downloadRequest.defaultFilename || `${downloadRequest.filename || 'video'}.${downloadRequest.defaultContainer || 'mp4'}`,
+                title: 'Save Video As'
+            }
+        });
+        
+        if (filesystemResponse.error) {
+            logger.debug('Filesystem dialog canceled or failed:', filesystemResponse.error);
+            // Broadcast error to UI
+            broadcastToPopups({
+                command: 'download-canceled',
+                downloadUrl: downloadRequest.downloadUrl,
+                masterUrl: downloadRequest.masterUrl || null,
+                filename: downloadRequest.filename,
+                selectedOptionOrigText: downloadRequest.selectedOptionOrigText || null,
+                error: 'File selection canceled'
+            });
+            return;
+        }
+
+        logger.debug('Filesystem dialog successful:', filesystemResponse);
+        
+        // Merge filesystem response with download request
+        const updatedRequest = {
+            ...downloadRequest,
+            savePath: filesystemResponse.directory,
+            filename: filesystemResponse.filename
+        };
+        
+        // Remove choosePath flag to prevent recursion
+        delete updatedRequest.choosePath;
+        delete updatedRequest.defaultFilename;
+        
+        // Continue with normal download flow
+        await startDownload(updatedRequest);
+        
+    } catch (error) {
+        logger.error('Download As flow failed:', error);
+        
+        // Broadcast error to UI
+        broadcastToPopups({
+            command: 'download-canceled',
+            downloadUrl: downloadRequest.downloadUrl,
+            masterUrl: downloadRequest.masterUrl || null,
+            filename: downloadRequest.filename,
+            selectedOptionOrigText: downloadRequest.selectedOptionOrigText || null,
+            error: `Download As failed: ${error.message}`
+        });
     }
 }

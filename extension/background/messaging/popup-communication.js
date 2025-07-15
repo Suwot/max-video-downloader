@@ -139,12 +139,12 @@ async function handlePortMessage(message, port, portId) {
         case 'fileSystem':
             // Handle file system operations through native host
             try {
-                await nativeHostService.sendMessage({
+                const result = await nativeHostService.sendMessage({
                     command: 'fileSystem',
                     operation: message.operation,
                     params: message.params
                 });
-                logger.debug(`File system operation completed: ${message.operation}`);
+                logger.debug(`File system operation completed: ${message.operation}`, result);
             } catch (error) {
                 logger.error(`File system operation failed: ${message.operation}`, error);
                 // For these operations, we don't need to send error back to popup

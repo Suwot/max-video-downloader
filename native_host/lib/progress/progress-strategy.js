@@ -759,16 +759,16 @@ class ProgressStrategy {
         const outTimeUs = output.match(/out_time_us=(\d+)/);
         const outTimeMs = output.match(/out_time_ms=(\d+)/);
         const outTimeMatch = output.match(/out_time=(\d+):(\d+):(\d+\.\d+)/);
-        
+
         if (outTimeUs) {
             const timeInMicroseconds = parseInt(outTimeUs[1], 10);
             if (!isNaN(timeInMicroseconds) && timeInMicroseconds > 0) {
-                this.finalProcessedTime = timeInMicroseconds / 1000000;
+                this.finalProcessedTime = Math.round(timeInMicroseconds / 1000000);
             }
         } else if (outTimeMs) {
             const timeInMilliseconds = parseInt(outTimeMs[1], 10);
             if (!isNaN(timeInMilliseconds) && timeInMilliseconds > 0) {
-                this.finalProcessedTime = timeInMilliseconds / 1000;
+                this.finalProcessedTime = Math.round(timeInMilliseconds / 1000);
             }
         } else if (outTimeMatch) {
             const hours = parseInt(outTimeMatch[1], 10);
@@ -776,7 +776,7 @@ class ProgressStrategy {
             const seconds = parseFloat(outTimeMatch[3]);
             const totalSeconds = hours * 3600 + minutes * 60 + seconds;
             if (totalSeconds > 0) {
-                this.finalProcessedTime = totalSeconds;
+                this.finalProcessedTime = Math.round(totalSeconds);
             }
         }
     }
