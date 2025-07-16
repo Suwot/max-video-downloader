@@ -217,7 +217,6 @@ function extractSegmentList(xmlContent) {
     
     return {
         duration: parseInt(extractAttribute(segmentListContent, 'duration') || '0', 10),
-        timescale: parseInt(extractAttribute(segmentListContent, 'timescale') || '1', 10),
         initialization: initialization,
         segments: segments
     };
@@ -306,7 +305,6 @@ export async function parseDashManifest(url, headers = null, tabId) {
             videoTracks: [],
             audioTracks: [],
             subtitleTracks: [],
-            variants: []
         };
     }
     
@@ -338,7 +336,6 @@ export async function parseDashManifest(url, headers = null, tabId) {
                 videoTracks: [],
                 audioTracks: [],
                 subtitleTracks: [],
-                variants: []
             };
         }
         
@@ -366,8 +363,7 @@ export async function parseDashManifest(url, headers = null, tabId) {
                     retryCount: fetchResult.retryCount || 0,
                     videoTracks: [],
                     audioTracks: [],
-                    subtitleTracks: [],
-                    variants: []
+                    subtitleTracks: []
                 };
             }
             
@@ -600,64 +596,7 @@ export async function parseDashManifest(url, headers = null, tabId) {
         // Sort track arrays by bandwidth (highest first)
         videoTracks.sort((a, b) => (b.bandwidth || 0) - (a.bandwidth || 0));
         audioTracks.sort((a, b) => (b.bandwidth || 0) - (a.bandwidth || 0));
-        
-        // For backward compatibility, also create a variants array from video tracks
-        const variants = [];
-        if (videoTracks.length > 0) {
-            // Find best audio track to pair with these videos (if available)
-            const bestAudioTrack = audioTracks.length > 0 ? audioTracks[0] : null;
-            const audioCodec = bestAudioTrack && bestAudioTrack.codecs ? bestAudioTrack.codecs : null;
-            
-            // Add each video track directly as a variant
-            for (const videoTrack of videoTracks) {
-                // Combine video and audio codecs (if available)
-                let combinedCodecs = null;
-                if (videoTrack.codecs && audioCodec) {
-                    combinedCodecs = `${videoTrack.codecs},${audioCodec}`;
-                } else if (videoTrack.codecs) {
-                    combinedCodecs = videoTrack.codecs;
-                } else if (audioCodec) {
-                    combinedCodecs = audioCodec;
-                }
                 
-                // Create backward-compatible variant structure
-                const variant = {
-                    url: videoTrack.trackUrl,
-                    normalizedUrl: videoTrack.normalizedTrackUrl,
-                    id: videoTrack.id,
-                    masterUrl: url,
-                    hasKnownMaster: true,
-                    type: 'dash',
-                    isVariant: true,
-                    isDASH: true,
-                    metaJS: {
-                        bandwidth: videoTrack.bandwidth,
-                        codecs: combinedCodecs,
-                        videoCodec: videoTrack.codecs,
-                        audioCodec: audioCodec,
-                        width: videoTrack.width,
-                        height: videoTrack.height,
-                        standardizedResolution: videoTrack.standardizedResolution,
-                        fps: videoTrack.frameRate,
-                        resolution: videoTrack.resolution,
-                        estimatedFileSizeBytes: videoTrack.estimatedFileSizeBytes,
-                        ffmpegStreamIndex: videoTrack.ffmpegStreamIndex, // Add FFmpeg stream index to variants
-                        isEncrypted: isEncrypted,
-                        encryptionType: encryptionType,
-                        isLive: isLive,
-                        duration: duration
-                    },
-                    source: 'parseDashManifest()',
-                    timestampDetected: Date.now()
-                };
-                
-                variants.push(variant);
-            }
-            
-            // Sort variants by bandwidth (highest first) - should already be sorted but ensuring it here
-            variants.sort((a, b) => (b.metaJS.bandwidth || 0) - (a.metaJS.bandwidth || 0));
-        }
-        
         // Set the full parse timestamp only at the end of successful parsing
         const timestampFP = Date.now();
         
@@ -676,7 +615,6 @@ export async function parseDashManifest(url, headers = null, tabId) {
             videoTracks: videoTracks,
             audioTracks: audioTracks,
             subtitleTracks: subtitleTracks,
-            variants: variants, // For backward compatibility
             segmentPaths: segmentPaths, // Add segment paths for filtering in background script
             status: 'success'
         };
@@ -693,7 +631,6 @@ export async function parseDashManifest(url, headers = null, tabId) {
             videoTracks: [],
             audioTracks: [],
             subtitleTracks: [],
-            variants: []
         };
     } finally {
         // Clean up
