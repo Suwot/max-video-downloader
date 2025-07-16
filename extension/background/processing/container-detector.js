@@ -5,58 +5,125 @@
  */
 
 /**
- * Codec to container mapping - optimized for best fit per media type
- * Based on industry standards and optimal container formats for each codec
+ * Minimal codec to container mapping - only special cases that need specific handling
+ * Everything else falls back to universal containers (MP4 for video, MP3 for audio)
  */
 const CODEC_TO_CONTAINER = {
-    // Video codecs - only mp4/webm/mkv (covers 100% of cases)
-    'avc1': 'mp4',      // H.264
-    'avc3': 'mp4',      // H.264
-    'hvc1': 'mp4',      // H.265/HEVC
-    'hev1': 'mp4',      // H.265/HEVC
-    'vp8': 'webm',      // VP8
-    'vp9': 'webm',      // VP9
-    'vp09': 'webm',     // VP9
-    'av01': 'mp4',      // AV1 (MP4 more widely supported)
-    'av1': 'mp4',       // AV1
+    // === VIDEO CODECS - Only specify non-MP4 cases ===
+    // VP8/VP9 → WebM (native container)
+    'vp8': 'webm',
+    'vp9': 'webm', 
+    'vp09': 'webm',
+    'vp80': 'webm',
     
-    // Audio codecs - best fit for each codec type
-    'mp4a': 'm4a',      // AAC → M4A (best fit, no transcoding needed)
-    'aac': 'm4a',       // AAC → M4A (best fit, no transcoding needed)
-    'opus': 'webm',     // Opus → WebM (native container)
-    'vorbis': 'ogg',    // Vorbis → OGG (native container)
-    'mp3': 'mp3',       // MP3 → MP3 (native container)
-    'ac-3': 'mp4',      // AC-3 → MP4 (common container)
-    'ec-3': 'mp4',      // Enhanced AC-3 → MP4 (common container)
-    'flac': 'flac',     // FLAC → FLAC (native container)
-    'dts': 'mkv'        // DTS → MKV (common container)
+    // Lossless video → MKV (best support)
+    'ffv1': 'mkv',
+    'huffyuv': 'mkv',
+    'utvideo': 'mkv',
+    
+    // Theora → OGG (native container)
+    'theo': 'ogg',
+    'thra': 'ogg',
+    
+    // === AUDIO CODECS - Only specify non-MP3 cases ===
+    // AAC family → M4A (native container, no transcoding needed)
+    'mp4a': 'm4a',
+    'aac': 'm4a',
+    'aacp': 'm4a',
+    'he-aac': 'm4a',
+    'he-aacv2': 'm4a',
+    'alac': 'm4a',     // Apple Lossless
+    'als': 'm4a',      // MPEG-4 ALS
+    
+    // Opus → WebM (native container)
+    'opus': 'webm',
+    
+    // Vorbis → OGG (native container)
+    'vorbis': 'ogg',
+    
+    // FLAC → FLAC (native container)
+    'flac': 'flac',
+    
+    // High-end audio → MKV (best support)
+    'dts': 'mkv',
+    'dtshd': 'mkv',
+    'dtse': 'mkv',
+    'truehd': 'mkv',
+    'mlp': 'mkv',
+    'tta': 'mkv',
+    'wavpack': 'mkv',
+    'wv': 'mkv',
+    'ape': 'mkv'
+    
+    // Everything else falls back to MP4 (video) or MP3 (audio) in the detection logic
 };
 
 /**
- * MimeType to container mapping - optimized for best fit per media type
+ * Minimal MIME type to container mapping - only special cases that need specific handling
+ * Everything else falls back to universal containers (MP4 for video, MP3 for audio)
  */
 const MIMETYPE_TO_CONTAINER = {
-    // Video mime types - only mp4/webm/mkv
-    'video/mp4': 'mp4',
+    // === VIDEO MIME TYPES - Only specify non-MP4 cases ===
     'video/webm': 'webm',
     'video/x-matroska': 'mkv',
-    'video/quicktime': 'mp4',  // MOV → MP4 (more compatible)
-    'video/x-msvideo': 'mp4',  // AVI → MP4 (more compatible)
-    'video/x-flv': 'mp4',      // FLV → MP4 (more compatible)
-    'video/mp2t': 'mp4',       // TS → MP4 (more compatible)
+    'video/mkv': 'mkv',
+    'video/ogg': 'ogg',
+    'video/x-theora': 'ogg',
     
-    // Audio mime types - best fit for each type
-    'audio/mp4': 'm4a',        // MP4 audio → M4A (best fit)
-    'audio/webm': 'webm',      // WebM audio → WebM
-    'audio/mpeg': 'mp3',       // MPEG audio → MP3 
-    'audio/aac': 'm4a',        // AAC → M4A (best fit)
-    'audio/ogg': 'ogg',        // OGG → OGG
-    'audio/flac': 'flac',      // FLAC → FLAC
+    // === AUDIO MIME TYPES - Only specify non-MP3 cases ===
+    'audio/mp4': 'm4a',
+    'audio/aac': 'm4a',
+    'audio/aacp': 'm4a',
+    'audio/x-aac': 'm4a',
+    'audio/x-m4a': 'm4a',
+    'audio/x-m4b': 'm4a',
+    'audio/x-m4p': 'm4a',
+    'audio/x-m4r': 'm4a',
+    'audio/x-alac': 'm4a',
+    'audio/x-caf': 'm4a',
+    'audio/3gpp': 'm4a',
+    'audio/3gpp2': 'm4a',
+    'audio/x-hx-aac-adts': 'm4a',
+    'audio/aac-adts': 'm4a',
+    'audio/aacp-adts': 'm4a',
+    'audio/x-ac3': 'm4a',
+    'audio/ac3': 'm4a',
     
-    // Subtitle mime types
-    'text/vtt': 'vtt',         // WebVTT → VTT
-    'application/ttml+xml': 'ttml', // TTML → TTML
-    'text/plain': 'srt'        // Plain text → SRT (common format)
+    'audio/webm': 'webm',
+    'audio/opus': 'webm',
+    
+    'audio/ogg': 'ogg',
+    'audio/vorbis': 'ogg',
+    'audio/x-vorbis': 'ogg',
+    'audio/x-vorbis+ogg': 'ogg',
+    'audio/x-speex': 'ogg',
+    'audio/speex': 'ogg',
+    
+    'audio/flac': 'flac',
+    'audio/x-flac': 'flac',
+    
+    'audio/x-matroska': 'mkv',
+    'audio/x-dts': 'mkv',
+    'audio/vnd.dts': 'mkv',
+    'audio/vnd.dts.hd': 'mkv',
+    'audio/x-tta': 'mkv',
+    'audio/x-wavpack': 'mkv',
+    'audio/x-ape': 'mkv',
+    
+    // === SUBTITLE MIME TYPES ===
+    'text/vtt': 'vtt',
+    'text/webvtt': 'vtt',
+    'application/x-subrip': 'srt',
+    'text/srt': 'srt',
+    'application/ttml+xml': 'ttml',
+    'application/ttaf+xml': 'ttml',
+    'text/x-ass': 'ass',
+    'text/x-ssa': 'ass',
+    'text/plain': 'srt',
+    'application/x-subtitle': 'srt',
+    'application/subtitle': 'srt'
+    
+    // Everything else falls back to MP4 (video) or MP3 (audio) in the detection logic
 };
 
 /**
@@ -79,7 +146,7 @@ function parseCodecString(codecString) {
 }
 
 /**
- * Determine container from codec analysis
+ * Determine container from codec analysis with smart fallbacks
  * @param {string} codecString - Codec string to analyze
  * @returns {Object} Container analysis result
  */
@@ -97,18 +164,33 @@ function determineContainerFromCodecs(codecString) {
     };
     
     for (const codec of codecs) {
-        if (CODEC_TO_CONTAINER[codec]) {
-            const suggestedContainer = CODEC_TO_CONTAINER[codec];
-            containerVotes[suggestedContainer] = (containerVotes[suggestedContainer] || 0) + 1;
-            
-            // Categorize codec type
-            if (['avc1', 'avc3', 'hvc1', 'hev1', 'vp8', 'vp9', 'vp09', 'av01', 'av1'].includes(codec)) {
+        let suggestedContainer = CODEC_TO_CONTAINER[codec];
+        
+        // Apply fallbacks if not in mapping
+        if (!suggestedContainer) {
+            // Determine if it's video or audio codec and apply fallback
+            if (isVideoCodec(codec)) {
+                suggestedContainer = 'mp4'; // Video fallback
+                codecAnalysis.hasVideo = true;
+                codecAnalysis.videoCodecs.push(codec);
+            } else if (isAudioCodec(codec)) {
+                suggestedContainer = 'mp3'; // Audio fallback
+                codecAnalysis.hasAudio = true;
+                codecAnalysis.audioCodecs.push(codec);
+            }
+        } else {
+            // Categorize known codecs
+            if (isVideoCodec(codec)) {
                 codecAnalysis.hasVideo = true;
                 codecAnalysis.videoCodecs.push(codec);
             } else {
                 codecAnalysis.hasAudio = true;
                 codecAnalysis.audioCodecs.push(codec);
             }
+        }
+        
+        if (suggestedContainer) {
+            containerVotes[suggestedContainer] = (containerVotes[suggestedContainer] || 0) + 1;
         }
     }
     
@@ -132,7 +214,38 @@ function determineContainerFromCodecs(codecString) {
 }
 
 /**
- * Determine container from mimeType
+ * Check if a codec is a video codec
+ * @param {string} codec - Codec identifier
+ * @returns {boolean} True if video codec
+ */
+function isVideoCodec(codec) {
+    const videoCodecPatterns = [
+        /^(avc|hvc|hev|h26[45]|x264|vp[089]|av0?1)/, // Modern video codecs
+        /^(mp4v|divx|div[345]|xvid|3iv)/, // MPEG-4 Visual/DivX/XviD
+        /^(wmv|rv[1-4]0|mjp|svq|cvid|iv[345])/, // Legacy video codecs
+        /^(theo|ffv1|huffyuv|utvideo)/ // Other video codecs
+    ];
+    
+    return videoCodecPatterns.some(pattern => pattern.test(codec));
+}
+
+/**
+ * Check if a codec is an audio codec
+ * @param {string} codec - Codec identifier
+ * @returns {boolean} True if audio codec
+ */
+function isAudioCodec(codec) {
+    const audioCodecPatterns = [
+        /^(mp4a|aac|opus|vorbis|mp[123]|flac)/, // Modern audio codecs
+        /^(alac|als|ac-?3|dts|truehd|mlp)/, // High-quality audio codecs
+        /^(wma|ra|amr|qcelp|gsm|pcm|wav)/ // Legacy audio codecs
+    ];
+    
+    return audioCodecPatterns.some(pattern => pattern.test(codec));
+}
+
+/**
+ * Determine container from mimeType with smart fallbacks
  * @param {string} mimeType - MIME type to analyze
  * @returns {Object} Container analysis result
  */
@@ -141,11 +254,27 @@ function determineContainerFromMimeType(mimeType) {
     
     const normalizedMime = mimeType.toLowerCase().split(';')[0]; // Remove parameters
     
+    // Check specific mapping first
     if (MIMETYPE_TO_CONTAINER[normalizedMime]) {
         return {
             container: MIMETYPE_TO_CONTAINER[normalizedMime],
             confidence: 'high',
             reason: `mime type: ${normalizedMime}`
+        };
+    }
+    
+    // Apply fallbacks based on MIME type category
+    if (normalizedMime.startsWith('video/')) {
+        return {
+            container: 'mp4',
+            confidence: 'medium',
+            reason: `video mime fallback: ${normalizedMime} → mp4`
+        };
+    } else if (normalizedMime.startsWith('audio/')) {
+        return {
+            container: 'mp3',
+            confidence: 'medium',
+            reason: `audio mime fallback: ${normalizedMime} → mp3`
         };
     }
     
