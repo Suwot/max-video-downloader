@@ -21,7 +21,7 @@ const LOG_LEVELS = {
 // Default runtime configuration
 const config = {
   currentLevel: LOG_LEVELS.DEBUG, // Can be changed at runtime
-  showTimestamp: true,
+  showTimestamp: false,
   showCaller: true
 };
 
