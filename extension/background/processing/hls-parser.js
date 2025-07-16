@@ -5,17 +5,15 @@
  */
 
 import { 
-    normalizeUrl,
     processingRequests,
     calculateEstimatedFileSizeBytes,
     resolveUrl,
-    getBaseDirectory,
     fetchManifest,
     validateManifestType
 } from './parser-utils.js';
 import { createLogger } from '../../shared/utils/logger.js';
 import { getVideoByUrl } from './video-store.js';
-import { standardizeResolution } from '../../shared/utils/processing-utils.js';
+import { standardizeResolution, normalizeUrl, getBaseDirectory } from '../../shared/utils/processing-utils.js';
 
 // Create a logger for the HLS parser
 const logger = createLogger('HLS Parser');

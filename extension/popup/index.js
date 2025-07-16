@@ -4,7 +4,7 @@
 
 import { initializeUI } from './ui.js';
 import { createLogger } from '../shared/utils/logger.js';
-import { normalizeUrl } from '../shared/utils/normalize-url.js';
+import { normalizeUrl } from '../shared/utils/processing-utils.js';
 import { setTabId, getGroupState, setGroupState } from './state.js';
 import { connect, disconnect, sendPortMessage } from './communication.js';
 import { restoreActiveDownloads } from './video/download-handler.js';

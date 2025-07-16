@@ -3,7 +3,7 @@
  * Manages video data storage, retrieval, and state management
  */
 
-import { normalizeUrl } from '../../shared/utils/normalize-url.js';
+import { normalizeUrl } from '../../shared/utils/processing-utils.js';
 import { createLogger } from '../../shared/utils/logger.js';
 import { calculateValidForDisplay } from '../../shared/utils/processing-utils.js';
 import { sendVideoStateChange } from '../messaging/popup-communication.js';

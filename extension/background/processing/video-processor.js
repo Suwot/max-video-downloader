@@ -3,7 +3,7 @@
  * Manages the flow of videos from detection through processing to UI display
  */
 
-import { normalizeUrl } from '../../shared/utils/normalize-url.js';
+import { normalizeUrl } from '../../shared/utils/processing-utils.js';
 import { createLogger } from '../../shared/utils/logger.js';
 import { standardizeResolution, getFilenameFromUrl, determineDirectDefaultContainer } from '../../shared/utils/processing-utils.js';
 import { applyDNRRule } from '../../shared/utils/headers-utils.js';

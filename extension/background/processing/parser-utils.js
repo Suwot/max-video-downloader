@@ -3,7 +3,6 @@
  * Common utilities for HLS and DASH parsing operations
  */
 
-import { normalizeUrl, getBaseDirectory } from '../../shared/utils/normalize-url.js';
 import { applyDNRRule } from '../../shared/utils/headers-utils.js';
 import { createLogger } from '../../shared/utils/logger.js';
 
@@ -473,6 +472,3 @@ export async function validateManifestType(url, headers = null, existingMetadata
         };
     }
 }
-
-// Re-export utilities that we're using directly from other modules
-export { normalizeUrl, getBaseDirectory };
