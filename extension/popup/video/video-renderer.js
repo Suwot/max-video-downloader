@@ -1,7 +1,7 @@
 import { getVideos, getTabId } from '../state.js';
 import { sendPortMessage } from '../communication.js';
 import { createLogger } from '../../shared/utils/logger.js';
-import { formatSize, formatDuration, formatBitrate } from '../../shared/utils/video-utils.js';
+import { formatSize, formatDuration, formatBitrate } from '../../shared/utils/processing-utils.js';
 import { createVideoElement } from './video-item.js';
 
 const logger = createLogger('Video Renderer');

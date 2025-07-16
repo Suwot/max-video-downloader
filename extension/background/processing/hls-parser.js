@@ -15,7 +15,7 @@ import {
 } from './parser-utils.js';
 import { createLogger } from '../../shared/utils/logger.js';
 import { getVideoByUrl } from './video-store.js';
-import { standardizeResolution } from '../../shared/utils/video-utils.js';
+import { standardizeResolution } from '../../shared/utils/processing-utils.js';
 
 // Create a logger for the HLS parser
 const logger = createLogger('HLS Parser');

@@ -1,4 +1,4 @@
-import { formatDuration } from '../../shared/utils/video-utils.js';
+import { formatDuration } from '../../shared/utils/processing-utils.js';
 import { showHoverPreview, hideHoverPreview } from './preview-hover.js';
 import { createCustomDropdown } from './dropdown.js';
 import { createDownloadButton } from './download-button.js';

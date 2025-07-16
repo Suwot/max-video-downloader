@@ -5,70 +5,13 @@
 
 import { normalizeUrl } from '../../shared/utils/normalize-url.js';
 import { createLogger } from '../../shared/utils/logger.js';
-import { getFilenameFromUrl, standardizeResolution } from '../../shared/utils/video-utils.js';
+import { standardizeResolution, getFilenameFromUrl, determineDirectDefaultContainer } from '../../shared/utils/processing-utils.js';
 import { applyDNRRule } from '../../shared/utils/headers-utils.js';
 import { getPreview, storePreview } from '../../shared/utils/preview-cache.js';
 import { parseHlsManifest, extractHlsMediaUrls } from './hls-parser.js';
 import { parseDashManifest } from './dash-parser.js';
 import nativeHostService from '../messaging/native-host-service.js';
 import { getVideo, updateVideo } from './video-store.js';
-
-/**
- * Track and update variant-master relationships for variants, audio tracks, and subtitles
- * @param {number} tabId - Tab ID
- * @param {Array} variants - Array of variant objects
- * @param {Array} audioTracks - Array of audio track objects
- * @param {Array} subtitles - Array of subtitle track objects
- * @param {string} masterUrl - The normalized master URL
- * @returns {Array} Array of updated video objects for items that were changed
- */
-function handleVariantMasterRelationships(tabId, variants, audioTracks, subtitles, masterUrl) {
-    // Use global maps for pipeline access
-    const variantMasterMap = globalThis.variantMasterMapInternal;
-    const allDetectedVideos = globalThis.allDetectedVideosInternal;
-
-    if (!variantMasterMap.has(tabId)) {
-        variantMasterMap.set(tabId, new Map());
-    }
-    const tabVariantMap = variantMasterMap.get(tabId);
-    const tabVideos = allDetectedVideos.get(tabId);
-    if (!tabVideos) return [];
-
-    const updatedVideos = [];
-
-    // Helper function to process media items with URLs
-    const processMediaItems = (items, itemType) => {
-        for (const item of items) {
-            if (!item.normalizedUrl) continue; // Skip items without URLs
-            // Update the variant-master relationship map
-            tabVariantMap.set(item.normalizedUrl, masterUrl);
-            logger.debug(`Tracked ${itemType} ${item.normalizedUrl} as belonging to master ${masterUrl}`);
-            // If this item exists as standalone, update it
-            if (tabVideos.has(item.normalizedUrl)) {
-                const updatedVideo = updateVideo('handleVariantMasterRelationships', tabId, item.normalizedUrl, {
-                    hasKnownMaster: true,
-                    masterUrl: masterUrl,
-                    isVariant: itemType === 'variant', // Only variants are marked as isVariant
-                    isAudioTrack: itemType === 'audio',
-                    isSubtitleTrack: itemType === 'subtitle'
-                });
-                if (updatedVideo) {
-                    logger.debug(`Updated existing standalone ${itemType} ${item.normalizedUrl} with master info`);
-                    updatedVideos.push({ url: item.normalizedUrl, updatedVideo, type: itemType });
-                }
-            }
-        }
-    };
-
-    // Process variants
-    processMediaItems(variants, 'variant');
-    // Process audio tracks
-    processMediaItems(audioTracks, 'audio');
-    // Process subtitles
-    processMediaItems(subtitles, 'subtitle');
-
-    return updatedVideos;
-}
 
 // Create a logger instance for the Video Processing Pipeline module
 const logger = createLogger('Video Processor');
@@ -432,6 +375,63 @@ async function processDirectVideo(tabId, normalizedUrl) {
 }
 
 /**
+ * Track and update variant-master relationships for variants, audio tracks, and subtitles
+ * @param {number} tabId - Tab ID
+ * @param {Array} variants - Array of variant objects
+ * @param {Array} audioTracks - Array of audio track objects
+ * @param {Array} subtitles - Array of subtitle track objects
+ * @param {string} masterUrl - The normalized master URL
+ * @returns {Array} Array of updated video objects for items that were changed
+ */
+function handleVariantMasterRelationships(tabId, variants, audioTracks, subtitles, masterUrl) {
+    // Use global maps for pipeline access
+    const variantMasterMap = globalThis.variantMasterMapInternal;
+    const allDetectedVideos = globalThis.allDetectedVideosInternal;
+
+    if (!variantMasterMap.has(tabId)) {
+        variantMasterMap.set(tabId, new Map());
+    }
+    const tabVariantMap = variantMasterMap.get(tabId);
+    const tabVideos = allDetectedVideos.get(tabId);
+    if (!tabVideos) return [];
+
+    const updatedVideos = [];
+
+    // Helper function to process media items with URLs
+    const processMediaItems = (items, itemType) => {
+        for (const item of items) {
+            if (!item.normalizedUrl) continue; // Skip items without URLs
+            // Update the variant-master relationship map
+            tabVariantMap.set(item.normalizedUrl, masterUrl);
+            logger.debug(`Tracked ${itemType} ${item.normalizedUrl} as belonging to master ${masterUrl}`);
+            // If this item exists as standalone, update it
+            if (tabVideos.has(item.normalizedUrl)) {
+                const updatedVideo = updateVideo('handleVariantMasterRelationships', tabId, item.normalizedUrl, {
+                    hasKnownMaster: true,
+                    masterUrl: masterUrl,
+                    isVariant: itemType === 'variant', // Only variants are marked as isVariant
+                    isAudioTrack: itemType === 'audio',
+                    isSubtitleTrack: itemType === 'subtitle'
+                });
+                if (updatedVideo) {
+                    logger.debug(`Updated existing standalone ${itemType} ${item.normalizedUrl} with master info`);
+                    updatedVideos.push({ url: item.normalizedUrl, updatedVideo, type: itemType });
+                }
+            }
+        }
+    };
+
+    // Process variants
+    processMediaItems(variants, 'variant');
+    // Process audio tracks
+    processMediaItems(audioTracks, 'audio');
+    // Process subtitles
+    processMediaItems(subtitles, 'subtitle');
+
+    return updatedVideos;
+}
+
+/**
  * Unified preview generation for all video types
  * @param {number} tabId - Tab ID
  * @param {string} normalizedUrl - URL to store the preview against
@@ -491,44 +491,6 @@ async function generateVideoPreview(tabId, normalizedUrl, headers, sourceUrl = n
     } catch (error) {
         logger.error(`Error generating preview for ${normalizedUrl}: ${error.message}`);
     }
-}
-    
-/**
- * Determine default container for direct videos based on FFprobe data
- * @param {Object} video - Video object
- * @param {Object} streamInfo - FFprobe stream info
- * @returns {string} Default container format
- * @private
- */
-function determineDirectDefaultContainer(video, streamInfo) {
-    // 1. Use FFprobe container info (most reliable)
-    if (streamInfo?.container) {
-        const container = streamInfo.container.toLowerCase();
-        if (container.includes('mp4') || container.includes('quicktime')) return 'mp4';
-        if (container.includes('webm') || container.includes('matroska')) return 'webm';
-        if (container.includes('mkv')) return 'mkv';
-        if (container.includes('mov')) return 'mp4'; // MOV -> MP4 for compatibility
-        logger.warn('Unrecognized FFprobe container:', { container, video, streamInfo });
-    }
-    
-    // 2. Use headers content-type
-    if (video.metadata?.contentType) {
-        if (video.metadata.contentType.includes('mp4')) return 'mp4';
-        if (video.metadata.contentType.includes('webm')) return 'webm';
-        logger.warn('Unrecognized contentType for container:', { contentType: video.metadata.contentType, video });
-    }
-    
-    // 3. URL detection fallback
-    if (video.originalContainer) {
-        const container = video.originalContainer.toLowerCase();
-        if (['mp4', 'webm', 'mkv'].includes(container)) return container;
-        if (['mov', 'm4v'].includes(container)) return 'mp4';
-        logger.warn('Unrecognized originalContainer:', { originalContainer: video.originalContainer, video });
-    }
-    
-    // 4. Final fallback
-    logger.warn('Falling back to default container "mp4":', { video, streamInfo });
-    return 'mp4';
 }
 
 /**
@@ -620,11 +582,10 @@ function clearAll() {
     processingMap.clear();
 }
 
-    
 export {
     enqueue,
-    cleanupProcessingQueueForTab,
-    clearAll,
     addDetectedVideo,
-    handleVariantMasterRelationships
+    handleVariantMasterRelationships,
+    cleanupProcessingQueueForTab,
+    clearAll
 };

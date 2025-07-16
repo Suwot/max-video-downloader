@@ -5,7 +5,7 @@
 
 import { normalizeUrl } from '../../shared/utils/normalize-url.js';
 import { createLogger } from '../../shared/utils/logger.js';
-import { calculateValidForDisplay } from '../../shared/utils/video-utils.js';
+import { calculateValidForDisplay } from '../../shared/utils/processing-utils.js';
 import { sendVideoStateChange } from '../messaging/popup-communication.js';
 import { updateTabIcon } from '../state/tab-manager.js';
 

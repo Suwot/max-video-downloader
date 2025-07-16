@@ -75,6 +75,30 @@ export function formatTime(seconds) {
     }
 }
 
+// formats bitrate in kbps or Mbps
+export function formatBitrate(kbps) {
+    if (typeof kbps !== 'number' || isNaN(kbps)) return 'Unknown';
+    if (kbps < 0) return 'Invalid';
+
+    return kbps >= 1000 ? `${(kbps / 1000).toFixed(2)} Mbps` : `${kbps} kbps`;
+}
+
+/**
+ * Calculate if a video is valid for display in the UI
+ * @param {Object} video - Video object
+ * @returns {boolean}
+ */
+export function calculateValidForDisplay(video) {
+    if (!video || !video.isValid) return false;
+    if (video.type === 'hls') {
+        // Only standalone variants without known masters, or master playlists
+        if ((video.isVariant || video.isAudioTrack || video.isSubtitleTrack) && video.hasKnownMaster) return false;
+        return true;
+    }
+    // For dash and direct, only if isValid
+    return true;
+}
+
 /**
  * Extract filename (without extension) from URL
  * @param {string} url - URL to extract filename from
@@ -112,26 +136,40 @@ export function getFilenameFromUrl(url) {
     }
 }
 
-// formats bitrate in kbps or Mbps
-export function formatBitrate(kbps) {
-    if (typeof kbps !== 'number' || isNaN(kbps)) return 'Unknown';
-    if (kbps < 0) return 'Invalid';
-
-    return kbps >= 1000 ? `${(kbps / 1000).toFixed(2)} Mbps` : `${kbps} kbps`;
-}
-
 /**
- * Calculate if a video is valid for display in the UI
+ * Determine default container for direct videos based on FFprobe data
  * @param {Object} video - Video object
- * @returns {boolean}
+ * @param {Object} streamInfo - FFprobe stream info
+ * @returns {string} Default container format
+ * @private
  */
-export function calculateValidForDisplay(video) {
-    if (!video || !video.isValid) return false;
-    if (video.type === 'hls') {
-        // Only standalone variants without known masters, or master playlists
-        if ((video.isVariant || video.isAudioTrack || video.isSubtitleTrack) && video.hasKnownMaster) return false;
-        return true;
+export function determineDirectDefaultContainer(video, streamInfo) {
+    // 1. Use FFprobe container info (most reliable)
+    if (streamInfo?.container) {
+        const container = streamInfo.container.toLowerCase();
+        if (container.includes('mp4') || container.includes('quicktime')) return 'mp4';
+        if (container.includes('webm') || container.includes('matroska')) return 'webm';
+        if (container.includes('mkv')) return 'mkv';
+        if (container.includes('mov')) return 'mp4'; // MOV -> MP4 for compatibility
+        logger.warn('Unrecognized FFprobe container:', { container, video, streamInfo });
     }
-    // For dash and direct, only if isValid
-    return true;
+    
+    // 2. Use headers content-type
+    if (video.metadata?.contentType) {
+        if (video.metadata.contentType.includes('mp4')) return 'mp4';
+        if (video.metadata.contentType.includes('webm')) return 'webm';
+        logger.warn('Unrecognized contentType for container:', { contentType: video.metadata.contentType, video });
+    }
+    
+    // 3. URL detection fallback
+    if (video.originalContainer) {
+        const container = video.originalContainer.toLowerCase();
+        if (['mp4', 'webm', 'mkv'].includes(container)) return container;
+        if (['mov', 'm4v'].includes(container)) return 'mp4';
+        logger.warn('Unrecognized originalContainer:', { originalContainer: video.originalContainer, video });
+    }
+    
+    // 4. Final fallback
+    logger.warn('Falling back to default container "mp4":', { video, streamInfo });
+    return 'mp4';
 }
