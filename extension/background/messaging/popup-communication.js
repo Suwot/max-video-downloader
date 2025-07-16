@@ -239,9 +239,6 @@ function sendVideoUpdateToUI(tabId, action = 'full-refresh', videoUrl = null, vi
     // Get the port first to see if popup is open
     const port = getActivePopupPortForTab(tabId);
 
-    // Update tab icon when videos change - delegate to tab tracker
-    updateTabIcon(tabId);
-
     // If no popup is open, skip sending updates
     if (!port) {
         logger.debug(`No active popup for tab ${tabId}, skipping update`);

@@ -7,6 +7,7 @@ import { normalizeUrl } from '../../shared/utils/normalize-url.js';
 import { createLogger } from '../../shared/utils/logger.js';
 import { calculateValidForDisplay } from '../../shared/utils/video-utils.js';
 import { sendVideoStateChange } from '../messaging/popup-communication.js';
+import { updateTabIcon } from '../state/tab-tracker.js';
 
 // Create a logger instance for the Video Store module
 const logger = createLogger('Video Store');
@@ -21,9 +22,6 @@ const variantMasterMap = new Map();
 
 
 
-// Track tabs that have valid, displayable videos for icon management
-// Set<tabId> - if tab is in set, it has videos (colored icon)
-const tabsWithVideos = new Set();
 
 // Expose internal maps for debugging and pipeline access
 globalThis.allDetectedVideosInternal = allDetectedVideos;
@@ -122,9 +120,11 @@ function updateVideo(functionName, tabId, normalizedUrl, updates, replace = fals
 
     logger.debug(`Updated video with action: '${action}' by ${functionName}, for URL: ${normalizedUrl}, ${sendToUI ? 'SENT to UI' : 'NOT SENT to UI'}`, updatedVideo);
 
+
     // Send UI update if requested
     if (sendToUI) {
         sendVideoStateChange(tabId, normalizedUrl, { updatedVideo, action });
+        updateTabIcon(tabId);
     }
 
     return updatedVideo;
@@ -280,10 +280,6 @@ function cleanupVideosForTab(tabId) {
         variantMasterMap.delete(tabId);
     }
     
-    // Clean up icon state
-    if (tabsWithVideos.has(tabId)) {
-        tabsWithVideos.delete(tabId);
-    }
 }
 
 /**
@@ -295,33 +291,7 @@ function cleanupAllVideos() {
     allDetectedVideos.clear();
     variantMasterMap.clear();
 
-    tabsWithVideos.clear();
     logger.info('All detected videos cleared');
-}
-
-/**
- * Get tab tracking state
- * @param {number} tabId - Tab ID
- * @returns {boolean} True if tab has videos
- */
-function hasVideosInTab(tabId) {
-    return tabsWithVideos.has(tabId);
-}
-
-/**
- * Add tab to videos tracking
- * @param {number} tabId - Tab ID
- */
-function addTabWithVideos(tabId) {
-    tabsWithVideos.add(tabId);
-}
-
-/**
- * Remove tab from videos tracking
- * @param {number} tabId - Tab ID
- */
-function removeTabWithVideos(tabId) {
-    tabsWithVideos.delete(tabId);
 }
 
 export {
@@ -341,10 +311,5 @@ export {
     // Display and cleanup
     getVideosForDisplay,
     cleanupVideosForTab,
-    cleanupAllVideos,
-
-    // Tab tracking
-    hasVideosInTab,
-    addTabWithVideos,
-    removeTabWithVideos
+    cleanupAllVideos
 };

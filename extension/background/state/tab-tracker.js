@@ -17,9 +17,6 @@ const logger = createLogger('Tab Tracker');
 // Map<tabId, origin> - tracks the current domain for each tab
 const tabDomains = new Map();
 
-// Track tabs that have valid, displayable videos for icon management
-// Set<tabId> - if tab is in set, it has videos (colored icon)
-const tabsWithVideos = new Set();
 
 /**
  * Check if navigation represents a domain change that requires cleanup
@@ -61,58 +58,47 @@ function shouldCleanupOnNavigation(tabId, newUrl) {
  * @param {number} [tabId] - Tab ID to update icon for; if omitted, resets all tracked tabs
  */
 function updateTabIcon(tabId) {
-    // If no tabId is provided, reset all icons for tabs with videos
+    // If no tabId is provided, reset all icons for all tabs (minimal stateless approach)
     if (typeof tabId === 'undefined') {
-        for (const id of tabsWithVideos) {
-            try {
-                chrome.action.setIcon({
-                    tabId: id,
-                    path: {
-                        "16": "../icons/16-bw.png",
-                        "32": "../icons/32-bw.png",
-                        "48": "../icons/48-bw.png",
-                        "128": "../icons/128-bw.png"
-                    }
-                });
-                logger.debug(`Tab ${id} icon reset to B&W (global reset)`);
-            } catch (error) {
-                logger.warn(`Failed to reset icon for tab ${id}:`, error);
-            }
-        }
-        tabsWithVideos.clear();
+        chrome.tabs.query({}, (tabs) => {
+            tabs.forEach(tab => {
+                try {
+                    chrome.action.setIcon({
+                        tabId: tab.id,
+                        path: {
+                            "16": "../icons/16-bw.png",
+                            "32": "../icons/32-bw.png",
+                            "48": "../icons/48-bw.png",
+                            "128": "../icons/128-bw.png"
+                        }
+                    });
+                    logger.debug(`Tab ${tab.id} icon reset to B&W (global reset)`);
+                } catch (error) {
+                    logger.warn(`Failed to reset icon for tab ${tab.id}:`, error);
+                }
+            });
+        });
         return;
     }
 
-    // Use statically imported getVideosForDisplay
+    // Use getVideosForDisplay to check for valid videos
     const hasValidVideos = getVideosForDisplay(tabId).length > 0;
 
     try {
-        if (hasValidVideos) {
-            tabsWithVideos.add(tabId);
-            // Set colored icon
-            chrome.action.setIcon({
-                tabId,
-                path: {
-                    "16": "../icons/16.png",
-                    "32": "../icons/32.png", 
-                    "48": "../icons/48.png",
-                    "128": "../icons/128.png"
-                }
-            });
-        } else {
-            tabsWithVideos.delete(tabId);
-            // Set B&W icon
-            chrome.action.setIcon({
-                tabId,
-                path: {
-                    "16": "../icons/16-bw.png",
-                    "32": "../icons/32-bw.png",
-                    "48": "../icons/48-bw.png", 
-                    "128": "../icons/128-bw.png"
-                }
-            });
-        }
-
+        chrome.action.setIcon({
+            tabId,
+            path: hasValidVideos ? {
+                "16": "../icons/16.png",
+                "32": "../icons/32.png", 
+                "48": "../icons/48.png",
+                "128": "../icons/128.png"
+            } : {
+                "16": "../icons/16-bw.png",
+                "32": "../icons/32-bw.png",
+                "48": "../icons/48-bw.png", 
+                "128": "../icons/128-bw.png"
+            }
+        });
         logger.debug(`Tab ${tabId} icon updated: ${hasValidVideos ? 'colored' : 'B&W'}`);
     } catch (error) {
         logger.warn(`Failed to update icon for tab ${tabId}:`, error);
