@@ -10,7 +10,7 @@ import { clearPreviewCache, getCacheStats } from '../../shared/utils/preview-cac
 import { clearAllHeaderCaches } from '../../shared/utils/headers-utils.js';
 import { getVideosForDisplay, getVideo, dismissVideoFromTab, cleanupAllVideos, getVideoTypeCounts } from '../processing/video-store.js';
 import nativeHostService from './native-host-service.js';
-import { updateTabIcon } from '../state/tab-tracker.js';
+import { updateTabIcon } from '../state/tab-manager.js';
 
 // Track all popup connections - simplified single map
 const popupPorts = new Map(); // key = portId, value = {port, tabId, url}

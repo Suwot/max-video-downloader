@@ -1,7 +1,7 @@
 // Import services
 import { initStateManager } from './state/state-manager.js';
 import { initHeaderTracking } from '../shared/utils/headers-utils.js';
-import { initTabTracking } from './state/tab-tracker.js';
+import { initTabTracking } from './state/tab-manager.js';
 import { initUICommunication } from './messaging/popup-communication.js';
 import { initDownloadManager } from './download/download-manager.js';
 import { createLogger } from '../shared/utils/logger.js';
