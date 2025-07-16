@@ -343,187 +343,194 @@ function determineContainerFromUrl(url) {
 }
 
 /**
- * Unified container detection with robust fallback chain
+ * Unified container detection for all media types and contexts
+ * Single entry point that handles video, audio, and subtitle container detection
  * @param {Object} options - Detection options
  * @param {string} [options.codecs] - Codec string
  * @param {string} [options.mimeType] - MIME type
  * @param {string} [options.url] - URL
  * @param {string} [options.ffprobeContainer] - FFprobe container info
- * @param {string} [options.mediaType] - Media type ('video' or 'audio')
+ * @param {string} [options.mediaType] - Media type ('video', 'audio', 'subtitle')
+ * @param {string} [options.videoType] - Video type ('hls', 'dash', 'direct')
+ * @param {string} [options.videoContainer] - Associated video container (for subtitles)
+ * @param {boolean} [options.separateContainers] - Return separate video/audio containers
  * @returns {Object} Container detection result
  */
-export function detectContainer(options = {}) {
+export function detectAllContainers(options = {}) {
+    const { codecs, mimeType, url, ffprobeContainer, mediaType, videoType, videoContainer, separateContainers } = options;
+    
+    // If separate containers requested, handle that case
+    if (separateContainers) {
+        return detectSeparateVideoAudio(options);
+    }
+    
+    // Handle subtitle-specific detection
+    if (mediaType === 'subtitle') {
+        return detectSubtitleWithContext(options);
+    }
+    
+    // Standard detection for video/audio/unknown
+    return detectSingleContainer(options);
+}
+
+/**
+ * Core single container detection with unified fallback chain
+ * @param {Object} options - Detection options
+ * @returns {Object} Container detection result
+ */
+function detectSingleContainer(options) {
     const { codecs, mimeType, url, ffprobeContainer, mediaType } = options;
     
-    // Track all detection attempts
-    const detectionAttempts = [];
+    // Simple reliability-ordered fallback chain
+    const detectionResults = [];
     
-    // 1. FFprobe container info (highest reliability for direct media)
+    // 1. FFprobe container (highest reliability - direct media only)
     if (ffprobeContainer) {
         const container = ffprobeContainer.toLowerCase();
-        if (container.includes('mp4') || container.includes('quicktime')) {
-            detectionAttempts.push({ container: 'mp4', confidence: 'highest', reason: 'ffprobe container' });
-        } else if (container.includes('webm') || container.includes('matroska')) {
-            detectionAttempts.push({ container: 'webm', confidence: 'highest', reason: 'ffprobe container' });
-        } else if (container.includes('mkv')) {
-            detectionAttempts.push({ container: 'mkv', confidence: 'highest', reason: 'ffprobe container' });
-        } else if (container.includes('mov')) {
-            detectionAttempts.push({ container: 'mp4', confidence: 'highest', reason: 'ffprobe container (mov->mp4)' });
+        const ffprobeMapping = {
+            'mp4': 'mp4',
+            'quicktime': 'mp4',
+            'webm': 'webm',
+            'matroska': 'webm',
+            'mkv': 'mkv',
+            'mov': 'mp4' // Convert MOV to MP4 for better compatibility
+        };
+        
+        for (const [key, value] of Object.entries(ffprobeMapping)) {
+            if (container.includes(key)) {
+                detectionResults.push({ 
+                    container: value, 
+                    confidence: 'highest', 
+                    reason: `ffprobe container${key === 'mov' ? ' (mov->mp4)' : ''}` 
+                });
+                break;
+            }
         }
     }
     
     // 2. Codec analysis (high reliability)
-    if (codecs) {
+    if (codecs && detectionResults.length === 0) {
         const codecResult = determineContainerFromCodecs(codecs);
         if (codecResult.container) {
-            detectionAttempts.push(codecResult);
+            detectionResults.push(codecResult);
         }
     }
     
     // 3. MIME type analysis (high reliability)
-    if (mimeType) {
+    if (mimeType && detectionResults.length === 0) {
         const mimeResult = determineContainerFromMimeType(mimeType);
         if (mimeResult.container) {
-            detectionAttempts.push(mimeResult);
+            detectionResults.push(mimeResult);
         }
     }
     
     // 4. URL structure analysis (low reliability)
-    if (url) {
+    if (url && detectionResults.length === 0) {
         const urlResult = determineContainerFromUrl(url);
         if (urlResult.container) {
-            detectionAttempts.push(urlResult);
+            detectionResults.push(urlResult);
         }
     }
     
-    // 5. Media type based fallback with improved logic
-    if (detectionAttempts.length === 0) {
-        let fallbackContainer;
-        let fallbackReason;
+    // 5. Media type fallback (lowest reliability)
+    if (detectionResults.length === 0) {
+        const fallbackMapping = {
+            'audio': { container: 'mp3', reason: 'audio fallback' },
+            'subtitle': { container: 'srt', reason: 'subtitle fallback' },
+            'video': { container: 'mp4', reason: 'video fallback' }
+        };
         
-        if (mediaType === 'audio') {
-            fallbackContainer = 'mp3'; // Safe transcoding target
-            fallbackReason = 'audio fallback (mp3 - safe for transcoding)';
-        } else if (mediaType === 'subtitle') {
-            // For subtitles, try to infer from video type context if available
-            fallbackContainer = 'srt'; // Most universal subtitle format
-            fallbackReason = 'subtitle fallback (srt - universal format)';
-        } else {
-            fallbackContainer = 'mp4'; // Video fallback
-            fallbackReason = 'video fallback (mp4 - universal format)';
-        }
-        
-        detectionAttempts.push({
-            container: fallbackContainer,
+        const fallback = fallbackMapping[mediaType] || fallbackMapping.video;
+        detectionResults.push({
+            container: fallback.container,
             confidence: 'fallback',
-            reason: fallbackReason
+            reason: fallback.reason
         });
     }
     
-    // Select best result based on confidence priority
-    const confidencePriority = ['highest', 'high', 'medium', 'low', 'fallback'];
-    const bestResult = detectionAttempts
-        .sort((a, b) => confidencePriority.indexOf(a.confidence) - confidencePriority.indexOf(b.confidence))[0];
-    
+    // Return best result (first in reliability order)
+    const bestResult = detectionResults[0];
     return {
         container: bestResult.container,
         confidence: bestResult.confidence,
         reason: bestResult.reason,
-        allAttempts: detectionAttempts
+        allAttempts: detectionResults
     };
 }
 
 /**
- * Determine separate video and audio containers for mixed content
+ * Detect separate video and audio containers for mixed content
  * @param {Object} options - Detection options
- * @param {string} [options.codecs] - Codec string
- * @param {string} [options.mimeType] - MIME type
- * @param {string} [options.url] - URL
  * @returns {Object} Separate container detection result
  */
-export function detectSeparateContainers(options = {}) {
-    const { codecs, mimeType, url } = options;
-    
-    // Parse codecs to separate video and audio
-    const codecAnalysis = codecs ? determineContainerFromCodecs(codecs) : { codecAnalysis: { hasVideo: false, hasAudio: false, videoCodecs: [], audioCodecs: [] } };
+function detectSeparateVideoAudio(options) {
+    const { codecs } = options;
     
     let videoContainer = null;
     let audioContainer = null;
+    let reason = 'fallback';
     
-    // Analyze video codecs
-    if (codecAnalysis.codecAnalysis?.hasVideo && codecAnalysis.codecAnalysis.videoCodecs.length > 0) {
-        const videoCodec = codecAnalysis.codecAnalysis.videoCodecs[0]; // Use first video codec
-        videoContainer = CODEC_TO_CONTAINER[videoCodec] || 'mp4';
+    // Try codec-based separation first
+    if (codecs) {
+        const codecAnalysis = determineContainerFromCodecs(codecs);
+        if (codecAnalysis.codecAnalysis) {
+            const { hasVideo, hasAudio, videoCodecs, audioCodecs } = codecAnalysis.codecAnalysis;
+            
+            if (hasVideo && videoCodecs.length > 0) {
+                videoContainer = CODEC_TO_CONTAINER[videoCodecs[0]] || 'mp4';
+            }
+            
+            if (hasAudio && audioCodecs.length > 0) {
+                audioContainer = CODEC_TO_CONTAINER[audioCodecs[0]] || 'mp3';
+            }
+            
+            if (videoContainer || audioContainer) {
+                reason = 'codec analysis';
+            }
+        }
     }
     
-    // Analyze audio codecs with better fallback
-    if (codecAnalysis.codecAnalysis?.hasAudio && codecAnalysis.codecAnalysis.audioCodecs.length > 0) {
-        const audioCodec = codecAnalysis.codecAnalysis.audioCodecs[0]; // Use first audio codec
-        audioContainer = CODEC_TO_CONTAINER[audioCodec] || 'mp3'; // Fallback to mp3 for transcoding
-    }
-    
-    // Fallback to unified detection if separate analysis fails
+    // Apply fallbacks if codec analysis failed
     if (!videoContainer && !audioContainer) {
-        const unified = detectContainer(options);
-        return {
-            videoContainer: unified.container,
-            audioContainer: 'mp3', // Always use mp3 for audio when no codec info available
-            reason: `unified fallback: ${unified.reason}`
-        };
+        const unified = detectSingleContainer(options);
+        videoContainer = unified.container;
+        audioContainer = 'mp3'; // Safe audio fallback
+        reason = `unified fallback: ${unified.reason}`;
     }
     
     return {
         videoContainer: videoContainer || 'mp4',
-        audioContainer: audioContainer || 'mp3', // Default to mp3 for safe transcoding
-        reason: 'separate codec analysis'
+        audioContainer: audioContainer || 'mp3',
+        containerDetectionReason: reason
     };
 }
 
 /**
- * Detect subtitle container with video type context awareness
+ * Detect subtitle container with video type context
  * @param {Object} options - Detection options
- * @param {string} [options.mimeType] - MIME type
- * @param {string} [options.url] - URL
- * @param {string} [options.videoType] - Video type ('hls', 'dash', 'direct')
- * @param {string} [options.videoContainer] - Associated video container
  * @returns {Object} Container detection result
  */
-export function detectSubtitleContainer(options = {}) {
+function detectSubtitleWithContext(options) {
     const { mimeType, url, videoType, videoContainer } = options;
     
     // Try standard detection first
-    const standardResult = detectContainer({
-        mimeType,
-        url,
-        mediaType: 'subtitle'
-    });
+    const standardResult = detectSingleContainer({ mimeType, url, mediaType: 'subtitle' });
     
     // If we got a reliable result, use it
     if (standardResult.confidence !== 'fallback') {
         return standardResult;
     }
     
-    // Enhanced fallback logic based on video type and container
+    // Apply context-aware fallbacks
     let fallbackContainer = 'srt'; // Universal fallback
-    let fallbackReason = 'subtitle fallback (srt - universal format)';
+    let fallbackReason = 'subtitle fallback';
     
     if (videoType === 'hls') {
-        // HLS typically uses WebVTT
         fallbackContainer = 'vtt';
-        fallbackReason = 'hls subtitle fallback (vtt - common for hls)';
+        fallbackReason = 'hls subtitle fallback';
     } else if (videoType === 'dash') {
-        // DASH can use various formats, often WebVTT or TTML
-        if (videoContainer === 'webm') {
-            fallbackContainer = 'vtt';
-            fallbackReason = 'dash webm subtitle fallback (vtt - webm compatible)';
-        } else {
-            fallbackContainer = 'ttml';
-            fallbackReason = 'dash subtitle fallback (ttml - common for dash)';
-        }
-    } else if (videoType === 'direct') {
-        // Direct videos often have SRT or ASS subtitles
-        fallbackContainer = 'srt';
-        fallbackReason = 'direct video subtitle fallback (srt - common for direct)';
+        fallbackContainer = videoContainer === 'webm' ? 'vtt' : 'ttml';
+        fallbackReason = 'dash subtitle fallback';
     }
     
     return {
@@ -532,4 +539,28 @@ export function detectSubtitleContainer(options = {}) {
         reason: fallbackReason,
         allAttempts: standardResult.allAttempts
     };
+}
+
+/**
+ * Legacy function for backward compatibility
+ * @deprecated Use detectAllContainers instead
+ */
+export function detectContainer(options = {}) {
+    return detectAllContainers(options);
+}
+
+/**
+ * Legacy function for backward compatibility
+ * @deprecated Use detectAllContainers with separateContainers: true instead
+ */
+export function detectSeparateContainers(options = {}) {
+    return detectAllContainers({ ...options, separateContainers: true });
+}
+
+/**
+ * Legacy function for backward compatibility
+ * @deprecated Use detectAllContainers with mediaType: 'subtitle' instead
+ */
+export function detectSubtitleContainer(options = {}) {
+    return detectAllContainers({ ...options, mediaType: 'subtitle' });
 }

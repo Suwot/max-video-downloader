@@ -14,7 +14,7 @@ import {
 import { createLogger } from '../../shared/utils/logger.js';
 import { getVideoByUrl } from './video-store.js';
 import { standardizeResolution, normalizeUrl, getBaseDirectory } from '../../shared/utils/processing-utils.js';
-import { detectContainer, detectSeparateContainers, detectSubtitleContainer } from './container-detector.js';
+import { detectAllContainers } from './container-detector.js';
 
 // Create a logger for the HLS parser
 const logger = createLogger('HLS Parser');
@@ -369,9 +369,10 @@ function parseHlsMaster(content, baseUrl, masterUrl) {
     // Build variant objects
     const variants = variantEntries.map(entry => {
         // Detect containers for this variant based on codecs
-        const containerDetection = detectSeparateContainers({
+        const containerDetection = detectAllContainers({
             codecs: entry.streamInf.codecs,
-            url: entry.url
+            url: entry.url,
+            separateContainers: true
         });
         
         return {
@@ -428,9 +429,10 @@ function parseHlsMaster(content, baseUrl, masterUrl) {
             }
             if (/TYPE=AUDIO/.test(line)) {
                 // Detect audio container - HLS audio tracks typically use AAC in MP4 or MP3
-                const audioContainer = detectContainer({
+                const audioContainer = detectAllContainers({
                     url: attrs['URI'] ? resolveUrl(baseUrl, attrs['URI']) : null,
-                    mediaType: 'audio'
+                    mediaType: 'audio',
+                    videoType: 'hls'
                 });
                 
                 audioTracks.push({
@@ -450,8 +452,9 @@ function parseHlsMaster(content, baseUrl, masterUrl) {
                 });
             } else if (/TYPE=SUBTITLES/.test(line)) {
                 // Detect subtitle container with HLS context
-                const subtitleContainerDetection = detectSubtitleContainer({
+                const subtitleContainerDetection = detectAllContainers({
                     url: attrs['URI'] ? resolveUrl(baseUrl, attrs['URI']) : null,
+                    mediaType: 'subtitle',
                     videoType: 'hls'
                 });
                 
@@ -576,9 +579,10 @@ async function parseHlsVariant(variantUrl, headers = null, tabId) {
         logger.debug(`Variant version: ${version}`);
         
         // Detect containers for standalone variants (no codec info available)
-        const containerDetection = detectContainer({
+        const containerDetection = detectAllContainers({
             url: variantUrl,
-            mediaType: 'video' // HLS variants are typically video+audio
+            mediaType: 'video', // HLS variants are typically video+audio
+            videoType: 'hls'
         });
         
         // Build a complete result object

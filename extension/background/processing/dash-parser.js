@@ -15,7 +15,7 @@ import {
 import { createLogger } from '../../shared/utils/logger.js';
 import { getVideoByUrl } from './video-store.js';
 import { standardizeResolution, normalizeUrl, getBaseDirectory } from '../../shared/utils/processing-utils.js';
-import { detectContainer, detectSubtitleContainer } from './container-detector.js';
+import { detectAllContainers } from './container-detector.js';
 import { registerDashSegmentPaths } from '../detection/video-detector.js'
 
 // Create a logger for the DASH parser
@@ -540,11 +540,12 @@ export async function parseDashManifest(url, headers = null, tabId) {
                     }
                     
                     // Detect video container based on DASH mimeType and codecs
-                    const videoContainerDetection = detectContainer({
+                    const videoContainerDetection = detectAllContainers({
                         mimeType: repMimeType,
                         codecs: repCodecs,
                         url: flatRepresentation.trackUrl,
-                        mediaType: 'video'
+                        mediaType: 'video',
+                        videoType: 'dash'
                     });
                     
                     flatRepresentation.videoContainer = videoContainerDetection.container;
@@ -560,11 +561,12 @@ export async function parseDashManifest(url, headers = null, tabId) {
                                                extractAttribute(representation, 'channels'), 10) || null;
                     
                     // Detect audio container based on DASH mimeType and codecs
-                    const audioContainerDetection = detectContainer({
+                    const audioContainerDetection = detectAllContainers({
                         mimeType: repMimeType,
                         codecs: repCodecs,
                         url: flatRepresentation.trackUrl,
-                        mediaType: 'audio'
+                        mediaType: 'audio',
+                        videoType: 'dash'
                     });
                     
                     flatRepresentation.audioContainer = audioContainerDetection.container;
@@ -576,9 +578,10 @@ export async function parseDashManifest(url, headers = null, tabId) {
                 } 
                 else if (mediaType === 'subtitles') {
                     // Detect subtitle container with DASH context
-                    const subtitleContainerDetection = detectSubtitleContainer({
+                    const subtitleContainerDetection = detectAllContainers({
                         mimeType: repMimeType,
                         url: flatRepresentation.trackUrl,
+                        mediaType: 'subtitle',
                         videoType: 'dash',
                         videoContainer: 'mp4' // Most common for DASH
                     });

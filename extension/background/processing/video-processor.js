@@ -6,7 +6,7 @@
 import { normalizeUrl } from '../../shared/utils/processing-utils.js';
 import { createLogger } from '../../shared/utils/logger.js';
 import { standardizeResolution, getFilenameFromUrl } from '../../shared/utils/processing-utils.js';
-import { detectContainer } from './container-detector.js';
+import { detectAllContainers } from './container-detector.js';
 import { applyDNRRule } from '../../shared/utils/headers-utils.js';
 import { getPreview, storePreview } from '../../shared/utils/preview-cache.js';
 import { parseHlsManifest, extractHlsMediaUrls } from './hls-parser.js';
@@ -499,7 +499,7 @@ async function getFFprobeMetadata(tabId, normalizedUrl, headers) {
             const isValid = streamInfo.hasVideo === false ? false : true;
 
             // Determine container using unified detection system
-            const containerDetection = detectContainer({
+            const containerDetection = detectAllContainers({
                 ffprobeContainer: streamInfo.container,
                 mimeType: video.metadata?.contentType,
                 url: video.url,
