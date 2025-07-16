@@ -1,0 +1,10 @@
+{
+  "name": "video-downloader-mv3-devtools",
+  "version": "1.0.0",
+  "description": "Dev/test scripts for video-downloader-mv3 (does not affect extension or native host)",
+  "type": "module",
+  "scripts": {
+    "test:container-detector": "node test_centralized_container_detector.js"
+  },
+  "devDependencies": {}
+}
