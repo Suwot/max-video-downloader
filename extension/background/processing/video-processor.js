@@ -5,7 +5,8 @@
 
 import { normalizeUrl } from '../../shared/utils/processing-utils.js';
 import { createLogger } from '../../shared/utils/logger.js';
-import { standardizeResolution, getFilenameFromUrl, determineDirectDefaultContainer } from '../../shared/utils/processing-utils.js';
+import { standardizeResolution, getFilenameFromUrl } from '../../shared/utils/processing-utils.js';
+import { detectContainer } from './container-detector.js';
 import { applyDNRRule } from '../../shared/utils/headers-utils.js';
 import { getPreview, storePreview } from '../../shared/utils/preview-cache.js';
 import { parseHlsManifest, extractHlsMediaUrls } from './hls-parser.js';
@@ -224,45 +225,8 @@ async function processHlsVideo(tabId, normalizedUrl) {
     const hlsResult = await parseHlsManifest(video.url, headers, tabId);
     
     if (hlsResult.status === 'success') {
-        let hlsUpdates;
-        if (hlsResult.isMaster) {
-            hlsUpdates = {
-                isValid: true,
-                type: 'hls',
-                isMaster: true,
-                isVariant: false,
-                variants: hlsResult.variants,
-                duration: hlsResult.duration,
-                version: hlsResult.version,
-                isEncrypted: hlsResult.isEncrypted,
-                encryptionType: hlsResult.encryptionType,
-                audioTracks: hlsResult.audioTracks || [],
-                subtitleTracks: hlsResult.subtitleTracks || [],
-                closedCaptions: hlsResult.closedCaptions || [],
-                hasMediaGroups: hlsResult.hasMediaGroups || false,
-                isLightParsed: true,
-                isFullParsed: true,
-                timestampLP: hlsResult.timestampLP,
-                timestampFP: hlsResult.timestampFP
-            };
-        } else {
-            hlsUpdates = {
-                isValid: true,
-                type: 'hls',
-                isMaster: false,
-                isVariant: true,
-                duration: hlsResult.duration,
-                version: hlsResult.version,
-                isEncrypted: hlsResult.isEncrypted,
-                encryptionType: hlsResult.encryptionType,
-                isLightParsed: true,
-                isFullParsed: true,
-                timestampLP: hlsResult.timestampLP,
-                timestampFP: hlsResult.timestampFP
-            };
-        }
 
-        updateVideo('processHlsVideo', tabId, normalizedUrl, hlsUpdates);
+        updateVideo('processHlsVideo', tabId, normalizedUrl, hlsResult);
 
         // Track variant-master relationships if this is a master playlist
         if (hlsResult.isMaster && hlsResult.variants?.length > 0) {
@@ -534,8 +498,13 @@ async function getFFprobeMetadata(tabId, normalizedUrl, headers) {
             // Only set isValid: false if ffprobe confirms not a video
             const isValid = streamInfo.hasVideo === false ? false : true;
 
-            // Determine default container from FFprobe data
-            const defaultContainer = determineDirectDefaultContainer(video, streamInfo);
+            // Determine container using unified detection system
+            const containerDetection = detectContainer({
+                ffprobeContainer: streamInfo.container,
+                mimeType: video.metadata?.contentType,
+                url: video.url,
+                mediaType: video.mediaType || 'video'
+            });
 
             updateVideo('getFFprobeMetadata', tabId, normalizedUrl, {
                 isValid,
@@ -544,7 +513,12 @@ async function getFFprobeMetadata(tabId, normalizedUrl, headers) {
                 standardizedResolution: standardizedRes,
                 estimatedFileSizeBytes: streamInfo.estimatedFileSizeBytes || video.fileSize,
                 fileSize: streamInfo.sizeBytes || null,
-                defaultContainer: defaultContainer
+                // Use new unified container detection
+                defaultContainer: containerDetection.container,
+                containerDetectionReason: containerDetection.reason,
+                // Add separate containers for audio-only downloads
+                videoContainer: containerDetection.container,
+                audioContainer: containerDetection.container === 'webm' ? 'webm' : 'mp3'
             });
         } else {
             logger.warn(`No stream info in ffprobe response for: ${normalizedUrl}`);

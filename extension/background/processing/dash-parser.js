@@ -15,6 +15,7 @@ import {
 import { createLogger } from '../../shared/utils/logger.js';
 import { getVideoByUrl } from './video-store.js';
 import { standardizeResolution, normalizeUrl, getBaseDirectory } from '../../shared/utils/processing-utils.js';
+import { detectContainer, detectSubtitleContainer } from './container-detector.js';
 import { registerDashSegmentPaths } from '../detection/video-detector.js'
 
 // Create a logger for the DASH parser
@@ -538,6 +539,17 @@ export async function parseDashManifest(url, headers = null, tabId) {
                         flatRepresentation.resolution = `${flatRepresentation.width}x${flatRepresentation.height}`;
                     }
                     
+                    // Detect video container based on DASH mimeType and codecs
+                    const videoContainerDetection = detectContainer({
+                        mimeType: repMimeType,
+                        codecs: repCodecs,
+                        url: flatRepresentation.trackUrl,
+                        mediaType: 'video'
+                    });
+                    
+                    flatRepresentation.videoContainer = videoContainerDetection.container;
+                    flatRepresentation.containerDetectionReason = videoContainerDetection.reason;
+                    
                     // Assign FFmpeg stream index before pushing to array
                     flatRepresentation.ffmpegStreamIndex = `0:v:${videoIndex++}`;
                     videoTracks.push(flatRepresentation);
@@ -547,11 +559,33 @@ export async function parseDashManifest(url, headers = null, tabId) {
                     flatRepresentation.channels = parseInt(extractAttribute(representation, 'audioChannels') || 
                                                extractAttribute(representation, 'channels'), 10) || null;
                     
+                    // Detect audio container based on DASH mimeType and codecs
+                    const audioContainerDetection = detectContainer({
+                        mimeType: repMimeType,
+                        codecs: repCodecs,
+                        url: flatRepresentation.trackUrl,
+                        mediaType: 'audio'
+                    });
+                    
+                    flatRepresentation.audioContainer = audioContainerDetection.container;
+                    flatRepresentation.containerDetectionReason = audioContainerDetection.reason;
+                    
                     // Assign FFmpeg stream index before pushing to array
                     flatRepresentation.ffmpegStreamIndex = `0:a:${audioIndex++}`;
                     audioTracks.push(flatRepresentation);
                 } 
                 else if (mediaType === 'subtitles') {
+                    // Detect subtitle container with DASH context
+                    const subtitleContainerDetection = detectSubtitleContainer({
+                        mimeType: repMimeType,
+                        url: flatRepresentation.trackUrl,
+                        videoType: 'dash',
+                        videoContainer: 'mp4' // Most common for DASH
+                    });
+                    
+                    flatRepresentation.subtitleContainer = subtitleContainerDetection.container;
+                    flatRepresentation.containerDetectionReason = subtitleContainerDetection.reason;
+                    
                     // Any subtitle-specific properties can be added here
                     // Assign FFmpeg stream index before pushing to array
                     flatRepresentation.ffmpegStreamIndex = `0:s:${subtitleIndex++}`;
