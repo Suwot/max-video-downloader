@@ -65,15 +65,9 @@ native_host/
 ## Development Environment
 
 - **Single environment**: Production files used for development (no dev/prod separation)
-- **Manual processes**: No automated build pipeline currently
+- **ESLint**: Chrome extension aware linting with ES6 modules (extension) + CommonJS (native_host)
+- **Test page**: Single HTML with all video types for simultaneous detection testing
 - **Settings UI**: Exists but empty, planned for comprehensive user options
-
-## Future Development Plans
-
-- **Testing**: Dedicated `/tests` folder with automated test suite
-- **Tooling**: Jest for testing, linter integration
-- **Project structure**: Proper dev/prod environment separation
-- **Build automation**: Replace manual processes with automated pipeline
 
 ## Build Commands
 
@@ -81,10 +75,16 @@ native_host/
 # Build native host
 cd native_host && npm run build && ./install.sh
 
-# Test
+# Linting
+npm run lint          # Check for errors
+npm run lint:fix      # Auto-fix simple issues
+
+# Testing
 npm run test:container-detector
 cd native_host && node test-host.js
 ./test_streaming.sh
+
+# Test page: test/videos.html (all video formats)
 ```
 
 ## Edge Cases (Handled Gracefully)
