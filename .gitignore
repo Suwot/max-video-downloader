@@ -2,6 +2,7 @@
 
 # Node modules
 native_host/node_modules/
+node_modules/
 
 # Build directories
 ffmpeg_build/
