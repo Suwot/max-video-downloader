@@ -428,8 +428,6 @@ export async function parseDashManifest(url, headers = null, tabId) {
                 encryptionType = 'marlin';
             } else if (content.includes('urn:uuid:1077efecc0b24d02ace33c1e52e2fb4b')) {
                 encryptionType = 'verimatrix';
-            } else if (content.includes('urn:uuid:f239e769-efa3-4850-9c16-a903c6932efb')) {
-                encryptionType = 'adobe-primetime';
             } else if (content.includes('urn:uuid:6a99532d-869f-40ea-a75b-8ebe2e279df6')) {
                 encryptionType = 'oma-drm';
             }
