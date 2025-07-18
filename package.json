@@ -4,7 +4,11 @@
   "description": "Dev/test scripts for video-downloader-mv3 (does not affect extension or native host)",
   "type": "module",
   "scripts": {
-    "test:container-detector": "node test_centralized_container_detector.js"
+    "test:container-detector": "node test_centralized_container_detector.js",
+    "lint": "eslint extension/ native_host/ *.js",
+    "lint:fix": "eslint extension/ native_host/ *.js --fix"
   },
-  "devDependencies": {}
+  "devDependencies": {
+    "eslint": "^9.31.0"
+  }
 }
