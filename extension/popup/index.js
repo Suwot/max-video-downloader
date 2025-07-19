@@ -12,8 +12,6 @@ import { renderHistoryItems } from './video/video-renderer.js';
 
 const logger = createLogger('Popup');
 
-
-
 /**
  * Get current active tab
  */
