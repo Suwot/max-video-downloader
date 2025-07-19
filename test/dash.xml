@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<MPD xmlns="urn:mpeg:DASH:schema:MPD:2011"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" mediaPresentationDuration="PT289.520S" minBufferTime="PT2S" profiles="urn:webm:dash:profile:webm-on-demand:2012" type="static" xsi:schemaLocation="urn:mpeg:DASH:schema:MPD:2011">
+	<Period duration="PT289.520S" id="0" start="PT0S">
+		<AdaptationSet bitstreamSwitching="true" codecs="vp9" id="0" mimeType="video/webm" subsegmentAlignment="true" subsegmentStartsWithSAP="1">
+			<Representation bandwidth="419452" frameRate="25" height="144" id="0" quality="mobile" width="256">
+				<BaseURL>?expires=1753211061188&amp;srcIp=194.233.91.102&amp;pr=40&amp;srcAg=CHROME_MAC&amp;ms=45.136.22.198&amp;mid=8198563047572&amp;type=4&amp;subId=7386433653396&amp;sig=p85QTaqjCzk&amp;ct=21&amp;urls=45.136.20.157&amp;clientType=13&amp;zs=43&amp;id=7386378930836</BaseURL>
+				<SegmentBase indexRange="467-5330" indexRangeExact="true">
+					<Initialization range="0-466"/>
+				</SegmentBase>
+			</Representation>
+			<Representation bandwidth="635852" frameRate="25" height="240" id="1" quality="lowest" width="426">
+				<BaseURL>?expires=1753211061188&amp;srcIp=194.233.91.102&amp;pr=40&amp;srcAg=CHROME_MAC&amp;ms=45.136.22.198&amp;mid=8198563047572&amp;type=0&amp;subId=7386433653396&amp;sig=M2t24ZMNEuU&amp;ct=21&amp;urls=45.136.20.157&amp;clientType=13&amp;zs=43&amp;id=7386378930836</BaseURL>
+				<SegmentBase indexRange="467-5332" indexRangeExact="true">
+					<Initialization range="0-466"/>
+				</SegmentBase>
+			</Representation>
+			<Representation bandwidth="2166384" frameRate="25" height="480" id="2" quality="sd" width="852">
+				<BaseURL>?expires=1753211061188&amp;srcIp=194.233.91.102&amp;pr=40&amp;srcAg=CHROME_MAC&amp;ms=45.136.22.198&amp;mid=8198563047572&amp;type=2&amp;subId=7386433653396&amp;sig=U1dUxw_iK6o&amp;ct=21&amp;urls=45.136.20.157&amp;clientType=13&amp;zs=43&amp;id=7386378930836</BaseURL>
+				<SegmentBase indexRange="468-5448" indexRangeExact="true">
+					<Initialization range="0-467"/>
+				</SegmentBase>
+			</Representation>
+			<Representation bandwidth="1249480" frameRate="25" height="360" id="3" quality="low" width="640">
+				<BaseURL>?expires=1753211061188&amp;srcIp=194.233.91.102&amp;pr=40&amp;srcAg=CHROME_MAC&amp;ms=45.136.22.198&amp;mid=8198563047572&amp;type=1&amp;subId=7386433653396&amp;sig=TxPlp8h6NAA&amp;ct=21&amp;urls=45.136.20.157&amp;clientType=13&amp;zs=43&amp;id=7386378930836</BaseURL>
+				<SegmentBase indexRange="468-5334" indexRangeExact="true">
+					<Initialization range="0-467"/>
+				</SegmentBase>
+			</Representation>
+			<Representation bandwidth="4376556" frameRate="25" height="720" id="4" quality="hd" width="1280">
+				<BaseURL>?expires=1753211061188&amp;srcIp=194.233.91.102&amp;pr=40&amp;srcAg=CHROME_MAC&amp;ms=45.136.22.198&amp;mid=8198563047572&amp;type=3&amp;subId=7386433653396&amp;sig=G1ZUK68cKiY&amp;ct=21&amp;urls=45.136.20.157&amp;clientType=13&amp;zs=43&amp;id=7386378930836</BaseURL>
+				<SegmentBase indexRange="468-5505" indexRangeExact="true">
+					<Initialization range="0-467"/>
+				</SegmentBase>
+			</Representation>
+			<Representation bandwidth="8690244" frameRate="25" height="1080" id="5" quality="full" width="1920">
+				<BaseURL>?expires=1753211061188&amp;srcIp=194.233.91.102&amp;pr=40&amp;srcAg=CHROME_MAC&amp;ms=45.136.22.198&amp;mid=8198563047572&amp;type=5&amp;subId=7386433653396&amp;sig=HYVPbo_KbSA&amp;ct=21&amp;urls=45.136.20.157&amp;clientType=13&amp;zs=43&amp;id=7386378930836</BaseURL>
+				<SegmentBase indexRange="468-5562" indexRangeExact="true">
+					<Initialization range="0-467"/>
+				</SegmentBase>
+			</Representation>
+			<Representation bandwidth="13783332" frameRate="25" height="1440" id="6" quality="quad" width="2560">
+				<BaseURL>?expires=1753211061188&amp;srcIp=194.233.91.102&amp;pr=40&amp;srcAg=CHROME_MAC&amp;ms=45.136.22.198&amp;mid=8198563047572&amp;type=6&amp;subId=7386433653396&amp;sig=Kn54NbX8fkg&amp;ct=21&amp;urls=45.136.20.157&amp;clientType=13&amp;zs=43&amp;id=7386378930836</BaseURL>
+				<SegmentBase indexRange="468-5586" indexRangeExact="true">
+					<Initialization range="0-467"/>
+				</SegmentBase>
+			</Representation>
+			<Representation bandwidth="22967628" frameRate="25" height="2160" id="7" quality="ultra" width="3840">
+				<BaseURL>?expires=1753211061188&amp;srcIp=194.233.91.102&amp;pr=40&amp;srcAg=CHROME_MAC&amp;ms=45.136.22.198&amp;mid=8198563047572&amp;type=7&amp;subId=7386433653396&amp;sig=4sfNlHTeEcc&amp;ct=21&amp;urls=45.136.20.157&amp;clientType=13&amp;zs=43&amp;id=7386378930836</BaseURL>
+				<SegmentBase indexRange="468-5600" indexRangeExact="true">
+					<Initialization range="0-467"/>
+				</SegmentBase>
+			</Representation>
+		</AdaptationSet>
+		<AdaptationSet audioSamplingRate="48000" bitstreamSwitching="true" codecs="opus" id="1" mimeType="audio/webm" subsegmentAlignment="true" subsegmentStartsWithSAP="1">
+			<AudioChannelConfiguration schemeIdUri="urn:mpeg:dash:23003:3:audio_channel_configuration:2011" value="2"/>
+			<Representation bandwidth="35471" id="8">
+				<BaseURL>?expires=1753211061188&amp;srcIp=194.233.91.102&amp;pr=40&amp;srcAg=CHROME_MAC&amp;ms=45.136.22.198&amp;mid=8198563047572&amp;type=4&amp;subId=7386433653396&amp;sig=p85QTaqjCzk&amp;ct=22&amp;urls=45.136.20.157&amp;clientType=13&amp;zs=43&amp;id=7386378930836</BaseURL>
+				<SegmentBase indexRange="493-2921" indexRangeExact="true">
+					<Initialization range="0-492"/>
+				</SegmentBase>
+			</Representation>
+			<Representation bandwidth="206573" id="9">
+				<BaseURL>?expires=1753211061188&amp;srcIp=194.233.91.102&amp;pr=40&amp;srcAg=CHROME_MAC&amp;ms=45.136.22.198&amp;mid=8198563047572&amp;type=1&amp;subId=7386433653396&amp;sig=TxPlp8h6NAA&amp;ct=22&amp;urls=45.136.20.157&amp;clientType=13&amp;zs=43&amp;id=7386378930836</BaseURL>
+				<SegmentBase indexRange="494-2928" indexRangeExact="true">
+					<Initialization range="0-493"/>
+				</SegmentBase>
+			</Representation>
+			<Representation bandwidth="135888" id="10">
+				<BaseURL>?expires=1753211061188&amp;srcIp=194.233.91.102&amp;pr=40&amp;srcAg=CHROME_MAC&amp;ms=45.136.22.198&amp;mid=8198563047572&amp;type=0&amp;subId=7386433653396&amp;sig=M2t24ZMNEuU&amp;ct=22&amp;urls=45.136.20.157&amp;clientType=13&amp;zs=43&amp;id=7386378930836</BaseURL>
+				<SegmentBase indexRange="494-2928" indexRangeExact="true">
+					<Initialization range="0-493"/>
+				</SegmentBase>
+			</Representation>
+		</AdaptationSet>
+		<AdaptationSet contentType="text" lang="ru" mimeType="text/vtt">
+			<Representation id="subtitles_auto_1" bandwidth="43521">
+				<BaseURL>?expires=1753211061188&amp;srcIp=194.233.91.102&amp;pr=40&amp;srcAg=CHROME_MAC&amp;ms=45.136.22.198&amp;mid=8198563047572&amp;type=2&amp;ix=1&amp;sig=v4HCpwzqgAc&amp;ct=13&amp;urls=45.136.20.157&amp;clientType=13&amp;zs=43&amp;id=7386433653396</BaseURL>
+			</Representation>
+		</AdaptationSet>
+	</Period>
+</MPD>
