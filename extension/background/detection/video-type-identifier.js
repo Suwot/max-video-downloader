@@ -257,26 +257,12 @@ export function identifyVideoTypeFromMime(contentType, url) {
  * @param {string} url - URL to check
  * @param {string} contentType - Content type (optional)
  * @param {boolean} hasDashContext - Whether this tab has DASH manifests
- * @param {Set} segmentPaths - Set of known segment paths for this tab
  * @returns {boolean} True if this appears to be a segment
  */
-export function isMediaSegment(url, contentType = null, hasDashContext = false, segmentPaths = null) {
+export function isMediaSegment(url, contentType = null, hasDashContext = false) {
     // Quick check for common segment extensions
     if (VIDEO_EXTENSIONS.SEGMENTS.some(ext => url.includes(ext))) {
         return true;
-    }
-
-    // Check against cached segment paths
-    if (hasDashContext && segmentPaths && segmentPaths.size > 0) {
-        const analysis = analyzeMediaUrl(url);
-        const urlPath = analysis ? analysis.pathname : url;
-        
-        // Check if any cached segment path matches
-        for (const basePath of segmentPaths) {
-            if (urlPath.includes(basePath)) {
-                return true;
-            }
-        }
     }
     
     // Check standard segment patterns

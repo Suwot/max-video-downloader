@@ -16,8 +16,7 @@ const DETECTION_CONSTANTS = {
 // Detection context tracking (tabId -> timestamp when MPD was detected)
 const tabsWithMpd = new Map();
 
-// tabId -> Set of segment paths
-const dashSegmentPathCache = new Map();
+
 
 /**
  * Get the URL of a tab for page context tracking
@@ -124,9 +123,8 @@ export async function processWebRequest(details, metadata = null) {
 
                 // Skip media segments
                 const hasMpdContext = tabsWithMpd.has(tabId);
-                const segmentPaths = dashSegmentPathCache.get(tabId);
 
-                if (isMediaSegment(url, metadata.contentType, hasMpdContext, segmentPaths)) {
+                if (isMediaSegment(url, metadata.contentType, hasMpdContext)) {
                     logger.debug(`Skipping media segment: ${url}`);
                     return;
                 }
@@ -161,47 +159,7 @@ export function processContentScriptVideo(tabId, videoData) {
     addDetectedVideo(tabId, videoData);
 }
 
-/**
- * Register DASH segment paths for filtering
- * @param {number} tabId - Tab ID
- * @param {Array<string>} paths - Array of segment paths
- * @param {string} url - MPD URL (optional, for finding matching tab)
- */
-export function registerDashSegmentPaths(tabId, paths, url = null) {
-    // If no tabId was provided but we have a URL, try to find the corresponding tab
-    if (!tabId && url) {
-        // Try to find the tab that loaded this MPD
-        for (const [existingTabId, timestamp] of tabsWithMpd.entries()) {
-            // Only check tabs with recent MPD activity
-            if (timestamp > Date.now() - DETECTION_CONSTANTS.MPD_CONTEXT_TIMEOUT) {
-                tabId = existingTabId;
-                logger.debug(`Found matching tab ${tabId} for MPD URL: ${url}`);
-                break;
-            }
-        }
-    }
-    
-    if (!tabId) {
-        logger.warn('Could not determine tab ID for segment paths, ignoring');
-        return;
-    }
-    
-    if (!Array.isArray(paths) || paths.length === 0) {
-        logger.warn('Invalid segment paths provided:', paths);
-        return;
-    }
-    
-    // Initialize segment paths set for this tab if it doesn't exist
-    if (!dashSegmentPathCache.has(tabId)) {
-        dashSegmentPathCache.set(tabId, new Set());
-    }
-    
-    // Add all paths to the cache
-    const pathCache = dashSegmentPathCache.get(tabId);
-    paths.forEach(path => pathCache.add(path));
-    
-    logger.debug(`Added ${paths.length} segment paths to cache for tab ${tabId}`);
-}
+
 
 /**
  * Clean up detection context for a tab
@@ -213,10 +171,7 @@ export function cleanupMPDContextForTab(tabId) {
         logger.debug(`Cleaned up MPD context for tab ${tabId}`);
     }
     
-    if (dashSegmentPathCache.has(tabId)) {
-        dashSegmentPathCache.delete(tabId);
-        logger.debug(`Cleaned up segment paths for tab ${tabId}`);
-    }
+
 }
 
 /**
@@ -227,7 +182,6 @@ export function initVideoDetector() {
     
     // Clear any stale detection context on initialization
     tabsWithMpd.clear();
-    dashSegmentPathCache.clear();
     
     setupWebRequestListener();     // Set up web request listener for video detection    
     setupMessageListener();        // Set up message listener for content script and other communications
