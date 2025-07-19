@@ -16,7 +16,6 @@ import { createLogger } from '../../shared/utils/logger.js';
 import { getVideoByUrl } from './video-store.js';
 import { standardizeResolution, normalizeUrl, getBaseDirectory } from '../../shared/utils/processing-utils.js';
 import { detectAllContainers } from './container-detector.js';
-import { registerDashSegmentPaths } from '../detection/video-detector.js'
 
 // Create a logger for the DASH parser
 const logger = createLogger('DASH Parser');
@@ -122,168 +121,83 @@ function getAdaptationSetType(adaptationSetContent) {
 }
 
 /**
- * Extract segment template information from adaptation set or representation
+ * Extract channel count from audio configuration
  * 
- * @param {string} xmlContent - XML content of adaptation set or representation
- * @returns {Object|null} Segment template info or null if not found
+ * @param {string} adaptationSetContent - AdaptationSet XML content
+ * @param {string} representationContent - Representation XML content
+ * @returns {number|null} Number of audio channels or null if not found
  */
-function extractSegmentTemplate(xmlContent) {
-    // Look for SegmentTemplate tag
-    const segmentTemplateMatch = xmlContent.match(/<SegmentTemplate[^>]*>([\s\S]*?)<\/SegmentTemplate>|<SegmentTemplate[^>]*\/>/);
-    if (!segmentTemplateMatch) {
-        return null;
+function extractChannelCount(adaptationSetContent, representationContent) {
+    // Check representation first, then adaptation set
+    const repChannels = extractAttribute(representationContent, 'audioChannels') || 
+                       extractAttribute(representationContent, 'channels');
+    if (repChannels) {
+        return parseInt(repChannels, 10);
     }
     
-    const segmentTemplateContent = segmentTemplateMatch[0];
+    const adaptChannels = extractAttribute(adaptationSetContent, 'audioChannels') || 
+                         extractAttribute(adaptationSetContent, 'channels');
+    if (adaptChannels) {
+        return parseInt(adaptChannels, 10);
+    }
     
-    // Extract common attributes
-    return {
-        media: extractAttribute(segmentTemplateContent, 'media'),
-        initialization: extractAttribute(segmentTemplateContent, 'initialization'),
-        startNumber: parseInt(extractAttribute(segmentTemplateContent, 'startNumber') || '1', 10),
-        timescale: parseInt(extractAttribute(segmentTemplateContent, 'timescale') || '1', 10),
-        duration: parseInt(extractAttribute(segmentTemplateContent, 'duration') || '0', 10)
-    };
+    // Check AudioChannelConfiguration value
+    const audioChannelConfigMatch = (representationContent + adaptationSetContent)
+        .match(/<AudioChannelConfiguration[^>]*value="([^"]+)"[^>]*\/>/);
+    if (audioChannelConfigMatch) {
+        return parseInt(audioChannelConfigMatch[1], 10);
+    }
+    
+    return null;
 }
 
 /**
- * Extract segment base information from adaptation set or representation
+ * Extract role information from adaptation set
  * 
- * @param {string} xmlContent - XML content of adaptation set or representation
- * @returns {Object|null} Segment base info or null if not found
+ * @param {string} adaptationSetContent - AdaptationSet XML content
+ * @returns {Object} Role information with role and isDefault properties
  */
-function extractSegmentBase(xmlContent) {
-    // Look for SegmentBase tag
-    const segmentBaseMatch = xmlContent.match(/<SegmentBase[^>]*>([\s\S]*?)<\/SegmentBase>|<SegmentBase[^>]*\/>/);
-    if (!segmentBaseMatch) {
-        return null;
-    }
+function extractRoleInfo(adaptationSetContent) {
+    const roleMatch = adaptationSetContent.match(/<Role[^>]*value="([^"]+)"[^>]*\/>/);
+    const role = roleMatch ? roleMatch[1] : null;
+    const isDefault = role === 'main';
     
-    const segmentBaseContent = segmentBaseMatch[0];
-    
-    // Extract initialization segment info
-    let initialization = null;
-    const initMatch = segmentBaseContent.match(/<Initialization[^>]*\/>/);
-    if (initMatch) {
-        initialization = {
-            range: extractAttribute(initMatch[0], 'range'),
-            sourceURL: extractAttribute(initMatch[0], 'sourceURL')
-        };
-    }
-    
-    return {
-        indexRange: extractAttribute(segmentBaseContent, 'indexRange'),
-        initialization: initialization,
-        presentationTimeOffset: parseInt(extractAttribute(segmentBaseContent, 'presentationTimeOffset') || '0', 10),
-        timescale: parseInt(extractAttribute(segmentBaseContent, 'timescale') || '1', 10)
-    };
+    return { role, isDefault };
 }
 
 /**
- * Extract segment list information from adaptation set or representation
+ * Extract quality label from representation
  * 
- * @param {string} xmlContent - XML content of adaptation set or representation
- * @returns {Object|null} Segment list info or null if not found
+ * @param {string} representationContent - Representation XML content
+ * @param {number} height - Video height for fallback quality detection
+ * @returns {string|null} Quality label or null if not found
  */
-function extractSegmentList(xmlContent) {
-    // Look for SegmentList tag
-    const segmentListMatch = xmlContent.match(/<SegmentList[^>]*>([\s\S]*?)<\/SegmentList>/);
-    if (!segmentListMatch) {
-        return null;
+function extractTrackQuality(representationContent, height) {
+    // Check for explicit quality attribute
+    const qualityAttr = extractAttribute(representationContent, 'quality');
+    if (qualityAttr) {
+        return qualityAttr;
     }
     
-    const segmentListContent = segmentListMatch[0];
-    
-    // Extract initialization segment info
-    let initialization = null;
-    const initMatch = segmentListContent.match(/<Initialization[^>]*\/>/);
-    if (initMatch) {
-        initialization = {
-            sourceURL: extractAttribute(initMatch[0], 'sourceURL'),
-            range: extractAttribute(initMatch[0], 'range')
-        };
-    }
-    
-    // Extract segments
-    const segments = [];
-    const segmentUrlRegex = /<SegmentURL[^>]*\/>/g;
-    let segmentMatch;
-    while ((segmentMatch = segmentUrlRegex.exec(segmentListContent)) !== null) {
-        segments.push({
-            media: extractAttribute(segmentMatch[0], 'media'),
-            mediaRange: extractAttribute(segmentMatch[0], 'mediaRange')
-        });
-    }
-    
-    return {
-        duration: parseInt(extractAttribute(segmentListContent, 'duration') || '0', 10),
-        initialization: initialization,
-        segments: segments
-    };
+    return null;
 }
 
 /**
- * Extract base paths for segments from MPD content
- * Used to identify and filter media segments in the background script
+ * Check if track has accessibility features
  * 
- * @param {string} content - MPD XML content
- * @returns {Array<string>} Array of segment base paths
+ * @param {string} adaptationSetContent - AdaptationSet XML content
+ * @returns {Object} Accessibility information
  */
-function extractSegmentBasePaths(content) {
-    const paths = new Set();
+function extractAccessibilityInfo(adaptationSetContent) {
+    const hasAccessibility = adaptationSetContent.includes('<Accessibility') ||
+                           adaptationSetContent.includes('role="caption"') ||
+                           adaptationSetContent.includes('role="subtitle"') ||
+                           adaptationSetContent.includes('role="description"');
     
-    try {
-        // Extract SegmentTemplate media attributes
-        const segmentTemplateRegex = /<SegmentTemplate[^>]*media="([^"]+)"[^>]*>/g;
-        let match;
-        
-        while ((match = segmentTemplateRegex.exec(content)) !== null) {
-            const mediaPattern = match[1];
-            
-            // Extract the base path (directory) from the pattern
-            // e.g. from "video/$RepresentationID$/segment-$Number$.m4s" get "video/"
-            const pathParts = mediaPattern.split('/');
-            if (pathParts.length > 1) {
-                // Remove the filename part and join the path
-                pathParts.pop();
-                const basePath = pathParts.join('/');
-                
-                if (basePath) {
-                    paths.add(basePath);
-                }
-            }
-        }
-        
-        // Also check BaseURL elements which often contain segment paths
-        const baseUrlRegex = /<BaseURL[^>]*>([^<]+)<\/BaseURL>/g;
-        while ((match = baseUrlRegex.exec(content)) !== null) {
-            const baseUrl = match[1].trim();
-            
-            // Look for common segment directory indicators
-            if (baseUrl.includes('segment') || baseUrl.includes('chunk') || 
-                baseUrl.includes('frag') || baseUrl.includes('media')) {
-                paths.add(baseUrl);
-            }
-        }
-        
-        // Extract common segment patterns from initialization attributes
-        const initRegex = /<SegmentTemplate[^>]*initialization="([^"]+)"[^>]*>/g;
-        while ((match = initRegex.exec(content)) !== null) {
-            const initPattern = match[1];
-            const pathParts = initPattern.split('/');
-            if (pathParts.length > 1) {
-                pathParts.pop();
-                const basePath = pathParts.join('/');
-                if (basePath) {
-                    paths.add(basePath);
-                }
-            }
-        }
-    } catch (e) {
-        logger.error('Error extracting segment base paths:', e);
-    }
+    const isForced = adaptationSetContent.includes('role="forced-subtitle"') ||
+                    adaptationSetContent.includes('forced="true"');
     
-    return Array.from(paths);
+    return { hasAccessibility, isForced };
 }
 
 /**
@@ -372,32 +286,6 @@ export async function parseDashManifest(url, headers = null, tabId) {
         
         const baseUrl = getBaseDirectory(url);
         
-        // Extract segment base paths to help filter out segments in the background script
-        const segmentPaths = extractSegmentBasePaths(content);
-        
-        // Try to send segment paths to background script
-        if (segmentPaths.length > 0) {
-            try {
-                // Try to extract tabId from URL if it contains it (common in background fetch)
-                let tabId = null;
-                try {
-                    const urlParams = new URL(url).searchParams;
-                    if (urlParams.has('tabId')) {
-                        tabId = parseInt(urlParams.get('tabId'), 10);
-                    }
-                } catch (e) {
-                    logger.debug('No tabId in URL params');
-                }
-                
-                // Send paths to background
-                registerDashSegmentPaths(tabId, segmentPaths, url);
-
-                logger.debug(`Sent ${segmentPaths.length} segment paths to background for URL: ${url}`);
-            } catch (e) {
-                logger.warn('Error sending segment paths to background:', e);
-            }
-        }
-        
         // Extract basic MPD properties
         const durationMatch = content.match(/mediaPresentationDuration="([^"]+)"/);
         const duration = durationMatch ? parseDashDuration(durationMatch[1]) : null;
@@ -459,22 +347,11 @@ export async function parseDashManifest(url, headers = null, tabId) {
             const mimeType = extractAttribute(adaptationSet, 'mimeType') || null;
             const codecs = extractAttribute(adaptationSet, 'codecs') || null;
             const lang = extractAttribute(adaptationSet, 'lang') || null;
-            const label = extractAttribute(adaptationSet, 'label') || (lang ? `${lang.toUpperCase()} Track` : null);
+            const label = extractAttribute(adaptationSet, 'label') || null;
             
-            // Extract segment information (could be at adaptation set level)
-            const segmentTemplate = extractSegmentTemplate(adaptationSet);
-            const segmentBase = extractSegmentBase(adaptationSet);
-            const segmentList = extractSegmentList(adaptationSet);
-            
-            // Extract audio channel configuration if present
-            let audioChannelConfig = null;
-            const audioChannelConfigMatch = adaptationSet.match(/<AudioChannelConfiguration[^>]*\/>/);
-            if (audioChannelConfigMatch) {
-                audioChannelConfig = {
-                    schemeIdUri: extractAttribute(audioChannelConfigMatch[0], 'schemeIdUri'),
-                    value: extractAttribute(audioChannelConfigMatch[0], 'value')
-                };
-            }
+            // Extract role and accessibility information
+            const roleInfo = extractRoleInfo(adaptationSet);
+            const accessibilityInfo = extractAccessibilityInfo(adaptationSet);
             
             // Get all representations for this adaptation set
             const representationElements = extractRepresentations(adaptationSet);
@@ -496,23 +373,12 @@ export async function parseDashManifest(url, headers = null, tabId) {
                     mimeType: repMimeType,
                     lang: lang,
                     label: label,
+                    role: roleInfo.role,
+                    isDefault: roleInfo.isDefault,
+                    hasAccessibility: accessibilityInfo.hasAccessibility,
+                    isForced: accessibilityInfo.isForced,
                     estimatedFileSizeBytes: calculateEstimatedFileSizeBytes(bandwidth, duration)
                 };
-                
-                // Add segment information from adaptation set if not present at representation level
-                const repSegmentTemplate = extractSegmentTemplate(representation);
-                flatRepresentation.segmentTemplate = repSegmentTemplate || segmentTemplate;
-                
-                const repSegmentBase = extractSegmentBase(representation);
-                flatRepresentation.segmentBase = repSegmentBase || segmentBase;
-                
-                const repSegmentList = extractSegmentList(representation);
-                flatRepresentation.segmentList = repSegmentList || segmentList;
-                
-                // Add audio channel configuration if available for audio
-                if (mediaType === 'audio' && audioChannelConfig) {
-                    flatRepresentation.audioChannelConfiguration = audioChannelConfig;
-                }
                 
                 // For rendering in the UI, create URL with fragment identifier
                 flatRepresentation.trackUrl = `${url}#adaptationSet=${adaptationSetId}&representation=${repId}`;
@@ -523,10 +389,9 @@ export async function parseDashManifest(url, headers = null, tabId) {
                     flatRepresentation.width = parseInt(extractAttribute(representation, 'width'), 10) || null;
                     flatRepresentation.height = parseInt(extractAttribute(representation, 'height'), 10) || null;
                     flatRepresentation.standardizedResolution = flatRepresentation.height ? 
-                    standardizeResolution(flatRepresentation.height) : null;
+                        standardizeResolution(flatRepresentation.height) : null;
                     flatRepresentation.frameRate = parseFrameRate(extractAttribute(representation, 'frameRate') || null);
-                    flatRepresentation.sar = extractAttribute(representation, 'sar') || null;
-                    flatRepresentation.scanType = extractAttribute(representation, 'scanType') || null;
+                    flatRepresentation.trackQuality = extractTrackQuality(representation, flatRepresentation.height);
                     
                     // Calculate resolution string
                     if (flatRepresentation.width && flatRepresentation.height) {
@@ -551,8 +416,7 @@ export async function parseDashManifest(url, headers = null, tabId) {
                 } 
                 else if (mediaType === 'audio') {
                     flatRepresentation.audioSamplingRate = parseInt(extractAttribute(representation, 'audioSamplingRate'), 10) || null;
-                    flatRepresentation.channels = parseInt(extractAttribute(representation, 'audioChannels') || 
-                                               extractAttribute(representation, 'channels'), 10) || null;
+                    flatRepresentation.channels = extractChannelCount(adaptationSet, representation);
                     
                     // Detect audio container based on DASH mimeType and codecs
                     const audioContainerDetection = detectAllContainers({
@@ -583,7 +447,6 @@ export async function parseDashManifest(url, headers = null, tabId) {
                     flatRepresentation.subtitleContainer = subtitleContainerDetection.container;
                     flatRepresentation.containerDetectionReason = subtitleContainerDetection.reason;
                     
-                    // Any subtitle-specific properties can be added here
                     // Assign FFmpeg stream index before pushing to array
                     flatRepresentation.ffmpegStreamIndex = `0:s:${subtitleIndex++}`;
                     subtitleTracks.push(flatRepresentation);
@@ -591,9 +454,31 @@ export async function parseDashManifest(url, headers = null, tabId) {
             }
         }
         
-        // Sort track arrays by bandwidth (highest first)
-        videoTracks.sort((a, b) => (b.bandwidth || 0) - (a.bandwidth || 0));
-        audioTracks.sort((a, b) => (b.bandwidth || 0) - (a.bandwidth || 0));
+        // Sort track arrays by mimeType, then codecs, then bandwidth (highest first)
+        const sortTracks = (tracks) => tracks.sort((a, b) => {
+            // Phase 1: mimeType (mp4 first, then webm)
+            const mimeA = a.mimeType || '';
+            const mimeB = b.mimeType || '';
+            if (mimeA !== mimeB) {
+                if (mimeA.includes('mp4')) return -1;
+                if (mimeB.includes('mp4')) return 1;
+                if (mimeA.includes('webm')) return -1;
+                if (mimeB.includes('webm')) return 1;
+            }
+            
+            // Phase 2: codecs (by family, alphabetical for consistency)
+            const codecA = (a.codecs || '').split('.')[0];
+            const codecB = (b.codecs || '').split('.')[0];
+            if (codecA !== codecB) {
+                return codecA.localeCompare(codecB);
+            }
+            
+            // Phase 3: bandwidth (highest first)
+            return (b.bandwidth || 0) - (a.bandwidth || 0);
+        });
+        
+        sortTracks(videoTracks);
+        sortTracks(audioTracks);
                 
         // Set the full parse timestamp only at the end of successful parsing
         const timestampFP = Date.now();
@@ -613,7 +498,7 @@ export async function parseDashManifest(url, headers = null, tabId) {
             videoTracks: videoTracks,
             audioTracks: audioTracks,
             subtitleTracks: subtitleTracks,
-            segmentPaths: segmentPaths, // Add segment paths for filtering in background script
+
             status: 'success'
         };
         

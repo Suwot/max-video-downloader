@@ -524,20 +524,22 @@ function formatTrackLabel(track, type) {
             .join(' • '); 
 
     } else if (type === 'audio') {
-        const label = track.label || null;
-        const lang = track.language || null;
+        // Prioritize displayLanguage over lang, then label
+        const language = track.isDefault ? `${track.label || track.lang || null}*` : track.label || track.lang || null;
         const codecs = track.codecs ? track.codecs.split('.')[0] : null;
         const channels = track.channels ? `${track.channels}ch` : null;
         const fileSizeBytes = track.estimatedFileSizeBytes ? 
             formatSize(track.estimatedFileSizeBytes) : null;
 
-        return [label, lang, channels, fileSizeBytes, codecs]
+        return [language, channels, fileSizeBytes, codecs]
             .filter(Boolean)
             .join(' • ');
 
     } else {
-        // Subtitle
-        return track.label || track.language || 'unknown';
+        // Subtitle - prioritize displayLanguage, show accessibility indicators
+        const language = track.isDefault ? `${track.label || track.lang || 'Unknown'}*` : 'Unknown';
+                
+        return language
     }
 }
 
