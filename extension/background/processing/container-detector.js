@@ -542,25 +542,53 @@ function detectSubtitleWithContext(options) {
 }
 
 /**
- * Legacy function for backward compatibility
- * @deprecated Use detectAllContainers instead
+ * Container compatibility matrix for muxing different track types together
+ * Based on actual container format capabilities, not MIME types
  */
-export function detectContainer(options = {}) {
-    return detectAllContainers(options);
-}
+const CONTAINER_COMPATIBILITY = {
+    // MP4 container compatibility
+    mp4: {
+        video: ['mp4'],           // MP4 video tracks
+        audio: ['mp4', 'm4a'],    // MP4 video + AAC/MP4 audio (m4a is MP4 with audio)
+        subtitle: ['srt', 'ttml', 'vtt'] // MP4 supports various subtitle formats
+    },
+    
+    // WebM container compatibility  
+    webm: {
+        video: ['webm'],          // WebM video tracks
+        audio: ['webm'],          // WebM video + Opus/Vorbis audio
+        subtitle: ['vtt']         // WebM primarily supports VTT subtitles
+    },
+    
+    // MKV container compatibility (most flexible)
+    mkv: {
+        video: ['mp4', 'webm', 'mkv', 'ogg'], // MKV can contain almost any video
+        audio: ['mp3', 'm4a', 'webm', 'ogg', 'flac', 'wav', 'mkv'], // MKV can contain any audio
+        subtitle: ['srt', 'ass', 'vtt', 'ttml'] // MKV supports all subtitle formats
+    },
+    
+    // OGG container compatibility
+    ogg: {
+        video: ['ogg'],           // OGG video tracks (Theora)
+        audio: ['ogg'],           // OGG audio tracks (Vorbis)
+        subtitle: ['srt']         // OGG has limited subtitle support
+    }
+};
+
+
 
 /**
- * Legacy function for backward compatibility
- * @deprecated Use detectAllContainers with separateContainers: true instead
+ * Check if a specific track type is compatible with a video container
+ * @param {string} trackContainer - Container of the track to check
+ * @param {string} trackType - Type of track ('audio' or 'subtitle')
+ * @param {string} videoContainer - Container of the video track
+ * @returns {boolean} True if compatible
  */
-export function detectSeparateContainers(options = {}) {
-    return detectAllContainers({ ...options, separateContainers: true });
+export function isTrackCompatibleWithVideo(trackContainer, trackType, videoContainer) {
+    const videoRules = CONTAINER_COMPATIBILITY[videoContainer];
+    if (!videoRules || !trackContainer) return false;
+    
+    const compatibleContainers = videoRules[trackType];
+    return compatibleContainers ? compatibleContainers.includes(trackContainer) : false;
 }
 
-/**
- * Legacy function for backward compatibility
- * @deprecated Use detectAllContainers with mediaType: 'subtitle' instead
- */
-export function detectSubtitleContainer(options = {}) {
-    return detectAllContainers({ ...options, mediaType: 'subtitle' });
-}
