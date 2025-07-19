@@ -537,8 +537,8 @@ function formatTrackLabel(track, type) {
 
     } else {
         // Subtitle - prioritize displayLanguage, show accessibility indicators
-        const language = track.isDefault ? `${track.label || track.lang || 'Unknown'}*` : 'Unknown';
-                
+        const language = track.isDefault ? `${track.label || track.lang || 'Unknown'}*` : track.label || track.lang || 'Unknown';
+
         return language
     }
 }
