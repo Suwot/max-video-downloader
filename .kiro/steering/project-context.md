@@ -9,6 +9,13 @@ MAX Video Downloader - Chrome extension (Manifest V3) that downloads videos from
 - **Extension** (`extension/`): Detection, validation, manifest processing via webRequest API
 - **Native Host** (`native_host/`): Downloads, conversion, FFmpeg operations using bundled binaries
 
+## State Management
+
+- **Background service worker**: All persistent state, video detection, download tracking, tab management
+- **Popup UI**: Stateless display layer that reads from background on open, destroyed on close
+- **Communication**: Port messaging for real-time updates, no UI state persistence
+- **Data flow**: Background → Popup (read-only), Popup → Background (commands/actions)
+
 ## Detection Flow
 
 1. **webRequest.onHeadersReceived** - Primary detection method
@@ -62,6 +69,13 @@ native_host/
 - **Styling**: SCSS with partials system (\_variables.scss used for all styles in all partials, CSS is compilation output)
 - **Communication**: Port messaging (popup), connectNative (native host)
 
+## Performance Considerations
+
+- **Memory management**: Rolling cleanup in webRequest handlers, immediate disposal of temporary data
+- **UI responsiveness**: Minimal DOM manipulation, direct HTML insertion over createElement chains
+- **Background efficiency**: Service worker hibernation-aware, persistent connections only when needed
+- **Native host**: Process spawning optimization, FFmpeg binary reuse, progress streaming
+
 ## Development Environment
 
 - **Single environment**: Production files used for development (no dev/prod separation)
@@ -87,9 +101,23 @@ cd native_host && node test-host.js
 # Test page: test/videos.html (all video formats)
 ```
 
+## Extension Lifecycle
+
+- **Service worker**: Persistent background processing, survives tab/popup closure
+- **Popup**: Ephemeral UI, recreated on each open, no state retention
+- **Content scripts**: Per-tab injection, isolated from extension state
+- **Native host**: On-demand process spawning, connection pooling for efficiency
+
 ## Edge Cases (Handled Gracefully)
 
 - HLS media-types for audio/subs (hasVideo/hasAudio flags)
 - Videos masking as direct but are chunks (preview timeout acceptable)
 - Obfuscated headers showing PNG but containing H264 after 4kb (not handled, acceptable)
 - Separate audio tracks in video variants (codec-based detection)
+
+## Security & Privacy
+
+- **Manifest V3 compliance**: No eval(), CSP-compliant, declarativeNetRequest for header modification
+- **Minimal permissions**: Only required APIs, no broad host permissions
+- **Local processing**: All video analysis happens locally, no external API calls
+- **User data**: Download history stored locally, no telemetry or tracking
