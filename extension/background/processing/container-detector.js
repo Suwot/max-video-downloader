@@ -434,17 +434,31 @@ function detectSingleContainer(options) {
     
     // 5. Media type fallback (lowest reliability)
     if (detectionResults.length === 0) {
-        const fallbackMapping = {
-            'audio': { container: 'mp3', reason: 'audio fallback' },
-            'subtitle': { container: 'srt', reason: 'subtitle fallback' },
-            'video': { container: 'mp4', reason: 'video fallback' }
-        };
+        const { mediaType, videoType } = options;
         
-        const fallback = fallbackMapping[mediaType] || fallbackMapping.video;
+        let fallbackContainer, fallbackReason;
+        
+        if (mediaType === 'audio') {
+            // HLS audio should be M4A (AAC in MP4), others default to MP3
+            if (videoType === 'hls') {
+                fallbackContainer = 'm4a';
+                fallbackReason = 'hls audio fallback (m4a)';
+            } else {
+                fallbackContainer = 'mp3';
+                fallbackReason = 'audio fallback (mp3)';
+            }
+        } else if (mediaType === 'subtitle') {
+            fallbackContainer = 'srt';
+            fallbackReason = 'subtitle fallback';
+        } else {
+            fallbackContainer = 'mp4';
+            fallbackReason = 'video fallback';
+        }
+        
         detectionResults.push({
-            container: fallback.container,
+            container: fallbackContainer,
             confidence: 'fallback',
-            reason: fallback.reason
+            reason: fallbackReason
         });
     }
     
@@ -494,13 +508,16 @@ function detectSeparateVideoAudio(options) {
     if (!videoContainer && !audioContainer) {
         const unified = detectSingleContainer(options);
         videoContainer = unified.container;
-        audioContainer = 'mp3'; // Safe audio fallback
+        
+        // Context-aware audio fallback
+        const { videoType } = options;
+        audioContainer = videoType === 'hls' ? 'm4a' : 'mp3';
         reason = `unified fallback: ${unified.reason}`;
     }
     
     return {
         videoContainer: videoContainer || 'mp4',
-        audioContainer: audioContainer || 'mp3',
+        audioContainer: audioContainer || (options.videoType === 'hls' ? 'm4a' : 'mp3'),
         containerDetectionReason: reason
     };
 }
@@ -550,7 +567,7 @@ const CONTAINER_COMPATIBILITY = {
     mp4: {
         video: ['mp4'],           // MP4 video tracks
         audio: ['mp4', 'm4a'],    // MP4 video + AAC/MP4 audio (m4a is MP4 with audio)
-        subtitle: ['srt', 'ttml', 'vtt'] // MP4 supports various subtitle formats
+        subtitle: ['srt', 'ttml'] // MP4 supports SRT and TTML, but NOT VTT natively
     },
     
     // WebM container compatibility  

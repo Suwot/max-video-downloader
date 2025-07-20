@@ -168,6 +168,7 @@ class DownloadCommand extends BaseCommand {
      * @param {string} params.defaultContainer Default container from processing (optional)
      * @param {boolean} params.audioOnly Whether to download audio only (optional)
      * @param {string} params.streamSelection Stream selection spec for DASH (optional)
+     * @param {Array} params.inputs Array of input objects for HLS advanced mode (optional)
      * @param {string} params.masterUrl Optional master manifest URL (for reporting)
      * @param {Object} params.duration Video duration (optional)
      * @param {Object} params.headers HTTP headers to use (optional)
@@ -274,6 +275,7 @@ class DownloadCommand extends BaseCommand {
                 container,
                 audioOnly,
                 streamSelection,
+                inputs: params.inputs,
                 headers,
                 sourceAudioCodec,
                 sourceAudioBitrate
@@ -442,6 +444,7 @@ class DownloadCommand extends BaseCommand {
         container,
         audioOnly = false,
         streamSelection,
+        inputs = null,
         headers = {},
         sourceAudioCodec = null,
         sourceAudioBitrate = null
@@ -463,14 +466,33 @@ class DownloadCommand extends BaseCommand {
             }
         }
         
-        // Input arguments based on media type
-        if (type === 'hls' || type === 'dash') {
-            args.push(
-                '-protocol_whitelist', 'file,http,https,tcp,tls,crypto',
-                '-i', downloadUrl
-            );
+        // Input arguments based on media type and inputs array
+        if (inputs && inputs.length > 0) {
+            // Advanced mode: multiple inputs (HLS with separate tracks)
+            inputs.forEach(input => {
+                // Add headers for each input if provided
+                if (headers && Object.keys(headers).length > 0) {
+                    const headerLines = Object.entries(headers)
+                        .map(([key, value]) => `${key}: ${value}`)
+                        .join('\r\n');
+                    args.push('-headers', headerLines + '\r\n');
+                }
+                
+                if (type === 'hls') {
+                    args.push('-protocol_whitelist', 'file,http,https,tcp,tls,crypto');
+                }
+                args.push('-i', input.url);
+            });
         } else {
-            args.push('-i', downloadUrl);
+            // Simple mode: single input
+            if (type === 'hls' || type === 'dash') {
+                args.push(
+                    '-protocol_whitelist', 'file,http,https,tcp,tls,crypto',
+                    '-i', downloadUrl
+                );
+            } else {
+                args.push('-i', downloadUrl);
+            }
         }
         
         // Stream selection and codec configuration
@@ -481,6 +503,14 @@ class DownloadCommand extends BaseCommand {
                     args.push('-map', streamSpec);
                 });
                 logDebug('🎵 DASH audio-only mode with specific track:', streamSelection);
+            } else if (inputs && inputs.length > 0) {
+                // For HLS advanced audio extraction, map audio inputs only
+                inputs.forEach(input => {
+                    if (input.streamMap.includes(':a:')) {
+                        args.push('-map', input.streamMap);
+                    }
+                });
+                logDebug('🎵 HLS advanced audio-only mode with specific tracks');
             } else {
                 // For HLS/direct audio extraction, use specific first audio stream instead of generic mapping
                 args.push('-map', '0:a:0');  // Map specifically the first audio stream
@@ -493,12 +523,22 @@ class DownloadCommand extends BaseCommand {
             // Smart codec selection for audio-only
             this.addAudioCodecArgs(args, container, sourceAudioCodec, sourceAudioBitrate);
         } 
+        else if (inputs && inputs.length > 0) {
+            // Advanced HLS mode: map streams from multiple inputs
+            inputs.forEach(input => {
+                args.push('-map', input.streamMap);
+            });
+            logDebug('🎯 Using HLS advanced inputs:', inputs.map(i => i.streamMap).join(','));
+            
+            // Default to copying all streams without re-encoding
+            args.push('-c', 'copy');
+        }
         else if (streamSelection && type === 'dash') {
             // Parse stream selection string (e.g., "0:v:0,0:a:3,0:s:1") 
             streamSelection.split(',').forEach(streamSpec => {
                 args.push('-map', streamSpec);
             });
-            logDebug('🎯 Using stream selection:', streamSelection);
+            logDebug('🎯 Using DASH stream selection:', streamSelection);
             
             // Default to copying all streams without re-encoding for regular downloads
             args.push('-c', 'copy');

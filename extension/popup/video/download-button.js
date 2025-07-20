@@ -255,8 +255,27 @@ class DownloadButtonComponent {
      * Extract HLS-specific data
      */
     extractHlsData(videoData, selectedOption) {
-        videoData.downloadUrl = selectedOption?.dataset.url;
-        videoData.fileSizeBytes = selectedOption?.dataset.filesize || null;
+        // Check if this is advanced HLS mode (has separate audio/subtitle tracks)
+        const hasAdvancedTracks = (this.video.audioTracks?.length || 0) > 0 || 
+                                 (this.video.subtitleTracks?.length || 0) > 0;
+        
+        if (hasAdvancedTracks) {
+            // Advanced HLS mode - build inputs array from dropdown selection
+            videoData.inputs = this.buildHlsInputsArray();
+            videoData.downloadUrl = selectedOption?.dataset.url; // Primary video URL for fallback
+            
+            // Use dropdown-determined container for advanced mode (handles subtitle compatibility)
+            const dropdownContainer = selectedOption?.dataset.defaultContainer;
+            if (dropdownContainer) {
+                videoData.defaultContainer = dropdownContainer;
+                logger.debug('🎯 Using dropdown container for HLS advanced mode:', dropdownContainer);
+            }
+        } else {
+            // Simple HLS mode
+            videoData.downloadUrl = selectedOption?.dataset.url;
+        }
+        
+        videoData.fileSizeBytes = selectedOption?.dataset.totalfilesize || selectedOption?.dataset.filesize || null;
         videoData.selectedOptionOrigText = selectedOption?.textContent || null;
     }
 
@@ -278,6 +297,88 @@ class DownloadButtonComponent {
         videoData.downloadUrl = selectedOption?.dataset.url;
         videoData.fileSizeBytes = selectedOption?.dataset.filesize || null;
         videoData.selectedOptionOrigText = selectedOption?.textContent || null;
+    }
+
+    /**
+     * Build HLS inputs array from advanced dropdown selection
+     * @returns {Array} Array of input objects with url and streamMap
+     */
+    buildHlsInputsArray() {
+        const inputs = [];
+        let streamIndex = 0;
+        
+        // Find the columns container for this video
+        const columnsContainer = this.elementsDiv.querySelector('.tracks-columns-container');
+        if (!columnsContainer) {
+            logger.debug('No columns container found for HLS advanced mode');
+            return inputs;
+        }
+        
+        // Get selected video track
+        const videoColumn = columnsContainer.querySelector('.column.video');
+        const selectedVideo = videoColumn?.querySelector('.track-option.selected');
+        if (selectedVideo) {
+            const videoTrack = this.getTrackByIdFromColumn(videoColumn, selectedVideo.dataset.id);
+            if (videoTrack?.url) {
+                inputs.push({
+                    url: videoTrack.url,
+                    streamMap: `${streamIndex++}:v:0`
+                });
+            }
+        }
+        
+        // Get selected audio tracks
+        const audioColumn = columnsContainer.querySelector('.column.audio');
+        const selectedAudioTracks = audioColumn?.querySelectorAll('.track-option.selected') || [];
+        selectedAudioTracks.forEach(audioOption => {
+            const audioTrack = this.getTrackByIdFromColumn(audioColumn, audioOption.dataset.id);
+            if (audioTrack?.url) {
+                inputs.push({
+                    url: audioTrack.url,
+                    streamMap: `${streamIndex++}:a:0`
+                });
+            }
+        });
+        
+        // Get selected subtitle tracks
+        const subtitleColumn = columnsContainer.querySelector('.column.subtitle');
+        const selectedSubtitleTracks = subtitleColumn?.querySelectorAll('.track-option.selected') || [];
+        selectedSubtitleTracks.forEach(subOption => {
+            const subTrack = this.getTrackByIdFromColumn(subtitleColumn, subOption.dataset.id);
+            if (subTrack?.url) {
+                inputs.push({
+                    url: subTrack.url,
+                    streamMap: `${streamIndex++}:s:0`
+                });
+            }
+        });
+        
+        logger.debug(`Built HLS inputs array with ${inputs.length} tracks:`, inputs);
+        return inputs;
+    }
+
+    /**
+     * Get track data by ID from a column (helper method)
+     * @param {HTMLElement} column - Track column
+     * @param {string} trackId - Track ID
+     * @returns {Object|null} Track data
+     */
+    getTrackByIdFromColumn(column, trackId) {
+        const columnsContainer = column.closest('.tracks-columns-container');
+        if (!columnsContainer?.tracksData) return null;
+        
+        const { videoTracks, audioTracks, subtitleTracks } = columnsContainer.tracksData;
+        
+        // Find track in appropriate array based on column type
+        if (column.classList.contains('video')) {
+            return videoTracks.find(track => track.id === trackId);
+        } else if (column.classList.contains('audio')) {
+            return audioTracks.find(track => track.id === trackId);
+        } else if (column.classList.contains('subtitle')) {
+            return subtitleTracks.find(track => track.id === trackId);
+        }
+        
+        return null;
     }
 
     /**

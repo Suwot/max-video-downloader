@@ -657,7 +657,7 @@ header .heading-row {
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
-.custom-dropdown[data-type=dash] .options-container {
+.custom-dropdown.advanced .options-container {
   width: 404px;
   left: -115px;
 }

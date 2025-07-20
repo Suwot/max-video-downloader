@@ -104,7 +104,7 @@
 }
 
 .options-container {
-    .custom-dropdown[data-type="dash"] & {
+    .custom-dropdown.advanced & {
         width: calc(420px - 16px);
         left: -115px;
     }

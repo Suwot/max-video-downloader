@@ -56,6 +56,9 @@ export function createCustomDropdown(video, onChange = null) {
     const useAdvancedMode = !hasOnlyVideoTracks;
     
     if (useAdvancedMode) {
+        // Add advanced class for styling
+        container.classList.add('advanced');
+        
         const tracks = {
             videoTracks: video.videoTracks || [],
             audioTracks: video.audioTracks || [],
@@ -209,9 +212,10 @@ function createTrackColumn(title, tracks, type, singleSelect, columnsContainer, 
         option.className = 'track-option';
         option.dataset.id = track.id;
         
-        // Store file size for calculations
-        if (track.estimatedFileSizeBytes) {
-            option.dataset.filesize = track.estimatedFileSizeBytes;
+        // Store file size for calculations (DASH: direct, HLS: in metaJS)
+        const fileSizeBytes = track.estimatedFileSizeBytes ?? track.metaJS?.estimatedFileSizeBytes;
+        if (fileSizeBytes) {
+            option.dataset.filesize = fileSizeBytes;
         }
         
         // First track is selected by default (presorted data)
@@ -428,6 +432,17 @@ function updateAdvancedDataAttributes(selectedDisplay, columnsContainer) {
     selectedDisplay.dataset.trackMap = selection.trackMap;
     selectedDisplay.dataset.defaultContainer = selection.defaultContainer;
     selectedDisplay.dataset.totalfilesize = selection.totalfilesize;
+    
+    // For HLS advanced mode, store primary video URL only
+    // inputs array will be built on-demand during download
+    const videoColumn = columnsContainer.querySelector('.column.video');
+    const selectedVideo = videoColumn?.querySelector('.track-option.selected');
+    if (selectedVideo) {
+        const videoTrack = getTrackByIdFromColumn(videoColumn, selectedVideo.dataset.id);
+        if (videoTrack?.url) {
+            selectedDisplay.dataset.url = videoTrack.url;
+        }
+    }
 }
 
 /**
@@ -516,34 +531,72 @@ function getTrackByIdFromColumn(column, trackId) {
  */
 function formatTrackLabel(track, type) {
     if (type === 'video') {
-        const res = track.standardizedResolution || null;
-        const fps = track.frameRate || null;
+        // Handle both DASH and HLS video tracks
+        let res, fps, fileSizeBytes, codecs;
+        
+        if (track.metaJS) {
+            // HLS video track structure
+            res = track.metaJS.standardizedResolution || null;
+            fps = track.metaJS.fps || null;
+            fileSizeBytes = track.metaJS.estimatedFileSizeBytes ? 
+                formatSize(track.metaJS.estimatedFileSizeBytes) : null;
+            codecs = track.metaJS.codecs ? track.metaJS.codecs.split('.')[0] : null;
+        } else {
+            // DASH video track structure
+            res = track.standardizedResolution || null;
+            fps = track.frameRate || null;
+            fileSizeBytes = track.estimatedFileSizeBytes ? 
+                formatSize(track.estimatedFileSizeBytes) : null;
+            codecs = track.codecs ? track.codecs.split('.')[0] : null;
+        }
+        
         const formattedResolution = res ? 
             ((fps && fps !== 30) ? `${res}${fps}` : res) : null;
-        
-        const fileSizeBytes = formatSize(track.estimatedFileSizeBytes) || null;
-        const codecs = track.codecs ? track.codecs.split('.')[0] : null;
 
         return [formattedResolution, fileSizeBytes, codecs]
             .filter(Boolean)
             .join(' • '); 
 
     } else if (type === 'audio') {
-        const language = track.isDefault ? `${track.label || track.lang || null}*` : track.label || track.lang || null;
-        const codecs = track.codecs ? track.codecs.split('.')[0] : null;
-        const channels = track.channels ? `${track.channels}ch` : null;
-        const fileSizeBytes = track.estimatedFileSizeBytes ? 
-            formatSize(track.estimatedFileSizeBytes) : null;
+        // Handle both DASH and HLS audio tracks
+        let language, channels, fileSizeBytes, codecs;
+        
+        if (track.name !== undefined) {
+            // HLS audio track structure
+            language = track.default ? `${track.name || track.language}*` : 
+                      (track.name || track.language);
+            channels = track.channels || null;
+            fileSizeBytes = null; // HLS audio tracks don't have individual file sizes
+            codecs = null; // HLS audio codecs not specified in master
+        } else {
+            // DASH audio track structure
+            language = track.isDefault ? `${track.label || track.lang}*` : 
+                      (track.label || track.lang);
+            channels = track.channels ? `${track.channels}ch` : null;
+            fileSizeBytes = track.estimatedFileSizeBytes ? 
+                formatSize(track.estimatedFileSizeBytes) : null;
+            codecs = track.codecs ? track.codecs.split('.')[0] : null;
+        }
 
         return [language, channels, fileSizeBytes, codecs]
             .filter(Boolean)
             .join(' • ');
 
     } else {
-        // Subtitle - prioritize displayLanguage, show accessibility indicators
-        const language = track.isDefault ? `${track.label || track.lang || 'Unknown'}*` : track.label || track.lang || 'Unknown';
+        // Subtitle tracks - handle both DASH and HLS
+        let language;
+        
+        if (track.name !== undefined) {
+            // HLS subtitle track structure
+            language = track.default ? `${track.name || track.language || 'Subtitle'}*` : 
+                      (track.name || track.language || 'Subtitle');
+        } else {
+            // DASH subtitle track structure
+            language = track.isDefault ? `${track.label || track.lang || 'Subtitle'}*` : 
+                      (track.label || track.lang || 'Subtitle');
+        }
 
-        return language
+        return language;
     }
 }
 

@@ -376,7 +376,21 @@ function parseHlsMaster(content, baseUrl, masterUrl) {
             separateContainers: true
         });
         
+        // Conditionally assign audioContainer based on codec analysis
+        let audioContainer = null;
+        if (entry.streamInf.codecs) {
+            // Codecs present - only assign audioContainer if audio codec detected
+            if (entry.streamInf.hasAudioCodec) {
+                audioContainer = containerDetection.audioContainer;
+            }
+            // If no audio codec detected, leave audioContainer as null
+        } else {
+            // No codecs info - assign default fallback (can't be sure it doesn't have audio)
+            audioContainer = containerDetection.audioContainer;
+        }
+        
         return {
+            id: `video-${entry.streamInf.bandwidth || 'unknown'}-${entry.streamInf.height || 'p'}`,
             url: entry.url,
             normalizedUrl: entry.normalizedUrl,
             masterUrl: masterUrl,
@@ -385,7 +399,7 @@ function parseHlsMaster(content, baseUrl, masterUrl) {
             isVariant: true,
             // Container information for download
             videoContainer: containerDetection.videoContainer,
-            audioContainer: containerDetection.audioContainer,
+            audioContainer: audioContainer,
             containerDetectionReason: containerDetection.reason,
             metaJS: {
                 bandwidth: entry.streamInf.bandwidth,
@@ -429,7 +443,8 @@ function parseHlsMaster(content, baseUrl, masterUrl) {
                 attrs[key] = value;
             }
             if (/TYPE=AUDIO/.test(line)) {
-                // Detect audio container - HLS audio tracks typically use AAC in MP4 or MP3
+                // Detect audio container - HLS audio tracks are typically AAC in M4A (MP4 audio)
+                // Since HLS is almost always MP4-compatible, audio should be M4A not MP3
                 const audioContainer = detectAllContainers({
                     url: attrs['URI'] ? resolveUrl(baseUrl, attrs['URI']) : null,
                     mediaType: 'audio',
@@ -437,6 +452,7 @@ function parseHlsMaster(content, baseUrl, masterUrl) {
                 });
                 
                 audioTracks.push({
+                    id: `audio-${attrs['GROUP-ID'] || 'default'}-${attrs['NAME'] || audioTracks.length}`,
                     groupId: attrs['GROUP-ID'] || null,
                     name: attrs['NAME'] || null,
                     language: attrs['LANGUAGE'] || null,
@@ -460,6 +476,7 @@ function parseHlsMaster(content, baseUrl, masterUrl) {
                 });
                 
                 subtitleTracks.push({
+                    id: `subtitle-${attrs['GROUP-ID'] || 'default'}-${attrs['NAME'] || subtitleTracks.length}`,
                     groupId: attrs['GROUP-ID'] || null,
                     name: attrs['NAME'] || null,
                     language: attrs['LANGUAGE'] || null,
@@ -596,7 +613,7 @@ async function parseHlsVariant(variantUrl, headers = null, tabId) {
             version: version,
             // Container information for download (defaults for HLS)
             videoContainer: containerDetection.container,
-            audioContainer: 'mp3', // Default audio container for HLS
+            audioContainer: 'm4a', // Default audio container for HLS (AAC in MP4)
             containerDetectionReason: containerDetection.reason
         };
 
