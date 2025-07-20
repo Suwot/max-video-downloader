@@ -837,7 +837,6 @@ header .heading-row {
 }
 .track-option.incompatible {
   border-left: 3px solid var(--color-red);
-  opacity: 0.8;
 }
 .track-option input {
   margin-right: 6px;
