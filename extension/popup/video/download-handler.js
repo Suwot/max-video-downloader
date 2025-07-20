@@ -329,6 +329,14 @@ async function cloneVideoItemToDownloads(elementsDiv, downloadData) {
         // Clone the element (without event listeners)
         const clonedElement = videoItem.cloneNode(true);
         
+        // Fix radio button name conflicts in cloned element
+        const radioButtons = clonedElement.querySelectorAll('input[type="radio"]');
+        radioButtons.forEach(radio => {
+            if (radio.name.startsWith('track-')) {
+                radio.name = `track-${radio.name.split('-')[1]}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+            }
+        });
+        
         // Add elementHTML to downloadData for storage by Download Manager
         downloadData.elementHTML = clonedElement.outerHTML;
 
