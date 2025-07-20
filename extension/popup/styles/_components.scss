@@ -182,6 +182,7 @@
 
         &.downloading {
             background: var(--bg-selected-dark);
+            color: var(--text-primary-dark);
         }
 
         &.queued, &.unqueued {
@@ -210,6 +211,7 @@
 
         &.downloading {
             background: var(--bg-element-active-light);
+            color: var(--text-primary-light);
         }
 
         &.queued, &.unqueued {

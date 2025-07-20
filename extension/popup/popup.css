@@ -710,6 +710,7 @@ header .heading-row {
 }
 .theme-dark .dropdown-option.downloading {
   background: var(--bg-selected-dark);
+  color: var(--text-primary-dark);
 }
 .theme-dark .dropdown-option.queued, .theme-dark .dropdown-option.unqueued {
   background-color: var(--color-yellow);
@@ -732,6 +733,7 @@ header .heading-row {
 }
 .theme-light .dropdown-option.downloading {
   background: var(--bg-element-active-light);
+  color: var(--text-primary-light);
 }
 .theme-light .dropdown-option.queued, .theme-light .dropdown-option.unqueued {
   background-color: var(--color-yellow);
