@@ -11,6 +11,7 @@ import { clearAllHeaderCaches } from '../../shared/utils/headers-utils.js';
 import { getVideosForDisplay, getVideo, dismissVideoFromTab, cleanupAllVideos, getVideoTypeCounts } from '../processing/video-store.js';
 import nativeHostService from './native-host-service.js';
 import { updateTabIcon } from '../state/tab-manager.js';
+import { settingsManager } from '../index.js';
 
 // Track all popup connections - simplified single map
 const popupPorts = new Map(); // key = portId, value = {port, tabId, url}
@@ -39,7 +40,7 @@ async function handlePortMessage(message, port, portId) {
     }
     
     // Define commands that don't require tab ID (global operations)
-    const globalCommands = ['clearCaches', 'getPreviewCacheStats', 'getDownloadProgress', 'fileSystem'];
+    const globalCommands = ['clearCaches', 'getPreviewCacheStats', 'getDownloadProgress', 'fileSystem', 'getSettings', 'updateSettings'];
     
     // Commands that require tab ID validation (tab-specific operations)
     const tabSpecificCommands = ['getVideos', 'generatePreview', 'download'];
@@ -149,6 +150,47 @@ async function handlePortMessage(message, port, portId) {
                 logger.error(`File system operation failed: ${message.operation}`, error);
                 // For these operations, we don't need to send error back to popup
                 // They are fire-and-forget UI operations
+            }
+            break;
+            
+        case 'getSettings':
+            // Route settings request to Settings Manager
+            try {
+                const settings = settingsManager.getAll();
+                port.postMessage({
+                    command: 'settingsResponse',
+                    settings: settings
+                });
+                logger.debug('Sent current settings to popup:', settings);
+            } catch (error) {
+                logger.error('Error getting settings:', error);
+                port.postMessage({
+                    command: 'settingsResponse',
+                    settings: {},
+                    error: error.message
+                });
+            }
+            break;
+            
+        case 'updateSettings':
+            // Route settings update to Settings Manager
+            try {
+                const success = await settingsManager.updateAll(message.settings);
+                const updatedSettings = settingsManager.getAll();
+                port.postMessage({
+                    command: 'settingsResponse',
+                    settings: updatedSettings,
+                    success: success
+                });
+                logger.debug('Updated settings and sent response to popup:', updatedSettings);
+            } catch (error) {
+                logger.error('Error updating settings:', error);
+                port.postMessage({
+                    command: 'settingsResponse',
+                    settings: settingsManager.getAll(),
+                    success: false,
+                    error: error.message
+                });
             }
             break;
             

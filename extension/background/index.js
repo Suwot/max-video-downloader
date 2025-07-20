@@ -1,5 +1,6 @@
 // Import services
 import { initStateManager } from './state/state-manager.js';
+import { SettingsManager } from './state/settings-manager.js';
 import { initHeaderTracking } from '../shared/utils/headers-utils.js';
 import { initTabTracking } from './state/tab-manager.js';
 import { initUICommunication } from './messaging/popup-communication.js';
@@ -11,6 +12,9 @@ import { initVideoDetector } from './detection/video-detector.js';
 
 // Create a logger instance for the background script
 const logger = createLogger('Background');
+
+// Create and export Settings Manager instance
+export const settingsManager = new SettingsManager();
 
 // Debug logger for allDetectedVideos - will log every 10 seconds
 let debugInterval;
@@ -64,6 +68,9 @@ async function initializeServices() {
     try {
         logger.info('Initializing background services');
 
+        // Initialize Settings Manager first since other services depend on it
+        await settingsManager.initialize();
+        
         await initStateManager();        // Initialize state manager first since other services depend on it
         await initDownloadManager();     // Initialize download manager early since it uses state manager
         await initVideoDetector();       // Initialize video detector

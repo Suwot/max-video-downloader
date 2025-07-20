@@ -493,6 +493,371 @@
 }
 
 // =====================================================
+// INPUT COMPONENTS
+// =====================================================
+
+// Base input styling
+.input-field {
+    width: 100%;
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: var(--font-body);
+    font-family: inherit;
+    transition: all var(--transition-normal);
+    border: 1px solid transparent;
+
+    .theme-dark & {
+        background-color: var(--bg-secondary-dark);
+        color: var(--text-primary-dark);
+        border-color: var(--border-primary-dark);
+
+        &:hover {
+            background-color: var(--bg-primary-dark-hover);
+        }
+
+        &:focus {
+            background-color: var(--bg-primary-dark);
+            border-color: var(--color-blue);
+            box-shadow: 0 0 0 2px rgba(3, 122, 251, 0.2);
+        }
+
+        &::placeholder {
+            color: var(--text-secondary-dark);
+        }
+    }
+
+    .theme-light & {
+        background-color: var(--bg-element-light);
+        color: var(--text-primary-light);
+        box-shadow: var(--bg-element-shadow-light);
+
+        &:hover {
+            background-color: var(--bg-element-hover-light);
+        }
+
+        &:focus {
+            background-color: var(--bg-primary-light);
+            border-color: var(--color-blue);
+            box-shadow: 0 0 0 2px rgba(3, 122, 251, 0.2);
+        }
+
+        &::placeholder {
+            color: var(--text-secondary-light);
+        }
+    }
+
+    // Validation states
+    &.error {
+        .theme-dark & {
+            border-color: var(--color-red);
+            box-shadow: 0 0 0 2px rgba(255, 59, 66, 0.2);
+        }
+
+        .theme-light & {
+            border-color: var(--color-red);
+            box-shadow: 0 0 0 2px rgba(255, 59, 66, 0.2);
+        }
+    }
+
+    &.success {
+        .theme-dark & {
+            border-color: var(--color-green);
+            box-shadow: 0 0 0 2px rgba(0, 202, 85, 0.2);
+        }
+
+        .theme-light & {
+            border-color: var(--color-green);
+            box-shadow: 0 0 0 2px rgba(0, 202, 85, 0.2);
+        }
+    }
+
+    &:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+
+        .theme-dark & {
+            background-color: var(--bg-primary-dark);
+        }
+
+        .theme-light & {
+            background-color: var(--bg-secondary-light);
+        }
+    }
+}
+
+// Number input specific styling
+.input-field[type="number"] {
+    &::-webkit-outer-spin-button,
+    &::-webkit-inner-spin-button {
+        -webkit-appearance: none;
+        margin: 0;
+    }
+}
+
+// Toggle switch component
+.toggle-switch {
+    position: relative;
+    display: inline-block;
+    width: 44px;
+    height: 24px;
+    cursor: pointer;
+
+    input {
+        opacity: 0;
+        width: 0;
+        height: 0;
+    }
+
+    .slider {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        border-radius: 12px;
+        transition: all var(--transition-normal);
+
+        .theme-dark & {
+            background-color: var(--bg-secondary-dark);
+            border: 1px solid var(--border-primary-dark);
+        }
+
+        .theme-light & {
+            background-color: var(--bg-element-light);
+            box-shadow: var(--bg-element-shadow-light);
+        }
+
+        &:before {
+            content: "";
+            position: absolute;
+            height: 18px;
+            width: 18px;
+            left: 2px;
+            top: 2px;
+            border-radius: 50%;
+            transition: all var(--transition-normal);
+
+            .theme-dark & {
+                background-color: var(--text-secondary-dark);
+            }
+
+            .theme-light & {
+                background-color: var(--text-secondary-light);
+            }
+        }
+    }
+
+    input:checked + .slider {
+        .theme-dark & {
+            background-color: var(--color-blue);
+            border-color: var(--color-blue);
+        }
+
+        .theme-light & {
+            background-color: var(--color-blue);
+        }
+
+        &:before {
+            transform: translateX(20px);
+            background-color: white;
+        }
+    }
+
+    input:focus + .slider {
+        box-shadow: 0 0 0 2px rgba(3, 122, 251, 0.2);
+    }
+
+    input:disabled + .slider {
+        opacity: 0.6;
+        cursor: not-allowed;
+    }
+
+    &:hover input:not(:disabled) + .slider {
+        .theme-dark & {
+            background-color: var(--bg-primary-dark-hover);
+        }
+
+        .theme-light & {
+            background-color: var(--bg-element-hover-light);
+        }
+    }
+
+    &:hover input:checked:not(:disabled) + .slider {
+        background-color: var(--color-blue-hover);
+    }
+}
+
+// Input group for labels and inputs
+.input-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    width: 100%;
+
+    .input-label {
+        font-size: var(--font-h2);
+        font-weight: 500;
+        margin: 0;
+
+        .theme-dark & {
+            color: var(--text-primary-dark);
+        }
+
+        .theme-light & {
+            color: var(--text-primary-light);
+        }
+    }
+
+    .input-description {
+        font-size: var(--font-body);
+        margin: 0;
+        opacity: 0.8;
+
+        .theme-dark & {
+            color: var(--text-secondary-dark);
+        }
+
+        .theme-light & {
+            color: var(--text-secondary-light);
+        }
+    }
+
+    .input-error {
+        font-size: var(--font-body);
+        margin: 0;
+        color: var(--color-red);
+    }
+
+    // Horizontal layout variant
+    &.horizontal {
+        flex-direction: row;
+        align-items: center;
+        justify-content: space-between;
+
+        .input-label {
+            flex: 1;
+            margin-right: 12px;
+        }
+
+        .input-field,
+        .toggle-switch {
+            flex-shrink: 0;
+        }
+
+        .input-field {
+            width: auto;
+            min-width: 80px;
+        }
+    }
+}
+
+// Button component (consistent with existing patterns)
+.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 8px 16px;
+    border-radius: 6px;
+    font-size: var(--font-h2);
+    font-weight: 500;
+    cursor: pointer;
+    border: none;
+    transition: all var(--transition-normal);
+    text-decoration: none;
+    gap: 6px;
+
+    &:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+    }
+
+    // Primary button (blue)
+    &.btn-primary {
+        background-color: var(--color-blue);
+        color: white;
+
+        &:hover:not(:disabled) {
+            background-color: var(--color-blue-hover);
+        }
+
+        &:focus {
+            box-shadow: 0 0 0 2px rgba(3, 122, 251, 0.2);
+        }
+    }
+
+    // Secondary button (theme-aware)
+    &.btn-secondary {
+        .theme-dark & {
+            background-color: var(--bg-secondary-dark);
+            color: var(--text-primary-dark);
+            border: 1px solid var(--border-primary-dark);
+
+            &:hover:not(:disabled) {
+                background-color: var(--bg-primary-dark-hover);
+            }
+        }
+
+        .theme-light & {
+            background-color: var(--bg-element-light);
+            color: var(--text-primary-light);
+            box-shadow: var(--bg-element-shadow-light);
+
+            &:hover:not(:disabled) {
+                background-color: var(--bg-element-hover-light);
+            }
+
+            &:active:not(:disabled) {
+                background-color: var(--bg-element-active-light);
+            }
+        }
+
+        &:focus {
+            box-shadow: 0 0 0 2px rgba(3, 122, 251, 0.2);
+        }
+    }
+
+    // Danger button (red)
+    &.btn-danger {
+        background-color: var(--color-red);
+        color: white;
+
+        &:hover:not(:disabled) {
+            background-color: var(--color-red-hover);
+        }
+
+        &:focus {
+            box-shadow: 0 0 0 2px rgba(255, 59, 66, 0.2);
+        }
+    }
+
+    // Success button (green)
+    &.btn-success {
+        background-color: var(--color-green);
+        color: white;
+
+        &:hover:not(:disabled) {
+            background-color: var(--color-green-hover);
+        }
+
+        &:focus {
+            box-shadow: 0 0 0 2px rgba(0, 202, 85, 0.2);
+        }
+    }
+
+    // Small size variant
+    &.btn-small {
+        padding: 6px 12px;
+        font-size: var(--font-body);
+    }
+
+    // Large size variant
+    &.btn-large {
+        padding: 12px 24px;
+        font-size: var(--font-h1);
+    }
+}
+
+// =====================================================
 // SECTION HEADER & COLLAPSIBLE COMPONENTS
 // =====================================================
 
