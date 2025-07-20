@@ -51,7 +51,9 @@ export function createCustomDropdown(video, onChange = null) {
     setupDropdownEvents(container);
     
     // Determine if this should use advanced (multi-track) mode
-    const useAdvancedMode = type === 'dash'; // || (type === 'hls' && video.hasMediaGroups);
+    const hasOnlyVideoTracks = (video.audioTracks?.length || 0) === 0 && 
+                              (video.subtitleTracks?.length || 0) === 0;
+    const useAdvancedMode = !hasOnlyVideoTracks;
     
     if (useAdvancedMode) {
         const tracks = {
@@ -64,10 +66,11 @@ export function createCustomDropdown(video, onChange = null) {
         createAdvancedOptions(optionsContainer, tracks, selectedDisplay, onChange);
         initializeAdvancedSelection(selectedDisplay, tracks, type);
     } else {
-        // Simple mode for HLS/Direct
-        const variants = video.variants?.length > 0 ? video.variants : [video];
-        createSimpleOptions(optionsContainer, variants, selectedDisplay, type, onChange);
-        initializeSimpleSelection(selectedDisplay, variants[0], type);
+        // Simple mode - use videoTracks for all video types
+        const videoTracks = video.videoTracks?.length > 0 ? video.videoTracks : [video];
+        
+        createSimpleOptions(optionsContainer, videoTracks, selectedDisplay, type, onChange);
+        initializeSimpleSelection(selectedDisplay, videoTracks[0], type);
     }
     
     return container;
@@ -108,17 +111,17 @@ function setupDropdownEvents(container) {
 }
 
 /**
- * Create options for simple dropdown (HLS/Direct)
+ * Create options for simple dropdown (all video types in simple mode)
  * @param {HTMLElement} container - Options container element
- * @param {Array} variants - Available quality variants (presorted, best first)
+ * @param {Array} videoTracks - Available video tracks (presorted, best first)
  * @param {HTMLElement} selectedDisplay - Selected display element
  * @param {string} type - Video type
  * @param {Function} onChange - Callback when selection changes
  */
-function createSimpleOptions(container, variants, selectedDisplay, type, onChange) {
-    if (!variants?.length) return;
+function createSimpleOptions(container, videoTracks, selectedDisplay, type, onChange) {
+    if (!videoTracks?.length) return;
     
-    variants.forEach((variant, index) => {
+    videoTracks.forEach((track, index) => {
         const option = document.createElement('div');
         option.className = 'dropdown-option';
         
@@ -129,11 +132,11 @@ function createSimpleOptions(container, variants, selectedDisplay, type, onChang
         
         const labelSpan = document.createElement('span');
         labelSpan.className = 'label';
-        labelSpan.textContent = formatVariantLabel(variant, type);
+        labelSpan.textContent = formatVariantLabel(track, type);
         option.appendChild(labelSpan);
         
-        option.dataset.url = variant.url;
-        setVariantFilesize(option, variant, type);
+        option.dataset.url = track.url;
+        setVariantFilesize(option, track, type);
         
         option.addEventListener('click', () => {
             container.querySelectorAll('.dropdown-option').forEach(opt => {
@@ -141,8 +144,8 @@ function createSimpleOptions(container, variants, selectedDisplay, type, onChang
             });
             option.classList.add('selected');
             
-            updateSimpleSelection(selectedDisplay, variant, type);
-            if (onChange) onChange(variant);
+            updateSimpleSelection(selectedDisplay, track, type);
+            if (onChange) onChange(track);
             container.closest('.custom-dropdown').classList.remove('open');
         });
         
@@ -261,20 +264,22 @@ function createTrackColumn(title, tracks, type, singleSelect, columnsContainer, 
 }
 
 /**
- * Set filesize data attribute for variant option
+ * Set filesize data attribute for video track option
  * @param {HTMLElement} option - Option element
- * @param {Object} variant - Variant data
+ * @param {Object} videoTrack - Video track data
  * @param {string} type - Video type
  */
-function setVariantFilesize(option, variant, type) {
+function setVariantFilesize(option, videoTrack, type) {
     if (type === 'hls') {
-        if (variant.metaJS?.estimatedFileSizeBytes) {
-            option.dataset.filesize = variant.metaJS.estimatedFileSizeBytes;
+        if (videoTrack.metaJS?.estimatedFileSizeBytes) {
+            option.dataset.filesize = videoTrack.metaJS.estimatedFileSizeBytes;
         }
     } else {
-        const filesize = variant.metadata?.contentLength || 
-                        variant.metaFFprobe?.sizeBytes || 
-                        variant.metaFFprobe?.estimatedFileSizeBytes;
+        const filesize = videoTrack.metadata?.contentLength || 
+                        videoTrack.metaFFprobe?.sizeBytes || 
+                        videoTrack.metaFFprobe?.estimatedFileSizeBytes ||
+                        videoTrack.fileSize ||
+                        videoTrack.estimatedFileSizeBytes;
         if (filesize) {
             option.dataset.filesize = filesize;
         }
@@ -282,31 +287,31 @@ function setVariantFilesize(option, variant, type) {
 }
 
 /**
- * Initialize simple selection (first variant selected by default)
+ * Initialize simple selection (first video track selected by default)
  * @param {HTMLElement} selectedDisplay - Selected display element
- * @param {Object} variant - First variant
+ * @param {Object} videoTrack - First video track
  * @param {string} type - Video type
  */
-function initializeSimpleSelection(selectedDisplay, variant, type) {
-    updateSimpleSelection(selectedDisplay, variant, type);
+function initializeSimpleSelection(selectedDisplay, videoTrack, type) {
+    updateSimpleSelection(selectedDisplay, videoTrack, type);
 }
 
 /**
  * Update simple selection display
  * @param {HTMLElement} selectedDisplay - Selected display element
- * @param {Object} variant - Selected variant
+ * @param {Object} videoTrack - Selected video track
  * @param {string} type - Video type
  */
-function updateSimpleSelection(selectedDisplay, variant, type) {
+function updateSimpleSelection(selectedDisplay, videoTrack, type) {
     selectedDisplay.querySelector('.label')?.remove();
     
     const label = document.createElement('span');
     label.className = 'label';
-    const parts = formatVariantLabel(variant, type).split(' • ');
+    const parts = formatVariantLabel(videoTrack, type).split(' • ');
     label.textContent = parts.slice(0, 2).join(' • ');
     
-    selectedDisplay.dataset.url = variant.url || '';
-    setVariantFilesize(selectedDisplay, variant, type);
+    selectedDisplay.dataset.url = videoTrack.url || '';
+    setVariantFilesize(selectedDisplay, videoTrack, type);
     selectedDisplay.prepend(label);
 }
 
@@ -524,7 +529,6 @@ function formatTrackLabel(track, type) {
             .join(' • '); 
 
     } else if (type === 'audio') {
-        // Prioritize displayLanguage over lang, then label
         const language = track.isDefault ? `${track.label || track.lang || null}*` : track.label || track.lang || null;
         const codecs = track.codecs ? track.codecs.split('.')[0] : null;
         const channels = track.channels ? `${track.channels}ch` : null;
@@ -545,7 +549,7 @@ function formatTrackLabel(track, type) {
 
 /**
  * Get formatted codecs based on media type
- * @param {Object} media - Media object (variant or track)
+ * @param {Object} media - Media object (video track)
  * @param {string} type - Media type
  * @returns {string|null} Formatted codecs string
  */
@@ -579,16 +583,16 @@ function getFormattedCodecs(media, type) {
 }
 
 /**
- * Format the displayed label for a variant
- * @param {Object} variant - Variant data
+ * Format the displayed label for a video track
+ * @param {Object} videoTrack - Video track data
  * @param {string} [type='direct'] - Media type ('hls', 'direct')
  * @returns {string} Formatted label
  */
-function formatVariantLabel(variant, type = 'direct') {
-    if (!variant) return "Unknown Quality";
+function formatVariantLabel(videoTrack, type = 'direct') {
+    if (!videoTrack) return "Unknown Quality";
 
     if (type === 'hls') {
-        const meta = variant.metaJS || {};
+        const meta = videoTrack.metaJS || {};
         const res = meta.standardizedResolution || null;
         const fps = meta.fps || null;
         const formattedResolution = res ? 
@@ -598,22 +602,22 @@ function formatVariantLabel(variant, type = 'direct') {
             formatSize(meta.estimatedFileSizeBytes) : null;
             
         const fullResolution = meta.resolution || null;
-        const formattedCodecs = getFormattedCodecs(variant, 'hls');
+        const formattedCodecs = getFormattedCodecs(videoTrack, 'hls');
         
         return [formattedResolution, fileSizeBytes, fullResolution, formattedCodecs]
             .filter(Boolean)
             .join(' • ') || 'Unknown Quality';
     } else {
         // Direct video formatting
-        const res = variant.standardizedResolution || null;
-        const fps = variant.metaFFprobe?.fps || null;
+        const res = videoTrack.standardizedResolution || null;
+        const fps = videoTrack.metaFFprobe?.fps || null;
         const formattedResolution = res ? 
             ((fps && fps !== 30) ? `${res}${fps}` : res) : null;
 
-        const fileSize = variant.fileSize ? formatSize(variant.fileSize) : 
-            (variant.estimatedFileSizeBytes ? formatSize(variant.estimatedFileSizeBytes) : null);
+        const fileSize = videoTrack.fileSize ? formatSize(videoTrack.fileSize) : 
+            (videoTrack.estimatedFileSizeBytes ? formatSize(videoTrack.estimatedFileSizeBytes) : null);
         
-        const formattedCodecs = getFormattedCodecs(variant, 'direct');
+        const formattedCodecs = getFormattedCodecs(videoTrack, 'direct');
         
         return [formattedResolution, fileSize, formattedCodecs]
             .filter(Boolean)

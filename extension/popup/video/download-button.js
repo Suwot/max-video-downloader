@@ -220,7 +220,7 @@ class DownloadButtonComponent {
             filename: this.video.title,
             type: this.video.type,
             defaultContainer: defaultContainer,
-            segmentCount: this.video.type === 'hls' ? this.video.variants?.[0].metaJS?.segmentCount : null,
+            segmentCount: this.video.type === 'hls' ? this.video.videoTracks?.[0]?.metaJS?.segmentCount : null,
             duration: this.video.duration || null,
             masterUrl: this.video.isMaster ? this.video.url : null,
             pageUrl: this.video.pageUrl || null,
@@ -442,7 +442,7 @@ class DownloadButtonComponent {
     hasAudio() {
         if (this.type === 'hls') {
             if (this.video.isMaster) {
-                return this.video.audioTracks?.length > 0 || this.video.variants[0]?.metaJS?.hasAudioCodec;
+                return this.video.audioTracks?.length > 0 || this.video.videoTracks?.[0]?.metaJS?.hasAudioCodec;
             } else {
                 return true; // assume audio exists in a variant, we don't know without ffprobe
             }

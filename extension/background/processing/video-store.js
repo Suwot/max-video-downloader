@@ -16,8 +16,8 @@ const logger = createLogger('Video Store');
 // Map<tabId, Map<normalizedUrl, videoInfo>>
 const allDetectedVideos = new Map();
 
-// Track relationships between variants and their master playlists
-// Map<tabId, Map<normalizedVariantUrl, masterUrl>>
+// Track relationships between video tracks and their master playlists
+// Map<tabId, Map<normalizedVideoTrackUrl, masterUrl>>
 const variantMasterMap = new Map();
 
 // Expose internal maps for debugging and pipeline access

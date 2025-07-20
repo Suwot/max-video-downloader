@@ -25,7 +25,7 @@ const logger = createLogger('HLS Parser');
  * 
  * @param {string} url - URL of the HLS manifest
  * @param {Object} [headers] - Optional request headers
- * @returns {Promise<Object>} Validated and parsed HLS content with variants
+ * @returns {Promise<Object>} Validated and parsed HLS content with videoTracks
  */
 export async function parseHlsManifest(url, headers = null, tabId) {
     const normalizedUrl = normalizeUrl(url);
@@ -37,7 +37,7 @@ export async function parseHlsManifest(url, headers = null, tabId) {
             isValid: false,
             isMaster: false,
             isVariant: false,
-            variants: [],
+            videoTracks: [],
             audioTracks: [],
             subtitleTracks: [],
             closedCaptions: [],
@@ -72,7 +72,7 @@ export async function parseHlsManifest(url, headers = null, tabId) {
                 timestampLP,
                 isMaster: false,
                 isVariant: false,
-                variants: [],
+                videoTracks: [],
                 audioTracks: [],
                 subtitleTracks: [],
                 closedCaptions: [],
@@ -107,7 +107,7 @@ export async function parseHlsManifest(url, headers = null, tabId) {
                     timestampLP,
                     isMaster: false,
                     isVariant: false, 
-                    variants: [],
+                    videoTracks: [],
                     audioTracks: [],
                     subtitleTracks: [],
                     closedCaptions: [],
@@ -131,8 +131,8 @@ export async function parseHlsManifest(url, headers = null, tabId) {
         
         const baseUrl = getBaseDirectory(url);
         
-        // For master playlists, parse variants
-        let variants = [];
+        // For master playlists, parse video tracks
+        let videoTracks = [];
         let duration = null;
         let isEncrypted = false;
         let encryptionType = null;
@@ -154,80 +154,80 @@ export async function parseHlsManifest(url, headers = null, tabId) {
             audioTracks = masterParseResult.audioTracks || [];
             hasMediaGroups = masterParseResult.hasMediaGroups || false;
 
-            if (masterParseResult.variants && masterParseResult.variants.length > 0) {
-                // Get basic variant information
-                const basicVariants = masterParseResult.variants;
-                logger.debug(`Found ${basicVariants.length} basic variants in master playlist`);
+            if (masterParseResult.videoTracks && masterParseResult.videoTracks.length > 0) {
+                // Get basic video track information
+                const basicVideoTracks = masterParseResult.videoTracks;
+                logger.debug(`Found ${basicVideoTracks.length} basic video tracks in master playlist`);
 
-                // Attach headers directly to each variant for explicit downstream use
+                // Attach headers directly to each video track for explicit downstream use
                 if (headers) {
-                    for (const variant of basicVariants) {
-                        variant.headers = headers;
+                    for (const videoTrack of basicVideoTracks) {
+                        videoTrack.headers = headers;
                     }
                 }
 
-                // Prepare variants array with basic info
-                variants = [...basicVariants];
+                // Prepare video tracks array with basic info
+                videoTracks = [...basicVideoTracks];
 
                 // Try to fetch the highest quality variant first
                 let variantInfo = null;
                 let processedVariantIndex = 0;
 
                 // Try highest quality first, then fall back to others if needed
-                while (!variantInfo && processedVariantIndex < Math.min(3, basicVariants.length)) {
+                while (!variantInfo && processedVariantIndex < Math.min(3, basicVideoTracks.length)) {
                     try {
-                        const currentVariant = basicVariants[processedVariantIndex];
-                        logger.debug(`Processing variant ${processedVariantIndex+1}: ${currentVariant.url}`);
+                        const currentVideoTrack = basicVideoTracks[processedVariantIndex];
+                        logger.debug(`Processing video track ${processedVariantIndex+1}: ${currentVideoTrack.url}`);
 
-                        variantInfo = await parseHlsVariant(currentVariant.url, headers, tabId);
+                        variantInfo = await parseHlsVariant(currentVideoTrack.url, headers, tabId);
 
                         if (variantInfo) {
-                            logger.debug(`Successfully fetched variant ${processedVariantIndex+1}`);
+                            logger.debug(`Successfully fetched video track ${processedVariantIndex+1}`);
                             break;
                         }
                     } catch (error) {
-                        logger.warn(`Failed to fetch variant ${processedVariantIndex+1}: ${error.message}`);
+                        logger.warn(`Failed to fetch video track ${processedVariantIndex+1}: ${error.message}`);
                     }
 
                     processedVariantIndex++;
                 }
 
                 if (variantInfo) {
-                    // Extract metadata for all variants from this one
+                    // Extract metadata for all video tracks from this one
                     duration = variantInfo.duration;
                     isEncrypted = variantInfo.isEncrypted || false;
                     encryptionType = variantInfo.encryptionType;
                     const isLive = variantInfo.isLive || false;
                     const segmentCount = variantInfo.segmentCount;
 
-                    // Apply this metadata to all video variants
-                    variants = variants.map(variant => {
-                        // Create a new variant object with detailed information
-                        const updatedVariant = {...variant};
+                    // Apply this metadata to all video tracks
+                    videoTracks = videoTracks.map(videoTrack => {
+                        // Create a new video track object with detailed information
+                        const updatedVideoTrack = {...videoTrack};
 
-                        // Apply metadata from the processed variant
-                        updatedVariant.metaJS.duration = duration;
-                        updatedVariant.metaJS.isLive = isLive;
-                        updatedVariant.metaJS.isEncrypted = isEncrypted;
-                        updatedVariant.metaJS.encryptionType = encryptionType;
-                        updatedVariant.metaJS.segmentCount = segmentCount;
-                        updatedVariant.metaJS.version = variantInfo.version || version;
+                        // Apply metadata from the processed video track
+                        updatedVideoTrack.metaJS.duration = duration;
+                        updatedVideoTrack.metaJS.isLive = isLive;
+                        updatedVideoTrack.metaJS.isEncrypted = isEncrypted;
+                        updatedVideoTrack.metaJS.encryptionType = encryptionType;
+                        updatedVideoTrack.metaJS.segmentCount = segmentCount;
+                        updatedVideoTrack.metaJS.version = variantInfo.version || version;
 
-                        // Distinguish the actually fetched variant
-                        if (variant.url === basicVariants[processedVariantIndex].url) {
-                            updatedVariant.metaJS.directlyFetched = true;
+                        // Distinguish the actually fetched video track
+                        if (videoTrack.url === basicVideoTracks[processedVariantIndex].url) {
+                            updatedVideoTrack.metaJS.directlyFetched = true;
                         }
 
                         // Calculate estimated file size based on bandwidth and duration
                         if (duration !== null && duration >= 0) {
-                            const effectiveBandwidth = updatedVariant.metaJS.averageBandwidth || updatedVariant.metaJS.bandwidth;
-                            updatedVariant.metaJS.estimatedFileSizeBytes = calculateEstimatedFileSizeBytes(
+                            const effectiveBandwidth = updatedVideoTrack.metaJS.averageBandwidth || updatedVideoTrack.metaJS.bandwidth;
+                            updatedVideoTrack.metaJS.estimatedFileSizeBytes = calculateEstimatedFileSizeBytes(
                                 effectiveBandwidth, 
                                 duration
                             );
                         }
 
-                        return updatedVariant;
+                        return updatedVideoTrack;
                     });
 
                     // --- Propagate metadata to all audio tracks with a URL ---
@@ -245,11 +245,11 @@ export async function parseHlsManifest(url, headers = null, tabId) {
                     });
                     logger.debug(`Propagated duration, isLive, and version to ${audioTracks.filter(t => t.url).length} audio track(s)`);
                 } else {
-                    // If all fetches failed, return basic variants
-                    logger.warn('Failed to fetch any variant for metadata extraction');
+                    // If all fetches failed, return basic video tracks
+                    logger.warn('Failed to fetch any video track for metadata extraction');
                 }
             } else {
-                logger.debug(`No variants found in master playlist`);
+                logger.debug(`No video tracks found in master playlist`);
             }
         }
         else if (isVariant) {
@@ -270,8 +270,8 @@ export async function parseHlsManifest(url, headers = null, tabId) {
             version = extractHlsVersion(content);
             logger.debug(`Standalone variant version: ${version}`);
             
-            // Create a single-item variants array with this variant including container info
-            variants = [{
+            // Create a single-item video tracks array with this video track including container info
+            videoTracks = [{
                 url: url,
                 normalizedUrl: normalizedUrl,
                 masterUrl: null,
@@ -294,13 +294,13 @@ export async function parseHlsManifest(url, headers = null, tabId) {
                 timestampDetected: Date.now()
             }];
             
-            logger.debug(`Created standalone variant entry with container info: ${JSON.stringify(variants[0])}`);
+            logger.debug(`Created standalone video track entry with container info: ${JSON.stringify(videoTracks[0])}`);
         }
         
         // Set the full parse timestamp
         const timestampFP = Date.now();
 
-        // Construct the full result
+        // Construct the full result with standardized structure
         const result = {
             url: url,
             normalizedUrl: normalizedUrl,
@@ -314,7 +314,8 @@ export async function parseHlsManifest(url, headers = null, tabId) {
             isEncrypted: isEncrypted,
             encryptionType: encryptionType,
             version: version,
-            variants: variants,
+            // Standardized structure
+            videoTracks: videoTracks,
             audioTracks: audioTracks,
             subtitleTracks: subtitleTracks,
             closedCaptions: closedCaptions,
@@ -322,7 +323,7 @@ export async function parseHlsManifest(url, headers = null, tabId) {
             status: 'success'
         };
 
-        logger.info(`Successfully parsed HLS: found ${variants.length} variants, ${audioTracks.length} audio tracks, ${subtitleTracks.length} subtitle tracks, ${closedCaptions.length} closed caption tracks`);
+        logger.info(`Successfully parsed HLS: found ${videoTracks.length} video tracks, ${audioTracks.length} audio tracks, ${subtitleTracks.length} subtitle tracks, ${closedCaptions.length} closed caption tracks`);
         return result;
     } catch (error) {
         logger.error(`Error parsing HLS: ${error.message}`);
@@ -333,7 +334,7 @@ export async function parseHlsManifest(url, headers = null, tabId) {
             timestampLP: Date.now(),
             isMaster: false,
             isVariant: false,
-            variants: [],
+            videoTracks: [],
             audioTracks: [],
             subtitleTracks: [],
             closedCaptions: [],
@@ -354,7 +355,7 @@ export async function parseHlsManifest(url, headers = null, tabId) {
  * @param {string} content - The playlist content
  * @param {string} baseUrl - Base URL for resolving relative paths
  * @param {string} masterUrl - The master playlist URL
- * @returns {Object} Object containing variants array and playlist info
+ * @returns {Object} Object containing videoTracks array and playlist info
  */
 function parseHlsMaster(content, baseUrl, masterUrl) {
     // Extract the HLS version from the master playlist
@@ -366,8 +367,8 @@ function parseHlsMaster(content, baseUrl, masterUrl) {
     // Use the unified variant entry extraction
     const variantEntries = extractMasterVariantEntries(content, baseUrl, masterUrl);
 
-    // Build variant objects
-    const variants = variantEntries.map(entry => {
+    // Build video track objects
+    const videoTracks = variantEntries.map(entry => {
         // Detect containers for this variant based on codecs
         const containerDetection = detectAllContainers({
             codecs: entry.streamInf.codecs,
@@ -488,24 +489,24 @@ function parseHlsMaster(content, baseUrl, masterUrl) {
     }
     logger.debug(`Found ${audioTracks.length} audio track(s), ${subtitleTracks.length} subtitle track(s) and ${closedCaptions.length} closed caption track(s) in HLS master: ${masterUrl}`);
 
-    // Filter out audio-only variants
-    const filteredVariants = variants.filter(variant => !(!variant.metaJS.hasVideoCodec && variant.metaJS.hasAudioCodec));
-    if (variants.length !== filteredVariants.length) {
-        logger.debug(`Filtered out ${variants.length - filteredVariants.length} audio-only variants`);
+    // Filter out audio-only video tracks
+    const filteredVideoTracks = videoTracks.filter(videoTrack => !(!videoTrack.metaJS.hasVideoCodec && videoTrack.metaJS.hasAudioCodec));
+    if (videoTracks.length !== filteredVideoTracks.length) {
+        logger.debug(`Filtered out ${videoTracks.length - filteredVideoTracks.length} audio-only video tracks`);
     }
 
-    // Sort variants by bandwidth (highest first for best quality)
-    if (filteredVariants.length > 0) {
-        filteredVariants.sort((a, b) => {
+    // Sort video tracks by bandwidth (highest first for best quality)
+    if (filteredVideoTracks.length > 0) {
+        filteredVideoTracks.sort((a, b) => {
             const aBandwidth = a.metaJS.averageBandwidth || a.metaJS.bandwidth || 0;
             const bBandwidth = b.metaJS.averageBandwidth || b.metaJS.bandwidth || 0;
             return bBandwidth - aBandwidth;
         });
-        logger.debug(`Variants sorted by bandwidth, highest: ${filteredVariants[0].metaJS.bandwidth}`);
+        logger.debug(`Video tracks sorted by bandwidth, highest: ${filteredVideoTracks[0].metaJS.bandwidth}`);
     }
 
     return {
-        variants: filteredVariants,
+        videoTracks: filteredVideoTracks,
         audioTracks: audioTracks,
         subtitleTracks: subtitleTracks,
         closedCaptions: closedCaptions,
@@ -578,10 +579,10 @@ async function parseHlsVariant(variantUrl, headers = null, tabId) {
         const version = extractHlsVersion(content);
         logger.debug(`Variant version: ${version}`);
         
-        // Detect containers for standalone variants (no codec info available)
+        // Detect containers for standalone video tracks (no codec info available)
         const containerDetection = detectAllContainers({
             url: variantUrl,
-            mediaType: 'video', // HLS variants are typically video+audio
+            mediaType: 'video', // HLS video tracks are typically video+audio
             videoType: 'hls'
         });
         
@@ -861,7 +862,7 @@ function extractMasterVariantEntries(content, baseUrl, masterUrl) {
  * @param {string} url - URL of the HLS master playlist
  * @param {Object} [headers] - Optional request headers
  * @param {number} tabId - Tab ID
- * @returns {Promise<Object>} Object containing arrays of normalized URLs for variants, audioTracks, and subtitleTracks
+ * @returns {Promise<Object>} Object containing arrays of normalized URLs for videoTracks, audioTracks, and subtitleTracks
  */
 export async function extractHlsMediaUrls(url, headers = null, tabId) {
     try {
@@ -874,20 +875,20 @@ export async function extractHlsMediaUrls(url, headers = null, tabId) {
         });
         if (!fetchResult.ok) {
             logger.warn(`Failed to fetch master playlist for media URL extraction: ${fetchResult.status}`);
-            return { variants: [], audioTracks: [], subtitleTracks: [] };
+            return { videoTracks: [], audioTracks: [], subtitleTracks: [] };
         }
         // Quick validation that this is an HLS master playlist
         const content = fetchResult.content;
         if (!content.includes('#EXTM3U') || !content.includes('#EXT-X-STREAM-INF')) {
             logger.warn(`Content is not an HLS master playlist`);
-            return { variants: [], audioTracks: [], subtitleTracks: [] };
+            return { videoTracks: [], audioTracks: [], subtitleTracks: [] };
         }
         const baseUrl = getBaseDirectory(url);
         const normalizedMasterUrl = normalizeUrl(url);
         
-        // Extract variants
+        // Extract video tracks
         const variantEntries = extractMasterVariantEntries(content, baseUrl, normalizedMasterUrl);
-        const variantUrls = variantEntries.map(entry => entry.normalizedUrl);
+        const videoTrackUrls = variantEntries.map(entry => entry.normalizedUrl);
         
         // Extract audio tracks and subtitles from #EXT-X-MEDIA lines
         const audioUrls = [];
@@ -919,14 +920,14 @@ export async function extractHlsMediaUrls(url, headers = null, tabId) {
             }
         }
         
-        logger.debug(`Extracted ${variantUrls.length} variant URLs, ${audioUrls.length} audio URLs, ${subtitleUrls.length} subtitle URLs`);
+        logger.debug(`Extracted ${videoTrackUrls.length} video track URLs, ${audioUrls.length} audio URLs, ${subtitleUrls.length} subtitle URLs`);
         return { 
-            variants: variantUrls, 
+            videoTracks: videoTrackUrls, 
             audioTracks: audioUrls, 
             subtitleTracks: subtitleUrls 
         };
     } catch (error) {
         logger.error(`Error extracting media URLs from ${url}: ${error.message}`);
-        return { variants: [], audioTracks: [], subtitleTracks: [] };
+        return { videoTracks: [], audioTracks: [], subtitleTracks: [] };
     }
 }

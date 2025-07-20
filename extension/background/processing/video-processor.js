@@ -90,20 +90,20 @@ function addDetectedVideo(tabId, videoInfo) {
         if (videoInfo.type === 'hls' && existingVideo.isMaster) {
             logger.debug(`Duplicate HLS master detected: ${normalizedUrl}. Extracting all media URLs for comprehensive deduplication.`);
             
-            // Extract all media URLs (variants, audio tracks, subtitle tracks) asynchronously without blocking the main flow
+            // Extract all media URLs (video tracks, audio tracks, subtitle tracks) asynchronously without blocking the main flow
             extractHlsMediaUrls(videoInfo.url, videoInfo.headers || {}, tabId)
                 .then(mediaUrls => {
-                    const totalUrls = mediaUrls.variants.length + mediaUrls.audioTracks.length + mediaUrls.subtitleTracks.length;
+                    const totalUrls = mediaUrls.videoTracks.length + mediaUrls.audioTracks.length + mediaUrls.subtitleTracks.length;
                     if (totalUrls > 0) {
                         // Convert URL arrays to objects format expected by handleVariantMasterRelationships
-                        const variants = mediaUrls.variants.map(url => ({ normalizedUrl: url }));
+                        const videoTracks = mediaUrls.videoTracks.map(url => ({ normalizedUrl: url }));
                         const audioTracks = mediaUrls.audioTracks.map(url => ({ normalizedUrl: url }));
                         const subtitleTracks = mediaUrls.subtitleTracks.map(url => ({ normalizedUrl: url }));
                         
                         // Use existing handleVariantMasterRelationships function for consistent processing
-                        handleVariantMasterRelationships(tabId, variants, audioTracks, subtitleTracks, normalizedUrl);
+                        handleVariantMasterRelationships(tabId, videoTracks, audioTracks, subtitleTracks, normalizedUrl);
 
-                        logger.debug(`Updated ${totalUrls} media URLs for duplicate master ${normalizedUrl} (${mediaUrls.variants.length} variants, ${mediaUrls.audioTracks.length} audio tracks, ${mediaUrls.subtitleTracks.length} subtitle tracks)`);
+                        logger.debug(`Updated ${totalUrls} media URLs for duplicate master ${normalizedUrl} (${mediaUrls.videoTracks.length} video tracks, ${mediaUrls.audioTracks.length} audio tracks, ${mediaUrls.subtitleTracks.length} subtitle tracks)`);
                     }
                 })
                 .catch(error => {
@@ -122,7 +122,17 @@ function addDetectedVideo(tabId, videoInfo) {
         isBeingProcessed: false,
         title: videoInfo.metadata?.filename || getFilenameFromUrl(videoInfo.url),
         // Set isValid: true for direct videos immediately
-        ...(videoInfo.type === 'direct' ? { isValid: true } : {})
+        ...(videoInfo.type === 'direct' ? { isValid: true } : {}),
+        // Standardize all video types to have track arrays
+        ...(videoInfo.type === 'direct' ? {
+            videoTracks: [{
+                url: videoInfo.url,
+                normalizedUrl: normalizedUrl,
+                type: 'direct'
+            }],
+            audioTracks: [],
+            subtitleTracks: []
+        } : {})
     };
     
     // validForDisplay will be set by updateVideo
@@ -225,22 +235,22 @@ async function processHlsVideo(tabId, normalizedUrl) {
     const hlsResult = await parseHlsManifest(video.url, headers, tabId);
     
     if (hlsResult.status === 'success') {
-
+        // HLS parser now outputs standardized structure with videoTracks[]
         updateVideo('processHlsVideo', tabId, normalizedUrl, hlsResult);
 
         // Track variant-master relationships if this is a master playlist
-        if (hlsResult.isMaster && hlsResult.variants?.length > 0) {
+        if (hlsResult.isMaster && hlsResult.videoTracks?.length > 0) {
             handleVariantMasterRelationships(
                 tabId, 
-                hlsResult.variants, 
-                hlsResult.audioTracks || [], 
-                hlsResult.subtitleTracks || [], 
+                hlsResult.videoTracks, 
+                hlsResult.audioTracks, 
+                hlsResult.subtitleTracks, 
                 normalizedUrl
             );
 
-            // Generate preview for the master using the first variant as source
-            const firstVariant = hlsResult.variants[0];
-            await generateVideoPreview(tabId, normalizedUrl, headers, firstVariant.url);
+            // Generate preview for the master using the first video track as source
+            const firstVideoTrack = hlsResult.videoTracks[0];
+            await generateVideoPreview(tabId, normalizedUrl, headers, firstVideoTrack.url);
         }
     } else {
         // Update with error information
@@ -272,14 +282,13 @@ async function processDashVideo(tabId, normalizedUrl) {
     const dashResult = await parseDashManifest(video.url, headers, tabId);
     
     if (dashResult.status === 'success') {
-        // Update video with all DASH parsing results at once
+        // DASH already has standardized structure with videoTracks[]
         const dashUpdates = {
             isValid: true,
             type: 'dash',
             videoTracks: dashResult.videoTracks,
             audioTracks: dashResult.audioTracks,
             subtitleTracks: dashResult.subtitleTracks,
-            variants: dashResult.variants, // For backward compatibility
             duration: dashResult.duration,
             isLive: dashResult.isLive,
             isEncrypted: dashResult.isEncrypted,
@@ -339,15 +348,15 @@ async function processDirectVideo(tabId, normalizedUrl) {
 }
 
 /**
- * Track and update variant-master relationships for variants, audio tracks, and subtitles
+ * Track and update variant-master relationships for video tracks, audio tracks, and subtitles
  * @param {number} tabId - Tab ID
- * @param {Array} variants - Array of variant objects
+ * @param {Array} videoTracks - Array of video track objects
  * @param {Array} audioTracks - Array of audio track objects
  * @param {Array} subtitles - Array of subtitle track objects
  * @param {string} masterUrl - The normalized master URL
  * @returns {Array} Array of updated video objects for items that were changed
  */
-function handleVariantMasterRelationships(tabId, variants, audioTracks, subtitles, masterUrl) {
+function handleVariantMasterRelationships(tabId, videoTracks, audioTracks, subtitles, masterUrl) {
     // Use global maps for pipeline access
     const variantMasterMap = globalThis.variantMasterMapInternal;
     const allDetectedVideos = globalThis.allDetectedVideosInternal;
@@ -373,7 +382,7 @@ function handleVariantMasterRelationships(tabId, variants, audioTracks, subtitle
                 const updatedVideo = updateVideo('handleVariantMasterRelationships', tabId, item.normalizedUrl, {
                     hasKnownMaster: true,
                     masterUrl: masterUrl,
-                    isVariant: itemType === 'variant', // Only variants are marked as isVariant
+                    isVariant: itemType === 'videoTrack', // Only video tracks are marked as isVariant
                     isAudioTrack: itemType === 'audio',
                     isSubtitleTrack: itemType === 'subtitle'
                 });
@@ -385,8 +394,8 @@ function handleVariantMasterRelationships(tabId, variants, audioTracks, subtitle
         }
     };
 
-    // Process variants
-    processMediaItems(variants, 'variant');
+    // Process video tracks
+    processMediaItems(videoTracks, 'videoTrack');
     // Process audio tracks
     processMediaItems(audioTracks, 'audio');
     // Process subtitles
@@ -506,6 +515,20 @@ async function getFFprobeMetadata(tabId, normalizedUrl, headers) {
                 mediaType: video.mediaType || 'video'
             });
 
+            // Update the videoTracks[0] with FFprobe metadata
+            const updatedVideoTracks = [{
+                url: video.url,
+                normalizedUrl: normalizedUrl,
+                type: 'direct',
+                standardizedResolution: standardizedRes,
+                estimatedFileSizeBytes: streamInfo.estimatedFileSizeBytes || video.fileSize,
+                fileSize: streamInfo.sizeBytes || null,
+                metaFFprobe: streamInfo,
+                videoContainer: containerDetection.container,
+                audioContainer: containerDetection.container === 'webm' ? 'webm' : 'mp3',
+                containerDetectionReason: containerDetection.reason
+            }];
+
             updateVideo('getFFprobeMetadata', tabId, normalizedUrl, {
                 isValid,
                 metaFFprobe: streamInfo,
@@ -518,7 +541,9 @@ async function getFFprobeMetadata(tabId, normalizedUrl, headers) {
                 containerDetectionReason: containerDetection.reason,
                 // Add separate containers for audio-only downloads
                 videoContainer: containerDetection.container,
-                audioContainer: containerDetection.container === 'webm' ? 'webm' : 'mp3'
+                audioContainer: containerDetection.container === 'webm' ? 'webm' : 'mp3',
+                // Update standardized videoTracks
+                videoTracks: updatedVideoTracks
             });
         } else {
             logger.warn(`No stream info in ffprobe response for: ${normalizedUrl}`);
