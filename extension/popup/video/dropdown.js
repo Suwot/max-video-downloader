@@ -218,15 +218,15 @@ function createTrackColumn(title, tracks, type, singleSelect, columnsContainer, 
             option.dataset.filesize = fileSizeBytes;
         }
         
+        const input = document.createElement('input');
+        input.type = singleSelect ? 'radio' : 'checkbox';
+        input.name = `track-${type}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        
         // First track is selected by default (presorted data)
         if (index === 0) {
             option.classList.add('selected');
+            input.checked = true;
         }
-        
-        const input = document.createElement('input');
-        input.type = singleSelect ? 'radio' : 'checkbox';
-        input.name = `track-${type}`;
-        input.checked = index === 0;
         
         const label = document.createElement('span');
         label.className = 'track-label';
