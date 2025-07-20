@@ -16,6 +16,10 @@ const CODEC_TO_CONTAINER = {
     'vp09': 'webm',
     'vp80': 'webm',
     
+    // AV1 → WebM (native container)
+    'av01': 'webm',
+    'av1': 'webm',
+    
     // Lossless video → MKV (best support)
     'ffv1': 'mkv',
     'huffyuv': 'mkv',
@@ -34,6 +38,13 @@ const CODEC_TO_CONTAINER = {
     'he-aacv2': 'm4a',
     'alac': 'm4a',     // Apple Lossless
     'als': 'm4a',      // MPEG-4 ALS
+    
+    // AC-3/E-AC-3 → MKV (best support for surround sound)
+    'ac3': 'mkv',
+    'eac3': 'mkv',
+    
+    // MP3 family → MP3 (explicit mapping for clarity)
+    'mpa': 'mp3',      // MPEG Audio Layer
     
     // Opus → WebM (native container)
     'opus': 'webm',
