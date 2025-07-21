@@ -1,0 +1,324 @@
+// =====================================================
+// DROPDOWN COMPONENT
+// =====================================================
+
+.custom-dropdown {
+    @extend %interactive-base;
+    position: relative;
+    width: 100%;
+    height: 24px;
+    border-radius: 6px;
+
+    .selected-option {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 8px;
+        max-width: 186px;
+        height: 100%;
+        border-radius: 6px;
+        font-size: var(--font-body);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        @extend %theme-bg-primary;
+        
+        // Progress states
+        &.downloading {
+            position: relative;
+            overflow: hidden;
+
+            &::after {
+                content: '';
+                position: absolute;
+                top: 0;
+                left: 0;
+                height: 100%;
+                width: var(--progress, 0%);
+                background-color: var(--color-green);
+                opacity: 0.9;
+                transition: width var(--transition-fast);
+                z-index: 0;
+            }
+
+            span {
+                position: relative;
+                z-index: 1;
+            }
+        }
+    }
+
+    // Open state
+    &.open {
+        .dropdown-icon svg {
+            transform: rotate(180deg);
+        }
+
+        .options-container {
+            max-height: 300px;
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .selected-option {
+            .theme-dark & {
+                background-color: var(--bg-selected-dark);
+
+                &:hover, &:focus {
+                    background-color: var(--bg-selected-dark-hover);
+                }
+            }
+        }
+    }
+    
+    // Advanced dropdown variant
+    &.advanced .options-container {
+        width: calc(420px - 16px);
+        left: -115px;
+    }
+}
+
+.dropdown-icon {
+    display: flex;
+    align-items: center;
+    transition: transform var(--transition-normal);
+
+    svg {
+        transition: transform var(--transition-normal);
+        
+        .theme-light & path {
+            stroke: var(--text-primary-light);
+        }
+    }
+}
+
+.options-container {
+    position: absolute;
+    left: 0;
+    margin-block-start: 1px;
+    border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    z-index: 100;
+    max-height: 0;
+    overflow-y: auto;
+    transition: all var(--transition-normal);
+    opacity: 0;
+    visibility: hidden;
+    width: 282px;
+    backdrop-filter: var(--backdrop-filter);
+    scrollbar-width: none;
+
+    .theme-dark & {
+        background: var(--bg-backdrop-dark);
+        border: 1px solid var(--border-primary-dark);
+    }
+
+    .theme-light & {
+        background: var(--bg-backdrop-light);
+        box-shadow: var(--bg-element-shadow-light);
+    }
+
+    // Webkit scrollbar styling
+    &::-webkit-scrollbar {
+        width: 6px;
+        
+        &-track {
+            background: var(--bg-primary-dark);
+        }
+        
+        &-thumb {
+            background: #555;
+            border-radius: 3px;
+
+            &:hover {
+                background: #666;
+            }
+        }
+    }
+}
+
+.dropdown-option {
+    padding: 8px;
+    font-size: var(--font-body);
+    transition: background-color var(--transition-fast);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    @extend %theme-text-secondary;
+    
+    // Base hover and selected states
+    &:not(.selected):hover,
+    &.selected {
+        position: relative;
+        @extend %theme-text-primary;
+        
+        .theme-dark & {
+            background: var(--bg-selected-dark);
+        }
+        
+        .theme-light & {
+            background: var(--bg-element-hover-light);
+        }
+    }
+    
+    &.selected:hover {
+        .theme-dark & {
+            background: var(--bg-selected-dark-hover);
+        }
+        
+        .theme-light & {
+            background: var(--bg-element-active-light);
+        }
+    }
+
+    // Status states
+    &.downloading {
+        @extend %theme-text-primary;
+        
+        .theme-dark & {
+            background: var(--bg-selected-dark);
+        }
+        
+        .theme-light & {
+            background: var(--bg-element-active-light);
+        }
+        
+        // Progress bar
+        position: relative;
+        overflow: hidden;
+
+        &::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            height: 100%;
+            width: var(--progress, 0%);
+            background-color: var(--color-green);
+            transition: width var(--transition-fast);
+            z-index: 0;
+        }
+
+        span {
+            position: relative;
+            z-index: 1;
+        }
+    }
+
+    &.queued,
+    &.unqueued {
+        background-color: var(--color-yellow);
+        color: var(--text-primary-light);
+
+        &:hover {
+            background-color: var(--color-yellow-hover);
+        }
+    }
+    
+    // Progress completion states
+    &.complete::after {
+        width: 100%;
+        background-color: var(--color-green);
+    }
+
+    &.error::after {
+        width: 100%;
+        background-color: var(--color-red);
+    }
+
+    &.canceled::after {
+        width: 100%;
+        background-color: var(--color-orange);
+    }
+}
+
+// DASH multi-column layout
+.tracks-columns-container {
+    display: flex;
+    padding: 6px;
+    gap: 4px;
+    max-width: 100%;
+}
+
+.column {
+    flex: 1;
+    min-width: 0;
+
+    .column-title {
+        @extend %theme-text-primary;
+        font-size: var(--font-h2);
+        font-weight: 500;
+        padding-block-end: 4px;
+        border-bottom: 1px solid var(--border-primary-dark);
+        margin-block-end: 4px;
+    }
+}
+
+.track-option {
+    display: flex;
+    align-items: center;
+    padding: 6px 4px;
+    font-size: var(--font-body);
+    @extend %theme-text-secondary;
+    cursor: pointer;
+    transition: background-color var(--transition-fast);
+    border-radius: 2px;
+
+    &:hover {
+        position: relative;
+        min-width: 100%;
+        width: fit-content;
+        background: var(--bg-selected-dark);
+        box-shadow: 0 0 0 1px var(--color-blue);
+        
+        .theme-dark & {
+            color: var(--text-secondary-dark-hover);
+        }
+    }
+
+    &.selected {
+        background: var(--bg-selected-dark);
+        @extend %theme-text-primary;
+
+        &:hover {
+            background: var(--bg-selected-dark-hover);
+        }
+    }
+
+    &.compatible {
+        border-left: 3px solid var(--color-green);
+    }
+
+    &.incompatible {
+        border-left: 3px solid var(--color-red);
+    }
+
+    input {
+        margin-inline-end: 6px;
+        accent-color: var(--color-blue);
+    }
+}
+
+.track-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.apply-button {
+    display: block;
+    width: calc(100% - 16px);
+    margin: 0 8px 8px;
+    padding: 6px;
+    background: var(--color-blue);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-size: var(--font-h2);
+    cursor: pointer;
+    transition: background-color var(--transition-normal);
+
+    &:hover {
+        background: var(--color-blue-hover);
+    }
+}

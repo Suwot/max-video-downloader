@@ -1,384 +1,98 @@
 // =====================================================
-// REUSABLE UI COMPONENTS
+// REUSABLE UI COMPONENTS - REFACTORED
 // =====================================================
 
+// Import component partials
+@import 'dropdown';
+@import 'inputs';
+
 // =====================================================
-// CUSTOM DROPDOWN
+// SHARED MIXINS & BASE STYLES
 // =====================================================
 
-.custom-dropdown {
-    position: relative;
-    width: 100%;
-    height: 24px;
-    border-radius: 6px;
+// Base interactive element styles
+%interactive-base {
     cursor: pointer;
     user-select: none;
-
-    .selected-option {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        padding: 0 8px;
-        max-width: 186px;
-        height: 100%;
-        border-radius: 6px;
-        background: var(--bg-primary-dark);
-        font-size: var(--font-body);
-        transition: background-color var(--transition-normal);
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-
-        .theme-dark & {
-            border: 1px solid var(--border-primary-dark);
-            background-color: var(--bg-secondary-dark);
-            color: var(--text-primary-dark);
-
-            &:hover  {
-                background: var(--bg-primary-dark-hover);
-            }
-        }
-
-        .theme-light & {
-            background-color: var(--bg-element-light);
-            color: var(--text-primary-light);
-            box-shadow: var(--bg-element-shadow-light);
-
-            &:hover, &:focus {
-                background: var(--bg-element-hover-light);
-            }
-
-            &:active {
-                background: var(--bg-element-active-light);
-            }
-
-            path {
-                stroke: var(--text-primary-light);
-            }
-        }
-    }
-
-    // styles when dropdown is open
-    &.open {
-        .dropdown-icon svg {
-            transform: rotate(180deg);
-        }
-
-        .options-container {
-            max-height: 300px;
-            opacity: 1;
-            visibility: visible;
-        }
-
-        .theme-dark & {
-            .selected-option {
-                background-color: var(--bg-selected-dark);
-
-                &:hover, &:focus {
-                    background-color: var(--bg-selected-dark-hover);
-                }
-            }
-        }
-
-        .theme-light & {
-            .selected-option {
-                &:hover, &:focus {
-                    background-color: var(--bg-element-hover-light);
-                }
-                &:active {
-                    background-color: var(--bg-element-active-light);
-                }
-            }
-        }
-    }
-}
-
-.dropdown-icon {
-    display: flex;
-    align-items: center;
-    transition: transform var(--transition-normal);
-
-    svg {
-        transition: transform var(--transition-normal);
-    }
-}
-
-.options-container {
-    .custom-dropdown.advanced & {
-        width: calc(420px - 16px);
-        left: -115px;
-    }
-    
-    position: absolute;
-    left: 0;
-    margin-block-start: 1px;
-    border-radius: 6px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-    z-index: 100;
-    max-height: 0;
-    overflow-y: auto;
     transition: all var(--transition-normal);
-    opacity: 0;
-    visibility: hidden;
-    width: 282px;
-    backdrop-filter: var(--backdrop-filter);
-    -ms-overflow-style: none;
-    scrollbar-width: none;
-
-    .theme-dark & {
-        background: var(--bg-backdrop-dark);
-        border: 1px solid var(--border-primary-dark);
-    }
-
-    // Scrollbar styling
-    &::-webkit-scrollbar {
-        width: 6px;
-    }
-
-    &::-webkit-scrollbar-track {
-        background: var(--bg-primary-dark);
-    }
-
-    &::-webkit-scrollbar-thumb {
-        background: #555;
-        border-radius: 3px;
-
-        &:hover {
-            background: #666;
-        }
-    }
-
-    .theme-light & {
-        background: var(--bg-backdrop-light);
-        box-shadow: var(--bg-element-shadow-light);
+    
+    &:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
     }
 }
 
-.dropdown-option {
-    padding: 8px;
-    font-size: var(--font-body);
-    transition: background-color var(--transition-fast);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+// Theme-aware background patterns
+%theme-bg-primary {
+    .theme-dark & {
+        background-color: var(--bg-secondary-dark);
+        border: 1px solid var(--border-primary-dark);
+        color: var(--text-primary-dark);
+        
+        &:hover:not(:disabled) {
+            background-color: var(--bg-primary-dark-hover);
+        }
+    }
     
+    .theme-light & {
+        background-color: var(--bg-element-light);
+        color: var(--text-primary-light);
+        box-shadow: var(--bg-element-shadow-light);
+        
+        &:hover:not(:disabled) {
+            background-color: var(--bg-element-hover-light);
+        }
+        
+        &:active:not(:disabled) {
+            background-color: var(--bg-element-active-light);
+        }
+    }
+}
+
+// Theme-aware text colors
+%theme-text-primary {
+    .theme-dark & {
+        color: var(--text-primary-dark);
+    }
+    
+    .theme-light & {
+        color: var(--text-primary-light);
+    }
+}
+
+%theme-text-secondary {
     .theme-dark & {
         color: var(--text-secondary-dark);
-
-        &.selected {
-            background: var(--bg-selected-dark);
-            color: var(--text-primary-dark);
-
-            &:hover {
-                background: var(--bg-selected-dark-hover);
-            }
-        }
-
-        &:not(.selected):hover {
-            position: relative;
-            color: var(--text-primary-dark);
-            background: var(--bg-selected-dark);
-        }
-
-        &.downloading {
-            background: var(--bg-selected-dark);
-            color: var(--text-primary-dark);
-        }
-
-        &.queued, &.unqueued {
-            background-color: var(--color-yellow);
-            color: var(--text-primary-light);
-
-            &:hover {
-                background-color: var(--color-yellow-hover);
-            }
-        }
     }
-
+    
     .theme-light & {
         color: var(--text-secondary-light);
-
-        &.selected {
-            background: var(--bg-element-active-light);
-            color: var(--text-primary-light);
-        }
-
-        &:hover {
-            position: relative;
-            color: var(--text-primary-light);
-            background: var(--bg-element-hover-light);
-        }
-
-        &.downloading {
-            background: var(--bg-element-active-light);
-            color: var(--text-primary-light);
-        }
-
-        &.queued, &.unqueued {
-            background-color: var(--color-yellow);
-            color: var(--text-primary-light);
-
-            &:hover {
-                background-color: var(--color-yellow-hover);
-            }
-        }
-    }
-
-    // Progress states
-    &.downloading {
-        position: relative;
-        overflow: hidden;
-
-        &::after {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            height: 100%;
-            width: var(--progress, 0%);
-            background-color: var(--color-green);
-            transition: width var(--transition-fast);
-            z-index: 0;
-        }
-
-        span {
-            position: relative;
-            z-index: 1;
-        }
-    }
-
-    &.complete::after {
-        width: 100%;
-        background-color: var(--color-green);
-    }
-
-    &.error::after {
-        width: 100%;
-        background-color: var(--color-red);
-    }
-
-    &.canceled::after {
-        width: 100%;
-        background-color: var(--color-orange);
     }
 }
 
-// DASH multi-column layout
-.tracks-columns-container {
-    display: flex;
-    padding: 6px;
-    gap: 4px;
-    max-width: 100%;
-}
-
-.column {
-    flex: 1;
-    min-width: 0;
-
-    .column-title {
-        color: var(--text-primary-dark);
-        font-size: var(--font-h2);
-        font-weight: 500;
-        padding-block-end: 4px;
-        border-bottom: 1px solid var(--border-primary-dark);
-        margin-block-end: 4px;
+// Validation state mixins
+%validation-error {
+    border-color: var(--color-red);
+    box-shadow: 0 0 0 2px rgba(255, 59, 66, 0.2);
+    
+    .theme-dark &,
+    .theme-light & {
+        background-color: rgba(255, 59, 66, 0.1);
     }
 }
 
-.track-option {
-    display: flex;
-    align-items: center;
-    padding: 6px 4px;
-    font-size: var(--font-body);
-    color: var(--text-secondary-dark);
-    cursor: pointer;
-    transition: background-color var(--transition-fast);
-    border-radius: 2px;
-
-    &:hover {
-        position: relative;
-        min-width: 100%;
-        width: fit-content;
-        color: var(--text-secondary-dark-hover);
-        background: var(--bg-selected-dark);
-        box-shadow: 0 0 0 1px var(--color-blue);
-    }
-
-    &.selected {
-        background: var(--bg-selected-dark);
-        color: var(--text-primary-dark);
-
-        &:hover {
-            background: var(--bg-selected-dark-hover);
-        }
-    }
-
-    &.compatible {
-        border-left: 3px solid var(--color-green);
-    }
-
-    &.incompatible {
-        border-left: 3px solid var(--color-red);
-    }
-
-    input {
-        margin-inline-end: 6px;
-        accent-color: var(--color-blue);
-    }
-}
-
-.track-label {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.apply-button {
-    display: block;
-    width: calc(100% - 16px);
-    margin: 0 8px 8px;
-    padding: 6px;
-    background: var(--color-blue);
-    color: white;
-    border: none;
-    border-radius: 6px;
-    font-size: var(--font-h2);
-    cursor: pointer;
-    transition: background-color var(--transition-normal);
-
-    &:hover {
-        background: var(--color-blue-hover);
-    }
-}
-
-// Progress states for selected option
-.selected-option {
-    &.downloading {
-        position: relative;
-        overflow: hidden;
-
-        &::after {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            height: 100%;
-            width: var(--progress, 0%);
-            background-color: var(--color-green);
-            opacity: 0.9;
-            transition: width var(--transition-fast);
-            z-index: 0;
-        }
-
-        span {
-            position: relative;
-            z-index: 1;
-        }
+%validation-success {
+    border-color: var(--color-green);
+    box-shadow: 0 0 0 2px rgba(0, 202, 85, 0.2);
+    
+    .theme-dark &,
+    .theme-light & {
+        background-color: rgba(0, 202, 85, 0.1);
     }
 }
 
 // =====================================================
-// BADGES
+// BADGES & STATUS INDICATORS
 // =====================================================
 
 .status-badge {
@@ -412,32 +126,66 @@
     }
 }
 
+.counter {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    font-size: var(--font-body);
+    font-weight: 600;
+    line-height: 1;
+    border-radius: 8px;
+    transition: all var(--transition-fast);
+
+    .theme-dark & {
+        background-color: rgba(255, 255, 255, 0.2);
+        color: var(--text-primary-dark);
+    }
+
+    .theme-light & {
+        background-color: rgba(0, 0, 0, 0.1);
+        color: var(--text-primary-light);
+    }
+
+    // Hide when empty
+    &:empty {
+        display: none;
+    }
+
+    // Context-specific styling
+    .tab-button.active & {
+        background-color: rgba(255, 255, 255, 0.3);
+        color: white;
+    }
+}
+
 // =====================================================
-// TOOLTIPS & DIALOGS
+// TOOLTIPS & NOTIFICATIONS
 // =====================================================
 
 .tooltip {
     position: fixed;
-    background-color: rgba(0,0,0,0.9);
-    color: white;
     padding: 6px 8px;
     border-radius: 4px;
     font-size: var(--font-body);
-    white-space: nowrap;
+    white-space: normal;
     z-index: 1000;
     pointer-events: none;
     box-shadow: 0 2px 8px rgba(0,0,0,0.3);
     max-width: 250px;
-    white-space: normal;
     line-height: 1.3;
 
     .theme-dark & {
         background-color: rgba(0,0,0,0.9);
+        color: white;
         border: 1px solid rgba(255,255,255,0.2);
     }
 
     .theme-light & {
         background-color: rgba(0,0,0,0.8);
+        color: white;
         border: 1px solid rgba(255,255,255,0.3);
     }
 }
@@ -462,6 +210,27 @@
     }
 }
 
+.tooltip-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: help;
+    opacity: 0.7;
+    transition: opacity var(--transition-normal);
+
+    &:hover {
+        opacity: 1;
+        
+        svg {
+            @extend %theme-text-primary;
+        }
+    }
+
+    svg {
+        @extend %theme-text-secondary;
+    }
+}
+
 // =====================================================
 // HOVER EFFECTS
 // =====================================================
@@ -471,7 +240,6 @@
     top: 0;
     left: 0;
     z-index: 1000;
-    background-color: rgba(0, 0, 0, 0.8);
     padding: 4px;
     border-radius: 6px;
     box-shadow: 0 4px 15px rgba(0, 0, 0, 0.6);
@@ -504,295 +272,11 @@
 }
 
 // =====================================================
-// INPUT COMPONENTS
+// BUTTON COMPONENTS
 // =====================================================
 
-// Base input styling
-.input-field {
-    width: 100%;
-    padding: 8px 12px;
-    border-radius: 6px;
-    font-size: var(--font-body);
-    font-family: inherit;
-    transition: all var(--transition-normal);
-    border: 1px solid transparent;
-
-    .theme-dark & {
-        background-color: var(--bg-secondary-dark);
-        color: var(--text-primary-dark);
-        border-color: var(--border-primary-dark);
-
-        &:hover {
-            background-color: var(--bg-primary-dark-hover);
-        }
-
-        &:focus {
-            background-color: var(--bg-primary-dark);
-            border-color: var(--color-blue);
-            box-shadow: 0 0 0 2px rgba(3, 122, 251, 0.2);
-        }
-
-        &::placeholder {
-            color: var(--text-secondary-dark);
-        }
-    }
-
-    .theme-light & {
-        background-color: var(--bg-element-light);
-        color: var(--text-primary-light);
-        box-shadow: var(--bg-element-shadow-light);
-
-        &:hover {
-            background-color: var(--bg-element-hover-light);
-        }
-
-        &:focus {
-            background-color: var(--bg-primary-light);
-            border-color: var(--color-blue);
-            box-shadow: 0 0 0 2px rgba(3, 122, 251, 0.2);
-        }
-
-        &::placeholder {
-            color: var(--text-secondary-light);
-        }
-    }
-
-    // Validation states
-    &.error {
-        .theme-dark & {
-            border-color: var(--color-red);
-            box-shadow: 0 0 0 2px rgba(255, 59, 66, 0.2);
-        }
-
-        .theme-light & {
-            border-color: var(--color-red);
-            box-shadow: 0 0 0 2px rgba(255, 59, 66, 0.2);
-        }
-    }
-
-    &.success {
-        .theme-dark & {
-            border-color: var(--color-green);
-            box-shadow: 0 0 0 2px rgba(0, 202, 85, 0.2);
-        }
-
-        .theme-light & {
-            border-color: var(--color-green);
-            box-shadow: 0 0 0 2px rgba(0, 202, 85, 0.2);
-        }
-    }
-
-    &:disabled {
-        opacity: 0.6;
-        cursor: not-allowed;
-
-        .theme-dark & {
-            background-color: var(--bg-primary-dark);
-        }
-
-        .theme-light & {
-            background-color: var(--bg-secondary-light);
-        }
-    }
-}
-
-// Number input specific styling
-.input-field[type="number"] {
-    &::-webkit-outer-spin-button,
-    &::-webkit-inner-spin-button {
-        -webkit-appearance: none;
-        margin: 0;
-    }
-}
-
-// Toggle switch component
-.toggle-switch {
-    position: relative;
-    display: inline-block;
-    width: 44px;
-    height: 24px;
-    cursor: pointer;
-
-    input {
-        opacity: 0;
-        width: 0;
-        height: 0;
-    }
-
-    .toggle-slider {
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        border-radius: 12px;
-        transition: all var(--transition-normal);
-
-        .theme-dark & {
-            background-color: var(--bg-secondary-dark);
-            border: 1px solid var(--border-primary-dark);
-        }
-
-        .theme-light & {
-            background-color: var(--bg-element-light);
-            box-shadow: var(--bg-element-shadow-light);
-        }
-
-        &:before {
-            content: "";
-            position: absolute;
-            height: 18px;
-            width: 18px;
-            left: 3px;
-            top: 50%;
-            transform: translateY(-50%);
-            border-radius: 50%;
-            transition: all var(--transition-normal);
-
-            .theme-dark & {
-                background-color: var(--text-secondary-dark);
-            }
-
-            .theme-light & {
-                background-color: var(--text-secondary-light);
-            }
-        }
-    }
-
-    input:checked + .toggle-slider {
-        .theme-dark & {
-            background-color: var(--color-blue);
-            border-color: var(--color-blue);
-        }
-
-        .theme-light & {
-            background-color: var(--color-blue);
-        }
-
-        &:before {
-            transform: translateX(20px) translateY(-50%);
-            background-color: white;
-        }
-    }
-
-    input:focus + .toggle-slider {
-        box-shadow: 0 0 0 2px rgba(3, 122, 251, 0.2);
-    }
-
-    input:disabled + .toggle-slider {
-        opacity: 0.6;
-        cursor: not-allowed;
-    }
-
-    &:hover input:not(:disabled) + .toggle-slider {
-        .theme-dark & {
-            background-color: var(--bg-primary-dark-hover);
-        }
-
-        .theme-light & {
-            background-color: var(--bg-element-hover-light);
-        }
-    }
-
-    &:hover input:checked:not(:disabled) + .toggle-slider {
-        background-color: var(--color-blue-hover);
-    }
-
-    // Success state for toggle
-    &.success .toggle-slider {
-        .theme-dark & {
-            box-shadow: 0 0 0 2px rgba(0, 202, 85, 0.3);
-        }
-
-        .theme-light & {
-            box-shadow: 0 0 0 2px rgba(0, 202, 85, 0.3);
-        }
-    }
-}
-
-// Input group for labels and inputs
-.input-group {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    width: 100%;
-
-    .input-label {
-        font-size: var(--font-h2);
-        font-weight: 500;
-        margin: 0;
-        display: flex;
-        align-items: center;
-        gap: 6px;
-        cursor: default;
-
-        .theme-dark & {
-            color: var(--text-primary-dark);
-        }
-
-        .theme-light & {
-            color: var(--text-primary-light);
-        }
-    }
-
-    .input-description {
-        font-size: var(--font-body);
-        margin: 0;
-        opacity: 0.8;
-
-        .theme-dark & {
-            color: var(--text-secondary-dark);
-        }
-
-        .theme-light & {
-            color: var(--text-secondary-light);
-        }
-    }
-
-    .input-error {
-        font-size: var(--font-body);
-        margin: 0;
-        color: var(--color-red);
-    }
-
-    // Horizontal layout variant
-    &.horizontal {
-        flex-direction: row;
-        align-items: center;
-        justify-content: space-between;
-
-        .input-label {
-            flex-shrink: 1;
-            margin-inline-end: 12px;
-        }
-
-        .input-field,
-        .toggle-switch {
-            flex-shrink: 0;
-        }
-
-        .input-field {
-            width: auto;
-            min-width: 80px;
-        }
-
-		// Path input group with flexible layout
-		&.path-input-group {
-			.input-container {
-				flex: 1 0; // Don't shrink label
-				width: auto; // Size to content
-			}
-			
-			.path-input {
-				flex: 1; // Take remaining space
-				min-width: 0; // Allow shrinking below content size
-			}
-		}
-    }
-}
-
-// Button component (consistent with existing patterns)
 .btn {
+    @extend %interactive-base;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -800,15 +284,12 @@
     border-radius: 6px;
     font-size: var(--font-h2);
     font-weight: 500;
-    cursor: pointer;
     border: none;
-    transition: all var(--transition-normal);
     text-decoration: none;
     gap: 6px;
 
-    &:disabled {
-        opacity: 0.6;
-        cursor: not-allowed;
+    &:focus {
+        box-shadow: 0 0 0 2px rgba(3, 122, 251, 0.2);
     }
 
     // Primary button (blue)
@@ -819,41 +300,11 @@
         &:hover:not(:disabled) {
             background-color: var(--color-blue-hover);
         }
-
-        &:focus {
-            box-shadow: 0 0 0 2px rgba(3, 122, 251, 0.2);
-        }
     }
 
     // Secondary button (theme-aware)
     &.btn-secondary {
-        .theme-dark & {
-            background-color: var(--bg-secondary-dark);
-            color: var(--text-primary-dark);
-            border: 1px solid var(--border-primary-dark);
-
-            &:hover:not(:disabled) {
-                background-color: var(--bg-primary-dark-hover);
-            }
-        }
-
-        .theme-light & {
-            background-color: var(--bg-element-light);
-            color: var(--text-primary-light);
-            box-shadow: var(--bg-element-shadow-light);
-
-            &:hover:not(:disabled) {
-                background-color: var(--bg-element-hover-light);
-            }
-
-            &:active:not(:disabled) {
-                background-color: var(--bg-element-active-light);
-            }
-        }
-
-        &:focus {
-            box-shadow: 0 0 0 2px rgba(3, 122, 251, 0.2);
-        }
+        @extend %theme-bg-primary;
     }
 
     // Danger button (red)
@@ -884,13 +335,12 @@
         }
     }
 
-    // Small size variant
+    // Size variants
     &.btn-small {
         padding: 6px 12px;
         font-size: var(--font-body);
     }
 
-    // Large size variant
     &.btn-large {
         padding: 12px 24px;
         font-size: var(--font-h1);
@@ -898,77 +348,7 @@
 }
 
 // =====================================================
-// TOOLTIP ICON
-// =====================================================
-
-.tooltip-icon {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: help;
-    opacity: 0.7;
-    transition: opacity var(--transition-normal);
-
-    &:hover {
-        opacity: 1;
-    }
-
-    svg {
-        .theme-dark & {
-            stroke: var(--text-secondary-dark);
-        }
-
-        .theme-light & {
-            stroke: var(--text-secondary-light);
-        }
-    }
-
-    &:hover svg {
-        .theme-dark & {
-            stroke: var(--text-primary-dark);
-        }
-
-        .theme-light & {
-            stroke: var(--text-primary-light);
-        }
-    }
-}
-
-// =====================================================
-// PATH INPUT CONTAINER
-// =====================================================
-
-.path-input-container {
-    display: flex;
-    gap: 8px;
-    align-items: center;
-    width: 100%;
-
-    .path-display {
-        flex: 1;
-        cursor: pointer;
-        
-        &:read-only {
-            .theme-dark & {
-                background-color: var(--bg-secondary-dark);
-                color: var(--text-secondary-dark);
-            }
-
-            .theme-light & {
-                background-color: var(--bg-element-light);
-                color: var(--text-secondary-light);
-            }
-        }
-    }
-
-    .button {
-        flex-shrink: 0;
-        white-space: nowrap;
-    }
-}
-
-// =====================================================
-// SECTION HEADER & COLLAPSIBLE COMPONENTS
+// SECTION & LAYOUT COMPONENTS
 // =====================================================
 
 .section-header {
@@ -978,10 +358,16 @@
     padding: 8px;
     width: 100%;
 
+    .section-title {
+        margin: 0;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
     // Collapsible variant (clickable, has toggle icon)
     &.collapsible {
-        cursor: pointer;
-        user-select: none;
+        @extend %interactive-base;
         position: sticky;
         top: 0;
         z-index: 50;
@@ -1007,83 +393,23 @@
                 transition: transform 0.1s ease;
                 
                 path {
-                    fill: var(--text-secondary-dark);
-                }
-                
-                .theme-light & {
-                    path {
-                        fill: var(--text-secondary-light);
-                    }
+                    @extend %theme-text-secondary;
                 }
             }
             
-            &.rotated {
-                svg {
-                    transform: rotate(-90deg);
-                }
+            &.rotated svg {
+                transform: rotate(-90deg);
             }
         }
         
-        &:hover {
-            .toggle-icon svg path {
-                fill: var(--text-primary-dark);
-                
-                .theme-light & {
-                    fill: var(--text-primary-light);
-                }
-            }
+        &:hover .toggle-icon svg path {
+            @extend %theme-text-primary;
         }
     }
 
     // Static variant (non-clickable, no toggle icon)
     &.static {
         cursor: default;
-    }
-
-    .section-title {
-        margin: 0;
-        display: flex;
-        align-items: center;
-        gap: 8px;
-    }
-}
-
-// =====================================================
-// UNIFIED COUNTER COMPONENT
-// =====================================================
-
-.counter {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 16px;
-    height: 16px;
-    padding: 0 4px;
-    font-size: var(--font-body);
-    font-weight: 600;
-    line-height: 1;
-    border-radius: 8px;
-    transition: all var(--transition-fast);
-
-    .theme-dark & {
-        background-color: rgba(255, 255, 255, 0.2);
-        color: var(--text-primary-dark);
-    }
-
-    .theme-light & {
-        background-color: rgba(0, 0, 0, 0.1);
-        color: var(--text-primary-light);
-    }
-
-    // Hide when empty
-    &:empty {
-        display: none;
-    }
-
-    // Context-specific styling via parent containers
-    .tab-button.active & {
-        background-color: rgba(255, 255, 255, 0.3);
-        color: white;
     }
 }
 
@@ -1102,58 +428,5 @@
         opacity: 0;
         padding: 0;
         overflow: hidden;
-    }
-}
-
-// SETTINGS COMPONENTS
-// =====================================================
-
-.input-container {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-}
-
-.input-constraint {
-    font-size: 11px;
-    color: var(--text-secondary);
-    opacity: 0.7;
-}
-
-.path-input.clickable {
-    cursor: pointer;
-    
-    &:hover {
-        background-color: var(--bg-element-hover-light);
-        
-        .theme-dark & {
-            background-color: var(--bg-primary-dark-hover);
-        }
-    }
-}
-
-.input-field {
-    &.success {
-        border-color: var(--color-green);
-        background-color: rgba(0, 202, 85, 0.1);
-        
-        &:focus {
-            box-shadow: 0 0 0 2px rgba(0, 202, 85, 0.2);
-        }
-    }
-    
-    &.error {
-        border-color: var(--color-red);
-        background-color: rgba(255, 59, 66, 0.1);
-        
-        &:focus {
-            box-shadow: 0 0 0 2px rgba(255, 59, 66, 0.2);
-        }
-    }
-}
-
-.toggle-switch {
-    &.success .toggle-slider {
-        box-shadow: 0 0 0 2px rgba(0, 202, 85, 0.3);
     }
 }

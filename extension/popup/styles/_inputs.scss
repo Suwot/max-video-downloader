@@ -1,0 +1,260 @@
+// =====================================================
+// INPUT COMPONENTS
+// =====================================================
+
+.input-field {
+    width: 100%;
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: var(--font-body);
+    font-family: inherit;
+    transition: all var(--transition-normal);
+    border: 1px solid transparent;
+    @extend %theme-bg-primary;
+
+    &::placeholder {
+        @extend %theme-text-secondary;
+    }
+
+    &:focus {
+        border-color: var(--color-blue);
+        box-shadow: 0 0 0 2px rgba(3, 122, 251, 0.2);
+        
+        .theme-dark & {
+            background-color: var(--bg-primary-dark);
+        }
+        
+        .theme-light & {
+            background-color: var(--bg-primary-light);
+        }
+    }
+
+    // Validation states
+    &.error {
+        @extend %validation-error;
+    }
+
+    &.success {
+        @extend %validation-success;
+    }
+
+    &:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+
+        .theme-dark & {
+            background-color: var(--bg-primary-dark);
+        }
+
+        .theme-light & {
+            background-color: var(--bg-secondary-light);
+        }
+    }
+    
+    // Number input specific
+    &[type="number"] {
+        &::-webkit-outer-spin-button,
+        &::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+    }
+}
+
+// Toggle switch component
+.toggle-switch {
+    @extend %interactive-base;
+    position: relative;
+    display: inline-block;
+    width: 44px;
+    height: 24px;
+
+    input {
+        opacity: 0;
+        width: 0;
+        height: 0;
+        
+        &:focus + .toggle-slider {
+            box-shadow: 0 0 0 2px rgba(3, 122, 251, 0.2);
+        }
+        
+        &:checked + .toggle-slider {
+            background-color: var(--color-blue);
+            border-color: var(--color-blue);
+
+            &:before {
+                transform: translateX(20px) translateY(-50%);
+                background-color: white;
+            }
+        }
+        
+        &:disabled + .toggle-slider {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+    }
+
+    .toggle-slider {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        border-radius: 12px;
+        transition: all var(--transition-normal);
+        @extend %theme-bg-primary;
+
+        &:before {
+            content: "";
+            position: absolute;
+            height: 18px;
+            width: 18px;
+            left: 3px;
+            top: 50%;
+            transform: translateY(-50%);
+            border-radius: 50%;
+            transition: all var(--transition-normal);
+            @extend %theme-text-secondary;
+        }
+    }
+
+    &:hover input:not(:disabled) + .toggle-slider {
+        .theme-dark & {
+            background-color: var(--bg-primary-dark-hover);
+        }
+
+        .theme-light & {
+            background-color: var(--bg-element-hover-light);
+        }
+    }
+
+    &:hover input:checked:not(:disabled) + .toggle-slider {
+        background-color: var(--color-blue-hover);
+    }
+
+    // Success state
+    &.success .toggle-slider {
+        @extend %validation-success;
+    }
+}
+
+// Input group layouts
+.input-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    width: 100%;
+
+    .input-label {
+        font-size: var(--font-h2);
+        font-weight: 500;
+        margin: 0;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        cursor: default;
+        @extend %theme-text-primary;
+    }
+
+    .input-description {
+        font-size: var(--font-body);
+        margin: 0;
+        opacity: 0.8;
+        @extend %theme-text-secondary;
+    }
+
+    .input-error {
+        font-size: var(--font-body);
+        margin: 0;
+        color: var(--color-red);
+    }
+
+    .input-constraint {
+        font-size: 11px;
+        color: var(--text-secondary);
+        opacity: 0.7;
+    }
+
+    // Horizontal layout variant
+    &.horizontal {
+        flex-direction: row;
+        align-items: center;
+        justify-content: space-between;
+
+        .input-label {
+            flex-shrink: 1;
+            margin-inline-end: 12px;
+        }
+
+        .input-field,
+        .toggle-switch {
+            flex-shrink: 0;
+        }
+
+        .input-field {
+            width: auto;
+            min-width: 80px;
+        }
+
+        // Path input group with flexible layout
+        &.path-input-group {
+            .input-container {
+                flex: 1 0;
+                width: auto;
+            }
+            
+            .path-input {
+                flex: 1;
+                min-width: 0;
+            }
+        }
+    }
+}
+
+.input-container {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+// Path input specific styling
+.path-input-container {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    width: 100%;
+
+    .path-display {
+        flex: 1;
+        cursor: pointer;
+        
+        &:read-only {
+            .theme-dark & {
+                background-color: var(--bg-secondary-dark);
+                color: var(--text-secondary-dark);
+            }
+
+            .theme-light & {
+                background-color: var(--bg-element-light);
+                color: var(--text-secondary-light);
+            }
+        }
+    }
+
+    .button {
+        flex-shrink: 0;
+        white-space: nowrap;
+    }
+}
+
+.path-input.clickable {
+    cursor: pointer;
+    
+    &:hover {
+        background-color: var(--bg-element-hover-light);
+        
+        .theme-dark & {
+            background-color: var(--bg-primary-dark-hover);
+        }
+    }
+}
