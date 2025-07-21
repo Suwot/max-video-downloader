@@ -21,6 +21,10 @@
     border-radius: 16px;
     min-height: 76px;
 
+	#videos-list & {
+		margin: 8px;
+	}
+
     .theme-dark & {
         background-color: var(--bg-secondary-dark);
         border: 1px solid var(--border-primary-dark);
