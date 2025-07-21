@@ -3,15 +3,17 @@
  * Maintains in-memory state and handles storage synchronization
  */
 
+import nativeHostService from '../messaging/native-host-service.js';
+
 const SETTINGS_DEFAULTS = {
   // Download settings
   maxConcurrentDownloads: 1,
-  defaultSavePath: null,
-  
+  defaultSavePath: null, // Will be set when user first downloads or manually selects
+
   // Detection settings  
-  minFileSizeFilter: 1024, // 1KB minimum
+  minFileSizeFilter: 102400, // 100KB minimum for direct videos
   autoGeneratePreviews: true,
-  
+
   // History settings
   maxHistorySize: 50,
   historyAutoRemoveInterval: 30, // days
@@ -37,21 +39,21 @@ class SettingsManager {
   async initialize() {
     try {
       const result = await chrome.storage.local.get('settings');
-      
+
       if (result.settings) {
         // Merge stored settings with defaults to handle new settings
         this.settings = { ...SETTINGS_DEFAULTS, ...result.settings };
-        
+
         // Validate and fix any invalid values
         this._validateAndFixSettings();
-        
+
         // Save corrected settings back to storage if needed
         await chrome.storage.local.set({ settings: this.settings });
       } else {
         // No existing settings, save defaults
         await chrome.storage.local.set({ settings: this.settings });
       }
-      
+
       this.initialized = true;
       console.log('Settings Manager initialized:', this.settings);
     } catch (error) {
@@ -95,13 +97,13 @@ class SettingsManager {
     try {
       // Validate incoming settings
       const validatedSettings = this._validateSettings(newSettings);
-      
+
       // Update in-memory state
       this.settings = validatedSettings;
-      
+
       // Update storage
       await chrome.storage.local.set({ settings: this.settings });
-      
+
       console.log('Settings updated:', this.settings);
       return true;
     } catch (error) {
@@ -118,7 +120,12 @@ class SettingsManager {
    */
   _validateSettings(settings) {
     const validated = { ...SETTINGS_DEFAULTS };
-    
+
+    // Handle null, undefined, or non-object inputs
+    if (!settings || typeof settings !== 'object') {
+      return validated;
+    }
+
     for (const [key, value] of Object.entries(settings)) {
       if (key in SETTINGS_DEFAULTS) {
         if (key in SETTINGS_CONSTRAINTS) {
@@ -133,8 +140,41 @@ class SettingsManager {
         }
       }
     }
-    
+
     return validated;
+  }
+
+  /**
+   * Choose save path using native host dialog
+   * @returns {Promise<boolean>} Success status
+   */
+  async chooseSavePath() {
+    try {
+      const result = await nativeHostService.sendMessage({
+        command: 'fileSystem',
+        operation: 'chooseDirectory',
+        params: { title: 'Choose Default Save Folder' }
+      });
+
+      if (result.success && result.selectedPath) {
+        // Update settings with the new path
+        const updatedSettings = {
+          ...this.settings,
+          defaultSavePath: result.selectedPath
+        };
+
+        const success = await this.updateAll(updatedSettings);
+        if (success) {
+          console.log('Updated default save path:', result.selectedPath);
+          return true;
+        }
+      }
+
+      return false;
+    } catch (error) {
+      console.error('Failed to choose save path:', error);
+      return false;
+    }
   }
 
   /**

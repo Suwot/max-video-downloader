@@ -3,13 +3,13 @@ import { shouldIgnoreForMediaDetection } from './url-filters.js';
 import { addDetectedVideo } from '../processing/video-processor.js';
 import { getRequestHeaders, removeHeadersByRequestId } from '../../shared/utils/headers-utils.js';
 import { identifyVideoType, identifyVideoTypeFromMime, extractExpiryInfo, isMediaSegment } from './video-type-identifier.js';
+import { settingsManager } from '../index.js';
 
 // Create a logger instance for video detection
 const logger = createLogger('VideoDetector');
 
 // Detection constants
 const DETECTION_CONSTANTS = {
-    MIN_FILE_SIZE: 100 * 1024, // 100KB minimum for direct video files
     MPD_CONTEXT_TIMEOUT: 60000 // 1 minute timeout for MPD context
 };
 
@@ -115,9 +115,10 @@ export async function processWebRequest(details, metadata = null) {
 
             // Handle direct video/audio files with additional filtering
             if (mimeTypeInfo.type === 'direct') {
-                // Skip small files
-                if (metadata.contentLength && metadata.contentLength < DETECTION_CONSTANTS.MIN_FILE_SIZE) {
-                    logger.debug(`Skipping small media file (${metadata.contentLength} bytes): ${url}`);
+                // Skip small files based on user setting
+                const minFileSize = settingsManager.get('minFileSizeFilter');
+                if (metadata.contentLength && metadata.contentLength < minFileSize) {
+                    logger.debug(`Skipping small media file (${metadata.contentLength} bytes, min: ${minFileSize}): ${url}`);
                     return;
                 }
 

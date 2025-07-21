@@ -25,9 +25,9 @@ class FileSystemCommand extends BaseCommand {
      */
     async execute(params) {
         const { operation, params: operationParams } = params;
-        
+
         logDebug(`FileSystem operation: ${operation}`, operationParams);
-        
+
         try {
             switch (operation) {
                 case 'openFile':
@@ -38,6 +38,7 @@ class FileSystemCommand extends BaseCommand {
                     return await this.chooseDirectory(operationParams);
                 case 'chooseSaveLocation':
                     return await this.chooseSaveLocation(operationParams);
+
                 default:
                     throw new Error(`Unknown file system operation: ${operation}`);
             }
@@ -54,7 +55,7 @@ class FileSystemCommand extends BaseCommand {
      */
     async openFile(params) {
         const { filePath } = params;
-        
+
         if (!filePath) {
             throw new Error('File path is required');
         }
@@ -66,7 +67,7 @@ class FileSystemCommand extends BaseCommand {
 
         const command = this.getOpenFileCommand(filePath);
         await this.executeCommand(command.cmd, command.args);
-        
+
         const result = { success: true, operation: 'openFile', filePath };
         this.sendMessage(result);
         return result;
@@ -78,7 +79,7 @@ class FileSystemCommand extends BaseCommand {
      */
     async showInFolder(params) {
         const { filePath } = params;
-        
+
         if (!filePath) {
             throw new Error('File path is required');
         }
@@ -90,7 +91,7 @@ class FileSystemCommand extends BaseCommand {
 
         const command = this.getShowInFolderCommand(filePath);
         await this.executeCommand(command.cmd, command.args);
-        
+
         const result = { success: true, operation: 'showInFolder', filePath };
         this.sendMessage(result);
         return result;
@@ -102,13 +103,13 @@ class FileSystemCommand extends BaseCommand {
      */
     async chooseDirectory(params) {
         const { title = 'Choose Directory' } = params;
-        
+
         const command = this.getChooseDirectoryCommand(title);
         const output = await this.executeCommand(command.cmd, command.args, true);
-        
+
         // Parse output to get selected path
         const selectedPath = this.parseDialogOutput(output, 'directory');
-        
+
         if (!selectedPath) {
             throw new Error('No directory selected');
         }
@@ -225,7 +226,7 @@ return POSIX path of chosenFile`;
     async executeCommand(cmd, args, captureOutput = false) {
         return new Promise((resolve, reject) => {
             logDebug(`Executing command: ${cmd} ${args.join(' ')}`);
-            
+
             const childProcess = spawn(cmd, args, {
                 windowsVerbatimArguments: process.platform === 'win32'
             });
@@ -266,7 +267,7 @@ return POSIX path of chosenFile`;
         }
 
         const trimmedOutput = output.trim();
-        
+
         // Handle cases where dialog was cancelled (empty output)
         if (trimmedOutput === '') {
             return null;

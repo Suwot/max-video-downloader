@@ -7,14 +7,11 @@
 import { createLogger } from '../../shared/utils/logger.js';
 import nativeHostService from '../messaging/native-host-service.js';
 import { broadcastToPopups } from '../messaging/popup-communication.js';
+import { settingsManager } from '../index.js';
 
 const logger = createLogger('Download Manager');
 
-// Maximum concurrent downloads (set to 1 for dev/testing)
-const MAX_CONCURRENT_DOWNLOADS = 1;
-
-// Storage management constants
-const MAX_DOWNLOAD_HISTORY_ITEMS = 50;
+// Storage management - will use settings manager for max history size
 
 // Simple Set for active download deduplication
 const activeDownloads = new Set();
@@ -43,6 +40,12 @@ export async function initDownloadManager() {
         // Initialize badge icon - restore count from storage or clear
         await restoreBadgeFromStorage();
         
+        // Clean up old history items on startup
+        await cleanupOldHistoryItems();
+        
+        // Set up periodic history cleanup (every 24 hours)
+        setInterval(cleanupOldHistoryItems, 24 * 60 * 60 * 1000);
+        
         logger.info('Download manager initialized successfully');
         return true;
     } catch (error) {
@@ -68,6 +71,18 @@ export async function startDownload(downloadRequest) {
         return;
     }
     
+    // Check if no default save path is set - trigger download-as flow for first-time setup
+    const defaultSavePath = settingsManager.get('defaultSavePath');
+    if (!defaultSavePath && !downloadRequest.savePath) {
+        logger.debug('No default save path set - triggering download-as flow for first-time setup');
+        await handleDownloadAsFlow({
+            ...downloadRequest,
+            choosePath: true,
+            isFirstTimeSetup: true
+        });
+        return;
+    }
+    
     // Simple deduplication check - active downloads or queued downloads
     if (activeDownloads.has(downloadId) || downloadQueue.find(req => req.downloadUrl === downloadId)) {
         logger.debug('Download already active or queued:', downloadId);
@@ -75,7 +90,8 @@ export async function startDownload(downloadRequest) {
     }
     
     // Check if we're at concurrent download limit
-    if (activeDownloads.size >= MAX_CONCURRENT_DOWNLOADS) {
+    const maxConcurrentDownloads = settingsManager.get('maxConcurrentDownloads');
+    if (activeDownloads.size >= maxConcurrentDownloads) {
         logger.debug('Queue download - at concurrent limit:', downloadId);
         
         // Add to queue
@@ -369,7 +385,8 @@ export async function cancelDownload(cancelRequest) {
  * Process next download in queue when space becomes available
  */
 async function processNextDownload() {
-    if (downloadQueue.length === 0 || activeDownloads.size >= MAX_CONCURRENT_DOWNLOADS) {
+    const maxConcurrentDownloads = settingsManager.get('maxConcurrentDownloads');
+    if (downloadQueue.length === 0 || activeDownloads.size >= maxConcurrentDownloads) {
         return;
     }
     
@@ -538,13 +555,27 @@ async function removeFromActiveDownloadsStorage(downloadUrl) {
 async function addToHistoryStorage(progressData) {
     try {
         const result = await chrome.storage.local.get(['downloads_history']);
-        const history = result.downloads_history || [];
+        let history = result.downloads_history || [];
+        
+        // Add completion timestamp if not present
+        if (!progressData.completedAt) {
+            progressData.completedAt = Date.now();
+        }
         
         history.unshift(progressData); // Add to beginning
         
-        // Maintain history size limit
-        if (history.length > MAX_DOWNLOAD_HISTORY_ITEMS) {
-            history.splice(MAX_DOWNLOAD_HISTORY_ITEMS);
+        // Clean up old history items based on auto-remove interval
+        const autoRemoveInterval = settingsManager.get('historyAutoRemoveInterval');
+        const cutoffTime = Date.now() - (autoRemoveInterval * 24 * 60 * 60 * 1000); // Convert days to milliseconds
+        history = history.filter(item => {
+            const itemTime = item.completedAt || 0;
+            return itemTime > cutoffTime;
+        });
+        
+        // Maintain history size limit from settings
+        const maxHistorySize = settingsManager.get('maxHistorySize');
+        if (history.length > maxHistorySize) {
+            history.splice(maxHistorySize);
         }
         
         await chrome.storage.local.set({ downloads_history: history });
@@ -590,6 +621,24 @@ async function handleDownloadAsFlow(downloadRequest) {
 
         logger.debug('Filesystem dialog successful:', filesystemResponse);
         
+        // If this is first-time setup, save the directory as default save path
+        if (downloadRequest.isFirstTimeSetup) {
+            try {
+                const currentSettings = settingsManager.getAll();
+                const updatedSettings = {
+                    ...currentSettings,
+                    defaultSavePath: filesystemResponse.directory
+                };
+                
+                const success = await settingsManager.updateAll(updatedSettings);
+                if (success) {
+                    logger.debug('Saved default save path from first download:', filesystemResponse.directory);
+                }
+            } catch (error) {
+                logger.warn('Failed to save default save path:', error);
+            }
+        }
+        
         // Merge filesystem response with download request
         const updatedRequest = {
             ...downloadRequest,
@@ -600,6 +649,7 @@ async function handleDownloadAsFlow(downloadRequest) {
         // Remove choosePath flag to prevent recursion
         delete updatedRequest.choosePath;
         delete updatedRequest.defaultFilename;
+        delete updatedRequest.isFirstTimeSetup;
         
         // Continue with normal download flow
         await startDownload(updatedRequest);
@@ -616,5 +666,33 @@ async function handleDownloadAsFlow(downloadRequest) {
             selectedOptionOrigText: downloadRequest.selectedOptionOrigText || null,
             error: `Download As failed: ${error.message}`
         });
+    }
+}
+
+/**
+ * Clean up old history items based on auto-remove interval setting
+ */
+async function cleanupOldHistoryItems() {
+    try {
+        const result = await chrome.storage.local.get(['downloads_history']);
+        let history = result.downloads_history || [];
+        
+        if (history.length === 0) return;
+        
+        const autoRemoveInterval = settingsManager.get('historyAutoRemoveInterval');
+        const cutoffTime = Date.now() - (autoRemoveInterval * 24 * 60 * 60 * 1000); // Convert days to milliseconds
+        
+        const originalLength = history.length;
+        history = history.filter(item => {
+            const itemTime = item.completedAt || 0;
+            return itemTime > cutoffTime;
+        });
+        
+        if (history.length !== originalLength) {
+            await chrome.storage.local.set({ downloads_history: history });
+            logger.debug(`Cleaned up ${originalLength - history.length} old history items`);
+        }
+    } catch (error) {
+        logger.error('Error cleaning up old history items:', error);
     }
 }

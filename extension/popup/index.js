@@ -9,6 +9,7 @@ import { setTabId, getGroupState, setGroupState } from './state.js';
 import { connect, disconnect, sendPortMessage } from './communication.js';
 import { restoreActiveDownloads } from './video/download-handler.js';
 import { renderHistoryItems } from './video/video-renderer.js';
+import { initializeSettingsTab } from './settings-tab.js';
 
 const logger = createLogger('Popup');
 
@@ -35,6 +36,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         // Initialize UI (theme will be handled there)
         await initializeUI();
+
+        // Initialize settings tab
+        await initializeSettingsTab();
 
         // Connect to background and register
         connect();

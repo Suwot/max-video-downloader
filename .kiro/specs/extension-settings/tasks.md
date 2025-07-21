@@ -30,7 +30,7 @@
   - Use existing CSS variables from `_variables.scss` for colors and transitions
   - _Requirements: 5.2, 5.3, 5.4_
 
-- [ ] 5. Implement settings tab UI component
+- [x] 5. Implement settings tab UI component
   - Create `extension/popup/settings-tab.js` to replace placeholder content
   - Implement settings rendering using existing section header and content patterns
   - Add concurrent downloads limit input with min=1, max=10 constraints
@@ -38,21 +38,21 @@
   - Send getSettings message on initialization and updateSettings on any change
   - _Requirements: 1.3, 3.1, 5.1, 5.4_
 
-- [ ] 6. Integrate settings tab with popup initialization and communication
+- [x] 6. Integrate settings tab with popup initialization and communication
   - Modify `extension/popup/index.js` to import and initialize settings tab
   - Modify `extension/popup/communication.js` to handle settings response messages
   - Ensure settings tab requests current values from background on popup open
   - Wire up settings tab to existing tab navigation system
   - _Requirements: 3.3, 3.4_
 
-- [ ] 7. Modify download manager to use Settings Manager
+- [x] 7. Modify download manager to use Settings Manager
   - Replace hardcoded MAX_CONCURRENT_DOWNLOADS constant in `extension/background/download/download-manager.js`
   - Import settingsManager and use settingsManager.get('maxConcurrentDownloads') in queue logic
   - Update startDownload and processNextDownload functions to use dynamic limit
   - Ensure existing downloads continue when limit is reduced, new downloads queue appropriately
   - _Requirements: 1.2, 1.4, 1.5_
 
-- [ ] 8. Test settings integration and edge cases
+- [x] 8. Test settings integration and edge cases
   - Verify Settings Manager initializes correctly with and without existing storage
   - Test settings persist across browser restarts and service worker hibernation
   - Test multiple popup instances show consistent values from Settings Manager

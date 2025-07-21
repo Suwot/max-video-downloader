@@ -13,6 +13,7 @@ import { parseHlsManifest, extractHlsMediaUrls } from './hls-parser.js';
 import { parseDashManifest } from './dash-parser.js';
 import nativeHostService from '../messaging/native-host-service.js';
 import { getVideo, updateVideo } from './video-store.js';
+import { settingsManager } from '../index.js';
 
 // Create a logger instance for the Video Processing Pipeline module
 const logger = createLogger('Video Processor');
@@ -248,9 +249,11 @@ async function processHlsVideo(tabId, normalizedUrl) {
                 normalizedUrl
             );
 
-            // Generate preview for the master using the first video track as source
-            const firstVideoTrack = hlsResult.videoTracks[0];
-            await generateVideoPreview(tabId, normalizedUrl, headers, firstVideoTrack.url);
+            // Generate preview for the master using the first video track as source (if enabled)
+            if (settingsManager.get('autoGeneratePreviews')) {
+                const firstVideoTrack = hlsResult.videoTracks[0];
+                await generateVideoPreview(tabId, normalizedUrl, headers, firstVideoTrack.url);
+            }
         }
     } else {
         // Update with error information
@@ -301,8 +304,10 @@ async function processDashVideo(tabId, normalizedUrl) {
         
         updateVideo('processDashVideo', tabId, normalizedUrl, dashUpdates);
         
-        // Generate preview for the manifest
-        await generateVideoPreview(tabId, normalizedUrl, headers);
+        // Generate preview for the manifest (if enabled)
+        if (settingsManager.get('autoGeneratePreviews')) {
+            await generateVideoPreview(tabId, normalizedUrl, headers);
+        }
     } else {
         // Update with error information
         updateVideo('processDashVideo-error', tabId, normalizedUrl, {
@@ -339,10 +344,12 @@ async function processDirectVideo(tabId, normalizedUrl) {
         // Get metadata first, then generate preview with that metadata
         await getFFprobeMetadata(tabId, normalizedUrl, headers);
         
-        // Get updated video with metadata for preview generation
-        const updatedVideo = getVideo(tabId, normalizedUrl);
-        if (updatedVideo.metaFFprobe?.hasVideo) {
-            await generateVideoPreview(tabId, normalizedUrl, headers);
+        // Get updated video with metadata for preview generation (if enabled)
+        if (settingsManager.get('autoGeneratePreviews')) {
+            const updatedVideo = getVideo(tabId, normalizedUrl);
+            if (updatedVideo.metaFFprobe?.hasVideo) {
+                await generateVideoPreview(tabId, normalizedUrl, headers);
+            }
         }
     }
 }

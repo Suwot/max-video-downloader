@@ -40,7 +40,7 @@ async function handlePortMessage(message, port, portId) {
     }
     
     // Define commands that don't require tab ID (global operations)
-    const globalCommands = ['clearCaches', 'getPreviewCacheStats', 'getDownloadProgress', 'fileSystem', 'getSettings', 'updateSettings'];
+    const globalCommands = ['clearCaches', 'getPreviewCacheStats', 'getDownloadProgress', 'fileSystem', 'getSettings', 'updateSettings', 'chooseSavePath'];
     
     // Commands that require tab ID validation (tab-specific operations)
     const tabSpecificCommands = ['getVideos', 'generatePreview', 'download'];
@@ -134,6 +134,23 @@ async function handlePortMessage(message, port, portId) {
                     stats: { count: 0, size: 0 },
                     error: error.message
                 });
+            }
+            break;
+            
+        case 'chooseSavePath':
+            // Handle save path selection through settings manager
+            try {
+                const success = await settingsManager.chooseSavePath();
+                if (success) {
+                    // Send updated settings back to popup
+                    port.postMessage({
+                        command: 'settingsResponse',
+                        settings: settingsManager.getAll(),
+                        success: true
+                    });
+                }
+            } catch (error) {
+                logger.error('Error choosing save path:', error);
             }
             break;
             

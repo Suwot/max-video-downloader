@@ -9,6 +9,7 @@ import { updateDownloadProgress } from './video/download-handler.js';
 import { renderVideos, addVideoToUI, updateVideoInUI, removeVideoFromUI } from './video/video-renderer.js';
 import { setVideos, updateVideo, clearVideos, getVideos } from './state.js';
 import { updateUICounters } from './ui.js';
+import { updateSettingsUI } from './settings-tab.js';
 
 const logger = createLogger('Communication');
 
@@ -91,6 +92,10 @@ async function handleIncomingMessage(message) {
                 downloadCounts = message.counts;
                 updateUICounters({ downloads: message.counts });
             }
+            break;
+
+        case 'settingsResponse':
+            updateSettingsUI(message.settings);
             break;
 
         default:

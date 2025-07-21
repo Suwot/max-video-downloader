@@ -12,9 +12,6 @@ import { setButtonState, restoreButtonState, setButtonIntermediaryState } from '
 
 const logger = createLogger('Download');
 
-// Downloads management constants
-const MAX_DOWNLOAD_HISTORY_ITEMS = 50;
-
 /**
  * Handle download button click - streamlined version
  * @param {HTMLElement} button - Download button
