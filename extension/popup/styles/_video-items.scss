@@ -74,7 +74,7 @@
 }
 
 .video-group {
-    margin-bottom: 12px;
+    margin-block-end: 12px;
     border-radius: 8px;
     overflow: hidden;
 }
@@ -102,7 +102,7 @@
 .preview-column {
     width: 100px;
     flex-shrink: 0;
-    margin-right: 8px;
+    margin-inline-end: 8px;
 }
 
 .preview-container {
@@ -204,7 +204,7 @@
     align-items: center;
     flex-wrap: wrap;
     gap: 4px;
-    margin-bottom: 4px;
+    margin-block-end: 4px;
 }
 
 .media-type-info {
@@ -224,7 +224,7 @@
     }
 
     svg {
-        margin-right: 4px;
+        margin-inline-end: 4px;
 
         .theme-dark & {
             fill: #aaa;
@@ -239,7 +239,7 @@
 .codec-info {
     font-size: var(--font-body);
     color: #666;
-    margin-left: 8px;
+    margin-inline-start: 8px;
     padding: 1px 4px;
     border-radius: 3px;
     background-color: rgba(0,0,0,0.05);
@@ -253,7 +253,7 @@
 .format-info {
     font-size: var(--font-body);
     color: #666;
-    margin-bottom: 4px;
+    margin-block-end: 4px;
     font-style: italic;
 
     .theme-dark & {
@@ -269,7 +269,7 @@
     display: flex;
     flex-wrap: nowrap;
     gap: 4px;
-    margin-top: 4px;
+    margin-block-start: 4px;
 }
 
 // Style for positioning wider options container
@@ -485,7 +485,7 @@
 .download-btn-icon {
     display: flex;
     align-items: center;
-    margin-right: 4px;
+    margin-inline-end: 4px;
 
     svg {
         width: 9px;
@@ -611,7 +611,7 @@
     svg {
         width: 14px;
         height: 14px;
-        margin-right: 8px;
+        margin-inline-end: 8px;
         flex-shrink: 0;
     }
 }

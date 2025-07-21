@@ -111,7 +111,7 @@
     
     position: absolute;
     left: 0;
-    margin-top: 1px;
+    margin-block-start: 1px;
     border-radius: 6px;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
     z-index: 100;
@@ -279,9 +279,9 @@
         color: var(--text-primary-dark);
         font-size: var(--font-h2);
         font-weight: 500;
-        padding-bottom: 4px;
+        padding-block-end: 4px;
         border-bottom: 1px solid var(--border-primary-dark);
-        margin-bottom: 4px;
+        margin-block-end: 4px;
     }
 }
 
@@ -322,7 +322,7 @@
     }
 
     input {
-        margin-right: 6px;
+        margin-inline-end: 6px;
         accent-color: var(--color-blue);
     }
 }
@@ -999,7 +999,7 @@
         }
         
         .toggle-icon {
-            margin-left: auto;
+            margin-inline-start: auto;
             transition: transform 0.2s ease;
             flex-shrink: 0;
             

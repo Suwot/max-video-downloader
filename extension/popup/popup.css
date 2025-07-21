@@ -168,7 +168,8 @@ h3, .h3, .item-title {
   color: #757575;
 }
 .initial-message svg {
-  margin-bottom: 16px;
+  -webkit-margin-after: 16px;
+          margin-block-end: 16px;
   opacity: 0.7;
 }
 .theme-dark .initial-message svg {
@@ -306,7 +307,8 @@ header .heading-row {
 }
 .tab-placeholder .placeholder-icon {
   opacity: 0.6;
-  margin-bottom: 8px;
+  -webkit-margin-after: 8px;
+          margin-block-end: 8px;
 }
 .theme-dark .tab-placeholder .placeholder-icon svg {
   fill: var(--text-secondary-dark);
@@ -687,7 +689,8 @@ header .heading-row {
 .options-container {
   position: absolute;
   left: 0;
-  margin-top: 1px;
+  -webkit-margin-before: 1px;
+          margin-block-start: 1px;
   border-radius: 6px;
   -webkit-box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
           box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
@@ -841,9 +844,11 @@ header .heading-row {
   color: var(--text-primary-dark);
   font-size: var(--font-h2);
   font-weight: 500;
-  padding-bottom: 4px;
+  -webkit-padding-after: 4px;
+          padding-block-end: 4px;
   border-bottom: 1px solid var(--border-primary-dark);
-  margin-bottom: 4px;
+  -webkit-margin-after: 4px;
+          margin-block-end: 4px;
 }
 
 .track-option {
@@ -886,7 +891,8 @@ header .heading-row {
   border-left: 3px solid var(--color-red);
 }
 .track-option input {
-  margin-right: 6px;
+  -webkit-margin-end: 6px;
+          margin-inline-end: 6px;
   accent-color: var(--color-blue);
 }
 
@@ -1524,7 +1530,8 @@ header .heading-row {
   background-color: var(--bg-element-hover-light);
 }
 .section-header.collapsible .toggle-icon {
-  margin-left: auto;
+  -webkit-margin-start: auto;
+          margin-inline-start: auto;
   -webkit-transition: -webkit-transform 0.2s ease;
   transition: -webkit-transform 0.2s ease;
   transition: transform 0.2s ease;
@@ -1744,7 +1751,8 @@ header .heading-row {
 }
 
 .video-group {
-  margin-bottom: 12px;
+  -webkit-margin-after: 12px;
+          margin-block-end: 12px;
   border-radius: 8px;
   overflow: hidden;
 }
@@ -1770,7 +1778,8 @@ header .heading-row {
   width: 100px;
   -ms-flex-negative: 0;
       flex-shrink: 0;
-  margin-right: 8px;
+  -webkit-margin-end: 8px;
+          margin-inline-end: 8px;
 }
 
 .preview-container {
@@ -1893,7 +1902,8 @@ header .heading-row {
   -ms-flex-wrap: wrap;
       flex-wrap: wrap;
   gap: 4px;
-  margin-bottom: 4px;
+  -webkit-margin-after: 4px;
+          margin-block-end: 4px;
 }
 
 .media-type-info {
@@ -1915,7 +1925,8 @@ header .heading-row {
   background-color: rgba(0, 0, 0, 0.05);
 }
 .media-type-info svg {
-  margin-right: 4px;
+  -webkit-margin-end: 4px;
+          margin-inline-end: 4px;
 }
 .theme-dark .media-type-info svg {
   fill: #aaa;
@@ -1927,7 +1938,8 @@ header .heading-row {
 .codec-info {
   font-size: var(--font-body);
   color: #666;
-  margin-left: 8px;
+  -webkit-margin-start: 8px;
+          margin-inline-start: 8px;
   padding: 1px 4px;
   border-radius: 3px;
   background-color: rgba(0, 0, 0, 0.05);
@@ -1940,7 +1952,8 @@ header .heading-row {
 .format-info {
   font-size: var(--font-body);
   color: #666;
-  margin-bottom: 4px;
+  -webkit-margin-after: 4px;
+          margin-block-end: 4px;
   font-style: italic;
 }
 .theme-dark .format-info {
@@ -1954,7 +1967,8 @@ header .heading-row {
   -ms-flex-wrap: nowrap;
       flex-wrap: nowrap;
   gap: 4px;
-  margin-top: 4px;
+  -webkit-margin-before: 4px;
+          margin-block-start: 4px;
 }
 
 .video-item .download-group {
@@ -2124,7 +2138,8 @@ header .heading-row {
   -webkit-box-align: center;
       -ms-flex-align: center;
           align-items: center;
-  margin-right: 4px;
+  -webkit-margin-end: 4px;
+          margin-inline-end: 4px;
 }
 .download-btn-icon svg {
   width: 9px;
@@ -2252,7 +2267,8 @@ header .heading-row {
 .download-menu-item svg {
   width: 14px;
   height: 14px;
-  margin-right: 8px;
+  -webkit-margin-end: 8px;
+          margin-inline-end: 8px;
   -ms-flex-negative: 0;
       flex-shrink: 0;
 }
@@ -2315,7 +2331,8 @@ header .heading-row {
 }
 .downloads-history .download-timestamp {
   font-size: var(--font-badge);
-  margin-top: 4px;
+  -webkit-margin-before: 4px;
+          margin-block-start: 4px;
   padding: 2px 6px;
   border-radius: 3px;
 }
@@ -2379,7 +2396,8 @@ header .heading-row {
       -ms-flex-align: center;
           align-items: center;
   font-size: var(--font-body);
-  margin-bottom: 2px;
+  -webkit-margin-after: 2px;
+          margin-block-end: 2px;
   gap: 4px;
 }
 .history-header .history-flags {
@@ -2390,8 +2408,10 @@ header .heading-row {
       -ms-flex-align: center;
           align-items: center;
   gap: 6px;
-  margin-left: 4px;
-  margin-right: 4px;
+  -webkit-margin-start: 4px;
+          margin-inline-start: 4px;
+  -webkit-margin-end: 4px;
+          margin-inline-end: 4px;
 }
 .history-header .history-flag-icon {
   display: -webkit-box;
@@ -2434,7 +2454,8 @@ header .heading-row {
       -ms-flex-align: center;
           align-items: center;
   gap: 4px;
-  margin-left: auto;
+  -webkit-margin-start: auto;
+          margin-inline-start: auto;
 }
 
 .history-play-btn,
@@ -2557,7 +2578,8 @@ header .heading-row {
           align-items: center;
   gap: 4px;
   min-width: 0;
-  margin-left: auto;
+  -webkit-margin-start: auto;
+          margin-inline-start: auto;
 }
 .page-info .favicon {
   width: 12px;
@@ -2593,7 +2615,8 @@ header .heading-row {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  margin-bottom: 2px;
+  -webkit-margin-after: 2px;
+          margin-block-end: 2px;
 }
 .theme-dark .history-item .filename {
   color: var(--text-primary-dark);

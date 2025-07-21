@@ -38,7 +38,7 @@
     }
 
     svg {
-        margin-bottom: 16px;
+        margin-block-end: 16px;
         opacity: 0.7;
 
         .theme-dark & {
@@ -172,7 +172,7 @@ header {
 
     .placeholder-icon {
         opacity: 0.6;
-        margin-bottom: 8px;
+        margin-block-end: 8px;
 
         svg {
             .theme-dark & {

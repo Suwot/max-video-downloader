@@ -81,7 +81,7 @@ export async function renderVideos() {
                 font-size: var(--font-body);
                 padding: 2px 6px;
                 border-radius: 10px;
-                margin-left: 8px;
+                margin-inline-start: 8px;
                 vertical-align: middle;
                 font-weight: 500;
             }
