@@ -45,161 +45,155 @@ function createSettingsHTML() {
         <section class="settings-container">
             <!-- Downloads Settings Section -->
             <div class="settings-section">
-                <div class="section-content">
-                    <div class="input-group horizontal">
-                        <label class="input-label">
-                            Concurrent Downloads
-                            <div class="tooltip-icon" data-tooltip="Maximum number of simultaneous downloads">
-                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
-                                    <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
-                                    <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                                    <path d="M12 17h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                                </svg>
-                            </div>
-                        </label>
-                        <div class="input-container">
-                            <input 
-                                type="number" 
-                                id="max-concurrent-downloads" 
-                                class="input-field" 
-                                min="1" 
-                                max="10" 
-                                value="1"
-                                placeholder="1"
-                            />
-                            <div class="input-constraint">Range: 1-10</div>
-                        </div>
-                    </div>
-                    
-                    <div class="input-group horizontal path-input-group">
-                        <label class="input-label">
-                            Default Save Path
-                            <div class="tooltip-icon" data-tooltip="Default folder for saving downloaded videos">
-                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
-                                    <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
-                                    <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                                    <path d="M12 17h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                                </svg>
-                            </div>
-                        </label>
-						<div class="input-container">
-							<input 
-								type="text" 
-								id="default-save-path" 
-								class="input-field path-input clickable" 
-								readonly
-								placeholder="Click to choose folder"
-							/>
-							<div class="input-constraint">Do not choose root folders!</div>
+				<div class="input-group horizontal">
+					<label class="input-label">
+						Concurrent Downloads
+						<div class="tooltip-icon" data-tooltip="Maximum number of simultaneous downloads">
+							<svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+								<circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
+								<path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+								<path d="M12 17h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+							</svg>
 						</div>
-                    </div>
-                </div>
+					</label>
+					<div class="input-container">
+						<input 
+							type="number" 
+							id="max-concurrent-downloads" 
+							class="input-field" 
+							min="1" 
+							max="10" 
+							value="1"
+							placeholder="1"
+						/>
+						<div class="input-constraint">Range: 1-10</div>
+					</div>
+				</div>
+				
+				<div class="input-group horizontal path-input-group">
+					<label class="input-label">
+						Default Save Path
+						<div class="tooltip-icon" data-tooltip="Default folder for saving downloaded videos">
+							<svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+								<circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
+								<path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+								<path d="M12 17h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+							</svg>
+						</div>
+					</label>
+					<div class="input-container">
+						<input 
+							type="text" 
+							id="default-save-path" 
+							class="input-field path-input clickable" 
+							readonly
+							placeholder="Click to choose folder"
+						/>
+						<div class="input-constraint">Do not choose root folders!</div>
+					</div>
+				</div>
             </div>
 
             <!-- Detection Settings Section -->
             <div class="settings-section">
-                <div class="section-content">
-                    <div class="input-group horizontal">
-                        <label class="input-label">
-                            Minimum File Size (KB)
-                            <div class="tooltip-icon" data-tooltip="Skip video files smaller than this size">
-                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
-                                    <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
-                                    <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                                    <path d="M12 17h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                                </svg>
-                            </div>
-                        </label>
-                        <div class="input-container">
-                            <input 
-                                type="number" 
-                                id="min-file-size-filter" 
-                                class="input-field" 
-                                min="0" 
-                                max="102400"
-                                value="100"
-                                placeholder="100"
-                            />
-                            <div class="input-constraint">Max: 100 MB</div>
-                        </div>
-                    </div>
-                    
-                    <div class="input-group horizontal">
-                        <label class="input-label">
-                            Auto-Generate Previews
-                            <div class="tooltip-icon" data-tooltip="Automatically generate video thumbnails for detected videos">
-                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
-                                    <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
-                                    <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                                    <path d="M12 17h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                                </svg>
-                            </div>
-                        </label>
-                        <label class="toggle-switch">
-                            <input 
-                                type="checkbox" 
-                                id="auto-generate-previews"
-                                checked
-                            />
-                            <span class="toggle-slider"></span>
-                        </label>
-                    </div>
-                </div>
+				<div class="input-group horizontal">
+					<label class="input-label">
+						Minimum File Size (KB)
+						<div class="tooltip-icon" data-tooltip="Skip video files smaller than this size">
+							<svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+								<circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
+								<path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+								<path d="M12 17h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+							</svg>
+						</div>
+					</label>
+					<div class="input-container">
+						<input 
+							type="number" 
+							id="min-file-size-filter" 
+							class="input-field" 
+							min="0" 
+							max="102400"
+							value="100"
+							placeholder="100"
+						/>
+						<div class="input-constraint">Max: 100 MB</div>
+					</div>
+				</div>
+				
+				<div class="input-group horizontal">
+					<label class="input-label">
+						Auto-Generate Previews
+						<div class="tooltip-icon" data-tooltip="Automatically generate video thumbnails for detected videos">
+							<svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+								<circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
+								<path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+								<path d="M12 17h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+							</svg>
+						</div>
+					</label>
+					<label class="toggle-switch">
+						<input 
+							type="checkbox" 
+							id="auto-generate-previews"
+							checked
+						/>
+						<span class="toggle-slider"></span>
+					</label>
+				</div>
             </div>
 
             <!-- History Settings Section -->
             <div class="settings-section">
-                <div class="section-content">
-                    <div class="input-group horizontal">
-                        <label class="input-label">
-                            Maximum History Items
-                            <div class="tooltip-icon" data-tooltip="Maximum number of download history items to keep">
-                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
-                                    <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
-                                    <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                                    <path d="M12 17h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                                </svg>
-                            </div>
-                        </label>
-                        <div class="input-container">
-                            <input 
-                                type="number" 
-                                id="max-history-size" 
-                                class="input-field" 
-                                min="0" 
-                                max="1000"
-                                value="50"
-                                placeholder="50"
-                            />
-                            <div class="input-constraint">Range: 0-1000</div>
-                        </div>
-                    </div>
-                    
-                    <div class="input-group horizontal">
-                        <label class="input-label">
-                            Auto-Remove After (Days)
-                            <div class="tooltip-icon" data-tooltip="Automatically remove history items older than this many days">
-                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
-                                    <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
-                                    <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                                    <path d="M12 17h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                                </svg>
-                            </div>
-                        </label>
-                        <div class="input-container">
-                            <input 
-                                type="number" 
-                                id="history-auto-remove-interval" 
-                                class="input-field" 
-                                min="1" 
-                                max="365"
-                                value="30"
-                                placeholder="30"
-                            />
-                            <div class="input-constraint">Range: 1-365</div>
-                        </div>
-                    </div>
-                </div>
+				<div class="input-group horizontal">
+					<label class="input-label">
+						Maximum History Items
+						<div class="tooltip-icon" data-tooltip="Maximum number of download history items to keep">
+							<svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+								<circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
+								<path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+								<path d="M12 17h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+							</svg>
+						</div>
+					</label>
+					<div class="input-container">
+						<input 
+							type="number" 
+							id="max-history-size" 
+							class="input-field" 
+							min="0" 
+							max="1000"
+							value="50"
+							placeholder="50"
+						/>
+						<div class="input-constraint">Range: 0-1000</div>
+					</div>
+				</div>
+				
+				<div class="input-group horizontal">
+					<label class="input-label">
+						Auto-Remove After (Days)
+						<div class="tooltip-icon" data-tooltip="Automatically remove history items older than this many days">
+							<svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+								<circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
+								<path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+								<path d="M12 17h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+							</svg>
+						</div>
+					</label>
+					<div class="input-container">
+						<input 
+							type="number" 
+							id="history-auto-remove-interval" 
+							class="input-field" 
+							min="1" 
+							max="365"
+							value="30"
+							placeholder="30"
+						/>
+						<div class="input-constraint">Range: 1-365</div>
+					</div>
+				</div>
             </div>
         </section>
     `;

@@ -465,8 +465,6 @@ header .heading-row {
           flex-direction: column;
   border-radius: 8px;
   overflow: hidden;
-}
-.settings-container .settings-section .section-content {
   gap: 12px;
   padding: 12px;
 }
