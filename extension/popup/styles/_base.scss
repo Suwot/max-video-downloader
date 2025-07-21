@@ -45,13 +45,10 @@ h1, .h1, .app-title {
     font-size: var(--font-h1);
     font-weight: 500;
     margin: 0;
-
-    .theme-dark & {
-        color: var(--text-primary-dark);
-    }
+    @extend %theme-text-primary;
 
     .theme-light & {
-        color: var(--color-blue);
+        color: var(--color-blue); // Override for app title
     }
 }
 
@@ -61,28 +58,14 @@ h2, .h2, .section-title {
     display: flex;
     align-items: center;
     gap: 8px;
-
-    .theme-dark & {
-        color: var(--text-primary-dark);
-    }
-
-    .theme-light & {
-        color: var(--text-primary-light);
-    }
+    @extend %theme-text-primary;
 }
 
 h3, .h3, .item-title {
     font-size: var(--font-h2);
     font-weight: 500;
     margin: 0;
-
-    .theme-dark & {
-        color: var(--text-primary-dark);
-    }
-
-    .theme-light & {
-        color: var(--text-primary-light);
-    }
+    @extend %theme-text-primary;
 }
 
 // Specific overrides for app title positioning

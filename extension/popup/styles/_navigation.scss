@@ -11,30 +11,13 @@
     width: 36px;
     height: 36px;
     border-radius: 50%;
-    cursor: pointer;
     padding: 0;
     position: relative;
-    box-shadow: var(--bg-element-shadow-light);
-
-    .theme-dark & {
-        background-color: var(--bg-primary-dark);
-        border: 1px solid var(--border-primary-dark);
-
-        &:hover {
-            background-color: var(--bg-primary-dark-hover);
-        }
-    }
+    @extend %interactive-base;
+    @extend %theme-bg-primary;
 
     .theme-light & {
-        background-color: var(--bg-element-light);
-
-        &:hover, &:focus {
-            background-color: var(--bg-element-hover-light);
-        }
-
-        &:active {
-            background-color: var(--bg-element-active-light);
-        }
+        box-shadow: var(--bg-element-shadow-light);
     }
 
     svg {
@@ -80,19 +63,8 @@
     border-radius: 6px;
     white-space: nowrap;
     z-index: 10;
-    backdrop-filter: var(--backdrop-filter);
-
-    .theme-dark & {
-        background-color: var(--bg-backdrop-dark);
-        color: var(--text-secondary-dark);
-        border: 1px solid var(--border-primary-dark);
-    }
-
-    .theme-light & {
-        background-color: var(--bg-backdrop-light);
-        color: var(--text-secondary-light);
-        box-shadow: var(--bg-element-shadow-light);
-    }
+    @extend %theme-backdrop;
+    @extend %theme-text-secondary;
 }
 
 // Dismiss button
@@ -100,18 +72,12 @@
     background: none;
     border: none;
     padding: 3px;
-    cursor: pointer;
     flex-shrink: 0;
     position: relative;
+    @extend %interactive-base;
 
     path {
-        .theme-dark & {
-            fill: var(--text-secondary-dark);
-        }
-
-        .theme-light & {
-            fill: var(--text-secondary-light);
-        }
+        @extend %theme-text-secondary;
     }
 
     &:hover path {
@@ -155,18 +121,18 @@
     padding: 6px;
     border: none;
     background: none;
-    cursor: pointer;
     font-size: var(--font-h2);
     font-weight: 500;
     position: relative;
     transition: all var(--transition-fast);
     text-align: center;
     border-radius: 16px;
-    position: relative;
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 6px;
+    @extend %interactive-base;
+    @extend %theme-text-secondary;
 
     &:not(:last-child)::after {
         content: '';
@@ -179,8 +145,6 @@
     }
 
     .theme-dark & {
-        color: var(--text-secondary-dark);
-
         &:not(:last-child)::after {
             background-color: var(--bg-selected-dark);
         }
@@ -196,8 +160,6 @@
     }
 
     .theme-light & {
-        color: var(--text-secondary-light);
-
         &:not(:last-child)::after {
             background-color: var(--bg-element-active-light);
         }

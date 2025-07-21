@@ -20,21 +20,19 @@
     font-size: var(--font-h2);
     border-radius: 16px;
     min-height: 76px;
+    @extend %theme-bg-primary;
 
 	#videos-list & {
 		margin: 8px;
 	}
 
+    // Override text color for muted appearance
     .theme-dark & {
-        background-color: var(--bg-secondary-dark);
-        border: 1px solid var(--border-primary-dark);
         color: #aaa;
     }
 
     .theme-light & {
-        background-color: var(--bg-element-light);
-        box-shadow: var(--bg-element-shadow-light);
-        color: #757575;;
+        color: #757575;
     }
 
     svg {
@@ -72,6 +70,7 @@ header {
     backdrop-filter: saturate(180%) blur(20px);
     padding: 8px;
     gap: 8px;
+    @extend %theme-backdrop;
 
     .heading-row {
         width: 100%;
@@ -79,8 +78,8 @@ header {
         justify-content: space-between;
     }
 
+    // Additional header-specific styling
     .theme-dark & {
-        background-color: var(--bg-backdrop-dark);
         box-shadow: 0 2px 4px rgba(0,0,0,0.2);
 
         svg {
@@ -89,8 +88,7 @@ header {
     }
 
     .theme-light & {
-        background-color: rgba(255, 255, 255, 0.8);
-        box-shadow: var(--bg-element-shadow-light);
+        background-color: rgba(255, 255, 255, 0.8); // Override backdrop for header
 
         svg {
             fill: #666;
@@ -126,34 +124,7 @@ header {
     }
 
     // Inherit scrollbar styling
-    &::-webkit-scrollbar {
-        width: 6px;
-        height: 6px;
-    }
-
-    &::-webkit-scrollbar-track {
-        background: transparent;
-    }
-
-    &::-webkit-scrollbar-thumb {
-        border-radius: 3px;
-
-        .theme-dark & {
-            background: #444;
-
-            &:hover {
-                background: #555;
-            }
-        }
-
-        .theme-light & {
-            background: #ccc;
-
-            &:hover {
-                background: #aaa;
-            }
-        }
-    }
+    @extend %theme-scrollbar;
 }
 
 // =====================================================
@@ -175,13 +146,7 @@ header {
         margin-block-end: 8px;
 
         svg {
-            .theme-dark & {
-                fill: var(--text-secondary-dark);
-            }
-
-            .theme-light & {
-                fill: var(--text-secondary-light);
-            }
+            @extend %theme-text-secondary;
         }
     }
 
@@ -189,28 +154,14 @@ header {
         font-size: var(--font-h1);
         font-weight: 500;
         margin: 0;
-
-        .theme-dark & {
-            color: var(--text-primary-dark);
-        }
-
-        .theme-light & {
-            color: var(--text-primary-light);
-        }
+        @extend %theme-text-primary;
     }
 
     p {
         font-size: var(--font-h2);
         margin: 0;
         opacity: 0.8;
-
-        .theme-dark & {
-            color: var(--text-secondary-dark);
-        }
-
-        .theme-light & {
-            color: var(--text-secondary-light);
-        }
+        @extend %theme-text-secondary;
     }
 }
 
@@ -231,16 +182,7 @@ header {
         flex-direction: column;
         border-radius: 8px;
         overflow: hidden;
-
-        .theme-dark & {
-            background-color: var(--bg-secondary-dark);
-            border: 1px solid var(--border-primary-dark);
-        }
-
-        .theme-light & {
-            background-color: var(--bg-element-light);
-            box-shadow: var(--bg-element-shadow-light);
-        }
+        @extend %theme-bg-primary;
 
         .section-content {
             gap: 12px;

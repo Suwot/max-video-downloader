@@ -15,6 +15,7 @@
     padding: 0;
     position: relative;
     scrollbar-gutter: stable;
+    @extend %theme-scrollbar;
 
     .theme-dark & {
         background-color: var(--bg-primary-dark);
@@ -22,36 +23,6 @@
 
     .theme-light & {
         background-color: var(--bg-secondary-light);
-    }
-
-    // Scrollbar styling
-    &::-webkit-scrollbar {
-        width: 6px;
-        height: 6px;
-    }
-
-    &::-webkit-scrollbar-track {
-        background: transparent;
-    }
-
-    &::-webkit-scrollbar-thumb {
-        border-radius: 3px;
-
-        .theme-dark & {
-            background: #444;
-
-            &:hover {
-                background: #555;
-            }
-        }
-
-        .theme-light & {
-            background: #ccc;
-
-            &:hover {
-                background: #aaa;
-            }
-        }
     }
 
     // Initial message display is handled by JavaScript
@@ -87,15 +58,10 @@
     display: flex;
     padding: 6px;
     border-radius: 16px;
-
-    .theme-dark & {
-        background-color: var(--bg-secondary-dark);
-        border: var(--border-primary-dark) 1px solid;
-    }
+    @extend %theme-bg-primary;
 
     .theme-light & {
-        background-color: var(--bg-primary-light);
-        box-shadow: var(--bg-element-shadow-light);
+        background-color: var(--bg-primary-light); // Override for video items
     }
 }
 
@@ -191,11 +157,11 @@
     width: 100%;
 
     .theme-dark & {
-        color: #aaa;
+        color: #aaa; // Specific muted color for file info
     }
 
     .theme-light & {
-        color: #666;
+        color: #666; // Specific muted color for file info
     }
 }
 
@@ -227,11 +193,11 @@
         margin-inline-end: 4px;
 
         .theme-dark & {
-            fill: #aaa;
+            fill: #aaa; // Specific muted color for media type icons
         }
 
         .theme-light & {
-            fill: #666;
+            fill: #666; // Specific muted color for media type icons
         }
     }
 }
@@ -527,7 +493,6 @@
     z-index: 100; // Consistent with existing dropdowns
     min-width: 160px;
     border-radius: 6px;
-    backdrop-filter: var(--backdrop-filter);
     opacity: 0;
     visibility: hidden;
     overflow: hidden;
@@ -536,16 +501,7 @@
     margin: 0;
     transform: translateY(-4px);
     transition: opacity var(--transition-normal), visibility var(--transition-normal), transform var(--transition-normal), height var(--transition-normal), padding var(--transition-normal);
-
-    .theme-dark & {
-        background: var(--bg-backdrop-dark);
-        border: 1px solid var(--border-primary-dark);
-    }
-
-    .theme-light & {
-        background: var(--bg-backdrop-light);
-        box-shadow: var(--bg-element-shadow-light);
-    }
+    @extend %theme-backdrop;
 
     &.show {
         opacity: 1;
@@ -561,12 +517,13 @@
     align-items: center;
     padding: 8px 12px; // Consistent with existing .dropdown-option
     font-size: var(--font-body);
-    cursor: pointer;
     transition: background-color var(--transition-fast);
     border: none;
     background: none;
     width: 100%;
     text-align: left;
+    @extend %interactive-base;
+    @extend %theme-text-secondary;
 
     &:first-child {
         border-top-left-radius: 6px;
@@ -578,33 +535,26 @@
         border-bottom-right-radius: 6px;
     }
 
-    .theme-dark & {
-        color: var(--text-secondary-dark);
-
-        &:hover {
-            position: relative;
-            color: var(--text-primary-dark);
+    &:hover {
+        position: relative;
+        @extend %theme-text-primary;
+        
+        .theme-dark & {
             background: var(--bg-selected-dark);
         }
 
-        &:disabled {
-            color: #666;
-            cursor: not-allowed;
+        .theme-light & {
+            background: var(--bg-element-hover-light);
         }
     }
 
-    .theme-light & {
-        color: var(--text-secondary-light);
-
-        &:hover {
-            position: relative;
-            color: var(--text-primary-light);
-            background: var(--bg-element-hover-light);
+    &:disabled {
+        .theme-dark & {
+            color: #666;
         }
 
-        &:disabled {
+        .theme-light & {
             color: #999;
-            cursor: not-allowed;
         }
     }
 

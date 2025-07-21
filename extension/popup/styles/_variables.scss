@@ -68,3 +68,137 @@
     --font-body: 11px;
     --font-badge: 8px;
 }
+
+// =====================================================
+// SHARED THEME MIXINS
+// =====================================================
+
+// Base interactive element styles
+%interactive-base {
+    cursor: pointer;
+    user-select: none;
+    transition: all var(--transition-normal);
+    
+    &:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+    }
+}
+
+// Theme-aware background patterns
+%theme-bg-primary {
+    .theme-dark & {
+        background-color: var(--bg-secondary-dark);
+        border: 1px solid var(--border-primary-dark);
+        color: var(--text-primary-dark);
+        
+        &:hover:not(:disabled) {
+            background-color: var(--bg-primary-dark-hover);
+        }
+    }
+    
+    .theme-light & {
+        background-color: var(--bg-element-light);
+        color: var(--text-primary-light);
+        box-shadow: var(--bg-element-shadow-light);
+        
+        &:hover:not(:disabled) {
+            background-color: var(--bg-element-hover-light);
+        }
+        
+        &:active:not(:disabled) {
+            background-color: var(--bg-element-active-light);
+        }
+    }
+}
+
+// Theme-aware text colors
+%theme-text-primary {
+    .theme-dark & {
+        color: var(--text-primary-dark);
+    }
+    
+    .theme-light & {
+        color: var(--text-primary-light);
+    }
+}
+
+%theme-text-secondary {
+    .theme-dark & {
+        color: var(--text-secondary-dark);
+    }
+    
+    .theme-light & {
+        color: var(--text-secondary-light);
+    }
+}
+
+// Validation state mixins
+%validation-error {
+    border-color: var(--color-red);
+    box-shadow: 0 0 0 2px rgba(255, 59, 66, 0.2);
+    
+    .theme-dark &,
+    .theme-light & {
+        background-color: rgba(255, 59, 66, 0.1);
+    }
+}
+
+%validation-success {
+    border-color: var(--color-green);
+    box-shadow: 0 0 0 2px rgba(0, 202, 85, 0.2);
+    
+    .theme-dark &,
+    .theme-light & {
+        background-color: rgba(0, 202, 85, 0.1);
+    }
+}
+
+// Backdrop/overlay patterns
+%theme-backdrop {
+    backdrop-filter: var(--backdrop-filter);
+    
+    .theme-dark & {
+        background: var(--bg-backdrop-dark);
+        border: 1px solid var(--border-primary-dark);
+    }
+    
+    .theme-light & {
+        background: var(--bg-backdrop-light);
+        box-shadow: var(--bg-element-shadow-light);
+    }
+}
+
+// Scrollbar theming
+%theme-scrollbar {
+    scrollbar-width: none;
+    
+    &::-webkit-scrollbar {
+        width: 6px;
+        height: 6px;
+        
+        &-track {
+            background: transparent;
+        }
+        
+        &-thumb {
+            border-radius: 3px;
+            
+            .theme-dark & {
+                background: #444;
+                
+                &:hover {
+                    background: #555;
+                }
+            }
+            
+            .theme-light & {
+                background: #ccc;
+                
+                &:hover {
+                    background: #aaa;
+                }
+            }
+        }
+    }
+}

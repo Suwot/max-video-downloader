@@ -64,14 +64,13 @@
         margin-block-start: 4px;
         padding: 2px 6px;
         border-radius: 3px;
+        @extend %theme-text-secondary;
         
         .theme-dark & {
-            color: var(--text-secondary-dark);
             background-color: rgba(255, 255, 255, 0.05);
         }
         
         .theme-light & {
-            color: var(--text-secondary-light);
             background-color: rgba(0, 0, 0, 0.05);
         }
     }
@@ -87,9 +86,9 @@
     padding: 8px;
     border-radius: 16px;
     gap: 4px;
+    @extend %theme-bg-primary;
 
     // Tooltip for detailed size breakdown
-
     span[data-tooltip] {cursor: help; }
 
     [data-tooltip] {
@@ -110,16 +109,6 @@
             z-index: 101;
             pointer-events: none;
         }
-    }
-    
-    .theme-dark & {
-        background-color: var(--bg-secondary-dark);
-        border: 1px solid var(--border-primary-dark);
-    }
-
-    .theme-light & {
-        background-color: var(--bg-element-light);
-        border: var(--border-primary-light);
     }
 }
 
@@ -173,10 +162,10 @@
 .history-play-btn,
 .history-folder-btn,
 .history-retry-btn {
+    @extend %interactive-base;
     background: none;
     border: none;
     padding: 2px;
-    cursor: pointer;
     border-radius: 4px;
     display: flex;
     align-items: center;
@@ -198,24 +187,11 @@
 
     svg {
         flex-shrink: 0;
-        
-        .theme-dark & {
-            stroke: var(--text-secondary-dark);
-        }
-
-        .theme-light & {
-            stroke: var(--text-secondary-light);
-        }
+        @extend %theme-text-secondary;
     }
 
     &:hover svg {
-        .theme-dark & {
-            stroke: var(--text-primary-dark);
-        }
-
-        .theme-light & {
-            stroke: var(--text-primary-light);
-        }
+        @extend %theme-text-primary;
     }
 }
 
@@ -224,14 +200,7 @@
     display: flex;
     align-items: center;
     gap: 4px;
-    
-    .theme-dark & {
-        color: var(--text-secondary-dark);
-    }
-
-    .theme-light & {
-        color: var(--text-secondary-light);
-    }
+    @extend %theme-text-secondary;
 
     svg {
         flex-shrink: 0;
@@ -308,28 +277,14 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     margin-block-end: 2px;
-
-    .theme-dark & {
-        color: var(--text-primary-dark);
-    }
-
-    .theme-light & {
-        color: var(--text-primary-light);
-    }
+    @extend %theme-text-primary;
 }
 
 .download-stats {
     display: flex;
     gap: 8px;
     font-size: var(--font-body);
-
-    .theme-dark & {
-        color: var(--text-secondary-dark);
-    }
-
-    .theme-light & {
-        color: var(--text-secondary-light);
-    }
+    @extend %theme-text-secondary;
 
     .quality {
         font-weight: 500;
@@ -353,14 +308,13 @@
         font-weight: 500;
         padding: 2px 6px;
         border-radius: 6px;
+        @extend %theme-text-secondary;
 
         .theme-dark & {
-            color: var(--text-secondary-dark);
             border: 1px solid var(--text-secondary-dark)
         }
         
         .theme-light & {
-            color: var(--text-secondary-light);
             border: 1px solid var(--text-secondary-light);
         }
     }
