@@ -138,8 +138,23 @@ export async function renderHistoryItems(fullRender = true) {
                     initialMessage.style.display = 'none';
                 }
                 
-                // Always prepend - simple and consistent
+                // Prepend new item
                 historyContainer.prepend(historyItem);
+                
+                // Smart DOM management: keep DOM in sync with storage
+                const currentHistoryItems = historyContainer.querySelectorAll('.history-item');
+                
+                // If DOM has more items than storage, remove excess from bottom
+                if (currentHistoryItems.length > history.length) {
+                    const excessCount = currentHistoryItems.length - history.length;
+                    for (let i = 0; i < excessCount; i++) {
+                        const lastItem = currentHistoryItems[currentHistoryItems.length - 1 - i];
+                        if (lastItem) {
+                            lastItem.remove();
+                        }
+                    }
+                    logger.debug(`Incremental render: removed ${excessCount} excess items from DOM`);
+                }
                 
                 logger.debug('Incremental render: prepended latest item');
             }
@@ -440,6 +455,8 @@ function buildStatsHtml(progressData) {
     
     return stats.join('');
 }
+
+
 
 /**
  * Delete a specific history item from storage and UI
