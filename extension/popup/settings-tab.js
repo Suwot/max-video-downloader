@@ -10,7 +10,6 @@ const logger = createLogger('SettingsTab');
 
 // Settings state
 let currentSettings = null;
-let settingsTimeouts = new Map(); // Track timeouts for each setting
 
 /**
  * Initialize settings tab - replace placeholder and set up UI
@@ -224,11 +223,10 @@ function createSettingsHTML() {
  * Set up event listeners for settings inputs
  */
 function setupEventListeners() {
-    // Concurrent downloads
+    // Concurrent downloads - only blur validation
     const maxConcurrentInput = document.getElementById('max-concurrent-downloads');
     if (maxConcurrentInput) {
-        maxConcurrentInput.addEventListener('input', handleConcurrentDownloadsChange);
-        maxConcurrentInput.addEventListener('blur', validateConcurrentDownloadsInput);
+        maxConcurrentInput.addEventListener('blur', handleConcurrentDownloadsBlur);
     }
 
     // Default save path - make input clickable
@@ -238,11 +236,10 @@ function setupEventListeners() {
         defaultSavePathInput.style.cursor = 'pointer';
     }
 
-    // Minimum file size filter
+    // Minimum file size filter - only blur validation
     const minFileSizeInput = document.getElementById('min-file-size-filter');
     if (minFileSizeInput) {
-        minFileSizeInput.addEventListener('input', handleMinFileSizeChange);
-        minFileSizeInput.addEventListener('blur', validateMinFileSizeInput);
+        minFileSizeInput.addEventListener('blur', handleMinFileSizeBlur);
     }
 
     // Show download notifications toggle
@@ -257,73 +254,25 @@ function setupEventListeners() {
         autoPreviewsToggle.addEventListener('change', handleAutoPreviewsChange);
     }
 
-    // Max history size
+    // Max history size - only blur validation
     const maxHistoryInput = document.getElementById('max-history-size');
     if (maxHistoryInput) {
-        maxHistoryInput.addEventListener('input', handleMaxHistoryChange);
-        maxHistoryInput.addEventListener('blur', validateMaxHistoryInput);
+        maxHistoryInput.addEventListener('blur', handleMaxHistoryBlur);
     }
 
-    // History auto-remove interval
+    // History auto-remove interval - only blur validation
     const historyIntervalInput = document.getElementById('history-auto-remove-interval');
     if (historyIntervalInput) {
-        historyIntervalInput.addEventListener('input', handleHistoryIntervalChange);
-        historyIntervalInput.addEventListener('blur', validateHistoryIntervalInput);
+        historyIntervalInput.addEventListener('blur', handleHistoryIntervalBlur);
     }
 }
 
 /**
- * Handle concurrent downloads input change with delayed update
+ * Handle concurrent downloads input blur - validate and save if changed
  */
-function handleConcurrentDownloadsChange(event) {
-    const input = event.target;
-    const value = parseInt(input.value, 10);
-    const inputId = input.id;
-
-    // Clear existing timeout
-    if (settingsTimeouts.has(inputId)) {
-        clearTimeout(settingsTimeouts.get(inputId));
-    }
-
-    // Validate range
-    if (isNaN(value) || value < 1 || value > 10) {
-        input.classList.add('error');
-        input.classList.remove('success');
-        return;
-    }
-
-    input.classList.remove('error');
-
-    // Set delayed update with success feedback
-    const timeoutId = setTimeout(() => {
-        if (currentSettings) {
-            const updatedSettings = {
-                ...currentSettings,
-                maxConcurrentDownloads: value
-            };
-
-            updateSettings(updatedSettings);
-            showSuccessFeedback(input);
-        }
-        settingsTimeouts.delete(inputId);
-    }, 1000);
-
-    settingsTimeouts.set(inputId, timeoutId);
-}
-
-/**
- * Validate and fix concurrent downloads input on blur
- */
-function validateConcurrentDownloadsInput(event) {
+function handleConcurrentDownloadsBlur(event) {
     const input = event.target;
     let value = parseInt(input.value, 10);
-    const inputId = input.id;
-
-    // Clear any pending timeout since we're validating now
-    if (settingsTimeouts.has(inputId)) {
-        clearTimeout(settingsTimeouts.get(inputId));
-        settingsTimeouts.delete(inputId);
-    }
 
     // Fix invalid values
     if (isNaN(value) || value < 1) {
@@ -335,8 +284,8 @@ function validateConcurrentDownloadsInput(event) {
     input.value = value;
     input.classList.remove('error');
 
-    // Update settings with corrected value and show success
-    if (currentSettings) {
+    // Only save if value has changed
+    if (currentSettings && currentSettings.maxConcurrentDownloads !== value) {
         const updatedSettings = {
             ...currentSettings,
             maxConcurrentDownloads: value
@@ -364,57 +313,11 @@ async function handleChooseSavePath() {
 }
 
 /**
- * Handle minimum file size input change with delayed update
+ * Handle minimum file size input blur - validate and save if changed
  */
-function handleMinFileSizeChange(event) {
-    const input = event.target;
-    const value = parseInt(input.value, 10);
-    const inputId = input.id;
-
-    // Clear existing timeout
-    if (settingsTimeouts.has(inputId)) {
-        clearTimeout(settingsTimeouts.get(inputId));
-    }
-
-    // Validate range (convert KB to bytes for storage)
-    if (isNaN(value) || value < 0 || value > 102400) {
-        input.classList.add('error');
-        input.classList.remove('success');
-        return;
-    }
-
-    input.classList.remove('error');
-
-    // Set delayed update with success feedback
-    const timeoutId = setTimeout(() => {
-        if (currentSettings) {
-            const updatedSettings = {
-                ...currentSettings,
-                minFileSizeFilter: value * 1024
-            };
-
-            updateSettings(updatedSettings);
-            showSuccessFeedback(input);
-        }
-        settingsTimeouts.delete(inputId);
-    }, 1000);
-
-    settingsTimeouts.set(inputId, timeoutId);
-}
-
-/**
- * Validate and fix minimum file size input on blur
- */
-function validateMinFileSizeInput(event) {
+function handleMinFileSizeBlur(event) {
     const input = event.target;
     let value = parseInt(input.value, 10);
-    const inputId = input.id;
-
-    // Clear any pending timeout since we're validating now
-    if (settingsTimeouts.has(inputId)) {
-        clearTimeout(settingsTimeouts.get(inputId));
-        settingsTimeouts.delete(inputId);
-    }
 
     // Fix invalid values
     if (isNaN(value) || value < 0) {
@@ -426,11 +329,12 @@ function validateMinFileSizeInput(event) {
     input.value = value;
     input.classList.remove('error');
 
-    // Update settings with corrected value (convert KB to bytes) and show success
-    if (currentSettings) {
+    // Only save if value has changed (convert KB to bytes for comparison)
+    const newValueInBytes = value * 1024;
+    if (currentSettings && currentSettings.minFileSizeFilter !== newValueInBytes) {
         const updatedSettings = {
             ...currentSettings,
-            minFileSizeFilter: value * 1024
+            minFileSizeFilter: newValueInBytes
         };
 
         updateSettings(updatedSettings);
@@ -493,57 +397,11 @@ function handleAutoPreviewsChange(event) {
 }
 
 /**
- * Handle max history size input change with delayed update
+ * Handle max history size input blur - validate and save if changed
  */
-function handleMaxHistoryChange(event) {
-    const input = event.target;
-    const value = parseInt(input.value, 10);
-    const inputId = input.id;
-
-    // Clear existing timeout
-    if (settingsTimeouts.has(inputId)) {
-        clearTimeout(settingsTimeouts.get(inputId));
-    }
-
-    // Validate range
-    if (isNaN(value) || value < 0 || value > 1000) {
-        input.classList.add('error');
-        input.classList.remove('success');
-        return;
-    }
-
-    input.classList.remove('error');
-
-    // Set delayed update with success feedback
-    const timeoutId = setTimeout(() => {
-        if (currentSettings) {
-            const updatedSettings = {
-                ...currentSettings,
-                maxHistorySize: value
-            };
-
-            updateSettings(updatedSettings);
-            showSuccessFeedback(input);
-        }
-        settingsTimeouts.delete(inputId);
-    }, 1000);
-
-    settingsTimeouts.set(inputId, timeoutId);
-}
-
-/**
- * Validate and fix max history size input on blur
- */
-function validateMaxHistoryInput(event) {
+function handleMaxHistoryBlur(event) {
     const input = event.target;
     let value = parseInt(input.value, 10);
-    const inputId = input.id;
-
-    // Clear any pending timeout since we're validating now
-    if (settingsTimeouts.has(inputId)) {
-        clearTimeout(settingsTimeouts.get(inputId));
-        settingsTimeouts.delete(inputId);
-    }
 
     // Fix invalid values
     if (isNaN(value) || value < 0) {
@@ -555,8 +413,8 @@ function validateMaxHistoryInput(event) {
     input.value = value;
     input.classList.remove('error');
 
-    // Update settings with corrected value and show success
-    if (currentSettings) {
+    // Only save if value has changed
+    if (currentSettings && currentSettings.maxHistorySize !== value) {
         const updatedSettings = {
             ...currentSettings,
             maxHistorySize: value
@@ -568,57 +426,11 @@ function validateMaxHistoryInput(event) {
 }
 
 /**
- * Handle history auto-remove interval input change with delayed update
+ * Handle history auto-remove interval input blur - validate and save if changed
  */
-function handleHistoryIntervalChange(event) {
-    const input = event.target;
-    const value = parseInt(input.value, 10);
-    const inputId = input.id;
-
-    // Clear existing timeout
-    if (settingsTimeouts.has(inputId)) {
-        clearTimeout(settingsTimeouts.get(inputId));
-    }
-
-    // Validate range
-    if (isNaN(value) || value < 1 || value > 365) {
-        input.classList.add('error');
-        input.classList.remove('success');
-        return;
-    }
-
-    input.classList.remove('error');
-
-    // Set delayed update with success feedback
-    const timeoutId = setTimeout(() => {
-        if (currentSettings) {
-            const updatedSettings = {
-                ...currentSettings,
-                historyAutoRemoveInterval: value
-            };
-
-            updateSettings(updatedSettings);
-            showSuccessFeedback(input);
-        }
-        settingsTimeouts.delete(inputId);
-    }, 1000);
-
-    settingsTimeouts.set(inputId, timeoutId);
-}
-
-/**
- * Validate and fix history auto-remove interval input on blur
- */
-function validateHistoryIntervalInput(event) {
+function handleHistoryIntervalBlur(event) {
     const input = event.target;
     let value = parseInt(input.value, 10);
-    const inputId = input.id;
-
-    // Clear any pending timeout since we're validating now
-    if (settingsTimeouts.has(inputId)) {
-        clearTimeout(settingsTimeouts.get(inputId));
-        settingsTimeouts.delete(inputId);
-    }
 
     // Fix invalid values
     if (isNaN(value) || value < 1) {
@@ -630,8 +442,8 @@ function validateHistoryIntervalInput(event) {
     input.value = value;
     input.classList.remove('error');
 
-    // Update settings with corrected value and show success
-    if (currentSettings) {
+    // Only save if value has changed
+    if (currentSettings && currentSettings.historyAutoRemoveInterval !== value) {
         const updatedSettings = {
             ...currentSettings,
             historyAutoRemoveInterval: value
@@ -684,7 +496,7 @@ function setupTooltips() {
     tooltipIcons.forEach(icon => {
         let tooltip = null;
 
-        icon.addEventListener('mouseenter', (e) => {
+        icon.addEventListener('mouseenter', () => {
             const tooltipText = icon.getAttribute('data-tooltip');
             if (!tooltipText) return;
 
