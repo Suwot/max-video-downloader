@@ -115,6 +115,14 @@
             border-radius: 50%;
             transition: all var(--transition-normal);
             @extend %theme-text-secondary;
+
+			.theme-dark & {
+				background-color: var(--bg-primary-dark-hover);
+			}
+
+			.theme-light & {
+				background-color: var(--bg-element-hover-light);
+			}
         }
     }
 

@@ -1015,6 +1015,12 @@ header .heading-row {
   -webkit-transition: all var(--transition-normal);
   transition: all var(--transition-normal);
 }
+.theme-dark .toggle-switch .toggle-slider:before {
+  background-color: var(--bg-primary-dark-hover);
+}
+.theme-light .toggle-switch .toggle-slider:before {
+  background-color: var(--bg-element-hover-light);
+}
 .theme-dark .toggle-switch:hover input:not(:disabled) + .toggle-slider {
   background-color: var(--bg-primary-dark-hover);
 }

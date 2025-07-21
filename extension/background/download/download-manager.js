@@ -258,6 +258,10 @@ async function handleDownloadEvent(event) {
 
 // Create download start notification
 function createDownloadNotification(filename) {
+    if (!settingsManager.get('showDownloadNotifications')) {
+        return;
+    }
+    
     const notificationId = `download-${Date.now()}`;
     chrome.notifications.create(notificationId, {
         type: 'basic',
@@ -269,6 +273,10 @@ function createDownloadNotification(filename) {
 
 // Create download completion notification
 function createCompletionNotification(filename) {
+    if (!settingsManager.get('showDownloadNotifications')) {
+        return;
+    }
+    
     const notificationId = `complete-${Date.now()}`;
     chrome.notifications.create(notificationId, {
         type: 'basic',

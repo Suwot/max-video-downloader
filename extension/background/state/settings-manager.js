@@ -9,6 +9,7 @@ const SETTINGS_DEFAULTS = {
   // Download settings
   maxConcurrentDownloads: 1,
   defaultSavePath: null, // Will be set when user first downloads or manually selects
+  showDownloadNotifications: true,
 
   // Detection settings  
   minFileSizeFilter: 102400, // 100KB minimum for direct videos

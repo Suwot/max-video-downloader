@@ -92,6 +92,27 @@ function createSettingsHTML() {
 						<div class="input-constraint">Do not choose root folders!</div>
 					</div>
 				</div>
+				
+				<div class="input-group horizontal">
+					<label class="input-label">
+						Show Download Notifications
+						<div class="tooltip-icon" data-tooltip="Show system notifications when downloads start and complete">
+							<svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+								<circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
+								<path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+								<path d="M12 17h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+							</svg>
+						</div>
+					</label>
+					<label class="toggle-switch">
+						<input 
+							type="checkbox" 
+							id="show-download-notifications"
+							checked
+						/>
+						<span class="toggle-slider"></span>
+					</label>
+				</div>
             </div>
 
             <!-- Detection Settings Section -->
@@ -222,6 +243,12 @@ function setupEventListeners() {
     if (minFileSizeInput) {
         minFileSizeInput.addEventListener('input', handleMinFileSizeChange);
         minFileSizeInput.addEventListener('blur', validateMinFileSizeInput);
+    }
+
+    // Show download notifications toggle
+    const showNotificationsToggle = document.getElementById('show-download-notifications');
+    if (showNotificationsToggle) {
+        showNotificationsToggle.addEventListener('change', handleShowNotificationsChange);
     }
 
     // Auto-generate previews toggle
@@ -408,6 +435,33 @@ function validateMinFileSizeInput(event) {
 
         updateSettings(updatedSettings);
         showSuccessFeedback(input);
+    }
+}
+
+/**
+ * Handle show download notifications toggle change
+ */
+function handleShowNotificationsChange(event) {
+    const checkbox = event.target;
+    const value = checkbox.checked;
+
+    // Update settings immediately for toggles (no delay needed)
+    if (currentSettings) {
+        const updatedSettings = {
+            ...currentSettings,
+            showDownloadNotifications: value
+        };
+
+        updateSettings(updatedSettings);
+
+        // Show brief success feedback on the toggle container
+        const toggleSwitch = checkbox.closest('.toggle-switch');
+        if (toggleSwitch) {
+            toggleSwitch.classList.add('success');
+            setTimeout(() => {
+                toggleSwitch.classList.remove('success');
+            }, 500);
+        }
     }
 }
 
@@ -683,6 +737,12 @@ export function updateSettingsUI(settings) {
     if (minFileSizeInput && settings.minFileSizeFilter !== undefined) {
         minFileSizeInput.value = Math.round(settings.minFileSizeFilter / 1024);
         minFileSizeInput.classList.remove('error');
+    }
+
+    // Show download notifications
+    const showNotificationsToggle = document.getElementById('show-download-notifications');
+    if (showNotificationsToggle && settings.showDownloadNotifications !== undefined) {
+        showNotificationsToggle.checked = settings.showDownloadNotifications;
     }
 
     // Auto-generate previews
