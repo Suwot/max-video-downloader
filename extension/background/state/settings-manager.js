@@ -22,7 +22,7 @@ const SETTINGS_DEFAULTS = {
 const SETTINGS_CONSTRAINTS = {
   maxConcurrentDownloads: { min: 1, max: 10 },
   minFileSizeFilter: { min: 0, max: 100 * 1024 * 1024 }, // 100MB max
-  maxHistorySize: { min: 10, max: 1000 },
+  maxHistorySize: { min: 0, max: 1000 },
   historyAutoRemoveInterval: { min: 1, max: 365 }
 };
 
@@ -146,7 +146,7 @@ class SettingsManager {
 
   /**
    * Choose save path using native host dialog
-   * @returns {Promise<boolean>} Success status
+   * @returns {Promise<{success: boolean, path?: string}>} Result with success status and path
    */
   async chooseSavePath() {
     try {
@@ -166,14 +166,14 @@ class SettingsManager {
         const success = await this.updateAll(updatedSettings);
         if (success) {
           console.log('Updated default save path:', result.selectedPath);
-          return true;
+          return { success: true, path: result.selectedPath };
         }
       }
 
-      return false;
+      return { success: false };
     } catch (error) {
       console.error('Failed to choose save path:', error);
-      return false;
+      return { success: false };
     }
   }
 

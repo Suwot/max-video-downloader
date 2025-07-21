@@ -140,17 +140,21 @@ async function handlePortMessage(message, port, portId) {
         case 'chooseSavePath':
             // Handle save path selection through settings manager
             try {
-                const success = await settingsManager.chooseSavePath();
-                if (success) {
-                    // Send updated settings back to popup
-                    port.postMessage({
-                        command: 'settingsResponse',
-                        settings: settingsManager.getAll(),
-                        success: true
-                    });
-                }
+                const result = await settingsManager.chooseSavePath();
+                // Always send updated settings back to popup (unified flow)
+                port.postMessage({
+                    command: 'settingsResponse',
+                    settings: settingsManager.getAll(),
+                    success: result.success
+                });
             } catch (error) {
                 logger.error('Error choosing save path:', error);
+                port.postMessage({
+                    command: 'settingsResponse',
+                    settings: settingsManager.getAll(),
+                    success: false,
+                    error: error.message
+                });
             }
             break;
             

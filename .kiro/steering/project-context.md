@@ -51,7 +51,7 @@ extension/
 │   └── state/              # tab-manager (state-manager unused legacy)
 ├── popup/
 │   ├── video/              # video-renderer, download-handler, dropdown, preview-hover
-│   ├── styles/             # SCSS partials with _variables.scss (CSS is compiled output)
+│   ├── styles/             # SCSS partials with _variables.scss (CSS is autocompiled output)
 │   └── [index,ui,state,communication].js
 └── shared/utils/           # logger, headers-utils, preview-cache, processing-utils
 
@@ -66,7 +66,7 @@ native_host/
 
 - **Extension**: ES6 modules, Chrome APIs (webRequest, scripting, downloads, nativeMessaging, storage, tabs)
 - **Native Host**: Node.js, pkg binary packaging, bundled FFmpeg/FFprobe binaries
-- **Styling**: SCSS with partials system (\_variables.scss used for all styles in all partials, CSS is compilation output)
+- **Styling**: SCSS with partials system (\_variables.scss used for all styles in all partials, CSS is autocompilation output by liveSass extension)
 - **Communication**: Port messaging (popup), connectNative (native host)
 
 ## Performance Considerations

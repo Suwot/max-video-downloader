@@ -64,16 +64,22 @@ export async function startDownload(downloadRequest) {
     
     logger.debug('Starting download:', downloadId);
     
+    // Check if no default save path is set - enrich request for first-time setup
+    const defaultSavePath = settingsManager.get('defaultSavePath');
+    const isFirstTimeSetup = !defaultSavePath;
+    
     // Check if this is a "download as" request that needs filesystem dialog
     if (downloadRequest.choosePath) {
         logger.debug('Download As request - handling filesystem dialog first');
-        await handleDownloadAsFlow(downloadRequest);
+        await handleDownloadAsFlow({
+            ...downloadRequest,
+            isFirstTimeSetup
+        });
         return;
     }
     
     // Check if no default save path is set - trigger download-as flow for first-time setup
-    const defaultSavePath = settingsManager.get('defaultSavePath');
-    if (!defaultSavePath && !downloadRequest.savePath) {
+    if (isFirstTimeSetup) {
         logger.debug('No default save path set - triggering download-as flow for first-time setup');
         await handleDownloadAsFlow({
             ...downloadRequest,
@@ -81,6 +87,11 @@ export async function startDownload(downloadRequest) {
             isFirstTimeSetup: true
         });
         return;
+    }
+    
+    // Use defaultSavePath
+    if (defaultSavePath) {
+        downloadRequest.savePath = defaultSavePath;
     }
     
     // Simple deduplication check - active downloads or queued downloads
@@ -633,6 +644,13 @@ async function handleDownloadAsFlow(downloadRequest) {
                 const success = await settingsManager.updateAll(updatedSettings);
                 if (success) {
                     logger.debug('Saved default save path from first download:', filesystemResponse.directory);
+                    
+                    // Broadcast updated settings to any open popups (for UI update)
+                    broadcastToPopups({
+                        command: 'settingsResponse',
+                        settings: settingsManager.getAll(),
+                        success: true
+                    });
                 }
             } catch (error) {
                 logger.warn('Failed to save default save path:', error);
