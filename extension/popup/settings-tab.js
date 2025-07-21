@@ -82,13 +82,16 @@ function createSettingsHTML() {
                                 </svg>
                             </div>
                         </label>
-                        <input 
-                            type="text" 
-                            id="default-save-path" 
-                            class="input-field path-input clickable" 
-                            readonly
-                            placeholder="Click to choose folder"
-                        />
+						<div class="input-container">
+							<input 
+								type="text" 
+								id="default-save-path" 
+								class="input-field path-input clickable" 
+								readonly
+								placeholder="Click to choose folder"
+							/>
+							<div class="input-constraint">Do not choose root folders!</div>
+						</div>
                     </div>
                 </div>
             </div>

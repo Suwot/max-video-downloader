@@ -778,8 +778,8 @@
 
 		// Path input group with flexible layout
 		&.path-input-group {
-			.input-label {
-				flex-shrink: 0; // Don't shrink label
+			.input-container {
+				flex: 1 0; // Don't shrink label
 				width: auto; // Size to content
 			}
 			

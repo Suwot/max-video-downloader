@@ -1328,9 +1328,10 @@ header .heading-row {
   width: auto;
   min-width: 80px;
 }
-.input-group.horizontal.path-input-group .input-label {
-  -ms-flex-negative: 0;
-      flex-shrink: 0;
+.input-group.horizontal.path-input-group .input-container {
+  -webkit-box-flex: 1;
+      -ms-flex: 1 0;
+          flex: 1 0;
   width: auto;
 }
 .input-group.horizontal.path-input-group .path-input {
