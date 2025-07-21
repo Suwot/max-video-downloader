@@ -4,6 +4,7 @@
  */
 
 import nativeHostService from '../messaging/native-host-service.js';
+import { broadcastToPopups } from '../messaging/popup-communication.js';
 
 const SETTINGS_DEFAULTS = {
   // Download settings
@@ -23,7 +24,7 @@ const SETTINGS_DEFAULTS = {
 const SETTINGS_CONSTRAINTS = {
   maxConcurrentDownloads: { min: 1, max: 10 },
   minFileSizeFilter: { min: 0, max: 100 * 1024 * 1024 }, // 100MB max
-  maxHistorySize: { min: 0, max: 1000 },
+  maxHistorySize: { min: 0, max: 200 },
   historyAutoRemoveInterval: { min: 1, max: 365 }
 };
 
@@ -96,14 +97,30 @@ class SettingsManager {
    */
   async updateAll(newSettings) {
     try {
+      // Store previous maxHistorySize for comparison
+      const previousMaxHistorySize = this.settings.maxHistorySize;
+
       // Validate incoming settings
       const validatedSettings = this._validateSettings(newSettings);
+
+      // Check if maxHistorySize was reduced and trim history if needed
+      let removedCount = 0;
+      if (validatedSettings.maxHistorySize < previousMaxHistorySize) {
+        removedCount = await this._trimHistoryToNewLimit(validatedSettings.maxHistorySize);
+      }
 
       // Update in-memory state
       this.settings = validatedSettings;
 
       // Update storage
       await chrome.storage.local.set({ settings: this.settings });
+
+      // Broadcast updated settings to all open popups
+      broadcastToPopups({
+        command: 'settingsUpdated',
+        settings: this.settings,
+        historyTrimmed: removedCount > 0 ? removedCount : null
+      });
 
       console.log('Settings updated:', this.settings);
       return true;
@@ -184,6 +201,36 @@ class SettingsManager {
    */
   _validateAndFixSettings() {
     this.settings = this._validateSettings(this.settings);
+  }
+
+  /**
+   * Trim history to new limit when maxHistorySize is reduced
+   * @param {number} newLimit - New maximum history size
+   * @returns {Promise<number>} Number of entries removed
+   * @private
+   */
+  async _trimHistoryToNewLimit(newLimit) {
+    try {
+      const result = await chrome.storage.local.get(['downloads_history']);
+      let history = result.downloads_history || [];
+
+      if (history.length > newLimit) {
+        // Keep only the most recent entries (first newLimit items)
+        const trimmedHistory = history.slice(0, newLimit);
+        
+        await chrome.storage.local.set({ downloads_history: trimmedHistory });
+        
+        const removedCount = history.length - newLimit;
+        console.log(`Trimmed ${removedCount} old history entries due to reduced maxHistorySize (${history.length} → ${newLimit})`);
+        
+        return removedCount;
+      }
+      
+      return 0;
+    } catch (error) {
+      console.error('Failed to trim history to new limit:', error);
+      return 0;
+    }
   }
 }
 

@@ -5,7 +5,7 @@
 
 import { createLogger } from '../../shared/utils/logger.js';
 import { sendPortMessage } from '../communication.js';
-import { showError } from '../ui.js';
+import { showError } from '../ui-utils.js';
 import { formatSize, formatTime } from '../../shared/utils/processing-utils.js';
 import { renderHistoryItems } from './video-renderer.js';
 import { setButtonState, restoreButtonState, setButtonIntermediaryState } from './download-button.js';

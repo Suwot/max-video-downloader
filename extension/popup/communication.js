@@ -6,9 +6,9 @@
 
 import { createLogger } from '../shared/utils/logger.js';
 import { updateDownloadProgress } from './video/download-handler.js';
-import { renderVideos, addVideoToUI, updateVideoInUI, removeVideoFromUI } from './video/video-renderer.js';
+import { renderVideos, addVideoToUI, updateVideoInUI, removeVideoFromUI, renderHistoryItems } from './video/video-renderer.js';
 import { setVideos, updateVideo, clearVideos, getVideos } from './state.js';
-import { updateUICounters } from './ui.js';
+import { updateUICounters, showToast } from './ui-utils.js';
 import { updateSettingsUI } from './settings-tab.js';
 
 const logger = createLogger('Communication');
@@ -96,6 +96,19 @@ async function handleIncomingMessage(message) {
 
         case 'settingsResponse':
             updateSettingsUI(message.settings);
+            break;
+
+        case 'settingsUpdated':
+            updateSettingsUI(message.settings);
+            
+            // Handle history trimming updates
+            if (message.historyTrimmed && message.historyTrimmed > 0) {
+                // Re-render history items to reflect trimmed entries
+                await renderHistoryItems(true); // Full re-render
+                
+                // Show toast notification
+                showToast(`${message.historyTrimmed} history entries were removed`, 'info');
+            }
             break;
 
         default:

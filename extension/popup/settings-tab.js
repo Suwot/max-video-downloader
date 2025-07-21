@@ -5,6 +5,7 @@
 
 import { createLogger } from '../shared/utils/logger.js';
 import { sendPortMessage } from './communication.js';
+import { showConfirmModal } from './ui-utils.js';
 
 const logger = createLogger('SettingsTab');
 
@@ -182,11 +183,11 @@ function createSettingsHTML() {
 							id="max-history-size" 
 							class="input-field" 
 							min="0" 
-							max="1000"
+							max="200"
 							value="50"
 							placeholder="50"
 						/>
-						<div class="input-constraint">Range: 0-1000</div>
+						<div class="input-constraint">Range: 0-200</div>
 					</div>
 				</div>
 				
@@ -223,23 +224,24 @@ function createSettingsHTML() {
  * Set up event listeners for settings inputs
  */
 function setupEventListeners() {
-    // Concurrent downloads - only blur validation
+    // Concurrent downloads
     const maxConcurrentInput = document.getElementById('max-concurrent-downloads');
     if (maxConcurrentInput) {
         maxConcurrentInput.addEventListener('blur', handleConcurrentDownloadsBlur);
+        addKeyboardHandlers(maxConcurrentInput, handleConcurrentDownloadsBlur);
     }
 
     // Default save path - make input clickable
     const defaultSavePathInput = document.getElementById('default-save-path');
     if (defaultSavePathInput) {
         defaultSavePathInput.addEventListener('click', handleChooseSavePath);
-        defaultSavePathInput.style.cursor = 'pointer';
     }
 
-    // Minimum file size filter - only blur validation
+    // Minimum file size filter
     const minFileSizeInput = document.getElementById('min-file-size-filter');
     if (minFileSizeInput) {
         minFileSizeInput.addEventListener('blur', handleMinFileSizeBlur);
+        addKeyboardHandlers(minFileSizeInput, handleMinFileSizeBlur);
     }
 
     // Show download notifications toggle
@@ -254,16 +256,18 @@ function setupEventListeners() {
         autoPreviewsToggle.addEventListener('change', handleAutoPreviewsChange);
     }
 
-    // Max history size - only blur validation
+    // Max history size
     const maxHistoryInput = document.getElementById('max-history-size');
     if (maxHistoryInput) {
         maxHistoryInput.addEventListener('blur', handleMaxHistoryBlur);
+        addKeyboardHandlers(maxHistoryInput, handleMaxHistoryBlur);
     }
 
-    // History auto-remove interval - only blur validation
+    // History auto-remove interval
     const historyIntervalInput = document.getElementById('history-auto-remove-interval');
     if (historyIntervalInput) {
         historyIntervalInput.addEventListener('blur', handleHistoryIntervalBlur);
+        addKeyboardHandlers(historyIntervalInput, handleHistoryIntervalBlur);
     }
 }
 
@@ -399,15 +403,15 @@ function handleAutoPreviewsChange(event) {
 /**
  * Handle max history size input blur - validate and save if changed
  */
-function handleMaxHistoryBlur(event) {
+async function handleMaxHistoryBlur(event) {
     const input = event.target;
     let value = parseInt(input.value, 10);
 
     // Fix invalid values
     if (isNaN(value) || value < 0) {
         value = 0;
-    } else if (value > 1000) {
-        value = 1000;
+    } else if (value > 200) {
+        value = 200;
     }
 
     input.value = value;
@@ -415,6 +419,37 @@ function handleMaxHistoryBlur(event) {
 
     // Only save if value has changed
     if (currentSettings && currentSettings.maxHistorySize !== value) {
+        const previousValue = currentSettings.maxHistorySize;
+        
+        // If reducing history size, check actual history and show confirmation
+        if (value < previousValue) {
+            // Get actual history count from storage
+            try {
+                const result = await chrome.storage.local.get(['downloads_history']);
+                const currentHistoryCount = (result.downloads_history || []).length;
+                
+                // Only show confirmation if we actually need to remove items
+                if (currentHistoryCount > value) {
+                    const itemsToRemove = currentHistoryCount - value;
+                    const confirmed = await showConfirmModal(
+                        `${itemsToRemove} items will be removed from history - are you sure?`,
+                        null, // onConfirm handled by promise
+                        null, // onCancel handled by promise
+                        input   // trigger element
+                    );
+                    
+                    if (!confirmed) {
+                        // Reset input to previous value
+                        input.value = previousValue;
+                        return;
+                    }
+                }
+            } catch (error) {
+                logger.error('Error checking history count:', error);
+                // Continue without confirmation if we can't check
+            }
+        }
+        
         const updatedSettings = {
             ...currentSettings,
             maxHistorySize: value
@@ -576,5 +611,41 @@ export function updateSettingsUI(settings) {
         historyIntervalInput.value = settings.historyAutoRemoveInterval;
         historyIntervalInput.classList.remove('error');
     }
+}
+
+/**
+ * Add keyboard handlers for Enter/Tab (apply) and Escape (revert)
+ */
+function addKeyboardHandlers(input, blurHandler) {
+    let originalValue = input.value;
+    
+    // Store original value when input gets focus
+    input.addEventListener('focus', () => {
+        originalValue = input.value;
+    });
+    
+    input.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') {
+            // Prevent default form submission and trigger blur
+            event.preventDefault();
+            input.blur();
+        } else if (event.key === 'Tab') {
+            // Let Tab work naturally, blur will trigger automatically
+            // No need to prevent default for Tab
+        } else if (event.key === 'Escape') {
+            // Revert to original value with error flash
+            event.preventDefault();
+            input.value = originalValue;
+            input.blur();
+            
+            // Show error flash AFTER blur to avoid being removed by blur handler
+            setTimeout(() => {
+                input.classList.add('error');
+                setTimeout(() => {
+                    input.classList.remove('error');
+                }, 1000);
+            }, 10);
+        }
+    });
 }
 
