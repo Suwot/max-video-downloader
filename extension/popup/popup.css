@@ -63,30 +63,42 @@
   cursor: not-allowed;
 }
 
-.theme-dark .history-item, .theme-dark .video-item, .theme-dark .btn.btn-secondary, .theme-dark .toggle-switch .toggle-slider, .toggle-switch .theme-dark .toggle-slider, .theme-dark .input-field, .theme-dark .custom-dropdown .selected-option, .custom-dropdown .theme-dark .selected-option, .theme-dark .theme-toggle,
-.theme-dark .clear-cache-button, .theme-dark .settings-container .settings-section, .settings-container .theme-dark .settings-section, .theme-dark .initial-message {
+.theme-dark .btn.btn-secondary, .theme-dark .input-field, .theme-dark .custom-dropdown .selected-option, .custom-dropdown .theme-dark .selected-option, .theme-dark .theme-toggle,
+.theme-dark .clear-cache-button {
   background-color: var(--bg-secondary-dark);
   border: 1px solid var(--border-primary-dark);
   color: var(--text-primary-dark);
 }
-.theme-dark .history-item:hover:not(:disabled), .theme-dark .video-item:hover:not(:disabled), .theme-dark .btn.btn-secondary:hover:not(:disabled), .theme-dark .toggle-switch .toggle-slider:hover:not(:disabled), .toggle-switch .theme-dark .toggle-slider:hover:not(:disabled), .theme-dark .input-field:hover:not(:disabled), .theme-dark .custom-dropdown .selected-option:hover:not(:disabled), .custom-dropdown .theme-dark .selected-option:hover:not(:disabled), .theme-dark .theme-toggle:hover:not(:disabled),
-.theme-dark .clear-cache-button:hover:not(:disabled), .theme-dark .settings-container .settings-section:hover:not(:disabled), .settings-container .theme-dark .settings-section:hover:not(:disabled), .theme-dark .initial-message:hover:not(:disabled) {
+.theme-dark .btn.btn-secondary:hover:not(:disabled), .theme-dark .input-field:hover:not(:disabled), .theme-dark .custom-dropdown .selected-option:hover:not(:disabled), .custom-dropdown .theme-dark .selected-option:hover:not(:disabled), .theme-dark .theme-toggle:hover:not(:disabled),
+.theme-dark .clear-cache-button:hover:not(:disabled) {
   background-color: var(--bg-primary-dark-hover);
 }
-.theme-light .history-item, .theme-light .video-item, .theme-light .btn.btn-secondary, .theme-light .toggle-switch .toggle-slider, .toggle-switch .theme-light .toggle-slider, .theme-light .input-field, .theme-light .custom-dropdown .selected-option, .custom-dropdown .theme-light .selected-option, .theme-light .theme-toggle,
-.theme-light .clear-cache-button, .theme-light .settings-container .settings-section, .settings-container .theme-light .settings-section, .theme-light .initial-message {
+.theme-light .btn.btn-secondary, .theme-light .input-field, .theme-light .custom-dropdown .selected-option, .custom-dropdown .theme-light .selected-option, .theme-light .theme-toggle,
+.theme-light .clear-cache-button {
   background-color: var(--bg-element-light);
   color: var(--text-primary-light);
   -webkit-box-shadow: var(--bg-element-shadow-light);
           box-shadow: var(--bg-element-shadow-light);
 }
-.theme-light .history-item:hover:not(:disabled), .theme-light .video-item:hover:not(:disabled), .theme-light .btn.btn-secondary:hover:not(:disabled), .theme-light .toggle-switch .toggle-slider:hover:not(:disabled), .toggle-switch .theme-light .toggle-slider:hover:not(:disabled), .theme-light .input-field:hover:not(:disabled), .theme-light .custom-dropdown .selected-option:hover:not(:disabled), .custom-dropdown .theme-light .selected-option:hover:not(:disabled), .theme-light .theme-toggle:hover:not(:disabled),
-.theme-light .clear-cache-button:hover:not(:disabled), .theme-light .settings-container .settings-section:hover:not(:disabled), .settings-container .theme-light .settings-section:hover:not(:disabled), .theme-light .initial-message:hover:not(:disabled) {
+.theme-light .btn.btn-secondary:hover:not(:disabled), .theme-light .input-field:hover:not(:disabled), .theme-light .custom-dropdown .selected-option:hover:not(:disabled), .custom-dropdown .theme-light .selected-option:hover:not(:disabled), .theme-light .theme-toggle:hover:not(:disabled),
+.theme-light .clear-cache-button:hover:not(:disabled) {
   background-color: var(--bg-element-hover-light);
 }
-.theme-light .history-item:active:not(:disabled), .theme-light .video-item:active:not(:disabled), .theme-light .btn.btn-secondary:active:not(:disabled), .theme-light .toggle-switch .toggle-slider:active:not(:disabled), .toggle-switch .theme-light .toggle-slider:active:not(:disabled), .theme-light .input-field:active:not(:disabled), .theme-light .custom-dropdown .selected-option:active:not(:disabled), .custom-dropdown .theme-light .selected-option:active:not(:disabled), .theme-light .theme-toggle:active:not(:disabled),
-.theme-light .clear-cache-button:active:not(:disabled), .theme-light .settings-container .settings-section:active:not(:disabled), .settings-container .theme-light .settings-section:active:not(:disabled), .theme-light .initial-message:active:not(:disabled) {
+.theme-light .btn.btn-secondary:active:not(:disabled), .theme-light .input-field:active:not(:disabled), .theme-light .custom-dropdown .selected-option:active:not(:disabled), .custom-dropdown .theme-light .selected-option:active:not(:disabled), .theme-light .theme-toggle:active:not(:disabled),
+.theme-light .clear-cache-button:active:not(:disabled) {
   background-color: var(--bg-element-active-light);
+}
+
+.theme-dark .history-item, .theme-dark .video-item, .theme-dark .settings-container .settings-section, .settings-container .theme-dark .settings-section, .theme-dark .initial-message {
+  background-color: var(--bg-secondary-dark);
+  border: 1px solid var(--border-primary-dark);
+  color: var(--text-primary-dark);
+}
+.theme-light .history-item, .theme-light .video-item, .theme-light .settings-container .settings-section, .settings-container .theme-light .settings-section, .theme-light .initial-message {
+  background-color: var(--bg-element-light);
+  color: var(--text-primary-light);
+  -webkit-box-shadow: var(--bg-element-shadow-light);
+          box-shadow: var(--bg-element-shadow-light);
 }
 
 .theme-dark .history-item .filename, .history-item .theme-dark .filename, .theme-dark .history-play-btn:hover svg, .history-play-btn:hover .theme-dark svg,
@@ -124,7 +136,7 @@
 .theme-dark .history-folder-btn svg,
 .history-folder-btn .theme-dark svg,
 .theme-dark .history-retry-btn svg,
-.history-retry-btn .theme-dark svg, .theme-dark .downloads-history .download-timestamp, .downloads-history .theme-dark .download-timestamp, .theme-dark .download-menu-item, .theme-dark .section-header.collapsible .toggle-icon svg path, .section-header.collapsible .toggle-icon svg .theme-dark path, .theme-dark .tooltip-icon svg, .tooltip-icon .theme-dark svg, .theme-dark .input-group .input-description, .input-group .theme-dark .input-description, .theme-dark .toggle-switch .toggle-slider:before, .toggle-switch .theme-dark .toggle-slider:before, .theme-dark .input-field::placeholder, .theme-dark .track-option, .theme-dark .dropdown-option, .theme-dark .tab-button, .theme-dark .dismiss-button path, .dismiss-button .theme-dark path, .theme-dark .cache-stats, .theme-dark .tab-placeholder p, .tab-placeholder .theme-dark p, .theme-dark .tab-placeholder .placeholder-icon svg, .tab-placeholder .placeholder-icon .theme-dark svg {
+.history-retry-btn .theme-dark svg, .theme-dark .downloads-history .download-timestamp, .downloads-history .theme-dark .download-timestamp, .theme-dark .download-menu-item, .theme-dark .section-header.collapsible .toggle-icon svg path, .section-header.collapsible .toggle-icon svg .theme-dark path, .theme-dark .tooltip-icon svg, .tooltip-icon .theme-dark svg, .theme-dark .input-group .input-description, .input-group .theme-dark .input-description, .theme-dark .input-field::placeholder, .theme-dark .track-option, .theme-dark .dropdown-option, .theme-dark .tab-button, .theme-dark .dismiss-button path, .dismiss-button .theme-dark path, .theme-dark .cache-stats, .theme-dark .tab-placeholder p, .tab-placeholder .theme-dark p, .theme-dark .tab-placeholder .placeholder-icon svg, .tab-placeholder .placeholder-icon .theme-dark svg {
   color: var(--text-secondary-dark);
 }
 .theme-light .input-field::-webkit-input-placeholder {
@@ -143,7 +155,7 @@
 .theme-light .history-folder-btn svg,
 .history-folder-btn .theme-light svg,
 .theme-light .history-retry-btn svg,
-.history-retry-btn .theme-light svg, .theme-light .downloads-history .download-timestamp, .downloads-history .theme-light .download-timestamp, .theme-light .download-menu-item, .theme-light .section-header.collapsible .toggle-icon svg path, .section-header.collapsible .toggle-icon svg .theme-light path, .theme-light .tooltip-icon svg, .tooltip-icon .theme-light svg, .theme-light .input-group .input-description, .input-group .theme-light .input-description, .theme-light .toggle-switch .toggle-slider:before, .toggle-switch .theme-light .toggle-slider:before, .theme-light .input-field::placeholder, .theme-light .track-option, .theme-light .dropdown-option, .theme-light .tab-button, .theme-light .dismiss-button path, .dismiss-button .theme-light path, .theme-light .cache-stats, .theme-light .tab-placeholder p, .tab-placeholder .theme-light p, .theme-light .tab-placeholder .placeholder-icon svg, .tab-placeholder .placeholder-icon .theme-light svg {
+.history-retry-btn .theme-light svg, .theme-light .downloads-history .download-timestamp, .downloads-history .theme-light .download-timestamp, .theme-light .download-menu-item, .theme-light .section-header.collapsible .toggle-icon svg path, .section-header.collapsible .toggle-icon svg .theme-light path, .theme-light .tooltip-icon svg, .tooltip-icon .theme-light svg, .theme-light .input-group .input-description, .input-group .theme-light .input-description, .theme-light .input-field::placeholder, .theme-light .track-option, .theme-light .dropdown-option, .theme-light .tab-button, .theme-light .dismiss-button path, .dismiss-button .theme-light path, .theme-light .cache-stats, .theme-light .tab-placeholder p, .tab-placeholder .theme-light p, .theme-light .tab-placeholder .placeholder-icon svg, .tab-placeholder .placeholder-icon .theme-light svg {
   color: var(--text-secondary-light);
 }
 
@@ -156,12 +168,12 @@
   background-color: rgba(255, 59, 66, 0.1);
 }
 
-.toggle-switch.success .toggle-slider, .input-field.success {
+.input-field.success {
   border-color: var(--color-green);
   -webkit-box-shadow: 0 0 0 2px rgba(0, 202, 85, 0.2);
           box-shadow: 0 0 0 2px rgba(0, 202, 85, 0.2);
 }
-.theme-dark .toggle-switch.success .toggle-slider, .toggle-switch.success .theme-dark .toggle-slider, .theme-dark .input-field.success, .theme-light .toggle-switch.success .toggle-slider, .toggle-switch.success .theme-light .toggle-slider, .theme-light .input-field.success {
+.theme-dark .input-field.success, .theme-light .input-field.success {
   background-color: rgba(0, 202, 85, 0.1);
 }
 
@@ -975,10 +987,6 @@ header .heading-row {
   width: 0;
   height: 0;
 }
-.toggle-switch input:focus + .toggle-slider {
-  -webkit-box-shadow: 0 0 0 2px rgba(3, 122, 251, 0.2);
-          box-shadow: 0 0 0 2px rgba(3, 122, 251, 0.2);
-}
 .toggle-switch input:checked + .toggle-slider {
   background-color: var(--color-blue);
   border-color: var(--color-blue);
@@ -1002,6 +1010,14 @@ header .heading-row {
   -webkit-transition: all var(--transition-normal);
   transition: all var(--transition-normal);
 }
+.theme-dark .toggle-switch .toggle-slider {
+  background-color: var(--bg-primary-dark);
+  border: 1px solid var(--border-primary-dark);
+}
+.theme-light .toggle-switch .toggle-slider {
+  background-color: var(--bg-secondary-light);
+  border: 1px solid rgba(0, 0, 0, 0.2);
+}
 .toggle-switch .toggle-slider:before {
   content: "";
   position: absolute;
@@ -1014,12 +1030,13 @@ header .heading-row {
   border-radius: 50%;
   -webkit-transition: all var(--transition-normal);
   transition: all var(--transition-normal);
+  background-color: white;
 }
 .theme-dark .toggle-switch .toggle-slider:before {
-  background-color: var(--bg-primary-dark-hover);
+  background-color: var(--text-secondary-dark);
 }
 .theme-light .toggle-switch .toggle-slider:before {
-  background-color: var(--bg-element-hover-light);
+  background-color: var(--text-secondary-light);
 }
 .theme-dark .toggle-switch:hover input:not(:disabled) + .toggle-slider {
   background-color: var(--bg-primary-dark-hover);
@@ -1030,6 +1047,7 @@ header .heading-row {
 .toggle-switch:hover input:checked:not(:disabled) + .toggle-slider {
   background-color: var(--color-blue-hover);
 }
+
 .input-group {
   display: -webkit-box;
   display: -ms-flexbox;

@@ -86,7 +86,7 @@
     padding: 8px;
     border-radius: 16px;
     gap: 4px;
-    @extend %theme-bg-primary;
+    @extend %theme-bg-static;
 
     // Tooltip for detailed size breakdown
     span[data-tooltip] {cursor: help; }

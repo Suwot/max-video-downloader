@@ -20,7 +20,7 @@
     font-size: var(--font-h2);
     border-radius: 16px;
     min-height: 76px;
-    @extend %theme-bg-primary;
+    @extend %theme-bg-static;
 
 	#videos-list & {
 		margin: 8px;
@@ -184,6 +184,6 @@ header {
         overflow: hidden;
 		gap: 12px;
         padding: 12px;
-        @extend %theme-bg-primary;
+        @extend %theme-bg-static;
     }
 }

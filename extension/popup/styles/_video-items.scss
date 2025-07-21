@@ -58,7 +58,7 @@
     display: flex;
     padding: 6px;
     border-radius: 16px;
-    @extend %theme-bg-primary;
+    @extend %theme-bg-static;
 
     .theme-light & {
         background-color: var(--bg-primary-light); // Override for video items

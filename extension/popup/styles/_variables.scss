@@ -85,7 +85,7 @@
     }
 }
 
-// Theme-aware background patterns
+// Theme-aware background patterns for INTERACTIVE elements
 %theme-bg-primary {
     .theme-dark & {
         background-color: var(--bg-secondary-dark);
@@ -109,6 +109,21 @@
         &:active:not(:disabled) {
             background-color: var(--bg-element-active-light);
         }
+    }
+}
+
+// Theme-aware background patterns for NON-INTERACTIVE elements (no hover states)
+%theme-bg-static {
+    .theme-dark & {
+        background-color: var(--bg-secondary-dark);
+        border: 1px solid var(--border-primary-dark);
+        color: var(--text-primary-dark);
+    }
+    
+    .theme-light & {
+        background-color: var(--bg-element-light);
+        color: var(--text-primary-light);
+        box-shadow: var(--bg-element-shadow-light);
     }
 }
 

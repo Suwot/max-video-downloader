@@ -74,9 +74,9 @@
         width: 0;
         height: 0;
         
-        &:focus + .toggle-slider {
-            box-shadow: 0 0 0 2px rgba(3, 122, 251, 0.2);
-        }
+        // &:focus + .toggle-slider {
+        //     box-shadow: 0 0 0 2px rgba(3, 122, 251, 0.2);
+        // }
         
         &:checked + .toggle-slider {
             background-color: var(--color-blue);
@@ -102,7 +102,17 @@
         bottom: 0;
         border-radius: 12px;
         transition: all var(--transition-normal);
-        @extend %theme-bg-primary;
+        
+        // OFF state - contrasted background for visibility
+        .theme-dark & {
+            background-color: var(--bg-primary-dark);
+            border: 1px solid var(--border-primary-dark);
+        }
+        
+        .theme-light & {
+            background-color: var(--bg-secondary-light);
+            border: 1px solid rgba(0, 0, 0, 0.2);
+        }
 
         &:before {
             content: "";
@@ -114,15 +124,17 @@
             transform: translateY(-50%);
             border-radius: 50%;
             transition: all var(--transition-normal);
-            @extend %theme-text-secondary;
-
-			.theme-dark & {
-				background-color: var(--bg-primary-dark-hover);
-			}
-
-			.theme-light & {
-				background-color: var(--bg-element-hover-light);
-			}
+            
+            // Consistent knob color in both states
+            background-color: white;
+            
+            .theme-dark & {
+                background-color: var(--text-secondary-dark);
+            }
+            
+            .theme-light & {
+                background-color: var(--text-secondary-light);
+            }
         }
     }
 
@@ -140,10 +152,10 @@
         background-color: var(--color-blue-hover);
     }
 
-    // Success state
-    &.success .toggle-slider {
-        @extend %validation-success;
-    }
+    // // Success state
+    // &.success .toggle-slider {
+    //     @extend %validation-success;
+    // }
 }
 
 // Input group layouts
