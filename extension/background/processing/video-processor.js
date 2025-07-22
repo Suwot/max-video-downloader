@@ -634,5 +634,6 @@ export {
     addDetectedVideo,
     handleVariantMasterRelationships,
     cleanupProcessingQueueForTab,
-    clearAll
+    clearAll,
+    generateVideoPreview
 };

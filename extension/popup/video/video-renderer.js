@@ -617,10 +617,11 @@ export function updateVideoFlags(videoUrl, video) {
         
         // Handle preview URL update
         if (video.previewUrl && previewImage) {
+            if (previewContainer) previewContainer.classList.add('has-preview');
             previewImage.onload = () => {
                 previewImage.classList.remove('placeholder');
                 previewImage.classList.add('loaded');
-                if (loader) loader.style.display = 'none';
+                if (previewContainer) previewContainer.classList.remove('loading');
             };
             previewImage.src = video.previewUrl;
         }

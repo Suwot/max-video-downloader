@@ -12,6 +12,7 @@ import { getVideosForDisplay, getVideo, dismissVideoFromTab, cleanupAllVideos, g
 import nativeHostService from './native-host-service.js';
 import { updateTabIcon } from '../state/tab-manager.js';
 import { settingsManager } from '../index.js';
+import { generateVideoPreview } from '../processing/video-processor.js';
 
 // Track all popup connections - simplified single map
 const popupPorts = new Map(); // key = portId, value = {port, tabId, url}
@@ -76,6 +77,22 @@ async function handlePortMessage(message, port, portId) {
                 downloadProgress.forEach(progressData => {
                     port.postMessage(progressData);
                 });
+            }
+            break;
+
+        case 'generatePreview':
+            // Manual preview generation request
+            if (message.tabId && message.url) {
+                try {
+                    const video = getVideo(message.tabId, message.url);
+                    if (video) {
+                        // Call generateVideoPreview directly - it will handle the full flow
+                        await generateVideoPreview(message.tabId, message.url, video.headers || {});
+                        logger.debug(`Manual preview generation triggered for: ${message.url}`);
+                    }
+                } catch (error) {
+                    logger.error(`Error in manual preview generation: ${error.message}`);
+                }
             }
             break;
 
