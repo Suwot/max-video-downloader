@@ -1,6 +1,5 @@
 /**
- * Settings Tab Component
- * Replaces placeholder content and provides settings UI
+ * Settings Tab Component - Streamlined settings UI
  */
 
 import { createLogger } from '../shared/utils/logger.js';
@@ -9,8 +8,26 @@ import { showConfirmModal } from './ui-utils.js';
 
 const logger = createLogger('SettingsTab');
 
-// Settings state
 let currentSettings = null;
+
+// Setting configurations with validation and display logic
+const SETTING_CONFIGS = {
+  maxConcurrentDownloads: { type: 'number', min: 1, max: 10 },
+  defaultSavePath: { type: 'path' },
+  showDownloadNotifications: { type: 'boolean' },
+  minFileSizeFilter: { 
+    type: 'unit-number',
+    min: 0, 
+    max: 100,  // max value in either unit
+    units: [
+      { label: 'KB', multiplier: 1024 },
+      { label: 'MB', multiplier: 1048576 }
+    ]
+  },
+  autoGeneratePreviews: { type: 'boolean' },
+  maxHistorySize: { type: 'number', min: 0, max: 200, confirmReduce: true },
+  historyAutoRemoveInterval: { type: 'number', min: 1, max: 365 }
+};
 
 /**
  * Initialize settings tab - replace placeholder and set up UI
@@ -34,7 +51,7 @@ export async function initializeSettingsTab() {
     setupTooltips();
 
     // Request current settings from background
-    requestCurrentSettings();
+    sendPortMessage({ command: 'getSettings' });
 }
 
 /**
@@ -59,7 +76,7 @@ function createSettingsHTML() {
 					<div class="input-container">
 						<input 
 							type="number" 
-							id="max-concurrent-downloads" 
+							data-setting="maxConcurrentDownloads"
 							class="input-field" 
 							min="1" 
 							max="10" 
@@ -84,7 +101,7 @@ function createSettingsHTML() {
 					<div class="input-container">
 						<input 
 							type="text" 
-							id="default-save-path" 
+							data-setting="defaultSavePath"
 							class="input-field path-input clickable" 
 							readonly
 							placeholder="Click to choose folder"
@@ -107,7 +124,7 @@ function createSettingsHTML() {
 					<label class="toggle-switch">
 						<input 
 							type="checkbox" 
-							id="show-download-notifications"
+							data-setting="showDownloadNotifications"
 							checked
 						/>
 						<span class="toggle-slider"></span>
@@ -119,7 +136,7 @@ function createSettingsHTML() {
             <div class="settings-section">
 				<div class="input-group horizontal">
 					<label class="input-label">
-						Minimum File Size (KB)
+						Min. File Size
 						<div class="tooltip-icon" data-tooltip="Skip video files smaller than this size">
 							<svg width="12" height="12" viewBox="0 0 24 24" fill="none">
 								<circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
@@ -129,15 +146,22 @@ function createSettingsHTML() {
 						</div>
 					</label>
 					<div class="input-container">
-						<input 
-							type="number" 
-							id="min-file-size-filter" 
-							class="input-field" 
-							min="0" 
-							max="102400"
-							value="100"
-							placeholder="100"
-						/>
+						<div class="unit-input-group">
+							<div class="unit-toggle" data-unit-toggle="minFileSizeFilter">
+								<button type="button" class="unit-option active" data-multiplier="1024">KB</button>
+								<button type="button" class="unit-option" data-multiplier="1048576">MB</button>
+							</div>
+							<input 
+								type="number" 
+								data-setting="minFileSizeFilter"
+								class="input-field unit-number-input" 
+								min="0" 
+								max="102400"
+								step="0.01"
+								value="100"
+								placeholder="100"
+							/>
+						</div>
 						<div class="input-constraint">Max: 100 MB</div>
 					</div>
 				</div>
@@ -156,7 +180,7 @@ function createSettingsHTML() {
 					<label class="toggle-switch">
 						<input 
 							type="checkbox" 
-							id="auto-generate-previews"
+							data-setting="autoGeneratePreviews"
 							checked
 						/>
 						<span class="toggle-slider"></span>
@@ -168,7 +192,7 @@ function createSettingsHTML() {
             <div class="settings-section">
 				<div class="input-group horizontal">
 					<label class="input-label">
-						Maximum History Items
+						Max. History Items
 						<div class="tooltip-icon" data-tooltip="Maximum number of download history items to keep">
 							<svg width="12" height="12" viewBox="0 0 24 24" fill="none">
 								<circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
@@ -180,7 +204,7 @@ function createSettingsHTML() {
 					<div class="input-container">
 						<input 
 							type="number" 
-							id="max-history-size" 
+							data-setting="maxHistorySize"
 							class="input-field" 
 							min="0" 
 							max="200"
@@ -205,7 +229,7 @@ function createSettingsHTML() {
 					<div class="input-container">
 						<input 
 							type="number" 
-							id="history-auto-remove-interval" 
+							data-setting="historyAutoRemoveInterval"
 							class="input-field" 
 							min="1" 
 							max="365"
@@ -221,280 +245,133 @@ function createSettingsHTML() {
 }
 
 /**
- * Set up event listeners for settings inputs
+ * Set up unified event listeners for all settings inputs
  */
 function setupEventListeners() {
-    // Concurrent downloads
-    const maxConcurrentInput = document.getElementById('max-concurrent-downloads');
-    if (maxConcurrentInput) {
-        maxConcurrentInput.addEventListener('blur', handleConcurrentDownloadsBlur);
-        addKeyboardHandlers(maxConcurrentInput, handleConcurrentDownloadsBlur);
-    }
+    // Set up listeners for all settings inputs using data attributes
+    Object.keys(SETTING_CONFIGS).forEach(settingKey => {
+        const config = SETTING_CONFIGS[settingKey];
+        const element = document.querySelector(`[data-setting="${settingKey}"]`);
+        
+        if (!element) return;
 
-    // Default save path - make input clickable
-    const defaultSavePathInput = document.getElementById('default-save-path');
-    if (defaultSavePathInput) {
-        defaultSavePathInput.addEventListener('click', handleChooseSavePath);
-    }
-
-    // Minimum file size filter
-    const minFileSizeInput = document.getElementById('min-file-size-filter');
-    if (minFileSizeInput) {
-        minFileSizeInput.addEventListener('blur', handleMinFileSizeBlur);
-        addKeyboardHandlers(minFileSizeInput, handleMinFileSizeBlur);
-    }
-
-    // Show download notifications toggle
-    const showNotificationsToggle = document.getElementById('show-download-notifications');
-    if (showNotificationsToggle) {
-        showNotificationsToggle.addEventListener('change', handleShowNotificationsChange);
-    }
-
-    // Auto-generate previews toggle
-    const autoPreviewsToggle = document.getElementById('auto-generate-previews');
-    if (autoPreviewsToggle) {
-        autoPreviewsToggle.addEventListener('change', handleAutoPreviewsChange);
-    }
-
-    // Max history size
-    const maxHistoryInput = document.getElementById('max-history-size');
-    if (maxHistoryInput) {
-        maxHistoryInput.addEventListener('blur', handleMaxHistoryBlur);
-        addKeyboardHandlers(maxHistoryInput, handleMaxHistoryBlur);
-    }
-
-    // History auto-remove interval
-    const historyIntervalInput = document.getElementById('history-auto-remove-interval');
-    if (historyIntervalInput) {
-        historyIntervalInput.addEventListener('blur', handleHistoryIntervalBlur);
-        addKeyboardHandlers(historyIntervalInput, handleHistoryIntervalBlur);
-    }
+        if (config.type === 'path') {
+            element.addEventListener('click', () => handleChooseSavePath());
+        } else if (config.type === 'boolean') {
+            element.addEventListener('change', (e) => {
+                handleSettingChange(settingKey, e.target.checked);
+                // Show success feedback on toggle switch
+                const toggleSwitch = e.target.closest('.toggle-switch');
+                if (toggleSwitch) {
+                    toggleSwitch.classList.add('success');
+                    setTimeout(() => toggleSwitch.classList.remove('success'), 500);
+                }
+            });
+        } else if (config.type === 'number') {
+            element.addEventListener('blur', (e) => handleNumberInput(settingKey, e.target));
+            addKeyboardHandlers(element);
+        } else if (config.type === 'unit-number') {
+            element.addEventListener('blur', (e) => handleUnitNumberInput(settingKey, e.target));
+            addKeyboardHandlers(element);
+            
+            // Set up unit toggle listeners
+            const unitToggle = document.querySelector(`[data-unit-toggle="${settingKey}"]`);
+            if (unitToggle) {
+                unitToggle.addEventListener('click', (e) => {
+                    if (e.target.classList.contains('unit-option')) {
+                        handleUnitToggleClick(settingKey, e.target);
+                    }
+                });
+            }
+        }
+    });
 }
 
 /**
- * Handle concurrent downloads input blur - validate and save if changed
+ * Unified setting change handler - always send all settings immediately
  */
-function handleConcurrentDownloadsBlur(event) {
-    const input = event.target;
+function handleSettingChange(settingKey, value) {
+    if (!currentSettings) return;
+
+    const config = SETTING_CONFIGS[settingKey];
+    
+    // Transform value if needed (e.g., KB to bytes)
+    const transformedValue = config.transform ? config.transform(value) : value;
+
+    // Update all settings immediately - simple and robust
+    updateSettings({ ...currentSettings, [settingKey]: transformedValue });
+    showSuccessFeedback(document.querySelector(`[data-setting="${settingKey}"]`));
+}
+
+/**
+ * Handle number input validation and change
+ */
+async function handleNumberInput(settingKey, input) {
+    const config = SETTING_CONFIGS[settingKey];
     let value = parseInt(input.value, 10);
 
-    // Fix invalid values
-    if (isNaN(value) || value < 1) {
-        value = 1;
-    } else if (value > 10) {
-        value = 10;
-    }
+    // Store original value for potential restoration
+    const originalDisplayValue = config.display ? config.display(currentSettings[settingKey]) : currentSettings[settingKey];
+
+    // Clamp to valid range
+    if (isNaN(value) || value < config.min) value = config.min;
+    if (value > config.max) value = config.max;
 
     input.value = value;
     input.classList.remove('error');
 
-    // Only save if value has changed
-    if (currentSettings && currentSettings.maxConcurrentDownloads !== value) {
-        const updatedSettings = {
-            ...currentSettings,
-            maxConcurrentDownloads: value
-        };
-
-        updateSettings(updatedSettings);
+    // Get display value for comparison
+    const currentValue = config.display ? config.display(currentSettings[settingKey]) : currentSettings[settingKey];
+    
+    if (currentSettings && currentValue !== value) {
+        // For settings that need confirmation, handle specially
+        if (config.confirmReduce && value < currentValue) {
+            const confirmed = await confirmHistoryReduction(value, input);
+            if (!confirmed) {
+                // Restore original value
+                input.value = originalDisplayValue;
+                return;
+            }
+        }
+        
+        handleSettingChange(settingKey, value);
         showSuccessFeedback(input);
     }
 }
 
 /**
- * Handle choose save path button click
+ * Handle save path selection
  */
 async function handleChooseSavePath() {
-    logger.debug('Choosing save path');
-
     try {
-        // Send message to background to open folder chooser
-        sendPortMessage({
-            command: 'chooseSavePath'
-        });
+        sendPortMessage({ command: 'chooseSavePath' });
     } catch (error) {
         logger.error('Error choosing save path:', error);
     }
 }
 
 /**
- * Handle minimum file size input blur - validate and save if changed
+ * Confirm history reduction with actual count check
  */
-function handleMinFileSizeBlur(event) {
-    const input = event.target;
-    let value = parseInt(input.value, 10);
-
-    // Fix invalid values
-    if (isNaN(value) || value < 0) {
-        value = 0;
-    } else if (value > 102400) {
-        value = 102400;
-    }
-
-    input.value = value;
-    input.classList.remove('error');
-
-    // Only save if value has changed (convert KB to bytes for comparison)
-    const newValueInBytes = value * 1024;
-    if (currentSettings && currentSettings.minFileSizeFilter !== newValueInBytes) {
-        const updatedSettings = {
-            ...currentSettings,
-            minFileSizeFilter: newValueInBytes
-        };
-
-        updateSettings(updatedSettings);
-        showSuccessFeedback(input);
-    }
-}
-
-/**
- * Handle show download notifications toggle change
- */
-function handleShowNotificationsChange(event) {
-    const checkbox = event.target;
-    const value = checkbox.checked;
-
-    // Update settings immediately for toggles (no delay needed)
-    if (currentSettings) {
-        const updatedSettings = {
-            ...currentSettings,
-            showDownloadNotifications: value
-        };
-
-        updateSettings(updatedSettings);
-
-        // Show brief success feedback on the toggle container
-        const toggleSwitch = checkbox.closest('.toggle-switch');
-        if (toggleSwitch) {
-            toggleSwitch.classList.add('success');
-            setTimeout(() => {
-                toggleSwitch.classList.remove('success');
-            }, 500);
-        }
-    }
-}
-
-/**
- * Handle auto-generate previews toggle change
- */
-function handleAutoPreviewsChange(event) {
-    const checkbox = event.target;
-    const value = checkbox.checked;
-
-    // Update settings immediately for toggles (no delay needed)
-    if (currentSettings) {
-        const updatedSettings = {
-            ...currentSettings,
-            autoGeneratePreviews: value
-        };
-
-        updateSettings(updatedSettings);
-
-        // Show brief success feedback on the toggle container
-        const toggleSwitch = checkbox.closest('.toggle-switch');
-        if (toggleSwitch) {
-            toggleSwitch.classList.add('success');
-            setTimeout(() => {
-                toggleSwitch.classList.remove('success');
-            }, 500);
-        }
-    }
-}
-
-/**
- * Handle max history size input blur - validate and save if changed
- */
-async function handleMaxHistoryBlur(event) {
-    const input = event.target;
-    let value = parseInt(input.value, 10);
-
-    // Fix invalid values
-    if (isNaN(value) || value < 0) {
-        value = 0;
-    } else if (value > 200) {
-        value = 200;
-    }
-
-    input.value = value;
-    input.classList.remove('error');
-
-    // Only save if value has changed
-    if (currentSettings && currentSettings.maxHistorySize !== value) {
-        const previousValue = currentSettings.maxHistorySize;
+async function confirmHistoryReduction(newLimit, triggerElement) {
+    try {
+        const result = await chrome.storage.local.get(['downloads_history']);
+        const currentCount = (result.downloads_history || []).length;
         
-        // If reducing history size, check actual history and show confirmation
-        if (value < previousValue) {
-            // Get actual history count from storage
-            try {
-                const result = await chrome.storage.local.get(['downloads_history']);
-                const currentHistoryCount = (result.downloads_history || []).length;
-                
-                // Only show confirmation if we actually need to remove items
-                if (currentHistoryCount > value) {
-                    const itemsToRemove = currentHistoryCount - value;
-                    const confirmed = await showConfirmModal(
-                        `${itemsToRemove} items will be removed from history - are you sure?`,
-                        null, // onConfirm handled by promise
-                        null, // onCancel handled by promise
-                        input   // trigger element
-                    );
-                    
-                    if (!confirmed) {
-                        // Reset input to previous value
-                        input.value = previousValue;
-                        return;
-                    }
-                }
-            } catch (error) {
-                logger.error('Error checking history count:', error);
-                // Continue without confirmation if we can't check
-            }
+        if (currentCount > newLimit) {
+            const itemsToRemove = currentCount - newLimit;
+            return await showConfirmModal(
+                `${itemsToRemove} items will be removed from history - are you sure?`,
+                null, // onConfirm handled by promise
+                null, // onCancel handled by promise  
+                triggerElement // Pass trigger element for positioning
+            );
         }
-        
-        const updatedSettings = {
-            ...currentSettings,
-            maxHistorySize: value
-        };
-
-        updateSettings(updatedSettings);
-        showSuccessFeedback(input);
+        return true;
+    } catch (error) {
+        logger.error('Error checking history count:', error);
+        return true; // Continue without confirmation if we can't check
     }
-}
-
-/**
- * Handle history auto-remove interval input blur - validate and save if changed
- */
-function handleHistoryIntervalBlur(event) {
-    const input = event.target;
-    let value = parseInt(input.value, 10);
-
-    // Fix invalid values
-    if (isNaN(value) || value < 1) {
-        value = 1;
-    } else if (value > 365) {
-        value = 365;
-    }
-
-    input.value = value;
-    input.classList.remove('error');
-
-    // Only save if value has changed
-    if (currentSettings && currentSettings.historyAutoRemoveInterval !== value) {
-        const updatedSettings = {
-            ...currentSettings,
-            historyAutoRemoveInterval: value
-        };
-
-        updateSettings(updatedSettings);
-        showSuccessFeedback(input);
-    }
-}
-
-/**
- * Request current settings from background
- */
-function requestCurrentSettings() {
-    logger.debug('Requesting current settings from background');
-    sendPortMessage({ command: 'getSettings' });
 }
 
 /**
@@ -559,91 +436,189 @@ function setupTooltips() {
 }
 
 /**
- * Update settings UI with current values
+ * Update settings UI with current values - unified approach
  */
 export function updateSettingsUI(settings) {
     logger.debug('Updating settings UI:', settings);
     currentSettings = settings;
 
-    // Concurrent downloads
-    const maxConcurrentInput = document.getElementById('max-concurrent-downloads');
-    if (maxConcurrentInput && settings.maxConcurrentDownloads !== undefined) {
-        maxConcurrentInput.value = settings.maxConcurrentDownloads;
-        maxConcurrentInput.classList.remove('error');
-    }
+    // Update all settings inputs using unified approach
+    Object.entries(SETTING_CONFIGS).forEach(([settingKey, config]) => {
+        const element = document.querySelector(`[data-setting="${settingKey}"]`);
+        if (!element || settings[settingKey] === undefined) return;
 
-    // Default save path
-    const defaultSavePathInput = document.getElementById('default-save-path');
-    if (defaultSavePathInput && settings.defaultSavePath !== undefined) {
-        defaultSavePathInput.value = settings.defaultSavePath || '';
-        defaultSavePathInput.placeholder = settings.defaultSavePath ? '' : 'Click to choose folder';
-    }
+        element.classList.remove('error');
 
-    // Minimum file size filter (convert bytes to KB for display)
-    const minFileSizeInput = document.getElementById('min-file-size-filter');
-    if (minFileSizeInput && settings.minFileSizeFilter !== undefined) {
-        minFileSizeInput.value = Math.round(settings.minFileSizeFilter / 1024);
-        minFileSizeInput.classList.remove('error');
-    }
+        if (config.type === 'boolean') {
+            element.checked = settings[settingKey];
+        } else if (config.type === 'path') {
+            element.value = settings[settingKey] || '';
+            element.placeholder = settings[settingKey] ? '' : 'Click to choose folder';
+        } else if (config.type === 'number') {
+            element.value = settings[settingKey];
+        } else if (config.type === 'unit-number') {
+            // Handle unit-number inputs - use stored unit preference
+            const bytes = settings[settingKey];
+            const preferredUnit = settings[settingKey + 'Unit'] || 1024; // Default to KB
+            
+            // Set the display value with decimal precision
+            const displayValue = bytes / preferredUnit;
+            
+            // Format with up to 2 decimal places, using user's locale
+            const formattedValue = displayValue.toLocaleString(undefined, {
+                minimumFractionDigits: 0,
+                maximumFractionDigits: 2,
+                useGrouping: false
+            });
+            
+            element.value = formattedValue;
+            
+            // Set dynamic max constraint based on unit
+            const maxBytes = 100 * 1048576; // 100 MB in bytes
+            const maxValueForUnit = maxBytes / preferredUnit;
+            element.max = maxValueForUnit;
+            
+            // Store original bytes for change detection
+            element.dataset.originalBytes = bytes.toString();
+            
+            // Set active unit toggle
+            const unitToggle = document.querySelector(`[data-unit-toggle="${settingKey}"]`);
+            if (unitToggle) {
+                unitToggle.querySelectorAll('.unit-option').forEach(opt => {
+                    const isActive = parseInt(opt.dataset.multiplier, 10) === preferredUnit;
+                    opt.classList.toggle('active', isActive);
+                });
+            }
+        }
+    });
+}
 
-    // Show download notifications
-    const showNotificationsToggle = document.getElementById('show-download-notifications');
-    if (showNotificationsToggle && settings.showDownloadNotifications !== undefined) {
-        showNotificationsToggle.checked = settings.showDownloadNotifications;
-    }
+/**
+ * Handle unit-number input (value with unit toggle)
+ */
+async function handleUnitNumberInput(settingKey, input) {
+    const config = SETTING_CONFIGS[settingKey];
+    let value = parseFloat(input.value.replace(',', '.')); // Support both . and , decimal separators
 
-    // Auto-generate previews
-    const autoPreviewsToggle = document.getElementById('auto-generate-previews');
-    if (autoPreviewsToggle && settings.autoGeneratePreviews !== undefined) {
-        autoPreviewsToggle.checked = settings.autoGeneratePreviews;
-    }
+    // Get active unit multiplier
+    const activeUnit = getActiveUnitOption(settingKey);
+    if (!activeUnit) return;
+    
+    const multiplier = parseInt(activeUnit.dataset.multiplier, 10);
 
-    // Max history size
-    const maxHistoryInput = document.getElementById('max-history-size');
-    if (maxHistoryInput && settings.maxHistorySize !== undefined) {
-        maxHistoryInput.value = settings.maxHistorySize;
-        maxHistoryInput.classList.remove('error');
-    }
+    // Calculate dynamic max based on unit (100 MB total limit)
+    const maxBytes = 100 * 1048576; // 100 MB in bytes
+    const maxValueForUnit = maxBytes / multiplier;
 
-    // History auto-remove interval
-    const historyIntervalInput = document.getElementById('history-auto-remove-interval');
-    if (historyIntervalInput && settings.historyAutoRemoveInterval !== undefined) {
-        historyIntervalInput.value = settings.historyAutoRemoveInterval;
-        historyIntervalInput.classList.remove('error');
+    // Clamp to valid range
+    if (isNaN(value) || value < config.min) value = config.min;
+    if (value > maxValueForUnit) value = maxValueForUnit;
+
+    // Format value with up to 2 decimal places, using user's locale
+    const formattedValue = value.toLocaleString(undefined, {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 2,
+        useGrouping: false
+    });
+    
+    input.value = formattedValue;
+    input.classList.remove('error');
+
+    // Calculate bytes and check if changed (round to avoid floating point issues)
+    const newBytes = Math.round(value * multiplier);
+    const originalBytes = parseInt(input.dataset.originalBytes || '0', 10);
+
+    if (currentSettings && newBytes !== originalBytes) {
+        // Update both the bytes value and the unit preference
+        const updatedSettings = {
+            ...currentSettings,
+            [settingKey]: newBytes,
+            [settingKey + 'Unit']: multiplier
+        };
+        
+        updateSettings(updatedSettings);
+        showSuccessFeedback(input);
+        
+        // Update stored original bytes
+        input.dataset.originalBytes = newBytes.toString();
     }
 }
 
 /**
- * Add keyboard handlers for Enter/Tab (apply) and Escape (revert)
+ * Handle unit toggle click - convert display value only, don't save until input changes
  */
-function addKeyboardHandlers(input, blurHandler) {
+function handleUnitToggleClick(settingKey, clickedUnit) {
+    const input = document.querySelector(`[data-setting="${settingKey}"].unit-number-input`);
+    const unitToggle = document.querySelector(`[data-unit-toggle="${settingKey}"]`);
+    const config = SETTING_CONFIGS[settingKey];
+    
+    if (!input || !unitToggle || !currentSettings) return;
+
+    // Don't do anything if clicking the already active unit
+    if (clickedUnit.classList.contains('active')) return;
+
+    // Update active state
+    unitToggle.querySelectorAll('.unit-option').forEach(opt => opt.classList.remove('active'));
+    clickedUnit.classList.add('active');
+
+    // Get current bytes and new multiplier
+    const currentBytes = currentSettings[settingKey];
+    const newMultiplier = parseInt(clickedUnit.dataset.multiplier, 10);
+    
+    // Convert to new unit with decimal precision
+    const newDisplayValue = currentBytes / newMultiplier;
+    
+    // Format with up to 2 decimal places, using user's locale
+    const formattedValue = newDisplayValue.toLocaleString(undefined, {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 2,
+        useGrouping: false
+    });
+    
+    // Update input value and dynamic max constraint
+    input.value = formattedValue;
+    
+    // Calculate dynamic max based on unit (100 MB total limit)
+    const maxBytes = 100 * 1048576; // 100 MB in bytes
+    const maxValueForUnit = maxBytes / newMultiplier;
+    input.max = maxValueForUnit;
+    
+    // Store original bytes for change detection
+    input.dataset.originalBytes = currentBytes.toString();
+    
+    // No success feedback needed for unit toggle - only for actual value changes
+}
+
+/**
+ * Get active unit option for a setting
+ */
+function getActiveUnitOption(settingKey) {
+    const unitToggle = document.querySelector(`[data-unit-toggle="${settingKey}"]`);
+    return unitToggle ? unitToggle.querySelector('.unit-option.active') : null;
+}
+
+/**
+ * Add keyboard handlers for number inputs
+ */
+function addKeyboardHandlers(input) {
     let originalValue = input.value;
     
-    // Store original value when input gets focus
     input.addEventListener('focus', () => {
         originalValue = input.value;
     });
     
     input.addEventListener('keydown', (event) => {
         if (event.key === 'Enter') {
-            // Prevent default form submission and trigger blur
             event.preventDefault();
             input.blur();
-        } else if (event.key === 'Tab') {
-            // Let Tab work naturally, blur will trigger automatically
-            // No need to prevent default for Tab
         } else if (event.key === 'Escape') {
-            // Revert to original value with error flash
             event.preventDefault();
             input.value = originalValue;
             input.blur();
             
-            // Show error flash AFTER blur to avoid being removed by blur handler
             setTimeout(() => {
                 input.classList.add('error');
-                setTimeout(() => {
-                    input.classList.remove('error');
-                }, 1000);
+                setTimeout(() => input.classList.remove('error'), 1000);
             }, 10);
         }
     });

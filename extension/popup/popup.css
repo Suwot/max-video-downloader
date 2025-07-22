@@ -105,14 +105,14 @@
 .theme-dark .history-folder-btn:hover svg,
 .history-folder-btn:hover .theme-dark svg,
 .theme-dark .history-retry-btn:hover svg,
-.history-retry-btn:hover .theme-dark svg, .theme-dark .download-menu-item:hover, .theme-dark .section-header.collapsible:hover .toggle-icon svg path, .section-header.collapsible:hover .toggle-icon svg .theme-dark path, .theme-dark .tooltip-icon:hover svg, .tooltip-icon:hover .theme-dark svg, .theme-dark .input-group .input-label, .input-group .theme-dark .input-label, .theme-dark .track-option.selected, .theme-dark .column .column-title, .column .theme-dark .column-title, .theme-dark .dropdown-option.downloading, .theme-dark .dropdown-option:not(.selected):hover, .theme-dark .dropdown-option.selected, .theme-dark .tab-placeholder h3, .tab-placeholder .theme-dark h3, .theme-dark h3, .theme-dark .h3, .theme-dark .item-title, .theme-dark h2, .theme-dark .h2, .theme-dark .section-title, .theme-dark h1, .theme-dark .h1, .theme-dark .app-title {
+.history-retry-btn:hover .theme-dark svg, .theme-dark .download-menu-item:hover, .theme-dark .tooltip-icon:hover svg, .tooltip-icon:hover .theme-dark svg, .theme-dark .input-group .input-label, .input-group .theme-dark .input-label, .theme-dark .track-option.selected, .theme-dark .column .column-title, .column .theme-dark .column-title, .theme-dark .dropdown-option.downloading, .theme-dark .dropdown-option:not(.selected):hover, .theme-dark .dropdown-option.selected, .theme-dark .tab-placeholder h3, .tab-placeholder .theme-dark h3, .theme-dark h3, .theme-dark .h3, .theme-dark .item-title, .theme-dark h2, .theme-dark .h2, .theme-dark .section-title, .theme-dark h1, .theme-dark .h1, .theme-dark .app-title {
   color: var(--text-primary-dark);
 }
 .theme-light .history-item .filename, .history-item .theme-light .filename, .theme-light .history-play-btn:hover svg, .history-play-btn:hover .theme-light svg,
 .theme-light .history-folder-btn:hover svg,
 .history-folder-btn:hover .theme-light svg,
 .theme-light .history-retry-btn:hover svg,
-.history-retry-btn:hover .theme-light svg, .theme-light .download-menu-item:hover, .theme-light .section-header.collapsible:hover .toggle-icon svg path, .section-header.collapsible:hover .toggle-icon svg .theme-light path, .theme-light .tooltip-icon:hover svg, .tooltip-icon:hover .theme-light svg, .theme-light .input-group .input-label, .input-group .theme-light .input-label, .theme-light .track-option.selected, .theme-light .column .column-title, .column .theme-light .column-title, .theme-light .dropdown-option.downloading, .theme-light .dropdown-option:not(.selected):hover, .theme-light .dropdown-option.selected, .theme-light .tab-placeholder h3, .tab-placeholder .theme-light h3, .theme-light h3, .theme-light .h3, .theme-light .item-title, .theme-light h2, .theme-light .h2, .theme-light .section-title, .theme-light h1, .theme-light .h1, .theme-light .app-title {
+.history-retry-btn:hover .theme-light svg, .theme-light .download-menu-item:hover, .theme-light .tooltip-icon:hover svg, .tooltip-icon:hover .theme-light svg, .theme-light .input-group .input-label, .input-group .theme-light .input-label, .theme-light .track-option.selected, .theme-light .column .column-title, .column .theme-light .column-title, .theme-light .dropdown-option.downloading, .theme-light .dropdown-option:not(.selected):hover, .theme-light .dropdown-option.selected, .theme-light .tab-placeholder h3, .tab-placeholder .theme-light h3, .theme-light h3, .theme-light .h3, .theme-light .item-title, .theme-light h2, .theme-light .h2, .theme-light .section-title, .theme-light h1, .theme-light .h1, .theme-light .app-title {
   color: var(--text-primary-light);
 }
 
@@ -136,7 +136,7 @@
 .theme-dark .history-folder-btn svg,
 .history-folder-btn .theme-dark svg,
 .theme-dark .history-retry-btn svg,
-.history-retry-btn .theme-dark svg, .theme-dark .downloads-history .download-timestamp, .downloads-history .theme-dark .download-timestamp, .theme-dark .download-menu-item, .theme-dark .section-header.collapsible .toggle-icon svg path, .section-header.collapsible .toggle-icon svg .theme-dark path, .theme-dark .tooltip-icon svg, .tooltip-icon .theme-dark svg, .theme-dark .input-group .input-description, .input-group .theme-dark .input-description, .theme-dark .input-field::placeholder, .theme-dark .track-option, .theme-dark .dropdown-option, .theme-dark .tab-button, .theme-dark .dismiss-button path, .dismiss-button .theme-dark path, .theme-dark .cache-stats, .theme-dark .tab-placeholder p, .tab-placeholder .theme-dark p, .theme-dark .tab-placeholder .placeholder-icon svg, .tab-placeholder .placeholder-icon .theme-dark svg {
+.history-retry-btn .theme-dark svg, .theme-dark .downloads-history .download-timestamp, .downloads-history .theme-dark .download-timestamp, .theme-dark .download-menu-item, .theme-dark .tooltip-icon svg, .tooltip-icon .theme-dark svg, .theme-dark .input-group .input-description, .input-group .theme-dark .input-description, .theme-dark .input-field::placeholder, .theme-dark .track-option, .theme-dark .dropdown-option, .theme-dark .tab-button, .theme-dark .cache-stats, .theme-dark .tab-placeholder p, .tab-placeholder .theme-dark p, .theme-dark .tab-placeholder .placeholder-icon svg, .tab-placeholder .placeholder-icon .theme-dark svg {
   color: var(--text-secondary-dark);
 }
 .theme-light .input-field::-webkit-input-placeholder {
@@ -155,7 +155,7 @@
 .theme-light .history-folder-btn svg,
 .history-folder-btn .theme-light svg,
 .theme-light .history-retry-btn svg,
-.history-retry-btn .theme-light svg, .theme-light .downloads-history .download-timestamp, .downloads-history .theme-light .download-timestamp, .theme-light .download-menu-item, .theme-light .section-header.collapsible .toggle-icon svg path, .section-header.collapsible .toggle-icon svg .theme-light path, .theme-light .tooltip-icon svg, .tooltip-icon .theme-light svg, .theme-light .input-group .input-description, .input-group .theme-light .input-description, .theme-light .input-field::placeholder, .theme-light .track-option, .theme-light .dropdown-option, .theme-light .tab-button, .theme-light .dismiss-button path, .dismiss-button .theme-light path, .theme-light .cache-stats, .theme-light .tab-placeholder p, .tab-placeholder .theme-light p, .theme-light .tab-placeholder .placeholder-icon svg, .tab-placeholder .placeholder-icon .theme-light svg {
+.history-retry-btn .theme-light svg, .theme-light .downloads-history .download-timestamp, .downloads-history .theme-light .download-timestamp, .theme-light .download-menu-item, .theme-light .tooltip-icon svg, .tooltip-icon .theme-light svg, .theme-light .input-group .input-description, .input-group .theme-light .input-description, .theme-light .input-field::placeholder, .theme-light .track-option, .theme-light .dropdown-option, .theme-light .tab-button, .theme-light .cache-stats, .theme-light .tab-placeholder p, .tab-placeholder .theme-light p, .theme-light .tab-placeholder .placeholder-icon svg, .tab-placeholder .placeholder-icon .theme-light svg {
   color: var(--text-secondary-light);
 }
 
@@ -549,6 +549,12 @@ header .heading-row {
   -ms-flex-negative: 0;
       flex-shrink: 0;
   position: relative;
+}
+.theme-light .dismiss-button path {
+  fill: var(--text-secondary-light);
+}
+.theme-dark .dismiss-button path {
+  fill: var(--text-secondary-dark);
 }
 .theme-dark .dismiss-button:hover path {
   fill: var(--text-secondary-dark-hover);
@@ -1110,9 +1116,8 @@ header .heading-row {
   -ms-flex-negative: 0;
       flex-shrink: 0;
 }
-.input-group.horizontal .input-field {
-  width: auto;
-  min-width: 80px;
+.input-group.horizontal .input-field:not(.path-input) {
+  width: 80px;
 }
 .input-group.horizontal.path-input-group .input-container {
   -webkit-box-flex: 1;
@@ -1138,44 +1143,6 @@ header .heading-row {
   gap: 4px;
 }
 
-.path-input-container {
-  display: -webkit-box;
-  display: -ms-flexbox;
-  display: flex;
-  gap: 8px;
-  -webkit-box-align: center;
-      -ms-flex-align: center;
-          align-items: center;
-  width: 100%;
-}
-.path-input-container .path-display {
-  -webkit-box-flex: 1;
-      -ms-flex: 1;
-          flex: 1;
-  cursor: pointer;
-}
-.theme-dark .path-input-container .path-display:-moz-read-only {
-  background-color: var(--bg-secondary-dark);
-  color: var(--text-secondary-dark);
-}
-.theme-dark .path-input-container .path-display:read-only {
-  background-color: var(--bg-secondary-dark);
-  color: var(--text-secondary-dark);
-}
-.theme-light .path-input-container .path-display:-moz-read-only {
-  background-color: var(--bg-element-light);
-  color: var(--text-secondary-light);
-}
-.theme-light .path-input-container .path-display:read-only {
-  background-color: var(--bg-element-light);
-  color: var(--text-secondary-light);
-}
-.path-input-container .button {
-  -ms-flex-negative: 0;
-      flex-shrink: 0;
-  white-space: nowrap;
-}
-
 .path-input.clickable {
   cursor: pointer;
 }
@@ -1184,6 +1151,106 @@ header .heading-row {
 }
 .theme-dark .path-input.clickable:hover {
   background-color: var(--bg-primary-dark-hover);
+}
+
+.unit-input-group {
+  display: -webkit-box;
+  display: -ms-flexbox;
+  display: flex;
+  -webkit-box-align: center;
+      -ms-flex-align: center;
+          align-items: center;
+  gap: 8px;
+}
+.unit-input-group .unit-number-input {
+  width: 80px;
+  -ms-flex-negative: 0;
+      flex-shrink: 0;
+}
+
+.unit-toggle {
+  display: -webkit-box;
+  display: -ms-flexbox;
+  display: flex;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid var(--border-primary);
+  -ms-flex-negative: 0;
+      flex-shrink: 0;
+}
+.unit-toggle .unit-option {
+  padding: 8px 12px;
+  font-size: var(--font-body);
+  font-family: inherit;
+  font-weight: 500;
+  border: none;
+  cursor: pointer;
+  -webkit-transition: all var(--transition-normal);
+  transition: all var(--transition-normal);
+  position: relative;
+  min-width: 40px;
+  text-align: center;
+  -webkit-user-select: none;
+     -moz-user-select: none;
+      -ms-user-select: none;
+          user-select: none;
+}
+.theme-dark .unit-toggle .unit-option {
+  background-color: var(--bg-secondary-dark);
+  border: 1px solid var(--border-primary-dark);
+  color: var(--text-secondary-dark);
+}
+.theme-light .unit-toggle .unit-option {
+  background-color: var(--bg-element-light);
+  color: var(--text-secondary-light);
+  -webkit-box-shadow: var(--bg-element-shadow-light);
+          box-shadow: var(--bg-element-shadow-light);
+}
+.unit-toggle .unit-option:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  top: 20%;
+  bottom: 20%;
+  width: 1px;
+  background-color: var(--border-primary);
+  opacity: 0.3;
+}
+.unit-toggle .unit-option:first-child {
+  border-top-left-radius: 6px;
+  border-bottom-left-radius: 6px;
+}
+.unit-toggle .unit-option:last-child {
+  border-top-right-radius: 6px;
+  border-bottom-right-radius: 6px;
+}
+.theme-dark .unit-toggle .unit-option:hover:not(.active) {
+  background-color: var(--bg-primary-dark-hover);
+  color: var(--text-primary-dark);
+}
+.theme-light .unit-toggle .unit-option:hover:not(.active) {
+  background-color: var(--bg-element-hover-light);
+  color: var(--text-primary-light);
+}
+.unit-toggle .unit-option.active {
+  background-color: var(--color-blue);
+  color: white;
+}
+.unit-toggle .unit-option.active::after {
+  display: none;
+}
+.unit-toggle .unit-option:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.unit-toggle.success .unit-option.active {
+  background-color: var(--color-green);
+}
+.unit-toggle.error {
+  border-color: var(--color-red);
+}
+.unit-toggle.error .unit-option.active {
+  background-color: var(--color-red);
 }
 
 .status-badge {
@@ -1562,6 +1629,12 @@ header .heading-row {
   transition: -webkit-transform 0.1s ease;
   transition: transform 0.1s ease;
   transition: transform 0.1s ease, -webkit-transform 0.1s ease;
+}
+.theme-light .section-header.collapsible .toggle-icon svg path {
+  fill: var(--text-secondary-light);
+}
+.theme-dark .section-header.collapsible .toggle-icon svg path {
+  fill: var(--text-secondary-dark);
 }
 .section-header.collapsible .toggle-icon.rotated svg {
   -webkit-transform: rotate(-90deg);

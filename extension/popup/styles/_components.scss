@@ -399,7 +399,12 @@
                 transition: transform 0.1s ease;
                 
                 path {
-                    @extend %theme-text-secondary;
+                    .theme-light & {
+						fill: var(--text-secondary-light);
+					}
+					.theme-dark &  {
+						fill: var(--text-secondary-dark);
+					}
                 }
             }
             
@@ -408,9 +413,6 @@
             }
         }
         
-        &:hover .toggle-icon svg path {
-            @extend %theme-text-primary;
-        }
     }
 
     // Static variant (non-clickable, no toggle icon)

@@ -77,7 +77,12 @@
     @extend %interactive-base;
 
     path {
-        @extend %theme-text-secondary;
+        .theme-light & {
+			fill: var(--text-secondary-light);
+		}
+		.theme-dark &  {
+			fill: var(--text-secondary-dark);
+		}
     }
 
     &:hover path {
