@@ -387,7 +387,8 @@ function buildStatsHtml(progressData) {
             </span>
         `);
     } else if (progressData.selectedOptionOrigText) {
-        const qualityText = progressData.type === 'dash' ? 
+        const advancedDropdown = progressData.selectedOptionOrigText.includes('≈')
+        const qualityText = advancedDropdown ? 
             progressData.selectedOptionOrigText.split('≈')[0]?.trim() : 
             progressData.selectedOptionOrigText.split('•')[0]?.trim();
 
@@ -395,8 +396,8 @@ function buildStatsHtml(progressData) {
             let displayQuality = qualityText;
             let tooltipAttr = '';
             
-            // For DASH, extract quality and tooltip info
-            if (progressData.type === 'dash') {
+            // If contains ≈, extract quality and tooltip info (DASH-style)
+            if (advancedDropdown) {
                 const parenMatch = qualityText.match(/^([^(]+)\s*(\(.+\))?$/);
                 if (parenMatch) {
                     displayQuality = parenMatch[1].trim();
