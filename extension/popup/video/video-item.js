@@ -79,13 +79,14 @@ export function createVideoElement(video) {
 
     // Handle loader visibility based on preview generation status
     if (video.generatingPreview) {
-        loader.style.display = 'flex';
+        previewContainer.classList.add('loading');
         previewImage.classList.add('generating');
     } else if (previewUrl) {
         previewImage.onload = () => {
             previewImage.classList.remove('placeholder');
             previewImage.classList.add('loaded');
-            loader.style.display = 'none';
+            // Remove loading class when image loads
+            previewContainer.classList.remove('loading');
         };
         previewImage.src = previewUrl;
 
@@ -97,9 +98,6 @@ export function createVideoElement(video) {
             showHoverPreview(previewUrl, event);
         });
         previewContainer.addEventListener('mouseleave', hideHoverPreview);
-    } else {
-        // No preview and not generating - hide loader
-        loader.style.display = 'none';
     }
     
     // Create info column

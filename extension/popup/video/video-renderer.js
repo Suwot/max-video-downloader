@@ -601,16 +601,16 @@ export function updateVideoFlags(videoUrl, video) {
             return false;
         }
         
-        const loader = existingElement.querySelector('.loader');
+        const previewContainer = existingElement.querySelector('.preview-container');
         const previewImage = existingElement.querySelector('.preview-image');
         
         // Handle preview generation flag
         if ('generatingPreview' in video) {
             if (video.generatingPreview) {
-                if (loader) loader.style.display = 'block';
+                if (previewContainer) previewContainer.classList.add('loading');
                 if (previewImage) previewImage.classList.add('generating');
             } else {
-                if (loader) loader.style.display = 'none';
+                if (previewContainer) previewContainer.classList.remove('loading');
                 if (previewImage) previewImage.classList.remove('generating');
             }
         }
