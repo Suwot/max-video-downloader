@@ -1760,6 +1760,11 @@ header .heading-row {
 .preview-image.placeholder {
   opacity: 0.5;
 }
+.preview-image.generating {
+  opacity: 0.3;
+  -webkit-filter: blur(1px);
+          filter: blur(1px);
+}
 
 .video-duration {
   position: absolute;

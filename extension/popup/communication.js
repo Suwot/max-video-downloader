@@ -137,8 +137,8 @@ async function handleVideoStateUpdate(message) {
                 if (message.video) {
                     // Update state first
                     updateVideo(message.videoUrl, message.video);
-                    // Update in UI
-                    await updateVideoInUI(message.videoUrl, message.video);
+                    // Update in UI with updateType
+                    await updateVideoInUI(message.videoUrl, message.video, message.updateType);
                 }
                 break;
                 

@@ -22,6 +22,11 @@ export async function renderVideos() {
             if (sectionCount) {
                 sectionCount.textContent = '';
             }
+            // Clear video items from DOM
+            const content = group.querySelector('.section-content');
+            if (content) {
+                content.innerHTML = '';
+            }
         });
         container.querySelector('.initial-message').style.display = 'flex';
         return;
@@ -581,12 +586,83 @@ export async function addVideoToUI(video) {
 }
 
 /**
+ * Update video flags without full re-render
+ * @param {string} videoUrl - Video URL to update
+ * @param {Object} video - Updated video object with flags
+ */
+export function updateVideoFlags(videoUrl, video) {
+    try {
+        const container = document.getElementById('videos-list');
+        const existingElement = container.querySelector(`.video-item[data-url="${videoUrl}"]`);
+        
+        if (!existingElement) {
+            logger.debug(`[FLAG] Video element not found for flag update: ${videoUrl}`);
+            return false;
+        }
+        
+        const loader = existingElement.querySelector('.loader');
+        const previewImage = existingElement.querySelector('.preview-image');
+        
+        // Handle preview generation flag
+        if ('generatingPreview' in video) {
+            if (video.generatingPreview) {
+                if (loader) loader.style.display = 'block';
+                if (previewImage) previewImage.classList.add('generating');
+            } else {
+                if (loader) loader.style.display = 'none';
+                if (previewImage) previewImage.classList.remove('generating');
+            }
+        }
+        
+        // Handle preview URL update
+        if (video.previewUrl && previewImage) {
+            previewImage.onload = () => {
+                previewImage.classList.remove('placeholder');
+                previewImage.classList.add('loaded');
+                if (loader) loader.style.display = 'none';
+            };
+            previewImage.src = video.previewUrl;
+        }
+        
+        // Handle processing flags (could add visual indicators later)
+        if ('isBeingProcessed' in video || 'parsingManifest' in video || 'runningFFprobe' in video) {
+            // For now, just log - can add visual indicators later
+            logger.debug(`[FLAG] Processing flags updated for ${videoUrl}:`, {
+                isBeingProcessed: video.isBeingProcessed,
+                parsingManifest: video.parsingManifest,
+                runningFFprobe: video.runningFFprobe
+            });
+        }
+        
+        logger.debug(`[FLAG] Updated flags for video: ${videoUrl}`);
+        return true;
+        
+    } catch (error) {
+        logger.error('[FLAG] Error updating video flags:', error);
+        return false;
+    }
+}
+
+/**
  * Update an existing video in the UI
  * @param {string} videoUrl - Video URL to update
  * @param {Object} video - Updated video object
+ * @param {string} [updateType='structural'] - Type of update: 'flags' or 'structural'
  */
-export async function updateVideoInUI(videoUrl, video) {
+export async function updateVideoInUI(videoUrl, video, updateType = 'structural') {
     try {
+        // For flag-only updates, use selective update
+        if (updateType === 'flags') {
+            const success = updateVideoFlags(videoUrl, video);
+            if (success) {
+                logger.debug(`[FLAG-UPD] Updated flags for video: ${videoUrl}`);
+                return;
+            }
+            // Fall back to full update if flag update failed
+            logger.debug(`[FLAG-UPD] Flag update failed, falling back to full update: ${videoUrl}`);
+        }
+        
+        // Full structural update
         const container = document.getElementById('videos-list');
         const existingElement = container.querySelector(`.video-item[data-url="${videoUrl}"]`);
         
@@ -602,7 +678,7 @@ export async function updateVideoInUI(videoUrl, video) {
         // Replace the existing element
         existingElement.parentNode.replaceChild(newElement, existingElement);
         
-        logger.debug(`[UPD] Updated video in UI: ${videoUrl}`);
+        logger.debug(`[UPD] Updated video in UI: ${videoUrl} (${updateType})`);
         
     } catch (error) {
         logger.error('[UPD] Error updating video in UI:', error);

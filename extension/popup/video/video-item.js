@@ -77,7 +77,11 @@ export function createVideoElement(video) {
     previewContainer.append(previewImage, loader);
     previewColumn.appendChild(previewContainer);
 
-    if (previewUrl) {
+    // Handle loader visibility based on preview generation status
+    if (video.generatingPreview) {
+        loader.style.display = 'flex';
+        previewImage.classList.add('generating');
+    } else if (previewUrl) {
         previewImage.onload = () => {
             previewImage.classList.remove('placeholder');
             previewImage.classList.add('loaded');
@@ -93,6 +97,9 @@ export function createVideoElement(video) {
             showHoverPreview(previewUrl, event);
         });
         previewContainer.addEventListener('mouseleave', hideHoverPreview);
+    } else {
+        // No preview and not generating - hide loader
+        loader.style.display = 'none';
     }
     
     // Create info column

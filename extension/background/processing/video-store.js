@@ -59,6 +59,26 @@ function getVideoByUrl(url) {
 }
 
 /**
+ * Determine if an update contains only flag properties
+ * @param {Object} updates - Update object to analyze
+ * @returns {string} - 'flags' for flag-only updates, 'structural' for others
+ */
+function determineUpdateType(updates) {
+    const flagOnlyProps = [
+        'isBeingProcessed', 
+        'parsingManifest', 
+        'runningFFprobe', 
+        'generatingPreview',
+        'error' // Simple error messages are treated as flags
+    ];
+    
+    const updateKeys = Object.keys(updates);
+    const isOnlyFlags = updateKeys.length > 0 && updateKeys.every(key => flagOnlyProps.includes(key));
+    
+    return isOnlyFlags ? 'flags' : 'structural';
+}
+
+/**
  * Single entry point for all video updates with proper logging and action detection
  * @param {string} functionName - Function making the update
  * @param {number} tabId - Tab ID
@@ -115,12 +135,14 @@ function updateVideo(functionName, tabId, normalizedUrl, updates, replace = fals
         sendToUI = false;
     }
 
-    logger.debug(`Updated video with action: '${action}' by ${functionName}, for URL: ${normalizedUrl}, ${sendToUI ? 'SENT to UI' : 'NOT SENT to UI'}`, updatedVideo);
+    // Determine update type for UI optimization
+    const updateType = replace ? 'structural' : determineUpdateType(updates);
 
+    logger.debug(`Updated video with action: '${action}' (${updateType}) by ${functionName}, for URL: ${normalizedUrl}, ${sendToUI ? 'SENT to UI' : 'NOT SENT to UI'}`, updatedVideo);
 
     // Send UI update if requested
     if (sendToUI) {
-        sendVideoStateChange(tabId, normalizedUrl, { updatedVideo, action });
+        sendVideoStateChange(tabId, normalizedUrl, { updatedVideo, action, updateType });
         updateTabIcon(tabId);
     }
 

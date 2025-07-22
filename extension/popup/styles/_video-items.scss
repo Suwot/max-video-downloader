@@ -101,6 +101,11 @@
     &.placeholder {
         opacity: 0.5;
     }
+
+    &.generating {
+        opacity: 0.3;
+        filter: blur(1px);
+    }
 }
 
 .video-duration {

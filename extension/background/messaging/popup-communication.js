@@ -296,7 +296,7 @@ function getActivePopupPortForTab(tabId) {
  * @param {string} action - Update action: 'add', 'update', 'remove', or 'full-refresh'
  * @param {string} [videoUrl] - Video URL for targeted updates
  * @param {Object} [videoData] - Video data for add/update actions
- * @param {Object} [options] - Additional options
+ * @param {Object} [options] - Additional options including updateType
  */
 function sendVideoUpdateToUI(tabId, action = 'full-refresh', videoUrl = null, videoData = null, options = {}) {
     // Get the port first to see if popup is open
@@ -325,6 +325,7 @@ function sendVideoUpdateToUI(tabId, action = 'full-refresh', videoUrl = null, vi
                     port.postMessage({
                         command: 'videos-state-update',
                         action: action,
+                        updateType: options.updateType || 'structural',
                         tabId: tabId,
                         videoUrl: videoUrl,
                         video: JSON.parse(JSON.stringify(videoData))
@@ -375,7 +376,7 @@ function sendVideoStateChange(tabId, videoUrl, updateResult, options = {}) {
         return false;
     }
 
-    const { updatedVideo, action } = updateResult;
+    const { updatedVideo, action, updateType } = updateResult;
     const debounceKey = `${tabId}-${videoUrl}`;
 
     // Clear existing debounce timer
@@ -383,11 +384,14 @@ function sendVideoStateChange(tabId, videoUrl, updateResult, options = {}) {
         clearTimeout(updateDebounceMap.get(debounceKey));
     }
 
-    // Set debounce timer for rapid updates (50ms)
+    // Use shorter debounce for flag updates, longer for structural updates
+    const debounceMs = updateType === 'flags' ? 25 : (options.debounceMs || 50);
+
+    // Set debounce timer for rapid updates
     const timeoutId = setTimeout(() => {
         updateDebounceMap.delete(debounceKey);
-        sendVideoUpdateToUI(tabId, action, videoUrl, updatedVideo, options);
-    }, options.debounceMs || 50);
+        sendVideoUpdateToUI(tabId, action, videoUrl, updatedVideo, { ...options, updateType });
+    }, debounceMs);
 
     updateDebounceMap.set(debounceKey, timeoutId);
     return true;
