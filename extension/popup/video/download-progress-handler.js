@@ -1,54 +1,15 @@
 /**
- * Streamlined Download Module - UI side only
- * Sends download requests and maps progress to UI elements
+ * Download Progress Handler - UI progress updates and state restoration
+ * Handles progress mapping, UI updates, and download state restoration
  */
 
 import { createLogger } from '../../shared/utils/logger.js';
 import { sendPortMessage } from '../communication.js';
-import { showError } from '../ui-utils.js';
 import { formatSize, formatTime } from '../../shared/utils/processing-utils.js';
 import { renderHistoryItems } from './video-renderer.js';
 import { VideoItemComponent } from './video-item-component.js';
 
-const logger = createLogger('Download');
-
-/**
- * Handle download button click - streamlined version with video data context
- * @param {HTMLElement} elementsDiv - Elements container
- * @param {Object} videoData - Video metadata with container context
- */
-export async function handleDownload(elementsDiv, videoData = {}) {
-    logger.debug('Initiating download for:', videoData.downloadUrl);
-    
-    try {     
-        // Use provided selectedOptionOrigText or extract from DOM (backward compatibility)
-        let selectedOptionOrigText = videoData.selectedOptionOrigText;
-        if (!selectedOptionOrigText) {
-            const isDash = elementsDiv.querySelector('[data-type="dash"]');
-            const dropdownOption = isDash ?
-                elementsDiv.querySelector('.selected-option .label') :
-                elementsDiv.querySelector('.dropdown-option.selected .label');
-            selectedOptionOrigText = dropdownOption ? dropdownOption.textContent : '';
-        }
-
-        const downloadMessage = {
-            command: 'download',
-            selectedOptionOrigText,
-            ...videoData  // Spread all videoData properties including containerContext
-        };
-        
-        // Background will handle creating downloads tab items when download starts
-        
-        // Send via communication service
-        sendPortMessage(downloadMessage);
-        
-        logger.debug('Download request sent to background with video data context');
-        
-    } catch (error) {
-        logger.error('Download failed:', error);
-        showError('Failed to start download');
-    }
-}
+const logger = createLogger('DownloadProgress');
 
 /**
  * Pure orchestrator for download progress updates
@@ -80,7 +41,8 @@ export async function updateDownloadProgress(progressData = {}) {
     // Handle completion states for all downloads (original and re-downloads)
     if (progressData.command === 'download-success' || progressData.command === 'download-error' || progressData.command === 'download-canceled') {
         const shouldAddToHistory = progressData.command !== 'download-canceled';
-        setTimeout(() => handleDownloadCompletion(progressData, shouldAddToHistory), 2000);
+        // Call immediately to remove from downloads-tab and prevent deduplication issues
+        handleDownloadCompletion(progressData, shouldAddToHistory);
     } else if (progressData.command === 'download-unqueued') {
         handleDownloadCompletion(progressData, false);
     }
@@ -474,12 +436,13 @@ async function handleDownloadCompletion(progressData, addToHistory = false) {
     try {
         const lookupUrl = progressData.masterUrl || progressData.downloadUrl;
 
-        // Remove from active downloads UI and manage initial message visibility
+        // IMMEDIATELY remove from downloads-tab to prevent deduplication issues
         const activeDownloadsContainer = document.querySelector('.active-downloads');
         if (activeDownloadsContainer) {
             const videoItemToRemove = activeDownloadsContainer.querySelector(`[data-url="${lookupUrl}"]`);
             if (videoItemToRemove) {
                 videoItemToRemove.remove();
+                logger.debug(`Immediately removed from downloads-tab:`, lookupUrl);
             }
             
             // Show initial message if no more active downloads remain
@@ -490,14 +453,46 @@ async function handleDownloadCompletion(progressData, addToHistory = false) {
             }
         }
 
-        logger.debug(`UI cleanup completed for ${progressData.command}:`, lookupUrl);
+        // DELAYED reset of videos-tab button states (preserves existing UX)
+        // Only for termination states that show temporary completion states
+        if (['download-success', 'download-error', 'download-canceled'].includes(progressData.command)) {
+            setTimeout(() => {
+                resetVideosTabButtonStates(lookupUrl);
+            }, 2000);
+        }
 
         // Re-render history items incrementally if this was added to history
         if (addToHistory) {
             await renderHistoryItems(false);
         }
 
+        logger.debug(`UI cleanup completed for ${progressData.command}:`, lookupUrl);
+
     } catch (error) {
         logger.error('Error handling download completion UI:', error);
+    }
+}
+
+/**
+ * Reset button states in videos-tab after completion state display
+ * @param {string} lookupUrl - URL to find matching video items
+ */
+function resetVideosTabButtonStates(lookupUrl) {
+    try {
+        // Only target videos container (not downloads-tab)
+        const videosElements = document.querySelectorAll(
+            `.videos-container .video-item[data-url="${lookupUrl}"]`
+        );
+        
+        videosElements.forEach(videoElement => {
+            const component = videoElement._component;
+            if (component && component.downloadButton) {
+                // Reset to default state (same as auto-restore logic)
+                component.downloadButton.updateState('default');
+                logger.debug('Reset videos-tab button state to default:', lookupUrl);
+            }
+        });
+    } catch (error) {
+        logger.error('Error resetting videos-tab button states:', error);
     }
 }

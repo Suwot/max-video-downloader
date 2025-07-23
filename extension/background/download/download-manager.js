@@ -55,48 +55,24 @@ export async function initDownloadManager() {
 }
 
 /**
- * Start a new download
- * @param {Object} downloadRequest - Complete download request
+ * Process download command - unified entry point for all download types
+ * @param {Object} downloadCommand - Complete download command from UI
  * @returns {Promise<void>}
  */
-export async function startDownload(downloadRequest) {
-    const downloadId = downloadRequest.downloadUrl; // Use URL as unique ID
+export async function processDownloadCommand(downloadCommand) {
+    const downloadId = downloadCommand.downloadUrl;
     
-    logger.debug('Starting download:', downloadId);
+    logger.debug('Processing download command:', downloadCommand.command || 'download', downloadId);
     
-    // Check if no default save path is set - enrich request for first-time setup
-    const defaultSavePath = settingsManager.get('defaultSavePath');
-    const isFirstTimeSetup = !defaultSavePath;
-    
-    // Check if this is a "download as" request that needs filesystem dialog
-    if (downloadRequest.choosePath) {
-        logger.debug('Download As request - handling filesystem dialog first');
-        await handleDownloadAsFlow({
-            ...downloadRequest,
-            isFirstTimeSetup
-        });
+    // Resolve paths and handle filesystem dialogs
+    const resolvedCommand = await resolveDownloadPaths(downloadCommand);
+    if (!resolvedCommand) {
+        // Path resolution failed or was canceled
         return;
-    }
-    
-    // Check if no default save path is set - trigger download-as flow for first-time setup
-    if (isFirstTimeSetup) {
-        logger.debug('No default save path set - triggering download-as flow for first-time setup');
-        await handleDownloadAsFlow({
-            ...downloadRequest,
-            choosePath: true,
-            isFirstTimeSetup: true
-        });
-        return;
-    }
-    
-    // Use defaultSavePath only if no savePath is already set
-    if (defaultSavePath && !downloadRequest.savePath) {
-        downloadRequest.savePath = defaultSavePath;
     }
     
     // Enhanced deduplication check - active downloads or queued downloads
-    // For DASH, include streamSelection in deduplication to allow multiple track downloads
-    const enhancedDownloadId = generateDownloadId(downloadRequest);
+    const enhancedDownloadId = generateDownloadId(resolvedCommand);
     if (activeDownloads.has(enhancedDownloadId) || downloadQueue.find(req => generateDownloadId(req) === enhancedDownloadId)) {
         logger.debug('Download already active or queued:', enhancedDownloadId);
         return;
@@ -106,41 +82,76 @@ export async function startDownload(downloadRequest) {
     const maxConcurrentDownloads = settingsManager.get('maxConcurrentDownloads');
     if (activeDownloads.size >= maxConcurrentDownloads) {
         logger.debug('Queue download - at concurrent limit:', downloadId);
-        
-        // Add to queue
-        downloadQueue.push(downloadRequest);
-        
-        // Add to storage with queued status
-        await addToActiveDownloadsStorage(downloadRequest);
-        
-        // Notify count change
-        notifyDownloadCountChange();
-        
-        // Store queue state in progress map for UI restoration
-        activeDownloadProgress.set(downloadId, {
-            command: 'download-queued',
-            downloadUrl: downloadRequest.downloadUrl,
-            masterUrl: downloadRequest.masterUrl || null,
-            filename: downloadRequest.filename,
-            selectedOptionOrigText: downloadRequest.selectedOptionOrigText || null
-        });
-        
-        // Broadcast queue state to UI and create downloads tab item
-        broadcastToPopups({
-            command: 'download-queued',
-            downloadUrl: downloadRequest.downloadUrl,
-            masterUrl: downloadRequest.masterUrl || null,
-            filename: downloadRequest.filename,
-            selectedOptionOrigText: downloadRequest.selectedOptionOrigText || null,
-            videoData: downloadRequest.videoData // Include video data for UI creation
-        });
-        
-        logger.debug('Download queued:', downloadId);
+        await queueDownload(resolvedCommand);
         return;
     }
     
     // Start download immediately
-    await startDownloadImmediately(downloadRequest);
+    await startDownloadImmediately(resolvedCommand);
+}
+
+/**
+ * Resolve download paths and handle filesystem dialogs
+ * @param {Object} downloadCommand - Download command from UI
+ * @returns {Promise<Object|null>} Resolved command or null if canceled
+ */
+async function resolveDownloadPaths(downloadCommand) {
+    const defaultSavePath = settingsManager.get('defaultSavePath');
+    const isFirstTimeSetup = !defaultSavePath;
+    
+    // Handle download-as or first-time setup
+    if (downloadCommand.choosePath || isFirstTimeSetup) {
+        logger.debug('Resolving path via filesystem dialog');
+        return await handleDownloadAsFlow({
+            ...downloadCommand,
+            isFirstTimeSetup: isFirstTimeSetup && !downloadCommand.choosePath
+        });
+    }
+    
+    // Use default save path
+    if (defaultSavePath && !downloadCommand.savePath) {
+        downloadCommand.savePath = defaultSavePath;
+    }
+    
+    return downloadCommand;
+}
+
+/**
+ * Queue download when at concurrent limit
+ * @param {Object} downloadCommand - Resolved download command
+ */
+async function queueDownload(downloadCommand) {
+    const downloadId = downloadCommand.downloadUrl;
+    
+    // Add to queue
+    downloadQueue.push(downloadCommand);
+    
+    // Add to storage with queued status
+    await addToActiveDownloadsStorage(downloadCommand);
+    
+    // Notify count change
+    notifyDownloadCountChange();
+    
+    // Store queue state in progress map for UI restoration
+    activeDownloadProgress.set(downloadId, {
+        command: 'download-queued',
+        downloadUrl: downloadCommand.downloadUrl,
+        masterUrl: downloadCommand.masterUrl || null,
+        filename: downloadCommand.filename,
+        selectedOptionOrigText: downloadCommand.selectedOptionOrigText || null
+    });
+    
+    // Broadcast queue state to UI and create downloads tab item
+    broadcastToPopups({
+        command: 'download-queued',
+        downloadUrl: downloadCommand.downloadUrl,
+        masterUrl: downloadCommand.masterUrl || null,
+        filename: downloadCommand.filename,
+        selectedOptionOrigText: downloadCommand.selectedOptionOrigText || null,
+        videoData: downloadCommand.videoData // Include video data for UI creation
+    });
+    
+    logger.debug('Download queued:', downloadId);
 }
 
 /**
@@ -640,21 +651,26 @@ async function addToHistoryStorage(progressData) {
 }
 
 /**
- * Handle download-as flow: filesystem dialog first, then download
- * @param {Object} downloadRequest - Download request with choosePath flag
+ * Handle download-as flow: filesystem dialog first, then return resolved command
+ * @param {Object} downloadCommand - Download command with choosePath flag
+ * @returns {Promise<Object|null>} Resolved command or null if canceled
  */
-async function handleDownloadAsFlow(downloadRequest) {
-    const downloadId = downloadRequest.downloadUrl;
+async function handleDownloadAsFlow(downloadCommand) {
+    const downloadId = downloadCommand.downloadUrl;
     
     try {
-        logger.debug(`Handling 'Download As' flow for:`, downloadId);
+        logger.debug(`Handling filesystem dialog for:`, downloadId);
+
+        // Generate default filename with container extension
+        const defaultFilename = downloadCommand.defaultFilename || 
+            `${downloadCommand.filename || 'video'}.${downloadCommand.defaultContainer || 'mp4'}`;
 
         // Send filesystem request to native host
         const filesystemResponse = await nativeHostService.sendMessage({
             command: 'fileSystem',
             operation: 'chooseSaveLocation',
             params: {
-                defaultName: downloadRequest.defaultFilename || `${downloadRequest.filename || 'video'}.${downloadRequest.defaultContainer || 'mp4'}`,
+                defaultName: defaultFilename,
                 title: 'Save Video As'
             }
         });
@@ -664,19 +680,19 @@ async function handleDownloadAsFlow(downloadRequest) {
             // Broadcast error to UI
             broadcastToPopups({
                 command: 'download-canceled',
-                downloadUrl: downloadRequest.downloadUrl,
-                masterUrl: downloadRequest.masterUrl || null,
-                filename: downloadRequest.filename,
-                selectedOptionOrigText: downloadRequest.selectedOptionOrigText || null,
+                downloadUrl: downloadCommand.downloadUrl,
+                masterUrl: downloadCommand.masterUrl || null,
+                filename: downloadCommand.filename,
+                selectedOptionOrigText: downloadCommand.selectedOptionOrigText || null,
                 error: 'File selection canceled'
             });
-            return;
+            return null;
         }
 
         logger.debug('Filesystem dialog successful:', filesystemResponse);
         
         // If this is first-time setup, save the directory as default save path
-        if (downloadRequest.isFirstTimeSetup) {
+        if (downloadCommand.isFirstTimeSetup) {
             try {
                 const currentSettings = settingsManager.getAll();
                 const updatedSettings = {
@@ -700,20 +716,19 @@ async function handleDownloadAsFlow(downloadRequest) {
             }
         }
         
-        // Merge filesystem response with download request
-        const updatedRequest = {
-            ...downloadRequest,
+        // Return resolved command
+        const resolvedCommand = {
+            ...downloadCommand,
             savePath: filesystemResponse.directory,
             filename: filesystemResponse.filename
         };
         
-        // Remove choosePath flag to prevent recursion
-        delete updatedRequest.choosePath;
-        delete updatedRequest.defaultFilename;
-        delete updatedRequest.isFirstTimeSetup;
+        // Clean up temporary flags
+        delete resolvedCommand.choosePath;
+        delete resolvedCommand.defaultFilename;
+        delete resolvedCommand.isFirstTimeSetup;
         
-        // Continue with normal download flow
-        await startDownload(updatedRequest);
+        return resolvedCommand;
         
     } catch (error) {
         logger.error('Download As flow failed:', error);
@@ -721,12 +736,14 @@ async function handleDownloadAsFlow(downloadRequest) {
         // Broadcast error to UI
         broadcastToPopups({
             command: 'download-canceled',
-            downloadUrl: downloadRequest.downloadUrl,
-            masterUrl: downloadRequest.masterUrl || null,
-            filename: downloadRequest.filename,
-            selectedOptionOrigText: downloadRequest.selectedOptionOrigText || null,
+            downloadUrl: downloadCommand.downloadUrl,
+            masterUrl: downloadCommand.masterUrl || null,
+            filename: downloadCommand.filename,
+            selectedOptionOrigText: downloadCommand.selectedOptionOrigText || null,
             error: `Download As failed: ${error.message}`
         });
+        
+        return null;
     }
 }
 

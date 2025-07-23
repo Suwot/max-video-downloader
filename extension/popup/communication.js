@@ -5,7 +5,7 @@
  */
 
 import { createLogger } from '../shared/utils/logger.js';
-import { updateDownloadProgress } from './video/download-handler.js';
+import { updateDownloadProgress } from './video/download-progress-handler.js';
 import { renderVideos, addVideoToUI, updateVideoInUI, removeVideoFromUI, renderHistoryItems } from './video/video-renderer.js';
 import { setVideos, updateVideo, clearVideos, getVideos } from './state.js';
 import { updateUICounters, showToast } from './ui-utils.js';

@@ -274,6 +274,120 @@ export class VideoItemComponent {
     }
     
     /**
+     * Execute download with specified mode
+     * @param {string} mode - Download mode ('download', 'download-as', 'extract-audio', 'extract-subs')
+     * @param {Object} options - Additional options for the download
+     */
+    executeDownload(mode = 'download', options = {}) {
+        const commands = this.createDownloadCommand(mode, options);
+        
+        // Handle single command or array of commands (for multi-track audio)
+        const commandArray = Array.isArray(commands) ? commands : [commands];
+        
+        commandArray.forEach(command => {
+            sendPortMessage(command);
+            logger.debug(`Executed ${mode} command:`, command);
+        });
+    }
+
+    /**
+     * Create complete download command based on mode and current component state
+     * @param {string} mode - Download mode
+     * @param {Object} options - Additional options
+     * @returns {Object|Array} Complete download command(s)
+     */
+    createDownloadCommand(mode = 'download', options = {}) {
+        const baseData = this.getDownloadData();
+        
+        // Get selected option text for UI restoration
+        const selectedOptionOrigText = this.getSelectedOptionText();
+        
+        const command = {
+            command: 'download',
+            selectedOptionOrigText,
+            videoData: this.videoData, // Include full video data for downloads tab creation
+            ...baseData
+        };
+        
+        // Apply mode-specific modifications
+        switch (mode) {
+            case 'download-as':
+                return { 
+                    ...command, 
+                    choosePath: true,
+                    defaultFilename: `${command.filename || 'video'}.${command.defaultContainer || 'mp4'}`,
+                    ...options 
+                };
+            case 'extract-audio':
+                return this.createAudioExtractionCommands(command, options);
+            case 'extract-subs':
+                return { ...command, subsOnly: true, ...options };
+            case 're-download':
+                return { ...command, isRedownload: true, ...options };
+            default:
+                return { ...command, ...options };
+        }
+    }
+
+    /**
+     * Create audio extraction commands - handles single and multi-track scenarios
+     * @param {Object} baseCommand - Base download command
+     * @param {Object} options - Additional options
+     * @returns {Object|Array} Single command or array of commands for multi-track
+     */
+    createAudioExtractionCommands(baseCommand, options = {}) {
+        const videoData = this.videoData;
+        const selectedAudioTracks = this.getSelectedAudioTracks();
+        
+        // Single audio extraction for most cases
+        if (videoData.type === 'direct' || 
+            (videoData.type === 'hls' && !videoData.isMaster) ||
+            selectedAudioTracks.length <= 1) {
+            return { 
+                ...baseCommand, 
+                audioOnly: true,
+                ...options 
+            };
+        }
+        
+        // Multi-track audio extraction for DASH or HLS master with multiple audio tracks
+        if (selectedAudioTracks.length > 1) {
+            return selectedAudioTracks.map((audioTrack, index) => {
+                const trackCommand = { ...baseCommand };
+                trackCommand.audioOnly = true;
+                trackCommand.filename = `${baseCommand.filename}_${audioTrack.label || `Audio_${index + 1}`}`;
+                
+                if (videoData.type === 'dash') {
+                    // DASH: Use specific stream selection
+                    trackCommand.streamSelection = audioTrack.ffmpegStreamIndex;
+                    trackCommand.containerContext = {
+                        ...trackCommand.containerContext,
+                        audioContainer: audioTrack.audioContainer || 'm4a'
+                    };
+                } else if (videoData.type === 'hls') {
+                    // HLS: Use specific audio track URL
+                    trackCommand.downloadUrl = audioTrack.url;
+                    trackCommand.containerContext = {
+                        ...trackCommand.containerContext,
+                        audioContainer: audioTrack.audioContainer || 'm4a'
+                    };
+                    // Clear inputs array for single audio track download
+                    delete trackCommand.inputs;
+                }
+                
+                return { ...trackCommand, ...options };
+            });
+        }
+        
+        // Fallback to single audio extraction
+        return { 
+            ...baseCommand, 
+            audioOnly: true,
+            ...options 
+        };
+    }
+
+    /**
      * Get current download data based on selected tracks and video type
      * @returns {Object} Complete download data object
      */
@@ -531,6 +645,19 @@ export class VideoItemComponent {
      * @returns {Array} Array of selected audio tracks with container info
      */
     getSelectedAudioTracks() {
+        if (!this.selectedTracks.audioTracks || this.selectedTracks.audioTracks.length === 0) {
+            // Fallback to first available audio track if none selected
+            if (this.videoData.audioTracks && this.videoData.audioTracks.length > 0) {
+                return [{
+                    ...this.videoData.audioTracks[0],
+                    label: this.videoData.audioTracks[0].name || this.videoData.audioTracks[0].label || this.videoData.audioTracks[0].lang || 'Audio 1',
+                    streamIndex: this.videoData.audioTracks[0].ffmpegStreamIndex,
+                    audioContainer: this.videoData.audioTracks[0].audioContainer || 'm4a'
+                }];
+            }
+            return [];
+        }
+        
         return this.selectedTracks.audioTracks.map((track, index) => ({
             ...track,
             label: track.name || track.label || track.lang || `Audio ${index + 1}`,

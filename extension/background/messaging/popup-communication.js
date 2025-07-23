@@ -4,7 +4,7 @@
  */
 
 // Add static imports at the top
-import { startDownload, cancelDownload, getActiveDownloadProgress, getActiveDownloadCount } from '../download/download-manager.js';
+import { processDownloadCommand, cancelDownload, getActiveDownloadProgress, getActiveDownloadCount } from '../download/download-manager.js';
 import { createLogger } from '../../shared/utils/logger.js';
 import { clearPreviewCache, getCacheStats } from '../../shared/utils/preview-cache.js';
 import { clearAllHeaderCaches } from '../../shared/utils/headers-utils.js';
@@ -115,7 +115,7 @@ async function handlePortMessage(message, port, portId) {
             if (isRedownload) {
                 logger.debug('🔄 Processing re-download request:', message);
             }
-            startDownload(message);
+            processDownloadCommand(message);
             break;
             
         case 'cancel-download':

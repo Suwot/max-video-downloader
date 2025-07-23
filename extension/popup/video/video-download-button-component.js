@@ -5,7 +5,6 @@
 
 import { createLogger } from '../../shared/utils/logger.js';
 import { sendPortMessage } from '../communication.js';
-import { handleDownload } from './download-handler.js';
 
 const logger = createLogger('VideoDownloadButtonComponent');
 
@@ -105,22 +104,15 @@ export class VideoDownloadButtonComponent {
      * Setup event handlers with preserved original handler (like old system)
      */
     setupEventHandlers() {
-        // Create and preserve the original download handler (like old system)
+        // Create and preserve the original download handler
         this.originalHandler = async () => {
-            // Capture original text BEFORE any state changes
-            const selectedOptionOrigText = this.getSelectedOptionText();
-            
-            const downloadData = this.videoItemComponent.getDownloadData();
-            downloadData.selectedOptionOrigText = selectedOptionOrigText;
-            downloadData.videoData = this.videoItemComponent.videoData; // Attach video data directly
-            
-            const cancelHandler = () => this.sendCancelMessage(downloadData);
+            const cancelHandler = () => this.sendCancelMessage();
             this.updateState(BUTTON_STATES.STARTING, {
                 text: 'Starting...',
                 handler: cancelHandler
             });
             
-            handleDownload(this.elementsDiv, downloadData);
+            this.videoItemComponent.executeDownload('download');
         };
         
         // Set the original handler as the default click handler
@@ -361,104 +353,13 @@ export class VideoDownloadButtonComponent {
      * Handle audio extraction with multi-track support
      */
     async handleExtractAudio() {
-        const videoData = this.videoItemComponent.videoData;
-        
-        if (videoData.type === 'dash') {
-            await this.handleDashAudioExtraction();
-        } else if (videoData.type === 'hls' && this.videoItemComponent.selectedTracks.audioTracks.length > 1) {
-            await this.handleHlsMultiAudioExtraction();
-        } else {
-            // Single audio extraction for HLS/Direct
-            await this.handleSingleAudioExtraction();
-        }
-    }
-    
-    /**
-     * Handle DASH audio extraction with multi-track support
-     */
-    async handleDashAudioExtraction() {
-        const selectedAudioTracks = this.videoItemComponent.getSelectedAudioTracks();
-        
-        if (selectedAudioTracks.length === 0) {
-            logger.debug('No audio tracks selected for DASH extraction');
-            return;
-        }
-        
-        if (selectedAudioTracks.length === 1) {
-            // Single audio track
-            const downloadData = this.videoItemComponent.getDownloadData();
-            downloadData.audioOnly = true;
-            downloadData.streamSelection = selectedAudioTracks[0].streamIndex;
-            downloadData.containerContext.audioContainer = selectedAudioTracks[0].audioContainer;
-            
-            await this.sendAudioExtractionCommand(downloadData);
-        } else {
-            // Multiple audio tracks - send separate command for each
-            for (let i = 0; i < selectedAudioTracks.length; i++) {
-                const audioTrack = selectedAudioTracks[i];
-                const downloadData = this.videoItemComponent.getDownloadData();
-                
-                downloadData.audioOnly = true;
-                downloadData.streamSelection = audioTrack.streamIndex;
-                downloadData.filename = `${downloadData.filename}_${audioTrack.label}`;
-                downloadData.containerContext.audioContainer = audioTrack.audioContainer;
-                
-                logger.debug(`Sending audio extraction command ${i + 1}/${selectedAudioTracks.length}:`, audioTrack.label);
-                await this.sendAudioExtractionCommand(downloadData);
-            }
-        }
-    }
-    
-    /**
-     * Handle HLS multi-audio extraction
-     */
-    async handleHlsMultiAudioExtraction() {
-        const selectedAudioTracks = this.videoItemComponent.getSelectedAudioTracks();
-        
-        for (let i = 0; i < selectedAudioTracks.length; i++) {
-            const audioTrack = selectedAudioTracks[i];
-            const downloadData = this.videoItemComponent.getDownloadData();
-            
-            downloadData.audioOnly = true;
-            downloadData.downloadUrl = audioTrack.url;
-            downloadData.filename = `${downloadData.filename}_${audioTrack.label}`;
-            downloadData.containerContext.audioContainer = audioTrack.audioContainer;
-            
-            // Clear inputs array for single audio track download
-            delete downloadData.inputs;
-            
-            logger.debug(`Sending HLS audio extraction command ${i + 1}/${selectedAudioTracks.length}:`, audioTrack.label);
-            await this.sendAudioExtractionCommand(downloadData);
-        }
-    }
-    
-    /**
-     * Handle single audio extraction (HLS/Direct)
-     */
-    async handleSingleAudioExtraction() {
-        const downloadData = this.videoItemComponent.getDownloadData();
-        downloadData.audioOnly = true;
-        
-        await this.sendAudioExtractionCommand(downloadData);
-    }
-    
-    /**
-     * Send audio extraction command
-     * @param {Object} downloadData - Download data with audioOnly flag
-     */
-    async sendAudioExtractionCommand(downloadData) {
-        // Capture original text BEFORE any state changes
-        const selectedOptionOrigText = this.getSelectedOptionText();
-        downloadData.selectedOptionOrigText = selectedOptionOrigText;
-        downloadData.videoData = this.videoItemComponent.videoData; // Attach video data directly
-        
-        const cancelHandler = () => this.sendCancelMessage(downloadData);
+        const cancelHandler = () => this.sendCancelMessage();
         this.updateState(BUTTON_STATES.STARTING, {
             text: 'Extracting...',
             handler: cancelHandler
         });
         
-        handleDownload(this.elementsDiv, downloadData);
+        this.videoItemComponent.executeDownload('extract-audio');
     }
     
     /**
@@ -486,40 +387,30 @@ export class VideoDownloadButtonComponent {
     }
     
     /**
-     * Handle Download As functionality - streamlined to just add choosePath flag
+     * Handle Download As functionality
      */
     async handleDownloadAs() {
-        const selectedOptionOrigText = this.getSelectedOptionText();
-        const downloadData = this.videoItemComponent.getDownloadData();
-        
-        // Add Download As specific flags
-        downloadData.selectedOptionOrigText = selectedOptionOrigText;
-        downloadData.videoData = this.videoItemComponent.videoData;
-        downloadData.choosePath = true;
-        downloadData.defaultFilename = `${downloadData.filename || 'video'}.${downloadData.defaultContainer || 'mp4'}`;
-        
-        // Update button state and delegate to standard download flow
         this.setIntermediaryText('Choosing...');
-        const cancelHandler = () => this.sendCancelMessage(downloadData);
+        const cancelHandler = () => this.sendCancelMessage();
         this.updateState(BUTTON_STATES.STARTING, {
             text: 'Starting...',
             handler: cancelHandler
         });
         
-        await handleDownload(this.elementsDiv, downloadData);
+        this.videoItemComponent.executeDownload('download-as');
     }
     
     /**
      * Send cancel message for download
-     * @param {Object} downloadData - Download data with URLs
      */
-    sendCancelMessage(downloadData) {
+    sendCancelMessage() {
+        const downloadData = this.videoItemComponent.getDownloadData();
         const cancelMessage = {
             command: 'cancel-download',
             type: downloadData.type,
             downloadUrl: downloadData.downloadUrl,
             masterUrl: downloadData.masterUrl || null,
-            selectedOptionOrigText: downloadData.selectedOptionOrigText
+            selectedOptionOrigText: this.getSelectedOptionText()
         };
         
         sendPortMessage(cancelMessage);
