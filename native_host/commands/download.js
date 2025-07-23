@@ -213,7 +213,8 @@ class DownloadCommand extends BaseCommand {
             // UI context fields
             selectedOptionOrigText = null,
             // Re-download flag
-            isRedownload = false
+            isRedownload = false,
+			videoData
         } = params;
 
         // Generate unique session ID for this download
@@ -241,7 +242,11 @@ class DownloadCommand extends BaseCommand {
             isRedownload,
             sourceAudioCodec,
             sourceAudioBitrate,
-            sessionId
+            sessionId,
+            videoData: videoData ? {
+                ...videoData,
+                previewUrl: undefined // Remove heavy preview data for storage efficiency
+            } : undefined
         };
 
         logDebug('Starting download with session ID:', sessionId, params);
@@ -311,28 +316,47 @@ class DownloadCommand extends BaseCommand {
     }
     
     /**
-     * Determine the appropriate container format based on parameters and video type
+     * Determine the appropriate container format using enhanced container context
      * @private
      */
     determineContainerFormat(params) {
-        const { preferredContainer, defaultContainer, type, audioOnly, downloadUrl, sourceAudioCodec } = params;
+        const { 
+            preferredContainer, 
+            defaultContainer, 
+            type, 
+            audioOnly, 
+            downloadUrl, 
+            sourceAudioCodec,
+            containerContext 
+        } = params;
         
         // 1. User override takes priority (future feature)
         if (preferredContainer && /^(mp4|webm|mkv|mp3|m4a)$/i.test(preferredContainer)) {
             return preferredContainer.toLowerCase();
         }
         
-        // 2. Audio-only mode - smart format selection based on source codec
+        // 2. Audio-only mode - use pre-computed container context
         if (audioOnly) {
+            if (containerContext?.audioContainer) {
+                logDebug('🎵 Using pre-computed audio container:', containerContext.audioContainer);
+                return containerContext.audioContainer;
+            }
             return this.determineAudioContainer(sourceAudioCodec);
         }
         
-        // 3. Use defaultContainer from processing (DASH from UI, Direct from FFprobe)
+        // 3. Use defaultContainer from UI (computed with compatibility checks)
         if (defaultContainer && /^(mp4|webm|mkv|mov|m4v|ts|avi|flv)$/i.test(defaultContainer)) {
+            logDebug('📦 Using UI-computed container:', defaultContainer);
             return defaultContainer.toLowerCase();
         }
         
-        // 4. Type-specific fallbacks
+        // 4. Use container context for video downloads
+        if (containerContext?.videoContainer) {
+            logDebug('📦 Using pre-computed video container:', containerContext.videoContainer);
+            return containerContext.videoContainer;
+        }
+        
+        // 5. Type-specific fallbacks (legacy)
         if (type === 'hls') {
             return 'mp4';
         }
@@ -346,12 +370,12 @@ class DownloadCommand extends BaseCommand {
             }
         }
         
-        // 5. Final fallback
+        // 6. Final fallback
         return 'mp4';
     }
     
     /**
-     * Determine optimal audio container based on source codec
+     * Determine optimal audio container based on source codec (fallback method)
      * @param {string} sourceAudioCodec - Source audio codec name (e.g., 'aac', 'mp3', 'opus')
      * @returns {string} - Optimal container format
      * @private

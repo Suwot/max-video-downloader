@@ -84,7 +84,8 @@ async function handleIncomingMessage(message) {
         case 'download-canceled':
         case 'download-queued':
         case 'download-unqueued':
-            updateDownloadProgress(message);
+        case 'download-started':
+            await updateDownloadProgress(message);
             break;
 
         case 'downloadCountUpdated':

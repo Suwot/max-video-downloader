@@ -2216,8 +2216,8 @@ header .heading-row {
       -ms-flex-direction: column;
           flex-direction: column;
 }
-.downloads-container .active-downloads-section .video-item .dropdown-icon, .downloads-container .active-downloads-section .video-item .dismiss-button, .downloads-container .active-downloads-section .video-item .loader, .downloads-container .active-downloads-section .video-item .options-container, .downloads-container .active-downloads-section .video-item .download-menu-dropdown {
-  display: none;
+.downloads-container .active-downloads-section .video-item .dropdown-icon, .downloads-container .active-downloads-section .video-item .dismiss-button, .downloads-container .active-downloads-section .video-item .loader, .downloads-container .active-downloads-section .video-item .options-container, .downloads-container .active-downloads-section .video-item .download-menu-dropdown, .downloads-container .active-downloads-section .video-item .retry-preview-btn {
+  display: none !important;
 }
 .downloads-container .active-downloads-section .video-item .preview-image.placeholder {
   opacity: 1;

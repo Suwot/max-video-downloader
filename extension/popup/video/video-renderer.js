@@ -2,7 +2,7 @@ import { getVideos, getTabId } from '../state.js';
 import { sendPortMessage } from '../communication.js';
 import { createLogger } from '../../shared/utils/logger.js';
 import { formatSize, formatDuration, formatBitrate } from '../../shared/utils/processing-utils.js';
-import { createVideoElement } from './video-item.js';
+import { VideoItemComponent } from './video-item-component.js';
 
 const logger = createLogger('Video Renderer');
 
@@ -58,7 +58,8 @@ export async function renderVideos() {
             content.innerHTML = ''; // Clear previous items
             
             typeVideos.forEach(video => {
-                const videoElement = createVideoElement(video);
+                const videoComponent = new VideoItemComponent(video, 'default');
+                const videoElement = videoComponent.render();
                 content.appendChild(videoElement);
             });
         } else {
@@ -343,11 +344,12 @@ function buildFlagsHtml(progressData) {
                 e.stopPropagation();
                 logger.debug('Retrying download with original command:', progressData.originalCommand);
                 
-                // Send original command with isRedownload flag set to true
+                // Send original command with isRedownload flag (videoData already included from native host)
                 const retryCommand = {
                     ...progressData.originalCommand,
                     selectedOptionOrigText: progressData.selectedOptionOrigText,
                     isRedownload: true
+                    // videoData is already in originalCommand from native host (robust approach)
                 };
                 
                 sendPortMessage(retryCommand);
@@ -574,7 +576,8 @@ export async function addVideoToUI(video) {
         }
         
         // Create video element
-        const videoElement = createVideoElement(video);
+        const videoComponent = new VideoItemComponent(video, 'default');
+        const videoElement = videoComponent.render();
         
         // Prepend to the group (newest first)
         groupBody.insertBefore(videoElement, groupBody.firstChild);
@@ -675,7 +678,8 @@ export async function updateVideoInUI(videoUrl, video, updateType = 'structural'
         }
         
         // Create new element
-        const newElement = createVideoElement(video);
+        const videoComponent = new VideoItemComponent(video, 'default');
+        const newElement = videoComponent.render();
         
         // Replace the existing element
         existingElement.parentNode.replaceChild(newElement, existingElement);

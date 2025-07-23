@@ -8,39 +8,41 @@ import { sendPortMessage } from '../communication.js';
 import { showError } from '../ui-utils.js';
 import { formatSize, formatTime } from '../../shared/utils/processing-utils.js';
 import { renderHistoryItems } from './video-renderer.js';
-import { setButtonState, restoreButtonState, setButtonIntermediaryState } from './download-button.js';
+import { VideoItemComponent } from './video-item-component.js';
 
 const logger = createLogger('Download');
 
 /**
- * Handle download button click - streamlined version
- * @param {HTMLElement} button - Download button
- * @param {Object} videoData - Video metadata
+ * Handle download button click - streamlined version with video data context
+ * @param {HTMLElement} elementsDiv - Elements container
+ * @param {Object} videoData - Video metadata with container context
  */
 export async function handleDownload(elementsDiv, videoData = {}) {
     logger.debug('Initiating download for:', videoData.downloadUrl);
     
     try {     
-        // Store original text for restoration
-        const isDash = elementsDiv.querySelector('[data-type="dash"]');
-        const dropdownOption = isDash ?
-            elementsDiv.querySelector('.selected-option .label') :
-            elementsDiv.querySelector('.dropdown-option.selected .label');
-        const selectedOptionOrigText = dropdownOption ? dropdownOption.textContent : '';
+        // Use provided selectedOptionOrigText or extract from DOM (backward compatibility)
+        let selectedOptionOrigText = videoData.selectedOptionOrigText;
+        if (!selectedOptionOrigText) {
+            const isDash = elementsDiv.querySelector('[data-type="dash"]');
+            const dropdownOption = isDash ?
+                elementsDiv.querySelector('.selected-option .label') :
+                elementsDiv.querySelector('.dropdown-option.selected .label');
+            selectedOptionOrigText = dropdownOption ? dropdownOption.textContent : '';
+        }
 
         const downloadMessage = {
             command: 'download',
             selectedOptionOrigText,
-            ...videoData  // Spread all videoData properties instead of manual mapping
+            ...videoData  // Spread all videoData properties including containerContext
         };
         
-        // Clone video item to downloads tab before sending request
-        await cloneVideoItemToDownloads(elementsDiv, downloadMessage);
+        // Background will handle creating downloads tab items when download starts
         
         // Send via communication service
         sendPortMessage(downloadMessage);
         
-        logger.debug('Download request sent to background');
+        logger.debug('Download request sent to background with video data context');
         
     } catch (error) {
         logger.error('Download failed:', error);
@@ -53,33 +55,33 @@ export async function handleDownload(elementsDiv, videoData = {}) {
  * Delegates to specialized UI update functions
  * @param {Object} progressData - Progress data from background
  */
-export function updateDownloadProgress(progressData = {}) {
+export async function updateDownloadProgress(progressData = {}) {
     logger.debug('Progress update received:', progressData.command, progressData.progress ? progressData.progress + '%' : 'No progress');
     
-    // Skip video item UI updates for re-downloads (they don't have video items in the videos tab)
-    if (progressData.isRedownload) {
-        logger.debug('🔄 Re-download progress - skipping video item UI updates');
-        // Handle completion states for re-downloads (active downloads UI only)
-        if (progressData.command === 'download-success' || progressData.command === 'download-error' || progressData.command === 'download-canceled') {
-            const shouldAddToHistory = progressData.command !== 'download-canceled';
-            setTimeout(() => handleDownloadCompletion(progressData, shouldAddToHistory), 2000);
-        } else if (progressData.command === 'download-unqueued') {
-            handleDownloadCompletion(progressData, false);
+    // Handle downloads tab creation for new downloads (efficient one-time events)
+    if (progressData.command === 'download-queued' && progressData.videoData) {
+        await createVideoItemInDownloads(progressData.videoData, 'queued');
+    } else if (progressData.command === 'download-started' && progressData.videoData) {
+        // Simple dedup: only create if item doesn't exist yet (handles queued → started transitions)
+        const lookupUrl = progressData.masterUrl || progressData.downloadUrl;
+        const activeDownloadsContainer = document.querySelector('.active-downloads');
+        const existingItem = activeDownloadsContainer?.querySelector(`.video-item[data-url="${lookupUrl}"]`);
+        
+        if (!existingItem) {
+            await createVideoItemInDownloads(progressData.videoData, 'starting');
         }
-        return;
     }
     
-    // Orchestrate all UI updates for original downloads
+    // Update ALL matching items in both tabs (videos and downloads)
+    // The functions will naturally find and update only existing items
     updateDownloadButton(progressData);
     updateDropdown(progressData);
     
-    // Handle completion states - unified cleanup with conditional timing and history
+    // Handle completion states for all downloads (original and re-downloads)
     if (progressData.command === 'download-success' || progressData.command === 'download-error' || progressData.command === 'download-canceled') {
-        // Delayed cleanup - success/error with history, canceled without history
         const shouldAddToHistory = progressData.command !== 'download-canceled';
         setTimeout(() => handleDownloadCompletion(progressData, shouldAddToHistory), 2000);
     } else if (progressData.command === 'download-unqueued') {
-        // Immediate cleanup without history addition (unqueued is not a final state, just removal)
         handleDownloadCompletion(progressData, false);
     }
     
@@ -87,8 +89,61 @@ export function updateDownloadProgress(progressData = {}) {
 }
 
 /**
+ * Restore download button states for ongoing downloads when popup reopens
+ * @param {Array} activeDownloads - Array of active download entries from storage
+ */
+export function restoreDownloadStates(activeDownloads = []) {
+    if (activeDownloads.length === 0) return;
+    
+    logger.debug('Restoring download states for', activeDownloads.length, 'active downloads');
+    
+    activeDownloads.forEach(downloadEntry => {
+        const lookupUrl = downloadEntry.masterUrl || downloadEntry.downloadUrl;
+        
+        // Find matching video items in videos tab
+        const videosElements = document.querySelectorAll(
+            `.videos-container .video-item[data-url="${lookupUrl}"]`
+        );
+        
+        videosElements.forEach(videoElement => {
+            const component = videoElement._component;
+            if (component && component.downloadButton) {
+                // Set to downloading state for ongoing downloads
+                const cancelHandler = () => {
+                    const cancelMessage = {
+                        command: 'cancel-download',
+                        type: downloadEntry.type,
+                        downloadUrl: downloadEntry.downloadUrl,
+                        masterUrl: downloadEntry.masterUrl || null,
+                        selectedOptionOrigText: downloadEntry.selectedOptionOrigText
+                    };
+                    sendPortMessage(cancelMessage);
+                };
+                
+                if (downloadEntry.status === 'downloading') {
+                    component.downloadButton.updateState('downloading', {
+                        text: 'Stop',
+                        handler: () => {
+                            component.downloadButton.setIntermediaryText('Stopping...');
+                            cancelHandler();
+                        }
+                    });
+                } else if (downloadEntry.status === 'queued') {
+                    component.downloadButton.updateState('queued', {
+                        text: 'Cancel',
+                        handler: cancelHandler
+                    });
+                }
+                
+                logger.debug('Restored button state for:', lookupUrl, 'to', downloadEntry.status);
+            }
+        });
+    });
+}
+
+/**
  * Update download button state based on progress
- * Downloads-first: always update active downloads, optionally update videos if present
+ * Updates ALL matching items in both videos and downloads tabs
  * @param {Object} progressData - Progress data from background
  */
 function updateDownloadButton(progressData = {}) {
@@ -111,18 +166,33 @@ function updateDownloadButton(progressData = {}) {
         return;
     }
     
-    // Update all matching elements using unified state manager
-    allElements.forEach(elementsDiv => {
-        updateSingleDownloadButtonState(elementsDiv, progressData);
+    // Update all matching elements using component-aware state manager
+    allElements.forEach(videoElement => {
+        updateSingleDownloadButtonState(videoElement, progressData);
     });
 }
 
 /**
- * Update a single download button element using unified state management
- * @param {HTMLElement} elementsDiv - The video item container element
+ * Update a single download button element using component-aware state management
+ * @param {HTMLElement} videoElement - The video item element
  * @param {Object} progressData - Progress data from background
  */
-function updateSingleDownloadButtonState(elementsDiv, progressData = {}) {
+function updateSingleDownloadButtonState(videoElement, progressData = {}) {
+    // All video elements now use component-based approach
+    const component = videoElement._component;
+    if (component && component.downloadButton) {
+        updateComponentButtonState(component.downloadButton, progressData);
+    } else {
+        logger.warn('Video element missing component reference:', progressData.downloadUrl);
+    }
+}
+
+/**
+ * Update button state using new component approach
+ * @param {Object} downloadButtonComponent - Download button component
+ * @param {Object} progressData - Progress data from background
+ */
+function updateComponentButtonState(downloadButtonComponent, progressData = {}) {
     // Create cancel handler for all cancel-able states
     const cancelHandler = () => {
         const cancelMessage = {
@@ -137,62 +207,64 @@ function updateSingleDownloadButtonState(elementsDiv, progressData = {}) {
 
     switch (progressData.command) {
         case 'download-queued':
-            setButtonState(elementsDiv, 'queued', {
+            downloadButtonComponent.updateState('queued', {
                 text: 'Cancel',
                 handler: cancelHandler
             });
-            logger.debug('Download button set to queued state');
+            logger.debug('Component download button set to queued state');
             break;
             
         case 'download-unqueued':
-            setButtonState(elementsDiv, 'default', {
-                text: 'Unqueued',
-                autoRestore: true,
-                autoRestoreDelay: 2000
-            });
-            logger.debug('Download button set to unqueued state');
+            // Immediately restore to default state for unqueued
+            downloadButtonComponent.updateState('default');
+            logger.debug('Component download button restored to default (unqueued)');
             break;
             
         case 'download-progress':
-            // Only set to downloading state on first progress message
-            setButtonState(elementsDiv, 'downloading', {
+            // Set to downloading state with stop functionality
+            downloadButtonComponent.updateState('downloading', {
                 text: 'Stop',
                 handler: () => {
-                    setButtonIntermediaryState(elementsDiv, 'Stopping...');
+                    downloadButtonComponent.setIntermediaryText('Stopping...');
                     cancelHandler();
                 }
             });
-            logger.debug('Download button switched to Stop mode');
+            logger.debug('Component download button switched to Stop mode');
             break;
             
         case 'download-success':
-            setButtonState(elementsDiv, 'success', {
+            // Show success state briefly with auto-restore (like old system)
+            downloadButtonComponent.updateState('success', {
                 text: 'Completed!',
                 autoRestore: true,
                 autoRestoreDelay: 2000
             });
-            logger.debug('Download button set to success state');
+            logger.debug('Component download button set to success state');
             break;
             
         case 'download-error':
-            setButtonState(elementsDiv, 'error', {
+            // Show error state briefly with auto-restore (like old system)
+            downloadButtonComponent.updateState('error', {
                 text: 'Error',
                 autoRestore: true,
                 autoRestoreDelay: 2000
             });
-            logger.debug('Download button set to error state');
+            logger.debug('Component download button set to error state');
             break;
             
         case 'download-canceled':
-            setButtonState(elementsDiv, 'canceled', {
+            // Show canceled state briefly with auto-restore (like old system)
+            downloadButtonComponent.updateState('canceled', {
                 text: 'Canceled',
                 autoRestore: true,
                 autoRestoreDelay: 2000
             });
-            logger.debug('Download button set to canceled state');
+            logger.debug('Component download button set to canceled state');
             break;
     }
 }
+
+// Legacy button state function removed - all items now use components
 
 /**
  * Update entire dropdown (selected-option + dropdown-option) during download
@@ -310,47 +382,35 @@ function updateSingleDropdown(downloadGroup, progressData = {}, progress) {
 }
 
 /**
- * Clone video item to downloads tab (UI only, no storage)
- * @param {HTMLElement} elementsDiv - The video item element to clone
- * @param {Object} downloadData - Download metadata
+ * Create video item in downloads tab from video data
+ * @param {Object} videoData - Raw video data
+ * @param {string} initialState - Initial download state
  */
-async function cloneVideoItemToDownloads(elementsDiv, downloadData) {
+async function createVideoItemInDownloads(videoData, initialState = 'default') {
     try {
-        // Find the video-item container
-        const videoItem = elementsDiv.closest('.video-item');
-        if (!videoItem) {
-            logger.error('Could not find video-item container to clone');
+        const activeDownloadsContainer = document.querySelector('.active-downloads');
+        if (!activeDownloadsContainer) {
+            logger.error('Active downloads container not found');
             return;
         }
 
-        // Clone the element (without event listeners)
-        const clonedElement = videoItem.cloneNode(true);
+        // Create new video item component with initial state
+        const videoComponent = new VideoItemComponent(videoData, initialState);
+        const videoElement = videoComponent.render();
         
-        // Fix radio button name conflicts in cloned element
-        const radioButtons = clonedElement.querySelectorAll('input[type="radio"]');
-        radioButtons.forEach(radio => {
-            if (radio.name.startsWith('track-')) {
-                radio.name = `track-${radio.name.split('-')[1]}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-            }
-        });
-        
-        // Add elementHTML to downloadData for storage by Download Manager
-        downloadData.elementHTML = clonedElement.outerHTML;
-
-        // Insert cloned element into downloads tab and manage initial message visibility
-        const activeDownloadsContainer = document.querySelector('.active-downloads');
+        // Hide initial message and append the element (queue order: oldest first)
         const initialMessage = activeDownloadsContainer.querySelector('.initial-message');
-        
-        // Hide initial message and append the element
         if (initialMessage) {
             initialMessage.style.display = 'none';
         }
-        activeDownloadsContainer.appendChild(clonedElement);
         
-        logger.debug('Cloned video item to downloads UI');
+        // Append to end for proper queue order (oldest downloads at top)
+        activeDownloadsContainer.appendChild(videoElement);
+        
+        logger.debug('Created video item in downloads tab with state:', initialState);
 
     } catch (error) {
-        logger.error('Error cloning video item to downloads:', error);
+        logger.error('Error creating video item in downloads:', error);
     }
 }
 
@@ -383,15 +443,22 @@ export async function restoreActiveDownloads() {
         // Hide initial message and restore downloads
         initialMessage.style.display = 'none';
         
-        // Restore full HTML elements as stored (unified with original cloning logic)
+        // Recreate video items from stored video data with proper initial states
         activeDownloads.forEach(downloadEntry => {
-            const tempDiv = document.createElement('div');
-            tempDiv.innerHTML = downloadEntry.elementHTML;
-            const videoItem = tempDiv.firstElementChild;
-            activeDownloadsContainer.appendChild(videoItem);
+            if (downloadEntry.videoData) {
+                const initialState = downloadEntry.status || 'queued';
+                const videoComponent = new VideoItemComponent(downloadEntry.videoData, initialState);
+                const videoElement = videoComponent.render();
+                activeDownloadsContainer.appendChild(videoElement);
+            } else {
+                logger.warn('Download entry missing videoData, skipping:', downloadEntry.downloadUrl);
+            }
         });
 
         logger.debug(`Restored ${activeDownloads.length} active downloads`);
+        
+        // Restore button states for ongoing downloads in videos tab
+        restoreDownloadStates(activeDownloads);
 
     } catch (error) {
         logger.error('Error restoring active downloads:', error);

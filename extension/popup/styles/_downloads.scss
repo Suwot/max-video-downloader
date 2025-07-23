@@ -12,8 +12,8 @@
     flex-direction: column;
 
     .active-downloads-section .video-item {  
-        .dropdown-icon, .dismiss-button, .loader, .options-container, .download-menu-dropdown {
-            display: none;
+        .dropdown-icon, .dismiss-button, .loader, .options-container, .download-menu-dropdown, .retry-preview-btn {
+            display: none !important;
         }
 
         .preview-image.placeholder {
