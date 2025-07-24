@@ -8,6 +8,7 @@ import { shouldIgnoreForHeaderCapture } from '../../background/detection/url-fil
 
 // Create a logger instance for the headers utilities
 const logger = createLogger('Headers Utils');
+logger.setLevel('ERROR');
 
 // Store headers by requestId
 // Map<requestId, headers>

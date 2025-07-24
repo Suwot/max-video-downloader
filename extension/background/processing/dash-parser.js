@@ -19,6 +19,7 @@ import { detectAllContainers } from './container-detector.js';
 
 // Create a logger for the DASH parser
 const logger = createLogger('DASH Parser');
+logger.setLevel('ERROR');
 
 /**
  * Parse DASH duration string (ISO 8601 format)

@@ -18,6 +18,7 @@ import { detectAllContainers } from './container-detector.js';
 
 // Create a logger for the HLS parser
 const logger = createLogger('HLS Parser');
+logger.setLevel('ERROR');
 
 /**
  * Parse an HLS playlist and organize content by type

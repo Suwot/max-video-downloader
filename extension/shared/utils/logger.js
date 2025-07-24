@@ -20,10 +20,14 @@ const LOG_LEVELS = {
 
 // Default runtime configuration
 const config = {
-  currentLevel: LOG_LEVELS.DEBUG, // Can be changed at runtime
+  currentLevel: LOG_LEVELS.DEBUG, // Global default level
   showTimestamp: false,
   showCaller: true
 };
+
+// Per-module level overrides
+// Map<moduleName, logLevel>
+const moduleLogLevels = new Map();
 
 /**
  * Get caller information from stack trace
@@ -62,9 +66,11 @@ function getCallerInfo() {
  * @param {...any} args - Arguments to log
  */
 function log(level = 'debug', module, ...args) {
-  // Check if we should log based on current level
+  // Check if we should log based on module-specific or global level
   const levelValue = level === 'group' ? LOG_LEVELS.DEBUG : LOG_LEVELS[level.toUpperCase()] || 0;
-  if (levelValue < config.currentLevel) return;
+  const moduleLevel = moduleLogLevels.get(module) ?? config.currentLevel;
+  
+  if (levelValue < moduleLevel) return;
   
   // Build log prefix
   const timestamp = config.showTimestamp ? new Date().toISOString() : '';
@@ -113,17 +119,54 @@ function createLogger(moduleName) {
     error: (...args) => log('error', moduleName, ...args),
     group: (...args) => log('group', moduleName, ...args),
     
-    // Allow changing config for this logger
+    // Set log level for this specific module
     setLevel: (level) => {
-      if (LOG_LEVELS[level.toUpperCase()] !== undefined) {
-        config.currentLevel = LOG_LEVELS[level.toUpperCase()];
+      const levelKey = level.toUpperCase();
+      if (LOG_LEVELS[levelKey] !== undefined) {
+        moduleLogLevels.set(moduleName, LOG_LEVELS[levelKey]);
       }
+    },
+    
+    // Get current log level for this module
+    getLevel: () => {
+      const moduleLevel = moduleLogLevels.get(moduleName);
+      return moduleLevel !== undefined ? moduleLevel : config.currentLevel;
+    },
+    
+    // Reset this module to use global level
+    resetLevel: () => {
+      moduleLogLevels.delete(moduleName);
     }
   };
 }
 
+// Global logger configuration functions
+const loggerConfig = {
+  // Set global default level (affects all modules without specific overrides)
+  setGlobalLevel: (level) => {
+    const levelKey = level.toUpperCase();
+    if (LOG_LEVELS[levelKey] !== undefined) {
+      config.currentLevel = LOG_LEVELS[levelKey];
+    }
+  },
+  
+  // Get global default level
+  getGlobalLevel: () => config.currentLevel,
+  
+  // Clear all module-specific overrides
+  resetAllModules: () => {
+    moduleLogLevels.clear();
+  },
+  
+  // Get all module-specific levels (for debugging)
+  getModuleLevels: () => {
+    return Object.fromEntries(moduleLogLevels);
+  }
+};
+
 // Export logger utilities
 export { 
   createLogger,
-  LOG_LEVELS
+  LOG_LEVELS,
+  loggerConfig
 };

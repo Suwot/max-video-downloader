@@ -7,6 +7,7 @@ import { applyDNRRule } from '../../shared/utils/headers-utils.js';
 import { createLogger } from '../../shared/utils/logger.js';
 
 const logger = createLogger('Parser Utils');
+logger.setLevel('ERROR');
 
 // Tracking URLs currently being processed
 export const processingRequests = {

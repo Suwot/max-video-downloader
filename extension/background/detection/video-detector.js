@@ -7,6 +7,7 @@ import { settingsManager } from '../index.js';
 
 // Create a logger instance for video detection
 const logger = createLogger('VideoDetector');
+logger.setLevel('ERROR');
 
 // Detection constants
 const DETECTION_CONSTANTS = {
