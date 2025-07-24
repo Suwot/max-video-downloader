@@ -174,17 +174,18 @@ export function showConfirmModal(message, onConfirm, onCancel = null, triggerEle
             const originalZIndex = triggerElement.style.zIndex;
             triggerElement.style.zIndex = '2001';
             
-            // Restore z-index on cleanup
-            const originalCleanup = cleanup;
-            cleanup = function() {
-                triggerElement.style.zIndex = originalZIndex;
-                originalCleanup();
-            };
+            // Store original z-index for restoration
+            modal.dataset.originalZIndex = originalZIndex;
         }
         
         document.body.appendChild(modal);
         
         function cleanup() {
+            // Restore original z-index if it was modified
+            if (modal.dataset.originalZIndex !== undefined) {
+                triggerElement.style.zIndex = modal.dataset.originalZIndex;
+            }
+            
             modal.classList.remove('show');
             setTimeout(() => {
                 if (modal.parentNode) {

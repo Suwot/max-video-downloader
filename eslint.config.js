@@ -22,6 +22,7 @@ export default [
         setInterval: "readonly",
         clearInterval: "readonly",
         requestAnimationFrame: "readonly",
+        cancelAnimationFrame: "readonly",
         XMLHttpRequest: "readonly",
         MutationObserver: "readonly",
         history: "readonly",
