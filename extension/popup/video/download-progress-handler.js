@@ -23,21 +23,24 @@ export async function updateDownloadProgress(progressData = {}) {
     if (progressData.command === 'download-queued' && progressData.videoData) {
         await createVideoItemInDownloads(progressData.videoData, 'queued', progressData.downloadId);
     } else if (progressData.command === 'download-started' && progressData.videoData) {
-        // Simple dedup: only create if item doesn't exist yet (handles queued → started transitions)
+        // Smart UI updates: update existing queued items instead of creating duplicates
         const downloadId = progressData.downloadId;
-        const lookupUrl = progressData.masterUrl || progressData.downloadUrl;
         const activeDownloadsContainer = document.querySelector('.active-downloads');
         
-        // Check for existing item by downloadId first, then by URL
+        // Check for existing item by downloadId first
         let existingItem = null;
         if (downloadId) {
             existingItem = activeDownloadsContainer?.querySelector(`.video-item[data-download-id="${downloadId}"]`);
         }
-        if (!existingItem) {
-            existingItem = activeDownloadsContainer?.querySelector(`.video-item[data-url="${lookupUrl}"]`);
-        }
         
-        if (!existingItem) {
+        if (existingItem) {
+            // Update existing queued item to downloading state
+            const component = existingItem._component;
+            if (component && component.downloadButton) {
+                component.downloadButton.updateState('starting');
+            }
+        } else {
+            // Create new item (for direct downloads)
             await createVideoItemInDownloads(progressData.videoData, 'starting', downloadId);
         }
     }
@@ -52,8 +55,6 @@ export async function updateDownloadProgress(progressData = {}) {
         const shouldAddToHistory = progressData.command !== 'download-canceled';
         // Call immediately to remove from downloads-tab and prevent deduplication issues
         handleDownloadCompletion(progressData, shouldAddToHistory);
-    } else if (progressData.command === 'download-unqueued') {
-        handleDownloadCompletion(progressData, false);
     }
     
     logger.debug('All UI elements updated for command:', progressData.command);
@@ -96,7 +97,7 @@ export function restoreDownloadStates(activeDownloads = []) {
                     component.downloadButton.updateState('downloading', {
                         text: 'Stop',
                         handler: () => {
-                            component.downloadButton.setIntermediaryText('Stopping...');
+                            component.downloadButton.updateState('stopping');
                             cancelHandler();
                         }
                     });
@@ -104,6 +105,17 @@ export function restoreDownloadStates(activeDownloads = []) {
                     component.downloadButton.updateState('queued', {
                         text: 'Cancel',
                         handler: cancelHandler
+                    });
+                } else if (downloadEntry.status === 'stopping') {
+                    component.downloadButton.updateState('stopping');
+                } else {
+                    // Unknown status, set to downloading as fallback
+                    component.downloadButton.updateState('downloading', {
+                        text: 'Stop',
+                        handler: () => {
+                            component.downloadButton.updateState('stopping');
+                            cancelHandler();
+                        }
                     });
                 }
                 
@@ -208,22 +220,23 @@ function updateComponentButtonState(downloadButtonComponent, progressData = {}) 
             logger.debug('Component download button set to queued state');
             break;
             
-        case 'download-unqueued':
-            // Immediately restore to default state for unqueued
-            downloadButtonComponent.updateState('default');
-            logger.debug('Component download button restored to default (unqueued)');
-            break;
-            
         case 'download-progress':
             // Set to downloading state with stop functionality
             downloadButtonComponent.updateState('downloading', {
                 text: 'Stop',
                 handler: () => {
-                    downloadButtonComponent.setIntermediaryText('Stopping...');
+                    // Set stopping state instead of intermediary text
+                    downloadButtonComponent.updateState('stopping');
                     cancelHandler();
                 }
             });
             logger.debug('Component download button switched to Stop mode');
+            break;
+            
+        case 'download-stopping':
+            // Handle stopping state from background
+            downloadButtonComponent.updateState('stopping');
+            logger.debug('Component download button set to stopping state');
             break;
             
         case 'download-success':
@@ -302,14 +315,6 @@ function updateSingleDropdown(downloadGroup, progressData = {}, progress) {
                 dropdownOption.classList.add('queued');
             }
             logger.debug('Dropdown option set to queued state');
-            break;
-            
-        case 'download-unqueued':
-            // Remove queued coloring
-            if (dropdownOption) {
-                dropdownOption.classList.remove('queued');
-            }
-            logger.debug('Dropdown option unqueued state');
             break;
             
         case 'download-progress':

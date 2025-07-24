@@ -14,6 +14,7 @@ const BUTTON_STATES = {
     STARTING: 'starting', 
     DOWNLOADING: 'downloading',
     QUEUED: 'queued',
+    STOPPING: 'stopping',
     ERROR: 'error',
     SUCCESS: 'success',
     CANCELED: 'canceled'
@@ -174,6 +175,11 @@ export class VideoDownloadButtonComponent {
             case BUTTON_STATES.QUEUED:
                 this.downloadBtn.innerHTML = options.text || 'Cancel';
                 this.downloadBtn.onclick = options.handler || null;
+                break;
+                
+            case BUTTON_STATES.STOPPING:
+                this.downloadBtn.innerHTML = options.text || 'Stopping...';
+                this.downloadBtn.onclick = null; // Disable clicks during stopping
                 break;
                 
             case BUTTON_STATES.ERROR:

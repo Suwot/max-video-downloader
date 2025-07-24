@@ -13,16 +13,8 @@ const logger = createLogger('Download Manager');
 
 // Storage management - will use settings manager for max history size
 
-// Simple Set for active download deduplication
-const activeDownloads = new Set();
-
-// Simple Map for tracking download progress per URL (for UI restoration)
-// Key: downloadUrl, Value: full progress message from NHS
-const activeDownloadProgress = new Map();
-
-// Queue for pending download requests
-// Array of complete download request objects
-const downloadQueue = [];
+// Unified download state management - Single source of truth
+const allDownloads = new Map(); // downloadId -> downloadEntry
 
 // Storage operation queue to prevent race conditions
 const storageOperationQueue = [];
@@ -80,17 +72,18 @@ export async function processDownloadCommand(downloadCommand) {
     }
     
     // Simple deduplication check using downloadId
-    const isAlreadyActive = activeDownloads.has(downloadId);
-    const isAlreadyQueued = downloadQueue.some(req => req.downloadId === downloadId);
-    
-    if (isAlreadyActive || isAlreadyQueued) {
-        logger.debug('Download already active or queued:', downloadId);
+    const existingEntry = allDownloads.get(downloadId);
+    if (existingEntry) {
+        logger.debug('Download already active or queued:', downloadId, 'status:', existingEntry.status);
         return;
     }
     
     // Check if we're at concurrent download limit
+    const activeCount = Array.from(allDownloads.values())
+        .filter(entry => entry.status === 'downloading' || entry.status === 'stopping').length;
     const maxConcurrentDownloads = settingsManager.get('maxConcurrentDownloads');
-    if (activeDownloads.size >= maxConcurrentDownloads) {
+    
+    if (activeCount >= maxConcurrentDownloads) {
         logger.debug('Queue download - at concurrent limit:', downloadId);
         await queueDownload(resolvedCommand);
         return;
@@ -131,27 +124,29 @@ async function resolveDownloadPaths(downloadCommand) {
  * @param {Object} downloadCommand - Resolved download command
  */
 async function queueDownload(downloadCommand) {
-    // Add to queue
-    downloadQueue.push(downloadCommand);
+    const downloadId = downloadCommand.downloadId;
+    
+    // Add to unified downloads map
+    allDownloads.set(downloadId, {
+        downloadId: downloadId,
+        status: 'queued',
+        downloadRequest: downloadCommand,
+        progressData: {
+            command: 'download-queued',
+            downloadUrl: downloadCommand.downloadUrl,
+            masterUrl: downloadCommand.masterUrl || null,
+            filename: downloadCommand.filename,
+            selectedOptionOrigText: downloadCommand.selectedOptionOrigText || null,
+            downloadId: downloadId
+        },
+        timestamp: Date.now()
+    });
     
     // Add to storage with queued status
     await addToActiveDownloadsStorage(downloadCommand);
     
     // Notify count change
     notifyDownloadCountChange();
-    
-    // Use the generated downloadId
-    const downloadId = downloadCommand.downloadId;
-    
-    // Store queue state in progress map for UI restoration
-    activeDownloadProgress.set(downloadId, {
-        command: 'download-queued',
-        downloadUrl: downloadCommand.downloadUrl,
-        masterUrl: downloadCommand.masterUrl || null,
-        filename: downloadCommand.filename,
-        selectedOptionOrigText: downloadCommand.selectedOptionOrigText || null,
-        downloadId: downloadId
-    });
     
     // Broadcast queue state to UI and create downloads tab item
     broadcastToPopups({
@@ -175,8 +170,23 @@ async function startDownloadImmediately(downloadRequest) {
     // Use the generated downloadId
     const downloadId = downloadRequest.downloadId;
     
-    // Add to active downloads Set for deduplication
-    activeDownloads.add(downloadId);
+    // Add to unified downloads map
+    allDownloads.set(downloadId, {
+        downloadId: downloadId,
+        status: 'downloading',
+        downloadRequest: downloadRequest,
+        progressData: {
+            command: 'download-started',
+            downloadUrl: downloadRequest.downloadUrl,
+            masterUrl: downloadRequest.masterUrl || null,
+            filename: downloadRequest.filename,
+            selectedOptionOrigText: downloadRequest.selectedOptionOrigText || null,
+            videoData: downloadRequest.videoData,
+            isRedownload: downloadRequest.isRedownload || false,
+            downloadId: downloadId
+        },
+        timestamp: Date.now()
+    });
     
     // Add to storage or update status if already exists (from queue)
     addToActiveDownloadsStorage(downloadRequest).then(() => {
@@ -224,24 +234,35 @@ async function handleDownloadEvent(event) {
     
     // Use downloadId from native host event (now passed through)
     let downloadId = event.downloadId;
-    let downloadRequest = null;
+    let downloadEntry = null;
     
-    // If no downloadId in event, find it from storage (legacy support)
+    // If no downloadId in event, find it from map or storage (legacy support)
     if (!downloadId) {
-        try {
-            const storedDownloads = await getActiveDownloadsStorage();
-            const candidates = storedDownloads.filter(d => d.downloadUrl === downloadUrl);
-            
-            if (candidates.length === 1) {
-                downloadRequest = candidates[0];
-                downloadId = downloadRequest.downloadId;
-            } else if (candidates.length > 1) {
-                // Multiple candidates - find the one that's currently active
-                downloadRequest = candidates.find(d => d.downloadId && activeDownloads.has(d.downloadId)) || candidates[0];
-                downloadId = downloadRequest?.downloadId;
+        // Try to find in current downloads map first
+        for (const [id, entry] of allDownloads.entries()) {
+            if (entry.downloadRequest.downloadUrl === downloadUrl) {
+                downloadId = id;
+                downloadEntry = entry;
+                break;
             }
-        } catch (error) {
-            logger.warn('Could not retrieve download request from storage:', error);
+        }
+        
+        // Fallback to storage lookup
+        if (!downloadId) {
+            try {
+                const storedDownloads = await getActiveDownloadsStorage();
+                const candidates = storedDownloads.filter(d => d.downloadUrl === downloadUrl);
+                
+                if (candidates.length === 1) {
+                    downloadId = candidates[0].downloadId;
+                } else if (candidates.length > 1) {
+                    // Multiple candidates - find the one that's currently in our map
+                    const activeCandidate = candidates.find(d => d.downloadId && allDownloads.has(d.downloadId));
+                    downloadId = activeCandidate?.downloadId || candidates[0].downloadId;
+                }
+            } catch (error) {
+                logger.warn('Could not retrieve download request from storage:', error);
+            }
         }
         
         // Final fallback to URL for legacy compatibility
@@ -249,23 +270,22 @@ async function handleDownloadEvent(event) {
             downloadId = downloadUrl;
             logger.debug('Using URL as downloadId fallback:', downloadId);
         }
-    } else {
-        // We have downloadId from native host, try to find the request for additional data
-        try {
-            const storedDownloads = await getActiveDownloadsStorage();
-            downloadRequest = storedDownloads.find(d => d.downloadId === downloadId);
-        } catch (error) {
-            logger.warn('Could not retrieve download request from storage:', error);
-        }
     }
     
-    // Store progress in local map for UI restoration 
-    activeDownloadProgress.set(downloadId, { ...event, downloadId });
+    // Get download entry from map
+    if (!downloadEntry) {
+        downloadEntry = allDownloads.get(downloadId);
+    }
+    
+    // Update progress data in the entry
+    if (downloadEntry) {
+        downloadEntry.progressData = { ...event, downloadId };
+    }
 
     // Handle completion/error/cancellation - clean up active tracking
     if (['download-canceled', 'download-success', 'download-error'].includes(command)) {
-        // Remove from active downloads Set using consistent downloadId
-        activeDownloads.delete(downloadId);
+        // Remove from unified downloads map
+        allDownloads.delete(downloadId);
         
         // Remove from active downloads storage using downloadId
         await removeFromActiveDownloadsStorage(downloadId);
@@ -275,16 +295,13 @@ async function handleDownloadEvent(event) {
             await addToHistoryStorage({
                 ...event,
                 downloadUrl: downloadUrl,
-                masterUrl: downloadRequest?.masterUrl || null,
+                masterUrl: downloadEntry?.downloadRequest?.masterUrl || null,
                 filename: event.filename,
                 selectedOptionOrigText: event.originalCommand.selectedOptionOrigText || null
                 // originalCommand already includes videoData from native host (robust approach)
             });
         }
         
-        // Clean up progress map on completion/error/cancellation
-        activeDownloadProgress.delete(downloadId);
-
         // Notify count change
         notifyDownloadCountChange();
 
@@ -295,10 +312,10 @@ async function handleDownloadEvent(event) {
             logger.debug('Download canceled:', downloadId);
             broadcastToPopups({
                 command: 'download-canceled',
-                downloadUrl: downloadRequest?.downloadUrl || downloadUrl,
-                masterUrl: downloadRequest?.masterUrl || null,
-                filename: downloadRequest?.filename || 'Unknown',
-                selectedOptionOrigText: downloadRequest?.selectedOptionOrigText || null,
+                downloadUrl: downloadEntry?.downloadRequest?.downloadUrl || downloadUrl,
+                masterUrl: downloadEntry?.downloadRequest?.masterUrl || null,
+                filename: downloadEntry?.downloadRequest?.filename || 'Unknown',
+                selectedOptionOrigText: downloadEntry?.downloadRequest?.selectedOptionOrigText || null,
                 downloadId: downloadId // Include downloadId for precise mapping
             });
         } else if (command === 'download-success') {
@@ -316,7 +333,7 @@ async function handleDownloadEvent(event) {
             ...event, 
             success: event.success, 
             error: event.error,
-            selectedOptionOrigText: downloadRequest?.selectedOptionOrigText || null,
+            selectedOptionOrigText: downloadEntry?.downloadRequest?.selectedOptionOrigText || null,
             downloadId: downloadId
         }
         : { ...event, downloadId: downloadId };
@@ -362,12 +379,12 @@ function createCompletionNotification(filename) {
 export function getActiveDownloadProgress() {
     const progressArray = [];
     
-    for (const [downloadId, progressData] of activeDownloadProgress.entries()) {
+    for (const [downloadId, entry] of allDownloads.entries()) {
         // Add completion flags that UI expects
         progressArray.push({
-            ...progressData,
-            success: progressData.success,
-            error: progressData.error
+            ...entry.progressData,
+            success: entry.progressData.success,
+            error: entry.progressData.error
         });
     }
     
@@ -377,10 +394,14 @@ export function getActiveDownloadProgress() {
 
 //Get count of active downloads and queue
 export function getActiveDownloadCount() {
+    const entries = Array.from(allDownloads.values());
+    const active = entries.filter(entry => entry.status === 'downloading' || entry.status === 'stopping').length;
+    const queued = entries.filter(entry => entry.status === 'queued').length;
+    
     return {
-        active: activeDownloads.size,
-        queued: downloadQueue.length,
-        total: activeDownloads.size + downloadQueue.length
+        active: active,
+        queued: queued,
+        total: active + queued
     };
 }
 
@@ -400,25 +421,28 @@ function notifyDownloadCountChange() {
     logger.debug('Download count updated:', counts);
 }
 
-// Check if a specific URL is currently being downloaded – not used anywhere yet
+// Check if a specific download is currently active
 export function isDownloadActive(downloadUrl) {
-    return activeDownloads.has(downloadUrl);
-}
-
-// Get all active download URLs – not used anywhere yet
-export function getActiveDownloadUrls() {
-    return Array.from(activeDownloads);
-}
-
-// Debug function to log current download manager state – not used anywhere yet
-export function debugDownloadManagerState() {
-    logger.debug('Download Manager State:', {
-        activeDownloads: Array.from(activeDownloads),
-        activeProgress: Array.from(activeDownloadProgress.keys()),
-        counts: {
-            active: activeDownloads.size,
-            withProgress: activeDownloadProgress.size
+    for (const entry of allDownloads.values()) {
+        if (entry.downloadRequest.downloadUrl === downloadUrl) {
+            return true;
         }
+    }
+    return false;
+}
+
+// Get all active download URLs
+export function getActiveDownloadUrls() {
+    return Array.from(allDownloads.values())
+        .map(entry => entry.downloadRequest.downloadUrl);
+}
+
+// Debug function to log current download manager state
+export function debugDownloadManagerState() {
+    const entries = Array.from(allDownloads.values());
+    logger.debug('Download Manager State:', {
+        allDownloads: entries.map(e => ({ id: e.downloadId, status: e.status, url: e.downloadRequest.downloadUrl })),
+        counts: getActiveDownloadCount()
     });
 }
 
@@ -432,41 +456,61 @@ export async function cancelDownload(cancelRequest) {
     
     logger.debug('Canceling download:', downloadId);
     
-    // Check if download is queued - remove from queue
-    if (removeFromQueue(downloadId)) {
+    const entry = allDownloads.get(downloadId);
+    if (!entry) {
+        logger.debug('No download found to cancel:', downloadId);
+        return;
+    }
+    
+    if (entry.status === 'queued') {
+        // Direct removal for queued items
+        allDownloads.delete(downloadId);
+        
         // Remove from storage as well
         await removeFromActiveDownloadsStorage(downloadId);
         
-        // Notify count change after queue removal
+        // Notify count change after removal
         notifyDownloadCountChange();
         
-        // Broadcast unqueue state to UI
+        // Broadcast cancellation to UI
         broadcastToPopups({
-            command: 'download-unqueued',
+            command: 'download-canceled',
             type: cancelRequest.type,
-            downloadUrl: downloadId,
-            masterUrl: cancelRequest.masterUrl || null,
-            filename: cancelRequest.filename || 'Unknown',
-            selectedOptionOrigText: cancelRequest.selectedOptionOrigText || null
+            downloadUrl: entry.downloadRequest.downloadUrl,
+            masterUrl: entry.downloadRequest.masterUrl || null,
+            filename: entry.downloadRequest.filename || 'Unknown',
+            selectedOptionOrigText: entry.downloadRequest.selectedOptionOrigText || null,
+            downloadId: downloadId
         });
+        
+        logger.debug('Queued download removed immediately:', downloadId);
         return;
+    } else if (entry.status === 'downloading') {
+        // Set stopping state, wait for native host
+        entry.status = 'stopping';
+        
+        // Broadcast stopping state to UI
+        broadcastToPopups({
+            command: 'download-stopping',
+            downloadId: downloadId,
+            downloadUrl: entry.downloadRequest.downloadUrl,
+            masterUrl: entry.downloadRequest.masterUrl || null,
+            filename: entry.downloadRequest.filename,
+            selectedOptionOrigText: entry.downloadRequest.selectedOptionOrigText || null
+        });
+        
+        // Send cancellation request to native host
+        // Response will come through event listeners
+        nativeHostService.sendMessage({
+            command: 'cancel-download',
+            downloadUrl: entry.downloadRequest.downloadUrl,
+            type: entry.downloadRequest.type
+        }, { expectResponse: false });
+        
+        logger.debug('Cancellation command sent, status set to stopping:', downloadId);
+    } else if (entry.status === 'stopping') {
+        logger.debug('Download already stopping:', downloadId);
     }
-    
-    // Check if download is actually active
-    if (!activeDownloads.has(downloadId)) {
-        logger.debug('No active download found to cancel:', downloadId);
-        return;
-    }
-    
-    // Send cancellation request to native host
-    // Response will come through event listeners
-    nativeHostService.sendMessage({
-        command: 'cancel-download',
-        downloadUrl: cancelRequest.downloadUrl,
-        type: cancelRequest.type
-    }, { expectResponse: false });
-    
-    logger.debug('Cancellation command sent:', downloadId);
 }
 
 /**
@@ -474,22 +518,51 @@ export async function cancelDownload(cancelRequest) {
  */
 async function processNextDownload() {
     const maxConcurrentDownloads = settingsManager.get('maxConcurrentDownloads');
-    if (downloadQueue.length === 0 || activeDownloads.size >= maxConcurrentDownloads) {
+    const activeCount = Array.from(allDownloads.values())
+        .filter(entry => entry.status === 'downloading' || entry.status === 'stopping').length;
+    
+    if (activeCount >= maxConcurrentDownloads) {
         return;
     }
     
-    // Get next download from queue
-    const nextDownload = downloadQueue.shift();
-    logger.debug('Processing next queued download:', nextDownload.downloadUrl);
+    // Find next queued download
+    const queuedEntry = Array.from(allDownloads.values())
+        .find(entry => entry.status === 'queued');
     
-    // Notify count change after queue shift
+    if (!queuedEntry) {
+        return;
+    }
+    
+    logger.debug('Processing next queued download:', queuedEntry.downloadId);
+    
+    // Update status to downloading
+    queuedEntry.status = 'downloading';
+    queuedEntry.progressData = {
+        ...queuedEntry.progressData,
+        command: 'download-started'
+    };
+    
+    // Notify count change
     notifyDownloadCountChange();
     
-    // Remove from progress map (will be re-added when download starts)
-    activeDownloadProgress.delete(nextDownload.downloadUrl);
+    // Broadcast download start to UI
+    broadcastToPopups({
+        command: 'download-started',
+        downloadUrl: queuedEntry.downloadRequest.downloadUrl,
+        masterUrl: queuedEntry.downloadRequest.masterUrl || null,
+        filename: queuedEntry.downloadRequest.filename,
+        selectedOptionOrigText: queuedEntry.downloadRequest.selectedOptionOrigText || null,
+        videoData: queuedEntry.downloadRequest.videoData,
+        downloadId: queuedEntry.downloadId
+    });
     
-    // Start the download
-    await startDownloadImmediately(nextDownload);
+    // Update storage status
+    await updateActiveDownloadStatus(queuedEntry.downloadRequest.downloadUrl, 'downloading');
+    
+    // Send download command to native host
+    nativeHostService.sendMessage(queuedEntry.downloadRequest, { expectResponse: false });
+    
+    logger.debug('Queued download promoted to active:', queuedEntry.downloadId);
 }
 
 /**
@@ -536,35 +609,6 @@ function generateDownloadId(request) {
     const timestamp = Date.now();
     
     return `${baseId}_${timestamp}`;
-}
-
-/**
- * Remove download from queue using downloadId as primary key
- * @param {string} downloadId - Download ID to remove from queue
- * @returns {boolean} - True if removed, false if not found
- */
-export function removeFromQueue(downloadId) {
-    // Find by downloadId (all queued downloads have this)
-    const index = downloadQueue.findIndex(req => req.downloadId === downloadId);
-    
-    if (index !== -1) {
-        const removedRequest = downloadQueue.splice(index, 1)[0];
-        activeDownloadProgress.delete(downloadId);
-        logger.debug('Removed from queue:', downloadId, 'URL:', removedRequest.downloadUrl);
-        return true;
-    }
-    
-    // Legacy fallback: try to find by URL for old queue entries
-    const urlIndex = downloadQueue.findIndex(req => req.downloadUrl === downloadId);
-    if (urlIndex !== -1) {
-        const removedRequest = downloadQueue.splice(urlIndex, 1)[0];
-        activeDownloadProgress.delete(downloadId);
-        logger.debug('Removed from queue (URL fallback):', downloadId);
-        return true;
-    }
-    
-    logger.debug('Download not found in queue:', downloadId);
-    return false;
 }
 
 /**
@@ -670,23 +714,21 @@ async function addToActiveDownloadsStorage(downloadRequest) {
             const result = await chrome.storage.local.get(['downloads_active']);
             const activeDownloads = result.downloads_active || [];
             
-            // Store the full download entry with video data for recreation
-            const downloadEntry = {
-                lookupUrl: downloadRequest.masterUrl || downloadRequest.downloadUrl,
-                downloadUrl: downloadRequest.downloadUrl,
-                masterUrl: downloadRequest.masterUrl || null,
-                filename: downloadRequest.filename,
-                videoData: downloadRequest.videoData, // Raw video data for recreation
-                timestamp: Date.now(),
-                selectedOptionOrigText: downloadRequest.selectedOptionOrigText || null,
-                status: 'queued', // Will be updated to 'downloading' when actually started
-                downloadId: downloadRequest.downloadId, // For precise progress mapping
-                // Store request data needed for downloadId generation
-                type: downloadRequest.type,
-                streamSelection: downloadRequest.streamSelection
-            };
-            
-            activeDownloads.push(downloadEntry);
+        // Store the full download entry with video data for recreation
+        const downloadEntry = {
+            lookupUrl: downloadRequest.masterUrl || downloadRequest.downloadUrl,
+            downloadUrl: downloadRequest.downloadUrl,
+            masterUrl: downloadRequest.masterUrl || null,
+            filename: downloadRequest.filename,
+            videoData: downloadRequest.videoData, // Raw video data for recreation
+            timestamp: Date.now(),
+            selectedOptionOrigText: downloadRequest.selectedOptionOrigText || null,
+            status: 'queued', // Will be updated to 'downloading' when actually started
+            downloadId: downloadRequest.downloadId, // For precise progress mapping
+            // Store request data needed for downloadId generation
+            type: downloadRequest.type,
+            streamSelection: downloadRequest.streamSelection
+        };            activeDownloads.push(downloadEntry);
             await chrome.storage.local.set({ downloads_active: activeDownloads });
             
             logger.debug('Added to active downloads storage:', downloadRequest.downloadUrl);
