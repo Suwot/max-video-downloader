@@ -336,7 +336,7 @@ export class VideoDownloadButtonComponent {
                 await this.handleExtractAudio();
                 break;
             case 'extract-subs':
-                // TODO: Implement subtitle extraction
+                await this.handleExtractSubs();
                 break;
             case 'download-as':
                 await this.handleDownloadAs();
@@ -360,6 +360,19 @@ export class VideoDownloadButtonComponent {
         });
         
         this.videoItemComponent.executeDownload('extract-audio');
+    }
+
+    /**
+     * Handle subtitle extraction with multi-track support
+     */
+    async handleExtractSubs() {
+        const cancelHandler = () => this.sendCancelMessage();
+        this.updateState(BUTTON_STATES.STARTING, {
+            text: 'Extracting...',
+            handler: cancelHandler
+        });
+        
+        this.videoItemComponent.executeDownload('extract-subs');
     }
     
     /**
@@ -407,6 +420,7 @@ export class VideoDownloadButtonComponent {
         const downloadData = this.videoItemComponent.getDownloadData();
         const cancelMessage = {
             command: 'cancel-download',
+            downloadId: this.videoItemComponent.getDownloadIdForCancellation(),
             type: downloadData.type,
             downloadUrl: downloadData.downloadUrl,
             masterUrl: downloadData.masterUrl || null,

@@ -62,6 +62,7 @@ class DownloadCommand extends BaseCommand {
                 command: 'download-canceled',
                 sessionId: null, // No session ID since no process exists
                 downloadUrl,
+                downloadId: null, // No downloadId available for non-existent process
                 message: 'Download already stopped or not found',
                 downloadStats: null,
                 duration: null,
@@ -83,6 +84,7 @@ class DownloadCommand extends BaseCommand {
                 pid: processInfo.pid,
                 isRedownload: processInfo.isRedownload,
                 sessionId: processInfo.sessionId,
+                downloadId: processInfo.downloadId, // Store downloadId for progress mapping
                 headers: processInfo.headers || null
             });
             
@@ -135,6 +137,7 @@ class DownloadCommand extends BaseCommand {
                 command: 'download-canceled',
                 sessionId,
                 downloadUrl,
+                downloadId: processInfo.downloadId || null, // Pass through downloadId
                 duration: progressTracker.getDuration(),
                 downloadStats: progressTracker.getDownloadStats() || null,
                 message: 'Download was canceled',
@@ -164,9 +167,9 @@ class DownloadCommand extends BaseCommand {
      * @param {string} params.filename Filename to save as
      * @param {string} params.savePath Path to save file to
      * @param {string} params.type Media type ('hls', 'dash', 'direct')
-     * @param {string} params.preferredContainer User's preferred container format (optional)
-     * @param {string} params.defaultContainer Default container from processing (optional)
+     * @param {string} params.container Container format from extension (required)
      * @param {boolean} params.audioOnly Whether to download audio only (optional)
+     * @param {boolean} params.subsOnly Whether to download subtitles only (optional)
      * @param {string} params.streamSelection Stream selection spec for DASH (optional)
      * @param {Array} params.inputs Array of input objects for HLS advanced mode (optional)
      * @param {string} params.masterUrl Optional master manifest URL (for reporting)
@@ -195,9 +198,9 @@ class DownloadCommand extends BaseCommand {
             filename,
             savePath,
             type,
-            preferredContainer = null,
-            defaultContainer = null,
+            container,
             audioOnly = false,
+            subsOnly = false,
             streamSelection,
             masterUrl = null,
             headers = {},
@@ -214,7 +217,9 @@ class DownloadCommand extends BaseCommand {
             selectedOptionOrigText = null,
             // Re-download flag
             isRedownload = false,
-			videoData
+            videoData,
+            // Download ID for progress mapping
+            downloadId = null
         } = params;
 
         // Generate unique session ID for this download
@@ -227,9 +232,9 @@ class DownloadCommand extends BaseCommand {
             filename,
             savePath,
             type,
-            preferredContainer,
-            defaultContainer,
+            container,
             audioOnly,
+            subsOnly,
             streamSelection,
             masterUrl,
             headers,
@@ -246,7 +251,8 @@ class DownloadCommand extends BaseCommand {
             videoData: videoData ? {
                 ...videoData,
                 previewUrl: undefined // Remove heavy preview data for storage efficiency
-            } : undefined
+            } : undefined,
+			downloadId
         };
 
         logDebug('Starting download with session ID:', sessionId, params);
@@ -263,8 +269,9 @@ class DownloadCommand extends BaseCommand {
             // Get required services
             const ffmpegService = this.getService('ffmpeg');
             
-            // Determine container format
-            const container = this.determineContainerFormat(params);
+            // Use container from extension (trusted completely)
+            const container = params.container || 'mp4';
+            logDebug('📦 Using container from extension:', container);
             
             // Generate clean output filename
             const outputFilename = this.generateOutputFilename(filename, container);
@@ -279,6 +286,7 @@ class DownloadCommand extends BaseCommand {
                 outputPath: uniqueOutput,
                 container,
                 audioOnly,
+                subsOnly,
                 streamSelection,
                 inputs: params.inputs,
                 headers,
@@ -305,7 +313,9 @@ class DownloadCommand extends BaseCommand {
                 originalCommand,
                 isRedownload, 
                 audioOnly,
-                sessionId
+                subsOnly,
+                sessionId, 
+				downloadId
             });
             
         } catch (err) {
@@ -314,110 +324,21 @@ class DownloadCommand extends BaseCommand {
             throw err;
         }
     }
-    
-    /**
-     * Determine the appropriate container format using enhanced container context
-     * @private
-     */
-    determineContainerFormat(params) {
-        const { 
-            preferredContainer, 
-            defaultContainer, 
-            type, 
-            audioOnly, 
-            downloadUrl, 
-            sourceAudioCodec,
-            containerContext 
-        } = params;
-        
-        // 1. User override takes priority (future feature)
-        if (preferredContainer && /^(mp4|webm|mkv|mp3|m4a)$/i.test(preferredContainer)) {
-            return preferredContainer.toLowerCase();
-        }
-        
-        // 2. Audio-only mode - use pre-computed container context
-        if (audioOnly) {
-            if (containerContext?.audioContainer) {
-                logDebug('🎵 Using pre-computed audio container:', containerContext.audioContainer);
-                return containerContext.audioContainer;
-            }
-            return this.determineAudioContainer(sourceAudioCodec);
-        }
-        
-        // 3. Use defaultContainer from UI (computed with compatibility checks)
-        if (defaultContainer && /^(mp4|webm|mkv|mov|m4v|ts|avi|flv)$/i.test(defaultContainer)) {
-            logDebug('📦 Using UI-computed container:', defaultContainer);
-            return defaultContainer.toLowerCase();
-        }
-        
-        // 4. Use container context for video downloads
-        if (containerContext?.videoContainer) {
-            logDebug('📦 Using pre-computed video container:', containerContext.videoContainer);
-            return containerContext.videoContainer;
-        }
-        
-        // 5. Type-specific fallbacks (legacy)
-        if (type === 'hls') {
-            return 'mp4';
-        }
-        
-        // For direct videos with webm extension, use webm as final fallback
-        if (type === 'direct') {
-            const urlExtMatch = downloadUrl.match(/\.([^./?#]+)($|\?|#)/i);
-            const urlExt = urlExtMatch ? urlExtMatch[1].toLowerCase() : null;
-            if (urlExt === 'webm') {
-                return 'webm';
-            }
-        }
-        
-        // 6. Final fallback
-        return 'mp4';
-    }
-    
-    /**
-     * Determine optimal audio container based on source codec (fallback method)
-     * @param {string} sourceAudioCodec - Source audio codec name (e.g., 'aac', 'mp3', 'opus')
-     * @returns {string} - Optimal container format
-     * @private
-     */
-    determineAudioContainer(sourceAudioCodec) {
-        if (!sourceAudioCodec) {
-            // No codec info available (HLS/DASH) - use universal MP3
-            logDebug('No source audio codec info - using universal MP3 format');
-            return 'mp3';
-        }
-        
-        const codec = sourceAudioCodec.toLowerCase();
-        
-        switch (codec) {
-            case 'aac':
-                logDebug('🎵 AAC source detected → M4A container (copy)');
-                return 'm4a';
-            case 'mp3':
-                logDebug('🎵 MP3 source detected → MP3 container (copy)');
-                return 'mp3';
-            default:
-                logDebug(`🎵 ${codec} source detected → MP3 container (convert)`);
-                return 'mp3'; // Convert other codecs to MP3 for universal compatibility
-        }
-    }
 
     /**
      * Generate clean output filename
      * @private
      */
     generateOutputFilename(filename, container) {
-        // Clean up filename: remove query params and extension  
-        let outputFilename = (filename ? filename.replace(/[?#].*$/, '') : 'audio');
+        // Clean up filename: remove query params
+        let outputFilename = (filename ? filename.replace(/[?#].*$/, '') : 'video');
         
         // For audio-only downloads, default to 'audio' if no filename
         if ((container === 'm4a' || container === 'mp3') && (!filename || filename.trim() === '')) {
             outputFilename = 'audio';
         }
         
-        // Remove any existing video/audio extensions
-        outputFilename = outputFilename.replace(/\.(mp4|webm|mov|m4v|ts|avi|mkv|flv|mp3|m4a|aac|wav)$/i, '');
-        
+        // Extension already cleaned up by extension if needed
         return `${outputFilename}.${container}`;
     }
     
@@ -467,6 +388,7 @@ class DownloadCommand extends BaseCommand {
         outputPath,
         container,
         audioOnly = false,
+        subsOnly = false,
         streamSelection,
         inputs = null,
         headers = {},
@@ -547,6 +469,33 @@ class DownloadCommand extends BaseCommand {
             // Smart codec selection for audio-only
             this.addAudioCodecArgs(args, container, sourceAudioCodec, sourceAudioBitrate);
         } 
+        else if (subsOnly) {
+            if (streamSelection && type === 'dash') {
+                // For DASH subtitle extraction, use the specific subtitle track from streamSelection
+                streamSelection.split(',').forEach(streamSpec => {
+                    args.push('-map', streamSpec);
+                });
+                logDebug('📝 DASH subtitle-only mode with specific track:', streamSelection);
+            } else if (inputs && inputs.length > 0) {
+                // For HLS advanced subtitle extraction, map subtitle inputs only
+                inputs.forEach(input => {
+                    if (input.streamMap.includes(':s:')) {
+                        args.push('-map', input.streamMap);
+                    }
+                });
+                logDebug('📝 HLS advanced subtitle-only mode with specific tracks');
+            } else {
+                // For HLS/direct subtitle extraction, use first subtitle stream
+                args.push('-map', '0:s:0');
+                logDebug('📝 Subtitle-only mode enabled (HLS/direct) - mapping first subtitle stream');
+            }
+            
+            // Explicitly disable video and audio streams for subtitle-only output
+            args.push('-vn', '-an');
+            
+            // Copy subtitle streams without re-encoding
+            args.push('-c:s', 'copy');
+        } 
         else if (inputs && inputs.length > 0) {
             // Advanced HLS mode: map streams from multiple inputs
             inputs.forEach(input => {
@@ -572,7 +521,7 @@ class DownloadCommand extends BaseCommand {
         }
         
         // Format-specific optimizations
-        if (type === 'hls' && !audioOnly) {
+        if (type === 'hls' && !audioOnly && !subsOnly) {
             // Fix for certain audio streams commonly found in HLS (only for regular video downloads)
             args.push('-bsf:a', 'aac_adtstoasc');
         } else if (audioOnly && container === 'm4a') {
@@ -580,8 +529,8 @@ class DownloadCommand extends BaseCommand {
             args.push('-bsf:a', 'aac_adtstoasc');
         }
         
-        // MP4/MOV optimizations
-        if (['mp4', 'mov', 'm4v'].includes(container.toLowerCase())) {
+        // MP4/MOV optimizations (only for video/audio, not subtitles)
+        if (!subsOnly && ['mp4', 'mov', 'm4v'].includes(container.toLowerCase())) {
             args.push('-movflags', '+faststart');
         }
         
@@ -592,26 +541,22 @@ class DownloadCommand extends BaseCommand {
     }
     
     /**
-     * Add appropriate audio codec arguments based on smart format selection
+     * Add appropriate audio codec arguments based on container format
      * @param {Array} args - FFmpeg arguments array
-     * @param {string} container - Output container format
-     * @param {string} sourceAudioCodec - Source audio codec
+     * @param {string} container - Output container format (from extension)
+     * @param {string} sourceAudioCodec - Source audio codec (unused, kept for compatibility)
      * @param {number} sourceAudioBitrate - Source audio bitrate in bps
      * @private
      */
     addAudioCodecArgs(args, container, sourceAudioCodec, sourceAudioBitrate) {
-        const codec = sourceAudioCodec ? sourceAudioCodec.toLowerCase() : null;
+        logDebug('🎵 Audio codec selection for container:', container);
         
-        if (container === 'm4a' && codec === 'aac') {
-            // AAC → M4A: Copy without re-encoding (lossless, fast)
+        if (container === 'm4a') {
+            // M4A container: Copy audio stream (assumes AAC-compatible source)
             args.push('-c:a', 'copy');
-            logDebug('🎵 AAC → M4A: copying without re-encoding');
-        } else if (container === 'mp3' && codec === 'mp3') {
-            // MP3 → MP3: Copy without re-encoding (lossless, fast)
-            args.push('-c:a', 'copy');
-            logDebug('🎵 MP3 → MP3: copying without re-encoding');
-        } else {
-            // Other codecs → MP3: Re-encode with libmp3lame
+            logDebug('🎵 M4A container: copying audio stream');
+        } else if (container === 'mp3') {
+            // MP3 container: Always re-encode with libmp3lame for universal compatibility
             args.push('-c:a', 'libmp3lame');
             
             // Use source bitrate if available, otherwise high-quality VBR
@@ -619,12 +564,16 @@ class DownloadCommand extends BaseCommand {
                 // Convert from bps to kbps and cap at reasonable limits
                 const bitrateKbps = Math.min(Math.max(Math.round(sourceAudioBitrate / 1000), 64), 320);
                 args.push('-b:a', `${bitrateKbps}k`);
-                logDebug(`🎵 ${codec || 'unknown'} → MP3: re-encoding at ${bitrateKbps}kbps (matched source)`);
+                logDebug(`🎵 MP3 container: re-encoding at ${bitrateKbps}kbps (matched source)`);
             } else {
                 // High-quality VBR when no bitrate info available
                 args.push('-q:a', '2'); // ~190kbps VBR
-                logDebug(`🎵 ${codec || 'unknown'} → MP3: re-encoding with VBR quality 2`);
+                logDebug('🎵 MP3 container: re-encoding with VBR quality 2');
             }
+        } else {
+            // Other containers (flac, ogg, etc.): Copy by default
+            args.push('-c:a', 'copy');
+            logDebug(`🎵 ${container} container: copying audio stream`);
         }
     }
 
@@ -748,7 +697,9 @@ class DownloadCommand extends BaseCommand {
         originalCommand,
         isRedownload, 
         audioOnly,
-        sessionId
+        subsOnly,
+        sessionId,
+		downloadId
     }) {
         return new Promise(async (resolve, reject) => {
             // Probe duration upfront if not provided to avoid race conditions
@@ -770,6 +721,7 @@ class DownloadCommand extends BaseCommand {
                         command: 'download-progress',
                         sessionId,
                         downloadUrl,
+                        downloadId, // Pass through downloadId for progress mapping
                         filename: path.basename(uniqueOutput),
                         isRedownload,
                         ...data
@@ -823,6 +775,7 @@ class DownloadCommand extends BaseCommand {
                 pid: ffmpeg.pid,
                 isRedownload,
                 sessionId,
+                downloadId, // Store downloadId for progress mapping
                 headers: headers || null
             });
             
@@ -878,7 +831,7 @@ class DownloadCommand extends BaseCommand {
                 const downloadStats = progressTracker.getDownloadStats();
 
                 // Determine termination reason using signal, exit code, and output file verification
-                const terminationInfo = this.analyzeProcessTermination(code, signal, downloadUrl, uniqueOutput, type);
+                const terminationInfo = this.analyzeProcessTermination(code, signal, downloadUrl, uniqueOutput, type, subsOnly);
                 logDebug(`FFmpeg process (PID: ${effectiveProcessInfo?.pid}) terminated after ${downloadDuration}ms:`, terminationInfo);
                 
                 if (terminationInfo.wasCanceled && !terminationInfo.isPartialSuccess) {
@@ -890,6 +843,7 @@ class DownloadCommand extends BaseCommand {
                             command: 'download-canceled',
                             sessionId,
                             downloadUrl,
+                            downloadId, // Pass through downloadId
                             duration,
                             downloadStats: downloadStats || null,
                             message: 'Download was canceled',
@@ -917,6 +871,7 @@ class DownloadCommand extends BaseCommand {
                     this.sendMessage({ 
                         command: 'download-success',
                         sessionId,
+                        downloadId, // Pass through downloadId
                         path: uniqueOutput,
                         filename: path.basename(uniqueOutput),
                         downloadUrl,
@@ -960,6 +915,7 @@ class DownloadCommand extends BaseCommand {
                     this.sendMessage({
                         command: 'download-error',
                         sessionId,
+                        downloadId, // Pass through downloadId
                         success: false,
                         message: errorMessage,
                         ffmpegOutput: errorOutput || null,
@@ -1027,6 +983,7 @@ class DownloadCommand extends BaseCommand {
                     success: false,
                     command: 'download-error',
                     sessionId,
+                    downloadId, // Pass through downloadId
                     message: `FFmpeg spawn error: ${err.message}`,
                     ffmpegOutput: null,
                     downloadUrl,
@@ -1067,11 +1024,11 @@ class DownloadCommand extends BaseCommand {
      * @returns {Object} Termination analysis with reason, type, and flags
      * @private
      */
-    analyzeProcessTermination(exitCode, signal, downloadUrl, outputPath = null, type = null) {
+    analyzeProcessTermination(exitCode, signal, downloadUrl, outputPath = null, type = null, subsOnly = false) {
         const wasCanceled = DownloadCommand.canceledDownloads.has(downloadUrl);
-        const hasValidFile = outputPath && this.verifyDownloadCompletion(outputPath, type);
+        const hasValidFile = outputPath && this.verifyDownloadCompletion(outputPath, type, subsOnly);
         
-        logDebug('Termination analysis:', { exitCode, signal, wasCanceled, hasValidFile, type, outputPath });
+        logDebug('Termination analysis:', { exitCode, signal, wasCanceled, hasValidFile, type, outputPath, subsOnly });
         
         // Signal-based detection (most reliable for cancellation)
         if (signal) {
@@ -1157,7 +1114,7 @@ class DownloadCommand extends BaseCommand {
      * @returns {boolean} - True if download appears to have completed successfully
      * @private
      */
-    verifyDownloadCompletion(outputPath, type) {
+    verifyDownloadCompletion(outputPath, type, subsOnly = false) {
         try {
             if (!fs.existsSync(outputPath)) {
                 logDebug('Download verification: Output file does not exist');
@@ -1167,16 +1124,24 @@ class DownloadCommand extends BaseCommand {
             const stats = fs.statSync(outputPath);
             const fileSizeBytes = stats.size;
             
-            // Minimum size threshold: 10KB for most media files
-            // Audio-only files might be smaller, but 10KB is reasonable minimum
-            const minSizeBytes = 10 * 1024; // 10KB
+            // Different minimum size thresholds based on content type
+            let minSizeBytes;
+            if (subsOnly) {
+                // Subtitle files can be very small (even 1KB for short content)
+                minSizeBytes = 100; // 100 bytes - just ensure file has some content
+                logDebug('Download verification: Using subtitle file threshold');
+            } else {
+                // Media files (video/audio) should be larger
+                minSizeBytes = 10 * 1024; // 10KB
+                logDebug('Download verification: Using media file threshold');
+            }
             
             if (fileSizeBytes < minSizeBytes) {
                 logDebug(`Download verification: File too small (${fileSizeBytes} bytes < ${minSizeBytes} bytes)`);
                 return false;
             }
             
-            logDebug(`Download verification: File exists with valid size (${fileSizeBytes} bytes)`);
+            logDebug(`Download verification: File exists with valid size (${fileSizeBytes} bytes, threshold: ${minSizeBytes} bytes)`);
             return true;
             
         } catch (error) {

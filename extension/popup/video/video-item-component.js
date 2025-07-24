@@ -17,9 +17,10 @@ const logger = createLogger('VideoItemComponent');
  * VideoItemComponent - Manages complete video item state and UI
  */
 export class VideoItemComponent {
-    constructor(videoData, initialDownloadState = 'default') {
+    constructor(videoData, initialDownloadState = 'default', downloadId = null) {
         this.videoData = videoData;
         this.initialDownloadState = initialDownloadState; // 'default', 'starting', 'downloading', 'queued'
+        this.downloadId = downloadId; // For precise progress mapping in downloads tab
         this.element = null;
         this.dropdown = null;
         this.downloadButton = null;
@@ -67,6 +68,11 @@ export class VideoItemComponent {
         this.element = document.createElement('div');
         this.element.className = 'video-item';
         this.element.dataset.url = this.videoData.normalizedUrl;
+        
+        // Set download ID for precise progress mapping (downloads tab only)
+        if (this.downloadId) {
+            this.element.dataset.downloadId = this.downloadId;
+        }
         
         // Store component reference for external access
         this.element._component = this;
@@ -281,10 +287,18 @@ export class VideoItemComponent {
     executeDownload(mode = 'download', options = {}) {
         const commands = this.createDownloadCommand(mode, options);
         
-        // Handle single command or array of commands (for multi-track audio)
+        // Handle single command or array of commands (for multi-track extraction)
         const commandArray = Array.isArray(commands) ? commands : [commands];
         
-        commandArray.forEach(command => {
+        // Filter out empty commands (e.g., when no subtitles selected)
+        const validCommands = commandArray.filter(cmd => cmd && Object.keys(cmd).length > 0);
+        
+        if (validCommands.length === 0) {
+            logger.debug(`No valid commands generated for ${mode}`);
+            return;
+        }
+        
+        validCommands.forEach(command => {
             sendPortMessage(command);
             logger.debug(`Executed ${mode} command:`, command);
         });
@@ -315,13 +329,13 @@ export class VideoItemComponent {
                 return { 
                     ...command, 
                     choosePath: true,
-                    defaultFilename: `${command.filename || 'video'}.${command.defaultContainer || 'mp4'}`,
+                    defaultFilename: `${command.filename || 'video'}.${command.container || 'mp4'}`,
                     ...options 
                 };
             case 'extract-audio':
                 return this.createAudioExtractionCommands(command, options);
             case 'extract-subs':
-                return { ...command, subsOnly: true, ...options };
+                return this.createSubtitleExtractionCommands(command, options);
             case 're-download':
                 return { ...command, isRedownload: true, ...options };
             default:
@@ -336,55 +350,38 @@ export class VideoItemComponent {
      * @returns {Object|Array} Single command or array of commands for multi-track
      */
     createAudioExtractionCommands(baseCommand, options = {}) {
-        const videoData = this.videoData;
         const selectedAudioTracks = this.getSelectedAudioTracks();
         
         // Single audio extraction for most cases
-        if (videoData.type === 'direct' || 
-            (videoData.type === 'hls' && !videoData.isMaster) ||
-            selectedAudioTracks.length <= 1) {
+        if (selectedAudioTracks.length <= 1) {
+            const audioTrack = selectedAudioTracks[0] || this.getDefaultAudioTrack();
             return { 
-                ...baseCommand, 
+                ...baseCommand,
+                container: audioTrack?.audioContainer || 'm4a',
                 audioOnly: true,
                 ...options 
             };
         }
         
-        // Multi-track audio extraction for DASH or HLS master with multiple audio tracks
-        if (selectedAudioTracks.length > 1) {
-            return selectedAudioTracks.map((audioTrack, index) => {
-                const trackCommand = { ...baseCommand };
-                trackCommand.audioOnly = true;
-                trackCommand.filename = `${baseCommand.filename}_${audioTrack.label || `Audio_${index + 1}`}`;
-                
-                if (videoData.type === 'dash') {
-                    // DASH: Use specific stream selection
-                    trackCommand.streamSelection = audioTrack.ffmpegStreamIndex;
-                    trackCommand.containerContext = {
-                        ...trackCommand.containerContext,
-                        audioContainer: audioTrack.audioContainer || 'm4a'
-                    };
-                } else if (videoData.type === 'hls') {
-                    // HLS: Use specific audio track URL
-                    trackCommand.downloadUrl = audioTrack.url;
-                    trackCommand.containerContext = {
-                        ...trackCommand.containerContext,
-                        audioContainer: audioTrack.audioContainer || 'm4a'
-                    };
-                    // Clear inputs array for single audio track download
-                    delete trackCommand.inputs;
-                }
-                
-                return { ...trackCommand, ...options };
-            });
-        }
-        
-        // Fallback to single audio extraction
-        return { 
-            ...baseCommand, 
-            audioOnly: true,
-            ...options 
-        };
+        // Multi-track audio extraction - send individual commands
+        return selectedAudioTracks.map((audioTrack, index) => {
+            const trackCommand = { ...baseCommand };
+            trackCommand.audioOnly = true;
+            trackCommand.container = audioTrack.audioContainer || 'm4a';
+            trackCommand.filename = `${baseCommand.filename}_${audioTrack.label || audioTrack.name || `Audio_${index + 1}`}`;
+            
+            if (this.videoData.type === 'dash') {
+                // DASH: Use specific stream selection
+                trackCommand.streamSelection = audioTrack.ffmpegStreamIndex;
+            } else if (this.videoData.type === 'hls') {
+                // HLS: Use specific audio track URL
+                trackCommand.downloadUrl = audioTrack.url;
+                // Clear inputs array for single audio track download
+                delete trackCommand.inputs;
+            }
+            
+            return { ...trackCommand, ...options };
+        });
     }
 
     /**
@@ -427,14 +424,10 @@ export class VideoItemComponent {
         return {
             ...baseData,
             downloadUrl: videoTrack.url,
-            defaultContainer: videoTrack.videoContainer || this.videoData.defaultContainer || 'mp4',
+            container: videoTrack.videoContainer || 'mp4',
             fileSizeBytes: videoTrack.fileSize || videoTrack.estimatedFileSizeBytes || null,
             sourceAudioCodec: this.videoData.metaFFprobe?.audioCodec?.name || null,
-            sourceAudioBitrate: this.videoData.metaFFprobe?.audioBitrate || null,
-            containerContext: {
-                videoContainer: videoTrack.videoContainer || 'mp4',
-                audioContainer: videoTrack.audioContainer || 'mp3'
-            }
+            sourceAudioBitrate: this.videoData.metaFFprobe?.audioBitrate || null
         };
     }
     
@@ -453,10 +446,9 @@ export class VideoItemComponent {
                 ...baseData,
                 downloadUrl: this.selectedTracks.videoTrack?.url,
                 inputs: this.buildHlsInputsArray(),
-                defaultContainer: this.getOptimalContainer(),
+                container: this.getOptimalContainer(),
                 fileSizeBytes: this.calculateTotalFileSize(),
-                segmentCount: this.selectedTracks.videoTrack?.metaJS?.segmentCount || null,
-                containerContext: this.getContainerContext()
+                segmentCount: this.selectedTracks.videoTrack?.metaJS?.segmentCount || null
             };
         } else {
             // Simple HLS mode
@@ -464,13 +456,9 @@ export class VideoItemComponent {
             return {
                 ...baseData,
                 downloadUrl: videoTrack?.url,
-                defaultContainer: videoTrack?.videoContainer || 'mp4',
+                container: videoTrack?.videoContainer || 'mp4',
                 fileSizeBytes: videoTrack?.metaJS?.estimatedFileSizeBytes || null,
-                segmentCount: videoTrack?.metaJS?.segmentCount || null,
-                containerContext: {
-                    videoContainer: videoTrack?.videoContainer || 'mp4',
-                    audioContainer: videoTrack?.audioContainer || 'm4a'
-                }
+                segmentCount: videoTrack?.metaJS?.segmentCount || null
             };
         }
     }
@@ -485,9 +473,8 @@ export class VideoItemComponent {
             ...baseData,
             downloadUrl: this.selectedTracks.videoTrack?.url || this.videoData.url,
             streamSelection: this.buildDashStreamSelection(),
-            defaultContainer: this.getOptimalContainer(),
-            fileSizeBytes: this.calculateTotalFileSize(),
-            containerContext: this.getContainerContext()
+            container: this.getOptimalContainer(),
+            fileSizeBytes: this.calculateTotalFileSize()
         };
     }
     
@@ -624,22 +611,51 @@ export class VideoItemComponent {
     }
     
     /**
-     * Get container context for all selected tracks
-     * @returns {Object} Container context object
+     * Create subtitle extraction commands - handles single and multi-track scenarios
+     * @param {Object} baseCommand - Base download command
+     * @param {Object} options - Additional options
+     * @returns {Object|Array} Single command or array of commands for multi-track
      */
-    getContainerContext() {
-        return {
-            videoContainer: this.selectedTracks.videoTrack?.videoContainer || 'mp4',
-            audioContainer: this.selectedTracks.audioTracks[0]?.audioContainer || 'm4a',
-            subtitleContainer: this.selectedTracks.subtitleTracks[0]?.subtitleContainer || 'srt',
-            selectedTrackContainers: {
-                video: this.selectedTracks.videoTrack?.videoContainer || 'mp4',
-                audio: this.selectedTracks.audioTracks.map(track => track.audioContainer).filter(Boolean),
-                subtitle: this.selectedTracks.subtitleTracks.map(track => track.subtitleContainer).filter(Boolean)
+    createSubtitleExtractionCommands(baseCommand, options = {}) {
+        const selectedSubtitleTracks = this.selectedTracks.subtitleTracks || [];
+        
+        if (selectedSubtitleTracks.length === 0) {
+            // No subtitles selected - return empty to prevent command execution
+            return [];
+        }
+        
+        // Single subtitle extraction
+        if (selectedSubtitleTracks.length === 1) {
+            const subTrack = selectedSubtitleTracks[0];
+            return { 
+                ...baseCommand,
+                container: subTrack.subtitleContainer || 'srt',
+                subsOnly: true,
+                ...options 
+            };
+        }
+        
+        // Multi-track subtitle extraction - send individual commands
+        return selectedSubtitleTracks.map((subTrack, index) => {
+            const trackCommand = { ...baseCommand };
+            trackCommand.subsOnly = true;
+            trackCommand.container = subTrack.subtitleContainer || 'srt';
+            trackCommand.filename = `${baseCommand.filename}_${subTrack.label || subTrack.name || subTrack.lang || `Subtitle_${index + 1}`}`;
+            
+            if (this.videoData.type === 'dash') {
+                // DASH: Use specific stream selection
+                trackCommand.streamSelection = subTrack.ffmpegStreamIndex;
+            } else if (this.videoData.type === 'hls') {
+                // HLS: Use specific subtitle track URL
+                trackCommand.downloadUrl = subTrack.url;
+                // Clear inputs array for single subtitle track download
+                delete trackCommand.inputs;
             }
-        };
+            
+            return { ...trackCommand, ...options };
+        });
     }
-    
+
     /**
      * Get selected audio tracks for multi-audio download
      * @returns {Array} Array of selected audio tracks with container info
@@ -647,23 +663,36 @@ export class VideoItemComponent {
     getSelectedAudioTracks() {
         if (!this.selectedTracks.audioTracks || this.selectedTracks.audioTracks.length === 0) {
             // Fallback to first available audio track if none selected
-            if (this.videoData.audioTracks && this.videoData.audioTracks.length > 0) {
-                return [{
-                    ...this.videoData.audioTracks[0],
-                    label: this.videoData.audioTracks[0].name || this.videoData.audioTracks[0].label || this.videoData.audioTracks[0].lang || 'Audio 1',
-                    streamIndex: this.videoData.audioTracks[0].ffmpegStreamIndex,
-                    audioContainer: this.videoData.audioTracks[0].audioContainer || 'm4a'
-                }];
-            }
-            return [];
+            const defaultTrack = this.getDefaultAudioTrack();
+            return defaultTrack ? [defaultTrack] : [];
         }
         
         return this.selectedTracks.audioTracks.map((track, index) => ({
             ...track,
             label: track.name || track.label || track.lang || `Audio ${index + 1}`,
-            streamIndex: track.ffmpegStreamIndex,
             audioContainer: track.audioContainer || 'm4a'
         }));
+    }
+
+    /**
+     * Get default audio track for single audio extraction
+     * @returns {Object|null} Default audio track
+     */
+    getDefaultAudioTrack() {
+        if (this.videoData.audioTracks && this.videoData.audioTracks.length > 0) {
+            return {
+                ...this.videoData.audioTracks[0],
+                label: this.videoData.audioTracks[0].name || this.videoData.audioTracks[0].label || this.videoData.audioTracks[0].lang || 'Audio',
+                audioContainer: this.videoData.audioTracks[0].audioContainer || 'm4a'
+            };
+        }
+        
+        // For simple dropdown or direct videos, use the selected video track's audio
+        const videoTrack = this.selectedTracks.videoTrack || this.videoData;
+        return {
+            audioContainer: videoTrack.audioContainer || 'm4a',
+            label: 'Audio'
+        };
     }
     
     /**
@@ -728,6 +757,7 @@ export class VideoItemComponent {
         const cancelHandler = () => {
             const cancelMessage = {
                 command: 'cancel-download',
+                downloadId: this.getDownloadIdForCancellation(),
                 type: this.videoData.type,
                 downloadUrl: this.getDownloadData().downloadUrl,
                 masterUrl: this.videoData.isMaster ? this.videoData.url : null,
@@ -772,6 +802,21 @@ export class VideoItemComponent {
         
         const selectedDisplay = this.dropdown.element.querySelector('.selected-option .label');
         return selectedDisplay?.textContent || '';
+    }
+
+    /**
+     * Get download ID for cancellation - use stored downloadId or fallback to URL
+     * @returns {string} Download ID for cancellation
+     */
+    getDownloadIdForCancellation() {
+        // Use stored downloadId if available (from downloads tab)
+        if (this.downloadId) {
+            return this.downloadId;
+        }
+        
+        // Fallback to URL for videos tab (no downloadId available)
+        const downloadData = this.getDownloadData();
+        return downloadData.downloadUrl;
     }
     
     /**

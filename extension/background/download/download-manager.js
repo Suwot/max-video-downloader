@@ -60,9 +60,13 @@ export async function initDownloadManager() {
  * @returns {Promise<void>}
  */
 export async function processDownloadCommand(downloadCommand) {
-    const downloadId = downloadCommand.downloadUrl;
+    // Generate unique downloadId once for this download
+    const downloadId = generateDownloadId(downloadCommand);
+    downloadCommand.downloadId = downloadId;
     
-    logger.debug('Processing download command:', downloadCommand.command || 'download', downloadId);
+    logger.debug('Processing download command:', downloadCommand.command || 'download');
+    logger.debug('Generated downloadId:', downloadId);
+    logger.debug('Download URL:', downloadCommand.downloadUrl);
     
     // Resolve paths and handle filesystem dialogs
     const resolvedCommand = await resolveDownloadPaths(downloadCommand);
@@ -71,10 +75,12 @@ export async function processDownloadCommand(downloadCommand) {
         return;
     }
     
-    // Enhanced deduplication check - active downloads or queued downloads
-    const enhancedDownloadId = generateDownloadId(resolvedCommand);
-    if (activeDownloads.has(enhancedDownloadId) || downloadQueue.find(req => generateDownloadId(req) === enhancedDownloadId)) {
-        logger.debug('Download already active or queued:', enhancedDownloadId);
+    // Simple deduplication check using downloadId
+    const isAlreadyActive = activeDownloads.has(downloadId);
+    const isAlreadyQueued = downloadQueue.some(req => req.downloadId === downloadId);
+    
+    if (isAlreadyActive || isAlreadyQueued) {
+        logger.debug('Download already active or queued:', downloadId);
         return;
     }
     
@@ -121,8 +127,6 @@ async function resolveDownloadPaths(downloadCommand) {
  * @param {Object} downloadCommand - Resolved download command
  */
 async function queueDownload(downloadCommand) {
-    const downloadId = downloadCommand.downloadUrl;
-    
     // Add to queue
     downloadQueue.push(downloadCommand);
     
@@ -132,13 +136,17 @@ async function queueDownload(downloadCommand) {
     // Notify count change
     notifyDownloadCountChange();
     
+    // Use the generated downloadId
+    const downloadId = downloadCommand.downloadId;
+    
     // Store queue state in progress map for UI restoration
     activeDownloadProgress.set(downloadId, {
         command: 'download-queued',
         downloadUrl: downloadCommand.downloadUrl,
         masterUrl: downloadCommand.masterUrl || null,
         filename: downloadCommand.filename,
-        selectedOptionOrigText: downloadCommand.selectedOptionOrigText || null
+        selectedOptionOrigText: downloadCommand.selectedOptionOrigText || null,
+        downloadId: downloadId
     });
     
     // Broadcast queue state to UI and create downloads tab item
@@ -148,7 +156,8 @@ async function queueDownload(downloadCommand) {
         masterUrl: downloadCommand.masterUrl || null,
         filename: downloadCommand.filename,
         selectedOptionOrigText: downloadCommand.selectedOptionOrigText || null,
-        videoData: downloadCommand.videoData // Include video data for UI creation
+        videoData: downloadCommand.videoData, // Include video data for UI creation
+        downloadId: downloadId // For precise progress mapping
     });
     
     logger.debug('Download queued:', downloadId);
@@ -159,15 +168,15 @@ async function queueDownload(downloadCommand) {
  * @param {Object} downloadRequest - Complete download request
  */
 async function startDownloadImmediately(downloadRequest) {
-    const downloadId = downloadRequest.downloadUrl;
+    // Use the generated downloadId
+    const downloadId = downloadRequest.downloadId;
     
-    // Add to active downloads Set for deduplication using enhanced ID
-    const enhancedDownloadId = generateDownloadId(downloadRequest);
-    activeDownloads.add(enhancedDownloadId);
+    // Add to active downloads Set for deduplication
+    activeDownloads.add(downloadId);
     
     // Add to storage or update status if already exists (from queue)
     addToActiveDownloadsStorage(downloadRequest).then(() => {
-        updateActiveDownloadStatus(downloadId, 'downloading');
+        updateActiveDownloadStatus(downloadRequest.downloadUrl, 'downloading');
     });
     
     // Notify count change
@@ -188,7 +197,8 @@ async function startDownloadImmediately(downloadRequest) {
         filename: downloadRequest.filename,
         selectedOptionOrigText: downloadRequest.selectedOptionOrigText || null,
         videoData: downloadRequest.videoData,
-        isRedownload: downloadRequest.isRedownload || false
+        isRedownload: downloadRequest.isRedownload || false,
+        downloadId: downloadId // For precise progress mapping
     });
     
     // Send download command (fire-and-forget)
@@ -204,31 +214,56 @@ async function startDownloadImmediately(downloadRequest) {
  */
 async function handleDownloadEvent(event) {
     const { command, downloadUrl, sessionId } = event;
-    const downloadId = downloadUrl; // Use URL as unique ID
     
-    logger.debug('Handling download event:', command, downloadId, sessionId);
+    logger.debug('Handling download event:', command, downloadUrl, sessionId);
+    logger.debug('Event downloadId:', event.downloadId);
     
-    // Find the corresponding download request (needed for metadata)
+    // Use downloadId from native host event (now passed through)
+    let downloadId = event.downloadId;
     let downloadRequest = null;
     
-    // Try to find in active downloads storage
-    try {
-        const activeDownloads = await getActiveDownloadsStorage();
-        downloadRequest = activeDownloads.find(d => d.downloadUrl === downloadUrl);
-    } catch (error) {
-        logger.warn('Could not retrieve download request from storage:', error);
+    // If no downloadId in event, find it from storage (legacy support)
+    if (!downloadId) {
+        try {
+            const storedDownloads = await getActiveDownloadsStorage();
+            const candidates = storedDownloads.filter(d => d.downloadUrl === downloadUrl);
+            
+            if (candidates.length === 1) {
+                downloadRequest = candidates[0];
+                downloadId = downloadRequest.downloadId;
+            } else if (candidates.length > 1) {
+                // Multiple candidates - find the one that's currently active
+                downloadRequest = candidates.find(d => d.downloadId && activeDownloads.has(d.downloadId)) || candidates[0];
+                downloadId = downloadRequest?.downloadId;
+            }
+        } catch (error) {
+            logger.warn('Could not retrieve download request from storage:', error);
+        }
+        
+        // Final fallback to URL for legacy compatibility
+        if (!downloadId) {
+            downloadId = downloadUrl;
+            logger.debug('Using URL as downloadId fallback:', downloadId);
+        }
+    } else {
+        // We have downloadId from native host, try to find the request for additional data
+        try {
+            const storedDownloads = await getActiveDownloadsStorage();
+            downloadRequest = storedDownloads.find(d => d.downloadId === downloadId);
+        } catch (error) {
+            logger.warn('Could not retrieve download request from storage:', error);
+        }
     }
     
     // Store progress in local map for UI restoration 
-    activeDownloadProgress.set(downloadId, event);
+    activeDownloadProgress.set(downloadId, { ...event, downloadId });
 
     // Handle completion/error/cancellation - clean up active tracking
     if (['download-canceled', 'download-success', 'download-error'].includes(command)) {
-        // Remove from active downloads Set using enhanced ID
-        const enhancedDownloadId = generateDownloadId(downloadRequest || { downloadUrl: downloadId, type: 'unknown' });
-        activeDownloads.delete(enhancedDownloadId);
+        // Remove from active downloads Set using consistent downloadId
+        activeDownloads.delete(downloadId);
         
-        // Remove from active downloads storage
+        // Remove from active downloads storage using downloadId
         await removeFromActiveDownloadsStorage(downloadId);
         
         // Add to history storage for success/error only
@@ -256,10 +291,11 @@ async function handleDownloadEvent(event) {
             logger.debug('Download canceled:', downloadId);
             broadcastToPopups({
                 command: 'download-canceled',
-                downloadUrl: downloadRequest.downloadUrl,
-                masterUrl: downloadRequest.masterUrl || null,
-                filename: downloadRequest.filename,
-                selectedOptionOrigText: downloadRequest.selectedOptionOrigText || null
+                downloadUrl: downloadRequest?.downloadUrl || downloadUrl,
+                masterUrl: downloadRequest?.masterUrl || null,
+                filename: downloadRequest?.filename || 'Unknown',
+                selectedOptionOrigText: downloadRequest?.selectedOptionOrigText || null,
+                downloadId: downloadId // Include downloadId for precise mapping
             });
         } else if (command === 'download-success') {
             // Create completion notification
@@ -270,15 +306,16 @@ async function handleDownloadEvent(event) {
         processNextDownload();
     }
 
-    // Prepare broadcast data with completion flags (no videoData needed for progress events)
+    // Prepare broadcast data with completion flags and downloadId (no videoData needed for progress events)
     const broadcastData = (['download-canceled', 'download-success', 'download-error'].includes(command))
         ? { 
             ...event, 
             success: event.success, 
             error: event.error,
-            selectedOptionOrigText: downloadRequest?.selectedOptionOrigText || null
+            selectedOptionOrigText: downloadRequest?.selectedOptionOrigText || null,
+            downloadId: downloadId
         }
-        : event;
+        : { ...event, downloadId: downloadId };
 
     // Always notify UI with progress data via direct broadcast
     broadcastToPopups(broadcastData);
@@ -383,11 +420,11 @@ export function debugDownloadManagerState() {
 
 /**
  * Cancel an active download
- * @param {Object} cancelRequest - Cancellation request with downloadUrl
+ * @param {Object} cancelRequest - Cancellation request with downloadId
  * @returns {Promise<void>}
  */
 export async function cancelDownload(cancelRequest) {
-    const downloadId = cancelRequest.downloadUrl;
+    const downloadId = cancelRequest.downloadId || cancelRequest.downloadUrl;
     
     logger.debug('Canceling download:', downloadId);
     
@@ -411,9 +448,8 @@ export async function cancelDownload(cancelRequest) {
         return;
     }
     
-    // Check if download is actually active using enhanced ID lookup
-    const enhancedDownloadId = generateDownloadId(cancelRequest || { downloadUrl: downloadId, type: 'unknown' });
-    if (!activeDownloads.has(enhancedDownloadId) && !activeDownloads.has(downloadId)) {
+    // Check if download is actually active
+    if (!activeDownloads.has(downloadId)) {
         logger.debug('No active download found to cancel:', downloadId);
         return;
     }
@@ -422,7 +458,7 @@ export async function cancelDownload(cancelRequest) {
     // Response will come through event listeners
     nativeHostService.sendMessage({
         command: 'cancel-download',
-        downloadUrl: downloadId,
+        downloadUrl: cancelRequest.downloadUrl,
         type: cancelRequest.type
     }, { expectResponse: false });
     
@@ -453,38 +489,77 @@ async function processNextDownload() {
 }
 
 /**
- * Generate unique download ID for deduplication
+ * Simple hash function for URL shortening
+ * @param {string} str - String to hash
+ * @returns {string} - Short hash
+ */
+function simpleHash(str) {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+        const char = str.charCodeAt(i);
+        hash = ((hash << 5) - hash) + char;
+        hash = hash & hash; // Convert to 32-bit integer
+    }
+    return Math.abs(hash).toString(36);
+}
+
+/**
+ * Generate unique download ID for deduplication and progress mapping
+ * Uses hash for privacy and performance, timestamp for uniqueness
  * @param {Object} request - Download request object
  * @returns {string} - Unique download identifier
  */
 function generateDownloadId(request) {
+    // Create base identifier with URL hash
+    let baseId = simpleHash(request.downloadUrl);
+    
+    // Add stream selection hash for DASH multi-track downloads
     if (request.type === 'dash' && request.streamSelection) {
-        return `${request.downloadUrl}#${request.streamSelection}`;
+        baseId += '_' + simpleHash(request.streamSelection);
     }
-    return request.downloadUrl;
+    
+    // Add audio-only flag for audio extraction
+    if (request.audioOnly) {
+        baseId += '_audio';
+    }
+    
+    // Add subs-only flag for subtitle extraction
+    if (request.subsOnly) {
+        baseId += '_subs';
+    }
+    
+    // Add timestamp for uniqueness (handles re-downloads and simultaneous operations)
+    const timestamp = Date.now();
+    
+    return `${baseId}_${timestamp}`;
 }
 
 /**
- * Remove download from queue
- * @param {string} downloadUrl - URL to remove from queue (legacy format)
+ * Remove download from queue using downloadId as primary key
+ * @param {string} downloadId - Download ID to remove from queue
  * @returns {boolean} - True if removed, false if not found
  */
-export function removeFromQueue(downloadUrl) {
-    const initialLength = downloadQueue.length;
-    
-    // Try to find by enhanced ID first, then fallback to simple URL
-    let index = downloadQueue.findIndex(req => generateDownloadId(req) === downloadUrl);
-    if (index === -1) {
-        index = downloadQueue.findIndex(req => req.downloadUrl === downloadUrl);
-    }
+export function removeFromQueue(downloadId) {
+    // Find by downloadId (all queued downloads have this)
+    const index = downloadQueue.findIndex(req => req.downloadId === downloadId);
     
     if (index !== -1) {
-        downloadQueue.splice(index, 1);
-        activeDownloadProgress.delete(downloadUrl);
-        logger.debug('Removed from queue:', downloadUrl);
+        const removedRequest = downloadQueue.splice(index, 1)[0];
+        activeDownloadProgress.delete(downloadId);
+        logger.debug('Removed from queue:', downloadId, 'URL:', removedRequest.downloadUrl);
         return true;
     }
     
+    // Legacy fallback: try to find by URL for old queue entries
+    const urlIndex = downloadQueue.findIndex(req => req.downloadUrl === downloadId);
+    if (urlIndex !== -1) {
+        const removedRequest = downloadQueue.splice(urlIndex, 1)[0];
+        activeDownloadProgress.delete(downloadId);
+        logger.debug('Removed from queue (URL fallback):', downloadId);
+        return true;
+    }
+    
+    logger.debug('Download not found in queue:', downloadId);
     return false;
 }
 
@@ -556,7 +631,11 @@ async function addToActiveDownloadsStorage(downloadRequest) {
             videoData: downloadRequest.videoData, // Raw video data for recreation
             timestamp: Date.now(),
             selectedOptionOrigText: downloadRequest.selectedOptionOrigText || null,
-            status: 'queued' // Will be updated to 'downloading' when actually started
+            status: 'queued', // Will be updated to 'downloading' when actually started
+            downloadId: downloadRequest.downloadId, // For precise progress mapping
+            // Store request data needed for downloadId generation
+            type: downloadRequest.type,
+            streamSelection: downloadRequest.streamSelection
         };
         
         activeDownloads.push(downloadEntry);
@@ -593,21 +672,29 @@ async function updateActiveDownloadStatus(downloadUrl, status) {
 }
 
 /**
- * Remove download from active downloads storage
- * @param {string} downloadUrl - Download URL to remove
+ * Remove download from active downloads storage using downloadId as primary key
+ * @param {string} downloadId - Download ID to remove
  */
-async function removeFromActiveDownloadsStorage(downloadUrl) {
+async function removeFromActiveDownloadsStorage(downloadId) {
     try {
         const result = await chrome.storage.local.get(['downloads_active']);
         const activeDownloads = result.downloads_active || [];
         
-        const lookupUrl = downloadUrl;
-        const updatedActiveDownloads = activeDownloads.filter(entry => 
-            entry.lookupUrl !== lookupUrl && entry.downloadUrl !== lookupUrl
-        );
+        // Filter out the entry with matching downloadId
+        const updatedActiveDownloads = activeDownloads.filter(entry => {
+            // Primary match: downloadId (all new downloads have this)
+            if (entry.downloadId) {
+                return entry.downloadId !== downloadId;
+            }
+        });
         
-        await chrome.storage.local.set({ downloads_active: updatedActiveDownloads });
-        logger.debug('Removed from active downloads storage:', downloadUrl);
+        const removedCount = activeDownloads.length - updatedActiveDownloads.length;
+        if (removedCount > 0) {
+            await chrome.storage.local.set({ downloads_active: updatedActiveDownloads });
+            logger.debug(`Removed ${removedCount} entry from active downloads storage:`, downloadId);
+        } else {
+            logger.debug('No matching entry found in active downloads storage:', downloadId);
+        }
     } catch (error) {
         logger.error('Error removing from active downloads storage:', error);
     }
@@ -716,11 +803,21 @@ async function handleDownloadAsFlow(downloadCommand) {
             }
         }
         
+        // Process filename to remove container extension if present
+        // (Native host will add it back)
+        const container = downloadCommand.container || 'mp4';
+        const expectedExt = `.${container}`;
+        let processedFilename = filesystemResponse.filename;
+        
+        if (processedFilename.toLowerCase().endsWith(expectedExt.toLowerCase())) {
+            processedFilename = processedFilename.slice(0, -expectedExt.length);
+        }
+        
         // Return resolved command
         const resolvedCommand = {
             ...downloadCommand,
             savePath: filesystemResponse.directory,
-            filename: filesystemResponse.filename
+            filename: processedFilename
         };
         
         // Clean up temporary flags

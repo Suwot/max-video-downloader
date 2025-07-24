@@ -21,15 +21,24 @@ export async function updateDownloadProgress(progressData = {}) {
     
     // Handle downloads tab creation for new downloads (efficient one-time events)
     if (progressData.command === 'download-queued' && progressData.videoData) {
-        await createVideoItemInDownloads(progressData.videoData, 'queued');
+        await createVideoItemInDownloads(progressData.videoData, 'queued', progressData.downloadId);
     } else if (progressData.command === 'download-started' && progressData.videoData) {
         // Simple dedup: only create if item doesn't exist yet (handles queued → started transitions)
+        const downloadId = progressData.downloadId;
         const lookupUrl = progressData.masterUrl || progressData.downloadUrl;
         const activeDownloadsContainer = document.querySelector('.active-downloads');
-        const existingItem = activeDownloadsContainer?.querySelector(`.video-item[data-url="${lookupUrl}"]`);
+        
+        // Check for existing item by downloadId first, then by URL
+        let existingItem = null;
+        if (downloadId) {
+            existingItem = activeDownloadsContainer?.querySelector(`.video-item[data-download-id="${downloadId}"]`);
+        }
+        if (!existingItem) {
+            existingItem = activeDownloadsContainer?.querySelector(`.video-item[data-url="${lookupUrl}"]`);
+        }
         
         if (!existingItem) {
-            await createVideoItemInDownloads(progressData.videoData, 'starting');
+            await createVideoItemInDownloads(progressData.videoData, 'starting', downloadId);
         }
     }
     
@@ -74,6 +83,7 @@ export function restoreDownloadStates(activeDownloads = []) {
                 const cancelHandler = () => {
                     const cancelMessage = {
                         command: 'cancel-download',
+                        downloadId: downloadEntry.downloadId || downloadEntry.downloadUrl,
                         type: downloadEntry.type,
                         downloadUrl: downloadEntry.downloadUrl,
                         masterUrl: downloadEntry.masterUrl || null,
@@ -104,27 +114,48 @@ export function restoreDownloadStates(activeDownloads = []) {
 }
 
 /**
+ * Find matching video elements - streamlined logic
+ * downloadId match for downloads-tab, URL fallback for videos-tab
+ * @param {Object} progressData - Progress data from background
+ * @returns {Array} Array of matching video elements
+ */
+function findMatchingVideoElements(progressData = {}) {
+    const downloadId = progressData.downloadId;
+    const lookupUrl = progressData.masterUrl || progressData.downloadUrl;
+    
+    const allElements = [];
+    const videoItems = document.querySelectorAll('.active-downloads .video-item, .videos-container .video-item');
+    
+    videoItems.forEach(item => {
+        const itemDownloadId = item.dataset.downloadId;
+        const itemUrl = item.dataset.url;
+        
+        // If item has downloadId, match only by downloadId (downloads-tab)
+        if (itemDownloadId) {
+            if (itemDownloadId === downloadId) {
+                allElements.push(item);
+            }
+        } else {
+            // If item has no downloadId, match by URL (videos-tab)
+            if (itemUrl === lookupUrl) {
+                allElements.push(item);
+            }
+        }
+    });
+    
+    return allElements;
+}
+
+/**
  * Update download button state based on progress
- * Updates ALL matching items in both videos and downloads tabs
+ * Updates matching items using downloadId for precision, with URL fallback
  * @param {Object} progressData - Progress data from background
  */
 function updateDownloadButton(progressData = {}) {
-    const lookupUrl = progressData.masterUrl || progressData.downloadUrl;
-    
-    // Always target active downloads (global)
-    const downloadsElements = document.querySelectorAll(
-        `.active-downloads .video-item[data-url="${lookupUrl}"]`
-    );
-    
-    // Optionally target videos container (contextual)
-    const videosElements = document.querySelectorAll(
-        `.videos-container .video-item[data-url="${lookupUrl}"]`
-    );
-    
-    const allElements = [...downloadsElements, ...videosElements];
+    const allElements = findMatchingVideoElements(progressData);
     
     if (allElements.length === 0) {
-        logger.debug('No video elements found for URL:', lookupUrl);
+        logger.debug('No video elements found for download:', progressData.downloadUrl);
         return;
     }
     
@@ -159,6 +190,7 @@ function updateComponentButtonState(downloadButtonComponent, progressData = {}) 
     const cancelHandler = () => {
         const cancelMessage = {
             command: 'cancel-download',
+            downloadId: progressData.downloadId || progressData.downloadUrl,
             type: progressData.type,
             downloadUrl: progressData.downloadUrl,
             masterUrl: progressData.masterUrl || null,
@@ -230,27 +262,20 @@ function updateComponentButtonState(downloadButtonComponent, progressData = {}) 
 
 /**
  * Update entire dropdown (selected-option + dropdown-option) during download
- * Downloads-first: always update active downloads, optionally update videos if present
+ * Uses downloadId for precision, with URL fallback
  * @param {Object} progressData - Progress data
  */
 function updateDropdown(progressData = {}) {
-    const lookupUrl = progressData.masterUrl || progressData.downloadUrl;
     const progress = progressData.progress;
-
-    // Always target active downloads (global)
-    const downloadsElements = document.querySelectorAll(
-        `.active-downloads .video-item[data-url="${lookupUrl}"] .download-group`
-    );
+    const allElements = findMatchingVideoElements(progressData);
     
-    // Optionally target videos container (contextual)
-    const videosElements = document.querySelectorAll(
-        `.videos-container .video-item[data-url="${lookupUrl}"] .download-group`
-    );
-    
-    const downloadGroups = [...downloadsElements, ...videosElements];
+    // Get download groups from matching video elements
+    const downloadGroups = allElements.map(videoElement => 
+        videoElement.querySelector('.download-group')
+    ).filter(Boolean);
     
     if (downloadGroups.length === 0) {
-        logger.debug('No download group elements found for URL:', lookupUrl);
+        logger.debug('No download group elements found for download:', progressData.downloadUrl);
         return;
     }
     
@@ -347,8 +372,9 @@ function updateSingleDropdown(downloadGroup, progressData = {}, progress) {
  * Create video item in downloads tab from video data
  * @param {Object} videoData - Raw video data
  * @param {string} initialState - Initial download state
+ * @param {string} downloadId - Download ID for precise progress mapping
  */
-async function createVideoItemInDownloads(videoData, initialState = 'default') {
+async function createVideoItemInDownloads(videoData, initialState = 'default', downloadId = null) {
     try {
         const activeDownloadsContainer = document.querySelector('.active-downloads');
         if (!activeDownloadsContainer) {
@@ -356,8 +382,8 @@ async function createVideoItemInDownloads(videoData, initialState = 'default') {
             return;
         }
 
-        // Create new video item component with initial state
-        const videoComponent = new VideoItemComponent(videoData, initialState);
+        // Create new video item component with initial state and download ID
+        const videoComponent = new VideoItemComponent(videoData, initialState, downloadId);
         const videoElement = videoComponent.render();
         
         // Hide initial message and append the element (queue order: oldest first)
@@ -405,11 +431,12 @@ export async function restoreActiveDownloads() {
         // Hide initial message and restore downloads
         initialMessage.style.display = 'none';
         
-        // Recreate video items from stored video data with proper initial states
+        // Recreate video items from stored video data with proper initial states and downloadId
         activeDownloads.forEach(downloadEntry => {
             if (downloadEntry.videoData) {
                 const initialState = downloadEntry.status || 'queued';
-                const videoComponent = new VideoItemComponent(downloadEntry.videoData, initialState);
+                const downloadId = downloadEntry.downloadId || null;
+                const videoComponent = new VideoItemComponent(downloadEntry.videoData, initialState, downloadId);
                 const videoElement = videoComponent.render();
                 activeDownloadsContainer.appendChild(videoElement);
             } else {
@@ -434,15 +461,25 @@ export async function restoreActiveDownloads() {
  */
 async function handleDownloadCompletion(progressData, addToHistory = false) {
     try {
+        const downloadId = progressData.downloadId;
         const lookupUrl = progressData.masterUrl || progressData.downloadUrl;
 
-        // IMMEDIATELY remove from downloads-tab to prevent deduplication issues
+        // IMMEDIATELY remove from downloads-tab using downloadId for precision
         const activeDownloadsContainer = document.querySelector('.active-downloads');
         if (activeDownloadsContainer) {
-            const videoItemToRemove = activeDownloadsContainer.querySelector(`[data-url="${lookupUrl}"]`);
+            let videoItemToRemove = null;
+            
+            // Try to find by downloadId first, then fallback to URL
+            if (downloadId) {
+                videoItemToRemove = activeDownloadsContainer.querySelector(`[data-download-id="${downloadId}"]`);
+            }
+            if (!videoItemToRemove) {
+                videoItemToRemove = activeDownloadsContainer.querySelector(`[data-url="${lookupUrl}"]`);
+            }
+            
             if (videoItemToRemove) {
                 videoItemToRemove.remove();
-                logger.debug(`Immediately removed from downloads-tab:`, lookupUrl);
+                logger.debug(`Immediately removed from downloads-tab:`, downloadId || lookupUrl);
             }
             
             // Show initial message if no more active downloads remain
