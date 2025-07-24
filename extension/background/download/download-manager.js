@@ -617,17 +617,17 @@ function generateDownloadId(request) {
  */
 function updateBadgeIcon(count) {
     try {
-        if (count === 0) {
-            // Clear badge when no downloads
-            chrome.action.setBadgeText({ text: '' });
-        } else {
-            // Show count on gray background
-            chrome.action.setBadgeText({ text: count.toString() });
-            chrome.action.setBadgeBackgroundColor({ color: '#444444' }); // Dark gray for white text contrast
+        const badgeText = count === 0 ? '' : count.toString();
+        chrome.action.setBadgeText({ text: badgeText });
+        
+        // Only set background color if we have a badge to show
+        if (count > 0) {
+            chrome.action.setBadgeBackgroundColor({ color: '#444444' });
         }
-        logger.debug('Badge icon updated with count:', count);
+        
+        logger.debug('Badge updated with count:', count);
     } catch (error) {
-        logger.error('Error updating badge icon:', error);
+        logger.error('Error updating badge:', error);
     }
 }
 
