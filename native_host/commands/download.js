@@ -338,7 +338,12 @@ class DownloadCommand extends BaseCommand {
             outputFilename = 'audio';
         }
         
-        // Extension already cleaned up by extension if needed
+        // Remove container extension if already present to prevent double extensions
+        const expectedExt = `.${container}`;
+        if (outputFilename.toLowerCase().endsWith(expectedExt.toLowerCase())) {
+            outputFilename = outputFilename.slice(0, -expectedExt.length);
+        }
+        
         return `${outputFilename}.${container}`;
     }
     

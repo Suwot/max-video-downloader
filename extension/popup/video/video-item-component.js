@@ -17,10 +17,21 @@ const logger = createLogger('VideoItemComponent');
  * VideoItemComponent - Manages complete video item state and UI
  */
 export class VideoItemComponent {
-    constructor(videoData, initialDownloadState = 'default', downloadId = null) {
-        this.videoData = videoData;
+    constructor(downloadRequestOrVideoData, initialDownloadState = 'default', downloadId = null) {
+        // Handle both downloadRequest (with filename/downloadId) and plain videoData
+        if (downloadRequestOrVideoData.videoData) {
+            // This is a downloadRequest object - deconstruct it
+            this.videoData = downloadRequestOrVideoData.videoData;
+            this.downloadId = downloadRequestOrVideoData.downloadId;
+            this.filename = downloadRequestOrVideoData.filename;
+        } else {
+            // This is plain videoData (legacy)
+            this.videoData = downloadRequestOrVideoData;
+            this.downloadId = downloadId;
+            this.filename = null;
+        }
+        
         this.initialDownloadState = initialDownloadState; // 'default', 'starting', 'downloading', 'queued'
-        this.downloadId = downloadId; // For precise progress mapping in downloads tab
         this.element = null;
         this.dropdown = null;
         this.downloadButton = null;
@@ -223,7 +234,7 @@ export class VideoItemComponent {
         
         const title = document.createElement('h3');
         title.className = 'video-title item-title';
-        title.textContent = this.videoData.title || 'Untitled Video';
+        title.textContent = this.filename || this.videoData.title || 'Untitled Video';
         
         // Add extracted badge for videos found in query parameters
         if (this.videoData.foundFromQueryParam) {

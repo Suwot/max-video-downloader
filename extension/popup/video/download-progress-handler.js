@@ -21,7 +21,7 @@ export async function updateDownloadProgress(progressData = {}) {
     
     // Handle downloads tab creation for new downloads (efficient one-time events)
     if (progressData.command === 'download-queued' && progressData.videoData) {
-        await createVideoItemInDownloads(progressData.videoData, 'queued', progressData.downloadId);
+        await createVideoItemInDownloads(progressData, 'queued');
     } else if (progressData.command === 'download-started' && progressData.videoData) {
         // Smart UI updates: update existing queued items instead of creating duplicates
         const downloadId = progressData.downloadId;
@@ -41,7 +41,7 @@ export async function updateDownloadProgress(progressData = {}) {
             }
         } else {
             // Create new item (for direct downloads)
-            await createVideoItemInDownloads(progressData.videoData, 'starting', downloadId);
+            await createVideoItemInDownloads(progressData, 'starting');
         }
     }
     
@@ -379,7 +379,7 @@ function updateSingleDropdown(downloadGroup, progressData = {}, progress) {
  * @param {string} initialState - Initial download state
  * @param {string} downloadId - Download ID for precise progress mapping
  */
-async function createVideoItemInDownloads(videoData, initialState = 'default', downloadId = null) {
+async function createVideoItemInDownloads(downloadRequestOrVideoData, initialState = 'default') {
     try {
         const activeDownloadsContainer = document.querySelector('.active-downloads');
         if (!activeDownloadsContainer) {
@@ -387,8 +387,8 @@ async function createVideoItemInDownloads(videoData, initialState = 'default', d
             return;
         }
 
-        // Create new video item component with initial state and download ID
-        const videoComponent = new VideoItemComponent(videoData, initialState, downloadId);
+        // Create new video item component - VideoItemComponent will handle deconstructing
+        const videoComponent = new VideoItemComponent(downloadRequestOrVideoData, initialState);
         const videoElement = videoComponent.render();
         
         // Hide initial message and append the element (queue order: oldest first)
@@ -440,8 +440,7 @@ export async function restoreActiveDownloads() {
         activeDownloads.forEach(downloadEntry => {
             if (downloadEntry.videoData) {
                 const initialState = downloadEntry.status || 'queued';
-                const downloadId = downloadEntry.downloadId || null;
-                const videoComponent = new VideoItemComponent(downloadEntry.videoData, initialState, downloadId);
+                const videoComponent = new VideoItemComponent(downloadEntry, initialState);
                 const videoElement = videoComponent.render();
                 activeDownloadsContainer.appendChild(videoElement);
             } else {

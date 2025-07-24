@@ -153,7 +153,7 @@ async function queueDownload(downloadCommand) {
         command: 'download-queued',
         downloadUrl: downloadCommand.downloadUrl,
         masterUrl: downloadCommand.masterUrl || null,
-        filename: downloadCommand.filename,
+        filename: downloadCommand.filename, // Already includes container extension
         selectedOptionOrigText: downloadCommand.selectedOptionOrigText || null,
         videoData: downloadCommand.videoData, // Include video data for UI creation
         downloadId: downloadId // For precise progress mapping
@@ -478,7 +478,7 @@ export async function cancelDownload(cancelRequest) {
             type: cancelRequest.type,
             downloadUrl: entry.downloadRequest.downloadUrl,
             masterUrl: entry.downloadRequest.masterUrl || null,
-            filename: entry.downloadRequest.filename || 'Unknown',
+            filename: entry.downloadRequest.filename,
             selectedOptionOrigText: entry.downloadRequest.selectedOptionOrigText || null,
             downloadId: downloadId
         });
@@ -550,7 +550,7 @@ async function processNextDownload() {
         command: 'download-started',
         downloadUrl: queuedEntry.downloadRequest.downloadUrl,
         masterUrl: queuedEntry.downloadRequest.masterUrl || null,
-        filename: queuedEntry.downloadRequest.filename,
+        filename: queuedEntry.downloadRequest.filename, // Already includes container extension
         selectedOptionOrigText: queuedEntry.downloadRequest.selectedOptionOrigText || null,
         videoData: queuedEntry.downloadRequest.videoData,
         downloadId: queuedEntry.downloadId
@@ -719,7 +719,7 @@ async function addToActiveDownloadsStorage(downloadRequest) {
             lookupUrl: downloadRequest.masterUrl || downloadRequest.downloadUrl,
             downloadUrl: downloadRequest.downloadUrl,
             masterUrl: downloadRequest.masterUrl || null,
-            filename: downloadRequest.filename,
+            filename: downloadRequest.filename, // Already includes container extension
             videoData: downloadRequest.videoData, // Raw video data for recreation
             timestamp: Date.now(),
             selectedOptionOrigText: downloadRequest.selectedOptionOrigText || null,
@@ -904,14 +904,13 @@ async function handleDownloadAsFlow(downloadCommand) {
             }
         }
         
-        // Process filename to remove container extension if present
-        // (Native host will add it back)
+        // Ensure filename has correct container extension
         const container = downloadCommand.container || 'mp4';
         const expectedExt = `.${container}`;
         let processedFilename = filesystemResponse.filename;
         
-        if (processedFilename.toLowerCase().endsWith(expectedExt.toLowerCase())) {
-            processedFilename = processedFilename.slice(0, -expectedExt.length);
+        if (!processedFilename.toLowerCase().endsWith(expectedExt.toLowerCase())) {
+            processedFilename = processedFilename + expectedExt;
         }
         
         // Return resolved command
