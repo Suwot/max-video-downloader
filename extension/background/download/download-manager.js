@@ -24,6 +24,10 @@ const activeDownloadProgress = new Map();
 // Array of complete download request objects
 const downloadQueue = [];
 
+// Storage operation queue to prevent race conditions
+const storageOperationQueue = [];
+let isProcessingStorageQueue = false;
+
 /**
  * Initialize download manager
  */
@@ -600,6 +604,49 @@ async function restoreBadgeFromStorage() {
 }
 
 /**
+ * Process storage operations sequentially to prevent race conditions
+ */
+async function processStorageQueue() {
+    if (isProcessingStorageQueue || storageOperationQueue.length === 0) {
+        return;
+    }
+    
+    isProcessingStorageQueue = true;
+    
+    while (storageOperationQueue.length > 0) {
+        const operation = storageOperationQueue.shift();
+        try {
+            await operation();
+        } catch (error) {
+            logger.error('Storage operation failed:', error);
+        }
+    }
+    
+    isProcessingStorageQueue = false;
+}
+
+/**
+ * Queue a storage operation to prevent race conditions
+ * @param {Function} operation - Async function to execute
+ * @returns {Promise} Promise that resolves when operation completes
+ */
+function queueStorageOperation(operation) {
+    return new Promise((resolve, reject) => {
+        const wrappedOperation = async () => {
+            try {
+                const result = await operation();
+                resolve(result);
+            } catch (error) {
+                reject(error);
+            }
+        };
+        
+        storageOperationQueue.push(wrappedOperation);
+        processStorageQueue();
+    });
+}
+
+/**
  * Get active downloads from storage
  * @returns {Promise<Array>} Array of active downloads
  */
@@ -618,33 +665,36 @@ async function getActiveDownloadsStorage() {
  * @param {Object} downloadRequest - Download request data (includes elementHTML from UI)
  */
 async function addToActiveDownloadsStorage(downloadRequest) {
-    try {
-        const result = await chrome.storage.local.get(['downloads_active']);
-        const activeDownloads = result.downloads_active || [];
-        
-        // Store the full download entry with video data for recreation
-        const downloadEntry = {
-            lookupUrl: downloadRequest.masterUrl || downloadRequest.downloadUrl,
-            downloadUrl: downloadRequest.downloadUrl,
-            masterUrl: downloadRequest.masterUrl || null,
-            filename: downloadRequest.filename,
-            videoData: downloadRequest.videoData, // Raw video data for recreation
-            timestamp: Date.now(),
-            selectedOptionOrigText: downloadRequest.selectedOptionOrigText || null,
-            status: 'queued', // Will be updated to 'downloading' when actually started
-            downloadId: downloadRequest.downloadId, // For precise progress mapping
-            // Store request data needed for downloadId generation
-            type: downloadRequest.type,
-            streamSelection: downloadRequest.streamSelection
-        };
-        
-        activeDownloads.push(downloadEntry);
-        await chrome.storage.local.set({ downloads_active: activeDownloads });
-        
-        logger.debug('Added to active downloads storage:', downloadRequest.downloadUrl);
-    } catch (error) {
-        logger.error('Error adding to active downloads storage:', error);
-    }
+    return queueStorageOperation(async () => {
+        try {
+            const result = await chrome.storage.local.get(['downloads_active']);
+            const activeDownloads = result.downloads_active || [];
+            
+            // Store the full download entry with video data for recreation
+            const downloadEntry = {
+                lookupUrl: downloadRequest.masterUrl || downloadRequest.downloadUrl,
+                downloadUrl: downloadRequest.downloadUrl,
+                masterUrl: downloadRequest.masterUrl || null,
+                filename: downloadRequest.filename,
+                videoData: downloadRequest.videoData, // Raw video data for recreation
+                timestamp: Date.now(),
+                selectedOptionOrigText: downloadRequest.selectedOptionOrigText || null,
+                status: 'queued', // Will be updated to 'downloading' when actually started
+                downloadId: downloadRequest.downloadId, // For precise progress mapping
+                // Store request data needed for downloadId generation
+                type: downloadRequest.type,
+                streamSelection: downloadRequest.streamSelection
+            };
+            
+            activeDownloads.push(downloadEntry);
+            await chrome.storage.local.set({ downloads_active: activeDownloads });
+            
+            logger.debug('Added to active downloads storage:', downloadRequest.downloadUrl);
+        } catch (error) {
+            logger.error('Error adding to active downloads storage:', error);
+            throw error;
+        }
+    });
 }
 
 /**
@@ -653,22 +703,25 @@ async function addToActiveDownloadsStorage(downloadRequest) {
  * @param {string} status - New status ('downloading', 'queued')
  */
 async function updateActiveDownloadStatus(downloadUrl, status) {
-    try {
-        const result = await chrome.storage.local.get(['downloads_active']);
-        const activeDownloads = result.downloads_active || [];
-        
-        const downloadIndex = activeDownloads.findIndex(entry => 
-            entry.downloadUrl === downloadUrl || entry.lookupUrl === downloadUrl
-        );
-        
-        if (downloadIndex !== -1) {
-            activeDownloads[downloadIndex].status = status;
-            await chrome.storage.local.set({ downloads_active: activeDownloads });
-            logger.debug('Updated download status in storage:', downloadUrl, status);
+    return queueStorageOperation(async () => {
+        try {
+            const result = await chrome.storage.local.get(['downloads_active']);
+            const activeDownloads = result.downloads_active || [];
+            
+            const downloadIndex = activeDownloads.findIndex(entry => 
+                entry.downloadUrl === downloadUrl || entry.lookupUrl === downloadUrl
+            );
+            
+            if (downloadIndex !== -1) {
+                activeDownloads[downloadIndex].status = status;
+                await chrome.storage.local.set({ downloads_active: activeDownloads });
+                logger.debug('Updated download status in storage:', downloadUrl, status);
+            }
+        } catch (error) {
+            logger.error('Error updating download status:', error);
+            throw error;
         }
-    } catch (error) {
-        logger.error('Error updating download status:', error);
-    }
+    });
 }
 
 /**
@@ -676,28 +729,31 @@ async function updateActiveDownloadStatus(downloadUrl, status) {
  * @param {string} downloadId - Download ID to remove
  */
 async function removeFromActiveDownloadsStorage(downloadId) {
-    try {
-        const result = await chrome.storage.local.get(['downloads_active']);
-        const activeDownloads = result.downloads_active || [];
-        
-        // Filter out the entry with matching downloadId
-        const updatedActiveDownloads = activeDownloads.filter(entry => {
-            // Primary match: downloadId (all new downloads have this)
-            if (entry.downloadId) {
-                return entry.downloadId !== downloadId;
+    return queueStorageOperation(async () => {
+        try {
+            const result = await chrome.storage.local.get(['downloads_active']);
+            const activeDownloads = result.downloads_active || [];
+            
+            // Filter out the entry with matching downloadId
+            const updatedActiveDownloads = activeDownloads.filter(entry => {
+                // Primary match: downloadId (all new downloads have this)
+                if (entry.downloadId) {
+                    return entry.downloadId !== downloadId;
+                }
+            });
+            
+            const removedCount = activeDownloads.length - updatedActiveDownloads.length;
+            if (removedCount > 0) {
+                await chrome.storage.local.set({ downloads_active: updatedActiveDownloads });
+                logger.debug(`Removed ${removedCount} entry from active downloads storage:`, downloadId);
+            } else {
+                logger.debug('No matching entry found in active downloads storage:', downloadId);
             }
-        });
-        
-        const removedCount = activeDownloads.length - updatedActiveDownloads.length;
-        if (removedCount > 0) {
-            await chrome.storage.local.set({ downloads_active: updatedActiveDownloads });
-            logger.debug(`Removed ${removedCount} entry from active downloads storage:`, downloadId);
-        } else {
-            logger.debug('No matching entry found in active downloads storage:', downloadId);
+        } catch (error) {
+            logger.error('Error removing from active downloads storage:', error);
+            throw error;
         }
-    } catch (error) {
-        logger.error('Error removing from active downloads storage:', error);
-    }
+    });
 }
 
 /**
@@ -705,36 +761,39 @@ async function removeFromActiveDownloadsStorage(downloadId) {
  * @param {Object} progressData - Final progress data with completion info
  */
 async function addToHistoryStorage(progressData) {
-    try {
-        const result = await chrome.storage.local.get(['downloads_history']);
-        let history = result.downloads_history || [];
-        
-        // Add completion timestamp if not present
-        if (!progressData.completedAt) {
-            progressData.completedAt = Date.now();
+    return queueStorageOperation(async () => {
+        try {
+            const result = await chrome.storage.local.get(['downloads_history']);
+            let history = result.downloads_history || [];
+            
+            // Add completion timestamp if not present
+            if (!progressData.completedAt) {
+                progressData.completedAt = Date.now();
+            }
+            
+            history.unshift(progressData); // Add to beginning
+            
+            // Clean up old history items based on auto-remove interval
+            const autoRemoveInterval = settingsManager.get('historyAutoRemoveInterval');
+            const cutoffTime = Date.now() - (autoRemoveInterval * 24 * 60 * 60 * 1000); // Convert days to milliseconds
+            history = history.filter(item => {
+                const itemTime = item.completedAt || 0;
+                return itemTime > cutoffTime;
+            });
+            
+            // Maintain history size limit from settings
+            const maxHistorySize = settingsManager.get('maxHistorySize');
+            if (history.length > maxHistorySize) {
+                history.splice(maxHistorySize);
+            }
+            
+            await chrome.storage.local.set({ downloads_history: history });
+            logger.debug('Added to history storage:', progressData.downloadUrl, progressData.command);
+        } catch (error) {
+            logger.error('Error adding to history storage:', error);
+            throw error;
         }
-        
-        history.unshift(progressData); // Add to beginning
-        
-        // Clean up old history items based on auto-remove interval
-        const autoRemoveInterval = settingsManager.get('historyAutoRemoveInterval');
-        const cutoffTime = Date.now() - (autoRemoveInterval * 24 * 60 * 60 * 1000); // Convert days to milliseconds
-        history = history.filter(item => {
-            const itemTime = item.completedAt || 0;
-            return itemTime > cutoffTime;
-        });
-        
-        // Maintain history size limit from settings
-        const maxHistorySize = settingsManager.get('maxHistorySize');
-        if (history.length > maxHistorySize) {
-            history.splice(maxHistorySize);
-        }
-        
-        await chrome.storage.local.set({ downloads_history: history });
-        logger.debug('Added to history storage:', progressData.downloadUrl, progressData.command);
-    } catch (error) {
-        logger.error('Error adding to history storage:', error);
-    }
+    });
 }
 
 /**
@@ -848,26 +907,29 @@ async function handleDownloadAsFlow(downloadCommand) {
  * Clean up old history items based on auto-remove interval setting
  */
 async function cleanupOldHistoryItems() {
-    try {
-        const result = await chrome.storage.local.get(['downloads_history']);
-        let history = result.downloads_history || [];
-        
-        if (history.length === 0) return;
-        
-        const autoRemoveInterval = settingsManager.get('historyAutoRemoveInterval');
-        const cutoffTime = Date.now() - (autoRemoveInterval * 24 * 60 * 60 * 1000); // Convert days to milliseconds
-        
-        const originalLength = history.length;
-        history = history.filter(item => {
-            const itemTime = item.completedAt || 0;
-            return itemTime > cutoffTime;
-        });
-        
-        if (history.length !== originalLength) {
-            await chrome.storage.local.set({ downloads_history: history });
-            logger.debug(`Cleaned up ${originalLength - history.length} old history items`);
+    return queueStorageOperation(async () => {
+        try {
+            const result = await chrome.storage.local.get(['downloads_history']);
+            let history = result.downloads_history || [];
+            
+            if (history.length === 0) return;
+            
+            const autoRemoveInterval = settingsManager.get('historyAutoRemoveInterval');
+            const cutoffTime = Date.now() - (autoRemoveInterval * 24 * 60 * 60 * 1000); // Convert days to milliseconds
+            
+            const originalLength = history.length;
+            history = history.filter(item => {
+                const itemTime = item.completedAt || 0;
+                return itemTime > cutoffTime;
+            });
+            
+            if (history.length !== originalLength) {
+                await chrome.storage.local.set({ downloads_history: history });
+                logger.debug(`Cleaned up ${originalLength - history.length} old history items`);
+            }
+        } catch (error) {
+            logger.error('Error cleaning up old history items:', error);
+            throw error;
         }
-    } catch (error) {
-        logger.error('Error cleaning up old history items:', error);
-    }
+    });
 }
