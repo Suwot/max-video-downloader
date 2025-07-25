@@ -130,12 +130,20 @@ function addDetectedVideo(tabId, videoInfo) {
         title: videoInfo.metadata?.filename || getFilenameFromUrl(videoInfo.url),
         // Set isValid: true for direct videos immediately
         ...(videoInfo.type === 'direct' ? { isValid: true } : {}),
+        // Include containers at video level if set during detection
+        ...(videoInfo.videoContainer && { videoContainer: videoInfo.videoContainer }),
+        ...(videoInfo.audioContainer && { audioContainer: videoInfo.audioContainer }),
+        ...(videoInfo.containerDetectionReason && { containerDetectionReason: videoInfo.containerDetectionReason }),
         // Standardize all video types to have track arrays
         ...(videoInfo.type === 'direct' ? {
             videoTracks: [{
                 url: videoInfo.url,
                 normalizedUrl: normalizedUrl,
-                type: 'direct'
+                type: 'direct',
+                // Include containers if they were set during detection
+                ...(videoInfo.videoContainer && { videoContainer: videoInfo.videoContainer }),
+                ...(videoInfo.audioContainer && { audioContainer: videoInfo.audioContainer }),
+                ...(videoInfo.containerDetectionReason && { containerDetectionReason: videoInfo.containerDetectionReason })
             }],
             audioTracks: [],
             subtitleTracks: []
@@ -374,7 +382,7 @@ async function processDirectVideo(tabId, normalizedUrl) {
     } else {
         logger.debug(`Processing as video content: ${normalizedUrl}`);
         
-        // Get metadata first, then generate preview with that metadata
+        // Get metadata (FFprobe will override containers if successful)
         await getFFprobeMetadata(tabId, normalizedUrl, headers);
         
         // Get updated video with metadata for preview generation (if enabled)
@@ -553,12 +561,13 @@ async function getFFprobeMetadata(tabId, normalizedUrl, headers) {
             // Only set isValid: false if ffprobe confirms not a video
             const isValid = streamInfo.hasVideo === false ? false : true;
 
-            // Determine container using unified detection system
+            // Determine container using unified detection system (FFprobe override)
             const containerDetection = detectAllContainers({
                 ffprobeContainer: streamInfo.container,
                 mimeType: video.metadata?.contentType,
                 url: video.url,
-                mediaType: video.mediaType || 'video'
+                mediaType: video.mediaType || 'video',
+                videoType: 'direct'
             });
 
             // Update the videoTracks[0] with FFprobe metadata
@@ -572,7 +581,7 @@ async function getFFprobeMetadata(tabId, normalizedUrl, headers) {
                 metaFFprobe: streamInfo,
                 videoContainer: containerDetection.container,
                 audioContainer: containerDetection.container === 'webm' ? 'webm' : 'mp3',
-                containerDetectionReason: containerDetection.reason
+                containerDetectionReason: `ffprobe-${containerDetection.reason}`
             }];
 
             updateVideo('getFFprobeMetadata', tabId, normalizedUrl, {
@@ -584,9 +593,9 @@ async function getFFprobeMetadata(tabId, normalizedUrl, headers) {
                 standardizedResolution: standardizedRes,
                 estimatedFileSizeBytes: streamInfo.estimatedFileSizeBytes || video.fileSize,
                 fileSize: streamInfo.sizeBytes || null,
-                // Use new unified container detection
+                // Use new unified container detection (FFprobe override)
                 defaultContainer: containerDetection.container,
-                containerDetectionReason: containerDetection.reason,
+                containerDetectionReason: `ffprobe-${containerDetection.reason}`,
                 // Add separate containers for audio-only downloads
                 videoContainer: containerDetection.container,
                 audioContainer: containerDetection.container === 'webm' ? 'webm' : 'mp3',
@@ -595,11 +604,19 @@ async function getFFprobeMetadata(tabId, normalizedUrl, headers) {
             });
         } else {
             logger.warn(`No stream info in ffprobe response for: ${normalizedUrl}`);
-            // Do NOT set isValid: false here, just log
+            // Clear processing flags but keep fallback containers
+            updateVideo('getFFprobeMetadata-no-stream', tabId, normalizedUrl, {
+                isBeingProcessed: false,
+                runningFFprobe: false
+            });
         }
     } catch (error) {
         logger.error(`Error getting FFprobe metadata for ${normalizedUrl}: ${error.message}`);
-        // Do NOT set isValid: false here, just log
+        // Clear processing flags but keep fallback containers
+        updateVideo('getFFprobeMetadata-error', tabId, normalizedUrl, {
+            isBeingProcessed: false,
+            runningFFprobe: false
+        });
     }
 }
 

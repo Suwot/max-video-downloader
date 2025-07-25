@@ -14,6 +14,38 @@ const DETECTION_CONSTANTS = {
     MPD_CONTEXT_TIMEOUT: 60000 // 1 minute timeout for MPD context
 };
 
+/**
+ * Get containers from MIME type for direct assignment during detection
+ * @param {string} mimeType - Content-Type header value
+ * @param {string} mediaType - Media type ('video', 'audio', or undefined)
+ * @returns {Object|null} Container assignment or null
+ */
+function getContainersFromMimeType(mimeType, mediaType) {
+    if (!mimeType) return null;
+    
+    const normalizedMime = mimeType.toLowerCase().split(';')[0]; // Remove parameters
+    const subtype = normalizedMime.split('/')[1] || '';
+    
+    let videoContainer = 'mp4'; // Default
+    
+    // Special cases for webm and mkv
+    if (subtype.includes('webm')) {
+        videoContainer = 'webm';
+    } else if (subtype.includes('matroska') || subtype.includes('mkv')) {
+        videoContainer = 'mkv';
+    }
+    
+    // Audio container based on video container
+    const audioContainer = videoContainer === 'webm' ? 'webm' : 
+                          videoContainer === 'mkv' ? 'mp3' : 'm4a';
+    
+    return {
+        videoContainer,
+        audioContainer,
+        reason: `detection-mime: ${normalizedMime}`
+    };
+}
+
 // Detection context tracking (tabId -> timestamp when MPD was detected)
 const tabsWithMpd = new Map();
 
@@ -65,6 +97,16 @@ function addVideoWithCommonProcessing(tabId, url, videoInfo, metadata, source, t
         ...(videoInfo.originalContainer && { originalContainer: videoInfo.originalContainer }),
         ...(expiryInfo && { expiryInfo })
     };
+    
+    // For direct videos, assign containers immediately using available data
+    if (videoInfo.type === 'direct' && metadata?.contentType) {
+        const containers = getContainersFromMimeType(metadata.contentType, videoInfo.mediaType);
+        if (containers) {
+            videoData.videoContainer = containers.videoContainer;
+            videoData.audioContainer = containers.audioContainer;
+            videoData.containerDetectionReason = containers.reason;
+        }
+    }
     
     // Attach headers if requestId is provided
     if (requestId) {
