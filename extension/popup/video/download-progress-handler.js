@@ -53,6 +53,12 @@ export async function updateDownloadProgress(progressData = {}) {
     // Handle completion states for all downloads (original and re-downloads)
     if (progressData.command === 'download-success' || progressData.command === 'download-error' || progressData.command === 'download-canceled') {
         const shouldAddToHistory = progressData.command !== 'download-canceled';
+        
+        // Stop elapsed time timer for this download
+        if (progressData.downloadId) {
+            stopElapsedTimeTimer(progressData.downloadId);
+        }
+        
         // Call immediately to remove from downloads-tab and prevent deduplication issues
         handleDownloadCompletion(progressData, shouldAddToHistory);
     }
@@ -279,7 +285,6 @@ function updateComponentButtonState(downloadButtonComponent, progressData = {}) 
  * @param {Object} progressData - Progress data
  */
 function updateDropdown(progressData = {}) {
-    const progress = progressData.progress;
     const allElements = findMatchingVideoElements(progressData);
     
     // Get download groups from matching video elements
@@ -294,7 +299,7 @@ function updateDropdown(progressData = {}) {
     
     // Update all matching elements
     downloadGroups.forEach(downloadGroup => {
-        updateSingleDropdown(downloadGroup, progressData, progress);
+        updateSingleDropdown(downloadGroup, progressData);
     });
 }
 
@@ -304,7 +309,8 @@ function updateDropdown(progressData = {}) {
  * @param {Object} progressData - Progress data
  * @param {number} progress - Progress percentage
  */
-function updateSingleDropdown(downloadGroup, progressData = {}, progress) {
+function updateSingleDropdown(downloadGroup, progressData = {}) {
+	const progress = progressData.progress;
     const selectedOption = downloadGroup.querySelector('.selected-option');
     const dropdownOption = downloadGroup.querySelector(`.dropdown-option[data-url="${progressData.downloadUrl}"]`);
 
@@ -326,7 +332,7 @@ function updateSingleDropdown(downloadGroup, progressData = {}, progress) {
                 
                 // Build progress display text
                 let displayText = `${progress}%`;
-                if (progressData.currentSegment) {
+                if (progress === 0 && progressData.currentSegment) {
                     displayText += ` (${progressData.currentSegment}/${progressData.totalSegments})`;
                 }
                 if (progressData.speed) {
@@ -338,6 +344,9 @@ function updateSingleDropdown(downloadGroup, progressData = {}, progress) {
 
                 const textSpan = selectedOption.querySelector('span:first-child') || selectedOption;
                 textSpan.textContent = displayText;
+                
+                // Update tooltip data attributes for hover display
+                updateProgressTooltip(selectedOption, progressData);
             }
 
             // Remove queued from dropdown-option when download starts
@@ -357,6 +366,9 @@ function updateSingleDropdown(downloadGroup, progressData = {}, progress) {
             if (selectedOption) {
                 selectedOption.classList.remove('downloading', 'queued');
                 selectedOption.style.removeProperty('--progress');
+                
+                // Clear tooltip data
+                clearProgressTooltip(selectedOption);
                 
                 // Restore original text
                 const textSpan = selectedOption.querySelector('span:first-child') || selectedOption;
@@ -443,6 +455,11 @@ export async function restoreActiveDownloads() {
                 const videoComponent = new VideoItemComponent(downloadEntry, initialState);
                 const videoElement = videoComponent.render();
                 activeDownloadsContainer.appendChild(videoElement);
+                
+                // Clear any stale timers for this downloadId (in case of popup reopen)
+                if (downloadEntry.downloadId) {
+                    stopElapsedTimeTimer(downloadEntry.downloadId);
+                }
             } else {
                 logger.warn('Download entry missing videoData, skipping:', downloadEntry.downloadUrl);
             }
@@ -536,4 +553,154 @@ function resetVideosTabButtonStates(lookupUrl) {
     } catch (error) {
         logger.error('Error resetting videos-tab button states:', error);
     }
+}
+/**
+ *
+ Update progress tooltip data attributes on selected-option element
+ * @param {HTMLElement} selectedOption - The selected-option element
+ * @param {Object} progressData - Progress data from native host
+ */
+function updateProgressTooltip(selectedOption, progressData) {
+    // Build compact tooltip content: downloaded • segments • eta • elapsed
+    const parts = [];
+    
+    // Downloaded size
+    if (progressData.downloadedBytes) {
+		const downloaded = `↓ ${formatSize(progressData.downloadedBytes)}`;
+		const segmentsProgress = `${progressData.currentSegment}/${progressData.totalSegments}`;
+		const showSegments = progressData.progress !== 0 && progressData.currentSegment && progressData.totalSegments;
+		
+        parts.push(showSegments ? `${downloaded} (${segmentsProgress})` : downloaded);
+    }
+    
+    // Elapsed time - use UI calculation if we have startTime, otherwise fallback to progressData
+    let elapsedSeconds;
+    if (progressData.downloadStartTime) {
+        elapsedSeconds = Math.round((Date.now() - progressData.downloadStartTime) / 1000);
+        // Start timer for continuous updates
+        if (progressData.downloadId) {
+            const lookupUrl = progressData.masterUrl || progressData.downloadUrl;
+            startElapsedTimeTimer(progressData.downloadId, progressData.downloadStartTime, lookupUrl);
+        }
+    } else {
+        elapsedSeconds = progressData.elapsedTime || 0;
+    }
+    
+    if (elapsedSeconds > 0) {
+        parts.push(formatTime(elapsedSeconds));
+    }
+	
+    // // ETA (if available and not complete)
+    // if (progressData.eta && progressData.eta > 0 && progressData.progress < 100) {
+    //     parts.push(formatTime(progressData.eta));
+    // }
+    
+    // Set single tooltip content attribute
+    selectedOption.setAttribute('data-tooltip-content', parts.join(' • '));
+    
+    // Keep quality for potential future use (but don't display)
+    selectedOption.setAttribute('data-tooltip-quality', 
+        progressData.selectedOptionOrigText || 'Unknown');
+    
+    // Add tooltip class for CSS styling
+    selectedOption.classList.add('has-progress-tooltip');
+}
+
+/**
+ * Clear progress tooltip data from selected-option element
+ * @param {HTMLElement} selectedOption - The selected-option element
+ */
+function clearProgressTooltip(selectedOption) {
+    selectedOption.removeAttribute('data-tooltip-content');
+    selectedOption.removeAttribute('data-tooltip-quality');
+    selectedOption.classList.remove('has-progress-tooltip');
+}
+
+// Map to track elapsed time timers: downloadId -> {timer, startTime}
+const elapsedTimeTimers = new Map();
+
+/**
+ * Start elapsed time timer for a download
+ * @param {string} downloadId - Download ID
+ * @param {number} downloadStartTime - Download start timestamp
+ * @param {string} lookupUrl - Lookup URL for videos-tab mapping (masterUrl || downloadUrl)
+ */
+function startElapsedTimeTimer(downloadId, downloadStartTime, lookupUrl) {
+    // Clear existing timer if any
+    stopElapsedTimeTimer(downloadId);
+    
+    // Start new timer that updates every second
+    const timer = setInterval(() => {
+        updateElapsedTimeForDownload(downloadId, downloadStartTime, lookupUrl);
+    }, 1000);
+    
+    elapsedTimeTimers.set(downloadId, { timer, downloadStartTime, lookupUrl });
+}
+
+/**
+ * Stop elapsed time timer for a download
+ * @param {string} downloadId - Download ID
+ */
+function stopElapsedTimeTimer(downloadId) {
+    const timerData = elapsedTimeTimers.get(downloadId);
+    if (timerData) {
+        clearInterval(timerData.timer);
+        elapsedTimeTimers.delete(downloadId);
+    }
+}
+
+/**
+ * Update elapsed time display for a specific download
+ * @param {string} downloadId - Download ID
+ * @param {number} downloadStartTime - Download start timestamp
+ * @param {string} lookupUrl - Lookup URL for videos-tab mapping
+ */
+function updateElapsedTimeForDownload(downloadId, downloadStartTime, lookupUrl) {
+    const elapsedSeconds = Math.round((Date.now() - downloadStartTime) / 1000);
+    
+    // Find elements in downloads-tab (which has data-download-id)
+    const downloadsTabElements = document.querySelectorAll(`[data-download-id="${downloadId}"] .selected-option.has-progress-tooltip`);
+    downloadsTabElements.forEach(selectedOption => {
+        updateTooltipElapsedTime(selectedOption, elapsedSeconds);
+    });
+    
+    // Find elements in videos-tab (which uses data-url for lookup)
+    if (lookupUrl) {
+        const videosTabElements = document.querySelectorAll(`[data-url="${lookupUrl}"] .selected-option.has-progress-tooltip`);
+        videosTabElements.forEach(selectedOption => {
+            updateTooltipElapsedTime(selectedOption, elapsedSeconds);
+        });
+    }
+}
+
+/**
+ * Update just the elapsed time part of an existing tooltip
+ * @param {HTMLElement} selectedOption - The selected-option element
+ * @param {number} elapsedSeconds - Elapsed time in seconds
+ */
+function updateTooltipElapsedTime(selectedOption, elapsedSeconds) {
+    const currentContent = selectedOption.getAttribute('data-tooltip-content') || '';
+    const parts = currentContent.split(' • ');
+    
+    // Replace or add elapsed time (always last part)
+    const elapsedTimeText = formatTime(elapsedSeconds);
+    if (parts.length > 0 && (parts[parts.length - 1].includes(' s') || parts[parts.length - 1].includes(' m') || parts[parts.length - 1].includes(' h') || parts[parts.length - 1].includes(' d'))) {
+        // Replace existing elapsed time
+        parts[parts.length - 1] = elapsedTimeText;
+    } else {
+        // Add elapsed time
+        parts.push(elapsedTimeText);
+    }
+    
+    selectedOption.setAttribute('data-tooltip-content', parts.join(' • '));
+}
+
+/**
+ * Clean up all elapsed time timers (called on popup close)
+ */
+export function cleanupAllElapsedTimeTimers() {
+    elapsedTimeTimers.forEach((timerData, downloadId) => {
+        clearInterval(timerData.timer);
+    });
+    elapsedTimeTimers.clear();
 }

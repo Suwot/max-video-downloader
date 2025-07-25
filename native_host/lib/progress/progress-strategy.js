@@ -377,45 +377,37 @@ class ProgressStrategy {
     }
 
     /**
-     * Calculate download speed
+     * Calculate download speed using 3-second rolling window
      * @param {number} downloaded Bytes downloaded (cumulative from FFmpeg)
      * @returns {number} Speed in bytes per second
      */
     calculateSpeed(downloaded) {
         const now = Date.now();
-        let speed = 0;
         
-        if (downloaded > this.lastBytes && downloaded > 0) {
-            const bytesDownloadedSinceLastUpdate = downloaded - this.lastBytes;
-            const timeElapsedSeconds = Math.max(0.1, (now - this.lastUpdate) / 1000);
-            
-            // Store speed sample for averaging (prevents wild fluctuations)
-            this.speedSamples.push({
-                bytesPerSecond: bytesDownloadedSinceLastUpdate / timeElapsedSeconds,
-                timestamp: now
-            });
-            
-            // Keep only recent samples (last 5 for smoothing)
-            if (this.speedSamples.length > 5) {
-                this.speedSamples.shift();
-            }
-            
-            // Calculate average speed from recent samples
-            if (this.speedSamples.length > 0) {
-                const totalSpeed = this.speedSamples.reduce((sum, sample) => sum + sample.bytesPerSecond, 0);
-                speed = totalSpeed / this.speedSamples.length;
-            }
-        } else if (downloaded > 0) {
-            // Fallback: overall average speed since start
-            const elapsedSeconds = Math.max(0.1, (now - this.startTime) / 1000);
-            speed = downloaded / elapsedSeconds;
+        // Remove samples older than 3 seconds
+        this.speedSamples = this.speedSamples.filter(sample => 
+            now - sample.timestamp <= 3000
+        );
+        
+        // Add current sample
+        this.speedSamples.push({
+            bytes: downloaded,
+            timestamp: now
+        });
+        
+        // Need at least 2 samples to calculate speed
+        if (this.speedSamples.length < 2) {
+            return 0;
         }
         
-        // Update state for next calculation
-        this.lastBytes = downloaded;
-        this.lastUpdate = now;
+        // Calculate speed over entire 3-second window
+        const oldest = this.speedSamples[0];
+        const newest = this.speedSamples[this.speedSamples.length - 1];
         
-        return speed;
+        const totalBytes = newest.bytes - oldest.bytes;
+        const totalTime = (newest.timestamp - oldest.timestamp) / 1000;
+        
+        return totalTime > 0 ? totalBytes / totalTime : 0;
     }
 
     /**

@@ -96,6 +96,9 @@ class ProgressTracker {
             data.downloadUrl = this.downloadUrl;
         }
         
+        // Add elapsed time since download start
+        data.elapsedTime = Math.round((Date.now() - this.strategy.startTime) / 1000);
+        
         // Add ETA calculation if we have sufficient data
         if (data.progress > 0 && data.speed > 0 && data.downloadedBytes > 0) {
             let totalBytes = data.totalBytes;

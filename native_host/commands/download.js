@@ -315,7 +315,8 @@ class DownloadCommand extends BaseCommand {
                 audioOnly,
                 subsOnly,
                 sessionId, 
-				downloadId
+                downloadId,
+                selectedOptionOrigText
             });
             
         } catch (err) {
@@ -704,7 +705,8 @@ class DownloadCommand extends BaseCommand {
         audioOnly,
         subsOnly,
         sessionId,
-		downloadId
+        downloadId,
+        selectedOptionOrigText
     }) {
         return new Promise(async (resolve, reject) => {
             // Probe duration upfront if not provided to avoid race conditions
@@ -728,6 +730,8 @@ class DownloadCommand extends BaseCommand {
                         downloadUrl,
                         downloadId, // Pass through downloadId for progress mapping
                         filename: path.basename(uniqueOutput),
+                        selectedOptionOrigText, // Pass through selected option text
+                        downloadStartTime, // Add start time for UI elapsed time calculation
                         isRedownload,
                         ...data
                     }, { useMessageId: false }); // Event message, no response ID

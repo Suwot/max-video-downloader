@@ -8,6 +8,7 @@
     width: 100%;
     height: 24px;
     border-radius: 6px;
+    overflow: visible; // Allow tooltips to show outside
 
     .selected-option {
         display: flex;
@@ -26,9 +27,10 @@
         // Progress states
         &.downloading {
             position: relative;
-            overflow: hidden;
+            overflow: visible; // Allow tooltip to show outside
 
-            &::after {
+            // Progress bar - use ::before to avoid conflict with tooltip arrow
+            &::before {
                 content: '';
                 position: absolute;
                 top: 0;
@@ -39,11 +41,37 @@
                 opacity: 0.9;
                 transition: width var(--transition-fast);
                 z-index: 0;
+                border-radius: 6px; // Match container border radius
             }
 
             span {
                 position: relative;
                 z-index: 1;
+            }
+        }
+        
+        // Progress tooltip - same width as parent, single line
+        &.downloading.has-progress-tooltip:hover::after {
+            content: attr(data-tooltip-content);
+            position: absolute;
+            bottom: calc(100% + 8px);
+            left: 0;
+            right: 0;
+            padding: 6px 8px;
+            border-radius: 6px;
+            font-size: var(--font-body);
+            white-space: nowrap;
+            text-align: center;
+            z-index: 200;
+            pointer-events: none;
+            @extend %theme-backdrop;
+            
+            .theme-dark & {
+                color: var(--text-primary-dark);
+            }
+            
+            .theme-light & {
+                color: var(--text-primary-light);
             }
         }
     }
