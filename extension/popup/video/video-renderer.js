@@ -74,26 +74,6 @@ export async function renderVideos() {
 
     // Request cache stats and download progress restoration
     sendPortMessage({ command: 'getDownloadProgress' }); // Restore download progress during rerender
-
-    // Add CSS for the extracted badge and timestamp if it doesn't exist
-    if (!document.getElementById('custom-badges-style')) {
-        const style = document.createElement('style');
-        style.id = 'custom-badges-style';
-        style.textContent = `
-            .badge.extracted {
-                display: inline-block;
-                background-color: #2196F3;
-                color: white;
-                font-size: var(--font-body);
-                padding: 2px 6px;
-                border-radius: 10px;
-                margin-inline-start: 8px;
-                vertical-align: middle;
-                font-weight: 500;
-            }
-        `;
-        document.head.appendChild(style);
-    }
 }
 
 /**

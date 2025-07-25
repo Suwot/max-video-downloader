@@ -236,14 +236,6 @@ export class VideoItemComponent {
         title.className = 'video-title item-title';
         title.textContent = this.filename || this.videoData.title || 'Untitled Video';
         
-        // Add extracted badge for videos found in query parameters
-        if (this.videoData.foundFromQueryParam) {
-            const extractedBadge = document.createElement('span');
-            extractedBadge.className = 'badge extracted';
-            extractedBadge.innerHTML = '🔎 Extracted';
-            title.appendChild(extractedBadge);
-        }
-        
         // Dismiss (X) button
         const dismissButton = document.createElement('button');
         dismissButton.className = 'dismiss-button';
