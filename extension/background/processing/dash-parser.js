@@ -206,10 +206,22 @@ function extractAccessibilityInfo(adaptationSetContent) {
  * First validates if it's really a DASH manifest using light parsing
  * 
  * @param {string} url - URL of the DASH manifest
- * @param {Object} [headers] - Optional request headers
  * @returns {Promise<Object>} Validated and parsed DASH content structured by media type
  */
-export async function parseDashManifest(url, headers = null, tabId) {
+export async function parseDashManifest(url) {
+    // Retrieve the video object containing all detection data
+    const videoObject = await getVideoByUrl(url);
+    if (!videoObject) {
+        return {
+            status: 'video-not-found',
+            isValid: false,
+            videoTracks: [],
+            audioTracks: [],
+            subtitleTracks: []
+        };
+    }
+    
+    const { tabId, headers, metadata } = videoObject;
     const normalizedUrl = normalizeUrl(url);
     
     // Skip if already being processed
@@ -231,12 +243,8 @@ export async function parseDashManifest(url, headers = null, tabId) {
     try {
         logger.debug(`Validating manifest: ${url}, with these headers:`, headers);
         
-        // Get video metadata from storage if available
-        const videoInfo = await getVideoByUrl(url);
-        const existingMetadata = videoInfo?.metadata;
-        
         // First perform light parsing to validate this is actually a DASH manifest
-        const validation = await validateManifestType(url, headers, existingMetadata, tabId);
+        const validation = await validateManifestType(videoObject);
         
         // Preserve the light parsing timestamp
         const timestampLP = validation.timestampLP || Date.now();
@@ -256,34 +264,20 @@ export async function parseDashManifest(url, headers = null, tabId) {
         
         logger.debug(`Confirmed valid DASH manifest, proceeding to full parse: ${url}`);
         
-        // Use content from light parsing if available, otherwise fetch full content
-        let content;
-        if (validation.content) {
-            logger.debug('Reusing content from light parsing for full parse');
-            content = validation.content;
-        } else {
-            logger.debug('Content not available from light parsing, fetching full content');
-            const fetchResult = await fetchManifest(url, {
-                headers,
-                maxRetries: 3,
-                tabId: tabId
-            });
-            
-            if (!fetchResult.ok) {
-                logger.error(`Failed to fetch MPD: ${fetchResult.status}`);
-                return { 
-                    status: 'fetch-failed',
-                    isValid: false,
-                    timestampLP,
-                    retryCount: fetchResult.retryCount || 0,
-                    videoTracks: [],
-                    audioTracks: [],
-                    subtitleTracks: []
-                };
-            }
-            
-            content = fetchResult.content;
+        // Always use content from validation (guaranteed to be available)
+        const content = validation.content;
+        if (!content) {
+            logger.error('No content available from validation - this should not happen');
+            return { 
+                status: 'no-content',
+                isValid: false,
+                timestampLP,
+                videoTracks: [],
+                audioTracks: [],
+                subtitleTracks: []
+            };
         }
+        logger.debug('Using content from validation for full parse');
         
         const baseUrl = getBaseDirectory(url);
         

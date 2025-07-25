@@ -250,7 +250,7 @@ async function processHlsVideo(tabId, normalizedUrl) {
     const headers = video.headers || {};
     
     // Run combined validation and parsing
-    const hlsResult = await parseHlsManifest(video.url, headers, tabId);
+    const hlsResult = await parseHlsManifest(video.url);
     
     if (hlsResult.status === 'success') {
         // HLS parser now outputs standardized structure with videoTracks[]
@@ -306,7 +306,7 @@ async function processDashVideo(tabId, normalizedUrl) {
     const headers = video.headers || {};
     
     // Run combined validation and parsing
-    const dashResult = await parseDashManifest(video.url, headers, tabId);
+    const dashResult = await parseDashManifest(video.url);
     
     if (dashResult.status === 'success') {
         // DASH already has standardized structure with videoTracks[]

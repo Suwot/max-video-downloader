@@ -281,11 +281,11 @@ export async function fetchManifest(url, options = {}) {
  * Relies entirely on content inspection to determine manifest type, not content-type header
  * Returns enhanced result with validation and content data when possible
  * 
- * @param {string} url - URL to check
- * @param {Object} [headers] - Optional request headers
+ * @param {Object} videoObject - Video object containing all detection data
  * @returns {Promise<Object>} - Validation result with additional metadata
  */
-export async function validateManifestType(url, headers = null, existingMetadata = null, tabId) {
+export async function validateManifestType(videoObject) {
+    const { url, headers, metadata, tabId } = videoObject;
     const logger = createLogger('Manifest Validator');
     try {
         logger.debug(`Checking manifest type for ${url}`);
@@ -295,11 +295,11 @@ export async function validateManifestType(url, headers = null, existingMetadata
         let supportsRanges = false;
         let fullContent = null;
         
-        // Use existing metadata if provided to avoid redundant HEAD request
-        if (existingMetadata) {
-            contentLength = existingMetadata.contentLength || null;
-            supportsRanges = existingMetadata.supportsRanges || false;
-            logger.debug(`Using existing metadata for manifest validation: content-length=${contentLength}, supports-ranges=${supportsRanges}`);
+        // Use detection metadata to avoid HEAD request
+        if (metadata) {
+            contentLength = metadata.contentLength || null;
+            supportsRanges = metadata.supportsRanges || false;
+            logger.debug(`Using detection metadata for manifest validation: content-length=${contentLength}, supports-ranges=${supportsRanges}`);
         }
         
         let validationResult = {
@@ -312,8 +312,8 @@ export async function validateManifestType(url, headers = null, existingMetadata
             content: null
         };
         
-        // Only do HEAD request if we don't have metadata
-        if (!existingMetadata) {
+        // Only do HEAD request if we don't have detection metadata
+        if (!metadata) {
             try {
                 const controller = new AbortController();
                 const timeoutId = setTimeout(() => controller.abort(), 3000);
@@ -381,6 +381,8 @@ export async function validateManifestType(url, headers = null, existingMetadata
                     validationResult.manifestType = 'dash';
                     validationResult.status = 'confirmed-by-content';
                     validationResult.timestampLP = Date.now();
+                    // Always preserve content for reuse
+                    validationResult.content = fullContent;
                     logger.debug(`Content inspection confirms DASH manifest`);
                     return validationResult;
                 } else if (isHls) {
@@ -394,12 +396,16 @@ export async function validateManifestType(url, headers = null, existingMetadata
                     validationResult.isVariant = isVariant;
                     validationResult.status = 'confirmed-by-content';
                     validationResult.timestampLP = Date.now();
+                    // Always preserve content for reuse
+                    validationResult.content = fullContent;
                     logger.debug(`Content inspection confirms HLS ${isMaster ? 'master' : (isVariant ? 'variant' : '')} playlist`);
                     return validationResult;
                 }
                 
                 validationResult.status = 'rejected-by-content';
                 validationResult.timestampLP = Date.now();
+                // Still preserve content even if rejected for debugging
+                validationResult.content = fullContent;
                 logger.debug('Content inspection rejects manifest - neither DASH nor HLS');
                 return validationResult;
             } catch (error) {
@@ -440,6 +446,8 @@ export async function validateManifestType(url, headers = null, existingMetadata
                 validationResult.manifestType = 'dash';
                 validationResult.status = 'confirmed-by-partial';
                 validationResult.timestampLP = Date.now();
+                // Always preserve content for reuse
+                validationResult.content = result.content;
                 logger.debug(`Partial content inspection confirms DASH manifest`);
                 return validationResult;
             } else if (isHls) {
@@ -453,12 +461,16 @@ export async function validateManifestType(url, headers = null, existingMetadata
                 validationResult.isVariant = isVariant;
                 validationResult.status = 'confirmed-by-partial';
                 validationResult.timestampLP = Date.now();
+                // Always preserve content for reuse
+                validationResult.content = result.content;
                 logger.debug(`Partial content inspection confirms HLS ${isMaster ? 'master' : (isVariant ? 'variant' : '')} playlist`);
                 return validationResult;
             }
             
             validationResult.status = 'rejected-by-partial';
             validationResult.timestampLP = Date.now();
+            // Still preserve content even if rejected for debugging
+            validationResult.content = result.content;
             logger.debug('Partial content inspection rejects manifest - neither DASH nor HLS');
             return validationResult;
         }

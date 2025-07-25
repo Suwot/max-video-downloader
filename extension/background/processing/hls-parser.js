@@ -25,10 +25,26 @@ logger.setLevel('ERROR');
  * First validates if it's really an HLS manifest using universal validator
  * 
  * @param {string} url - URL of the HLS manifest
- * @param {Object} [headers] - Optional request headers
  * @returns {Promise<Object>} Validated and parsed HLS content with videoTracks
  */
-export async function parseHlsManifest(url, headers = null, tabId) {
+export async function parseHlsManifest(url) {
+    // Retrieve the video object containing all detection data
+    const videoObject = await getVideoByUrl(url);
+    if (!videoObject) {
+        return {
+            status: 'video-not-found',
+            isValid: false,
+            isMaster: false,
+            isVariant: false,
+            videoTracks: [],
+            audioTracks: [],
+            subtitleTracks: [],
+            closedCaptions: [],
+            hasMediaGroups: false
+        };
+    }
+    
+    const { tabId, headers, metadata } = videoObject;
     const normalizedUrl = normalizeUrl(url);
     
     // Skip if already being processed
@@ -54,12 +70,8 @@ export async function parseHlsManifest(url, headers = null, tabId) {
     try {
         logger.debug(`Validating manifest: ${url} with these headers:`, headers);
         
-        // Get video metadata from storage if available
-        const videoInfo = await getVideoByUrl(url);
-        const existingMetadata = videoInfo?.metadata;
-        
         // First perform universal validation to confirm this is an HLS manifest
-        const validation = await validateManifestType(url, headers, existingMetadata, tabId);
+        const validation = await validateManifestType(videoObject);
         
         // Preserve the light parsing timestamp
         const timestampLP = validation.timestampLP || Date.now();
@@ -87,48 +99,27 @@ export async function parseHlsManifest(url, headers = null, tabId) {
         
         logger.debug(`Confirmed valid HLS ${isMaster ? 'master' : (isVariant ? 'variant' : 'unknown')} manifest, proceeding to full parse: ${url}`);
         
-        // Use content from light parsing if available, otherwise fetch full content
-        let content;
-        if (validation.content) {
-            logger.debug('Reusing content from light parsing for full parse');
-            content = validation.content;
-        } else {
-            logger.debug('Content not available from light parsing, fetching full content');
-            const fetchResult = await fetchManifest(url, {
-                headers,
-                maxRetries: 3,
-                tabId: tabId
-            });
-            
-            if (!fetchResult.ok) {
-                logger.error(`Failed to fetch HLS playlist: ${fetchResult.status}`);
-                return { 
-                    status: 'fetch-failed',
-                    isValid: false,
-                    timestampLP,
-                    isMaster: false,
-                    isVariant: false, 
-                    videoTracks: [],
-                    audioTracks: [],
-                    subtitleTracks: [],
-                    closedCaptions: [],
-                    hasMediaGroups: false
-                };
-            }
-            
-            content = fetchResult.content;
+        // Always use content from validation (guaranteed to be available)
+        const content = validation.content;
+        if (!content) {
+            logger.error('No content available from validation - this should not happen');
+            return { 
+                status: 'no-content',
+                isValid: false,
+                timestampLP,
+                isMaster: false,
+                isVariant: false, 
+                videoTracks: [],
+                audioTracks: [],
+                subtitleTracks: [],
+                closedCaptions: [],
+                hasMediaGroups: false
+            };
         }
+        logger.debug('Using content from validation for full parse');
         
-        // Double-check content type based on actual content
-        // This ensures we handle the manifest correctly regardless of Content-Type header
-        const hasStreamInf = content.includes('#EXT-X-STREAM-INF');
-        const hasExtInf = content.includes('#EXTINF');
-        
-        // Force correct type detection based on content inspection
-        isMaster = hasStreamInf;
-        isVariant = !isMaster && hasExtInf;
-        
-        logger.debug(`Content inspection confirms: isMaster=${isMaster}, isVariant=${isVariant}`);
+        // Trust validation results (no redundant type detection)
+        logger.debug(`Using validation results: isMaster=${isMaster}, isVariant=${isVariant}`);
         
         const baseUrl = getBaseDirectory(url);
         
