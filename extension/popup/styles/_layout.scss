@@ -181,7 +181,6 @@ header {
         display: flex;
         flex-direction: column;
         border-radius: 8px;
-        overflow: hidden;
 		gap: 12px;
         padding: 12px;
         @extend %theme-bg-static;

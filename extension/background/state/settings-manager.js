@@ -12,6 +12,7 @@ const SETTINGS_DEFAULTS = {
   minFileSizeFilter: 102400, // 100KB in bytes (for video-detector.js)
   minFileSizeFilterUnit: 1024, // KB multiplier (user's preferred unit)
   autoGeneratePreviews: true,
+  saveDownloadsInHistory: true,
   maxHistorySize: 50,
   historyAutoRemoveInterval: 30
 };

@@ -189,12 +189,6 @@
         color: var(--color-red);
     }
 
-    .input-constraint {
-        font-size: 11px;
-        color: var(--text-secondary);
-        opacity: 0.7;
-    }
-
     // Horizontal layout variant
     &.horizontal {
         flex-direction: row;
@@ -234,6 +228,42 @@
     display: flex;
     flex-direction: column;
     gap: 4px;
+}
+
+// Input constraint wrapper - works around input pseudo-element limitations
+.input-constraint-wrapper {
+    position: relative;
+    display: inline-block;
+    width: 100%;
+
+    &[data-constraint] {
+        &:hover::after,
+        &:focus-within::after {
+            content: attr(data-constraint);
+            position: absolute;
+            top: calc(100% + 4px);
+            left: 0;
+			right: 0;
+			z-index: 4;
+            padding: 4px 6px;
+            font-size: 11px;
+            border-radius: 4px;
+            pointer-events: none;
+            white-space: nowrap;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+            
+            .theme-dark & {
+                background-color: rgba(0, 0, 0, 0.95);
+                color: #fff;
+            }
+            
+            .theme-light & {
+                background-color: rgba(0, 0, 0, 0.9);
+                color: #fff;
+            }
+        }
+    }
 }
 
 .path-input.clickable {

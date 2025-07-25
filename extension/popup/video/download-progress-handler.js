@@ -52,7 +52,8 @@ export async function updateDownloadProgress(progressData = {}) {
     
     // Handle completion states for all downloads (original and re-downloads)
     if (progressData.command === 'download-success' || progressData.command === 'download-error' || progressData.command === 'download-canceled') {
-        const shouldAddToHistory = progressData.command !== 'download-canceled';
+        // Use the addedToHistory flag from background instead of making UI decision
+        const addedToHistory = progressData.addedToHistory || false;
         
         // Stop elapsed time timer for this download
         if (progressData.downloadId) {
@@ -60,7 +61,7 @@ export async function updateDownloadProgress(progressData = {}) {
         }
         
         // Call immediately to remove from downloads-tab and prevent deduplication issues
-        handleDownloadCompletion(progressData, shouldAddToHistory);
+        handleDownloadCompletion(progressData, addedToHistory);
     }
     
     logger.debug('All UI elements updated for command:', progressData.command);

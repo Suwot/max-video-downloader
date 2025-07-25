@@ -334,7 +334,8 @@ async function handleDownloadEvent(event) {
             success: event.success, 
             error: event.error,
             selectedOptionOrigText: downloadEntry?.downloadRequest?.selectedOptionOrigText || null,
-            downloadId: downloadId
+            downloadId: downloadId,
+            addedToHistory: settingsManager.get('saveDownloadsInHistory') && (command === 'download-success' || command === 'download-error')
         }
         : { ...event, downloadId: downloadId };
 
@@ -803,6 +804,13 @@ async function removeFromActiveDownloadsStorage(downloadId) {
  * @param {Object} progressData - Final progress data with completion info
  */
 async function addToHistoryStorage(progressData) {
+    // Check if history saving is enabled
+    const saveDownloadsInHistory = settingsManager.get('saveDownloadsInHistory');
+    if (!saveDownloadsInHistory) {
+        logger.debug('History saving disabled, skipping:', progressData.downloadUrl);
+        return;
+    }
+
     return queueStorageOperation(async () => {
         try {
             const result = await chrome.storage.local.get(['downloads_history']);

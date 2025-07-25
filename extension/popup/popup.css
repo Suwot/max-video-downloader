@@ -476,7 +476,6 @@ header .heading-row {
       -ms-flex-direction: column;
           flex-direction: column;
   border-radius: 8px;
-  overflow: hidden;
   gap: 12px;
   padding: 12px;
 }
@@ -1110,11 +1109,6 @@ header .heading-row {
   margin: 0;
   color: var(--color-red);
 }
-.input-group .input-constraint {
-  font-size: 11px;
-  color: var(--text-secondary);
-  opacity: 0.7;
-}
 .input-group.horizontal {
   -webkit-box-orient: horizontal;
   -webkit-box-direction: normal;
@@ -1163,6 +1157,36 @@ header .heading-row {
       -ms-flex-direction: column;
           flex-direction: column;
   gap: 4px;
+}
+
+.input-constraint-wrapper {
+  position: relative;
+  display: inline-block;
+  width: 100%;
+}
+.input-constraint-wrapper[data-constraint]:hover::after, .input-constraint-wrapper[data-constraint]:focus-within::after {
+  content: attr(data-constraint);
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 4;
+  padding: 4px 6px;
+  font-size: 11px;
+  border-radius: 4px;
+  pointer-events: none;
+  white-space: nowrap;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  -webkit-box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+.theme-dark .input-constraint-wrapper[data-constraint]:hover::after, .theme-dark .input-constraint-wrapper[data-constraint]:focus-within::after {
+  background-color: rgba(0, 0, 0, 0.95);
+  color: #fff;
+}
+.theme-light .input-constraint-wrapper[data-constraint]:hover::after, .theme-light .input-constraint-wrapper[data-constraint]:focus-within::after {
+  background-color: rgba(0, 0, 0, 0.9);
+  color: #fff;
 }
 
 .path-input.clickable {

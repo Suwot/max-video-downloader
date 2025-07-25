@@ -25,6 +25,7 @@ const SETTING_CONFIGS = {
     ]
   },
   autoGeneratePreviews: { type: 'boolean' },
+  saveDownloadsInHistory: { type: 'boolean' },
   maxHistorySize: { type: 'number', min: 0, max: 200, confirmReduce: true },
   historyAutoRemoveInterval: { type: 'number', min: 1, max: 365 }
 };
@@ -74,16 +75,17 @@ function createSettingsHTML() {
 						</div>
 					</label>
 					<div class="input-container">
-						<input 
-							type="number" 
-							data-setting="maxConcurrentDownloads"
-							class="input-field" 
-							min="1" 
-							max="10" 
-							value="1"
-							placeholder="1"
-						/>
-						<div class="input-constraint">Range: 1-10</div>
+						<div class="input-constraint-wrapper" data-constraint="1-10">
+							<input 
+								type="number" 
+								data-setting="maxConcurrentDownloads"
+								class="input-field" 
+								min="1" 
+								max="10" 
+								value="1"
+								placeholder="1"
+							/>
+						</div>
 					</div>
 				</div>
 				
@@ -99,14 +101,15 @@ function createSettingsHTML() {
 						</div>
 					</label>
 					<div class="input-container">
-						<input 
-							type="text" 
-							data-setting="defaultSavePath"
-							class="input-field path-input clickable" 
-							readonly
-							placeholder="Click to choose folder"
-						/>
-						<div class="input-constraint">Do not choose root folders!</div>
+						<div class="input-constraint-wrapper" data-constraint="Do not choose root folders!">
+							<input 
+								type="text" 
+								data-setting="defaultSavePath"
+								class="input-field path-input clickable" 
+								readonly
+								placeholder="Click to choose folder"
+							/>
+						</div>
 					</div>
 				</div>
 				
@@ -151,18 +154,19 @@ function createSettingsHTML() {
 								<button type="button" class="unit-option active" data-multiplier="1024">KB</button>
 								<button type="button" class="unit-option" data-multiplier="1048576">MB</button>
 							</div>
-							<input 
-								type="number" 
-								data-setting="minFileSizeFilter"
-								class="input-field unit-number-input" 
-								min="0" 
-								max="102400"
-								step="0.01"
-								value="100"
-								placeholder="100"
-							/>
+							<div class="input-constraint-wrapper" data-constraint="Max: 100 MB">
+								<input 
+									type="number" 
+									data-setting="minFileSizeFilter"
+									class="input-field unit-number-input" 
+									min="0" 
+									max="102400"
+									step="0.01"
+									value="100"
+									placeholder="100"
+								/>
+							</div>
 						</div>
-						<div class="input-constraint">Max: 100 MB</div>
 					</div>
 				</div>
 				
@@ -188,8 +192,29 @@ function createSettingsHTML() {
 				</div>
             </div>
 
-            <!-- History Settings Section -->
+            <!-- History Settings Section -->		
             <div class="settings-section">
+				<div class="input-group horizontal">
+					<label class="input-label">
+						Save Downloads in History
+						<div class="tooltip-icon" data-tooltip="Save completed downloads to history for tracking">
+							<svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+								<circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
+								<path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+								<path d="M12 17h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+							</svg>
+						</div>
+					</label>
+					<label class="toggle-switch">
+						<input 
+							type="checkbox" 
+							data-setting="saveDownloadsInHistory"
+							checked
+						/>
+						<span class="toggle-slider"></span>
+					</label>
+				</div>
+				
 				<div class="input-group horizontal">
 					<label class="input-label">
 						Max. History Items
@@ -202,16 +227,17 @@ function createSettingsHTML() {
 						</div>
 					</label>
 					<div class="input-container">
-						<input 
-							type="number" 
-							data-setting="maxHistorySize"
-							class="input-field" 
-							min="0" 
-							max="200"
-							value="50"
-							placeholder="50"
-						/>
-						<div class="input-constraint">Range: 0-200</div>
+						<div class="input-constraint-wrapper" data-constraint="0-200">
+							<input 
+								type="number" 
+								data-setting="maxHistorySize"
+								class="input-field" 
+								min="0" 
+								max="200"
+								value="50"
+								placeholder="50"
+							/>
+						</div>
 					</div>
 				</div>
 				
@@ -227,16 +253,17 @@ function createSettingsHTML() {
 						</div>
 					</label>
 					<div class="input-container">
-						<input 
-							type="number" 
-							data-setting="historyAutoRemoveInterval"
-							class="input-field" 
-							min="1" 
-							max="365"
-							value="30"
-							placeholder="30"
-						/>
-						<div class="input-constraint">Range: 1-365</div>
+						<div class="input-constraint-wrapper" data-constraint="1-365">
+							<input 
+								type="number" 
+								data-setting="historyAutoRemoveInterval"
+								class="input-field" 
+								min="1" 
+								max="365"
+								value="30"
+								placeholder="30"
+							/>
+						</div>
 					</div>
 				</div>
             </div>
