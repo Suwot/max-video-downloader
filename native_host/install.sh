@@ -22,18 +22,18 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
     # macOS
     TARGET_DIR="$HOME/Library/Application Support/Google/Chrome/NativeMessagingHosts"
     mkdir -p "$TARGET_DIR"
-    cp "$DIR/manifest.json" "$TARGET_DIR/com.mycompany.ffmpeg.json"
+    cp "$DIR/manifest.json" "$TARGET_DIR/pro.maxvideodownloader.coapp.json"
     echo "Native host installed for macOS."
 elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
     # Linux
     TARGET_DIR="$HOME/.config/google-chrome/NativeMessagingHosts"
     mkdir -p "$TARGET_DIR"
-    cp "$DIR/manifest.json" "$TARGET_DIR/com.mycompany.ffmpeg.json"
+    cp "$DIR/manifest.json" "$TARGET_DIR/pro.maxvideodownloader.coapp.json"
     echo "Native host installed for Linux."
 elif [[ "$OSTYPE" == "msys"* || "$OSTYPE" == "win"* ]]; then
     # Windows - requires registry edit
     echo "For Windows, please manually add the registry key:"
-    echo "HKEY_CURRENT_USER\\Software\\Google\\Chrome\\NativeMessagingHosts\\com.mycompany.ffmpeg"
+    echo "HKEY_CURRENT_USER\\Software\\Google\\Chrome\\NativeMessagingHosts\\pro.maxvideodownloader.coapp.ffmpeg"
     echo "with value: $DIR\\manifest.json"
     echo "Or run the registry script as administrator to install automatically."
     exit 0
@@ -47,4 +47,4 @@ chmod +x "$HOST_PATH"
 
 echo "Installation complete!"
 echo "Native host application is installed at: $HOST_PATH"
-echo "Manifest is installed at: $TARGET_DIR/com.mycompany.ffmpeg.json"
+echo "Manifest is installed at: $TARGET_DIR/pro.maxvideodownloader.coapp.json"

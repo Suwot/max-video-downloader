@@ -7,7 +7,7 @@ export class NativeHostService {
         this.eventListeners = new Map(); // For event-driven communication
         this.reconnectTimer = null;
         this.heartbeatTimer = null;
-        this.hostName = 'com.mycompany.ffmpeg';
+        this.hostName = 'pro.maxvideodownloader.coapp';
         this.RECONNECT_DELAY = 2000;
         this.HEARTBEAT_INTERVAL = 15000; // Match native host: 15 seconds
         
