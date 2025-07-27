@@ -1,7 +1,7 @@
 {
-  "name": "host",
-  "version": "1.0.0",
-  "description": "Native host for video downloader extension",
+  "name": "mvdcoapp",
+  "version": "0.1.0",
+  "description": "MAX Video Downloader Native Host - mvdcoapp",
   "main": "index.js",
   "bin": "index.js",
   "pkg": {
@@ -15,7 +15,12 @@
     ]
   },
   "scripts": {
-    "build": "pkg .",
+    "build": "./build.sh -build",
+    "build:mac": "./build.sh -build mac-arm64",
+    "build:app": "./build.sh -package-app",
+    "install": "./build.sh -install",
+    "uninstall": "./build.sh -uninstall",
+    "version": "./build.sh -version",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],

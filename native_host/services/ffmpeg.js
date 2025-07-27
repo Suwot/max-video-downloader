@@ -74,74 +74,101 @@ class FFmpegService {
                 }
             }
             
-            // Platform-specific paths
-            if (process.platform === 'darwin') {
-                // Use the custom ffmpeg and ffprobe binaries from the project
-                const customBinDir = path.join(__dirname, '..', 'bin', 'mac', 'bin');
-                const ffmpegPath = path.join(customBinDir, 'ffmpeg');
-                const ffprobePath = path.join(customBinDir, 'ffprobe');
+            // Try to get binaries using smart path resolution
+            const binaryPaths = this.getBinaryPaths();
+            
+            if (fs.existsSync(binaryPaths.ffmpeg) && fs.existsSync(binaryPaths.ffprobe)) {
+                this.ffmpegPath = binaryPaths.ffmpeg;
+                this.ffprobePath = binaryPaths.ffprobe;
                 
-                if (fs.existsSync(ffmpegPath) && fs.existsSync(ffprobePath)) {
-                    this.ffmpegPath = ffmpegPath;
-                    this.ffprobePath = ffprobePath;
-                    
-                    // Save these paths to config for future use
-                    if (customPathsConfig.enabled) {
-                        configService.set('ffmpegCustomPaths', {
-                            enabled: true,
-                            ffmpegPath: this.ffmpegPath,
-                            ffprobePath: this.ffprobePath
-                        });
-                    }
-                    
-                    logDebug('Using custom FFmpeg at:', this.ffmpegPath);
-                    logDebug('Using custom FFprobe at:', this.ffprobePath);
-                    return true;
-                } else {
-                    logDebug('Custom FFmpeg binaries not found at:', customBinDir);
-                    
-                    // Fallback to system paths if custom binaries are not found
-                    const macOSPaths = [
-                        '/opt/homebrew/bin',  // M1 Mac Homebrew
-                        '/usr/local/bin',     // Intel Mac Homebrew
-                        '/opt/local/bin',     // MacPorts
-                        '/usr/bin'            // System
-                    ];
-                    
-                    // Try each path until we find both ffmpeg and ffprobe
-                    for (const basePath of macOSPaths) {
-                        const sysFfmpegPath = `${basePath}/ffmpeg`;
-                        const sysFfprobePath = `${basePath}/ffprobe`;
-                        
-                        if (fs.existsSync(sysFfmpegPath) && fs.existsSync(sysFfprobePath)) {
-                            this.ffmpegPath = sysFfmpegPath;
-                            this.ffprobePath = sysFfprobePath;
-                            logDebug('Falling back to system FFmpeg at:', this.ffmpegPath);
-                            logDebug('Falling back to system FFprobe at:', this.ffprobePath);
-                            return true;
-                        }
-                    }
+                // Save these paths to config for future use
+                if (customPathsConfig.enabled) {
+                    configService.set('ffmpegCustomPaths', {
+                        enabled: true,
+                        ffmpegPath: this.ffmpegPath,
+                        ffprobePath: this.ffprobePath
+                    });
                 }
-            } else if (process.platform === 'win32') {
-                // Windows paths
-                this.ffmpegPath = 'C:\\ffmpeg\\bin\\ffmpeg.exe';
-                this.ffprobePath = 'C:\\ffmpeg\\bin\\ffprobe.exe';
-            } else {
-                // Linux paths
-                this.ffmpegPath = '/usr/bin/ffmpeg';
-                this.ffprobePath = '/usr/bin/ffprobe';
+                
+                logDebug('Using FFmpeg at:', this.ffmpegPath);
+                logDebug('Using FFprobe at:', this.ffprobePath);
+                return true;
             }
 
-            // Final check if paths are valid
-            if (!fs.existsSync(this.ffmpegPath) || !fs.existsSync(this.ffprobePath)) {
-                throw new Error('FFmpeg or FFprobe not found at specified paths');
-            }
-
-            return true;
+            // Fallback to system paths
+            return this.trySystemPaths();
         } catch (err) {
             logDebug('FFmpeg check failed:', err);
             return false;
         }
+    }
+
+    /**
+     * Get binary paths based on execution context (dev vs built)
+     */
+    getBinaryPaths() {
+        // Check if we're running from a built binary (pkg sets this)
+        const isBuilt = typeof process.pkg !== 'undefined';
+        
+        if (isBuilt) {
+            // Built binary: binaries are in same directory as executable
+            const execDir = path.dirname(process.execPath);
+            logDebug('Running from built binary, exec dir:', execDir);
+            
+            return {
+                ffmpeg: path.join(execDir, process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg'),
+                ffprobe: path.join(execDir, process.platform === 'win32' ? 'ffprobe.exe' : 'ffprobe')
+            };
+        } else {
+            // Development: use bin folder structure
+            logDebug('Running in development mode');
+            const platform = process.platform === 'darwin' ? 'mac' : 
+                           process.platform === 'win32' ? 'win' : 'linux';
+            const binDir = path.join(__dirname, '..', 'bin', platform, 'bin');
+            
+            return {
+                ffmpeg: path.join(binDir, process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg'),
+                ffprobe: path.join(binDir, process.platform === 'win32' ? 'ffprobe.exe' : 'ffprobe')
+            };
+        }
+    }
+
+    /**
+     * Try system-installed FFmpeg as fallback
+     */
+    trySystemPaths() {
+        logDebug('Trying system FFmpeg paths as fallback');
+        
+        const systemPaths = process.platform === 'darwin' ? [
+            '/opt/homebrew/bin',  // M1 Mac Homebrew
+            '/usr/local/bin',     // Intel Mac Homebrew
+            '/opt/local/bin',     // MacPorts
+            '/usr/bin'            // System
+        ] : process.platform === 'win32' ? [
+            'C:\\ffmpeg\\bin',
+            'C:\\Program Files\\ffmpeg\\bin'
+        ] : [
+            '/usr/bin',
+            '/usr/local/bin'
+        ];
+        
+        const extension = process.platform === 'win32' ? '.exe' : '';
+        
+        for (const basePath of systemPaths) {
+            const ffmpegPath = path.join(basePath, `ffmpeg${extension}`);
+            const ffprobePath = path.join(basePath, `ffprobe${extension}`);
+            
+            if (fs.existsSync(ffmpegPath) && fs.existsSync(ffprobePath)) {
+                this.ffmpegPath = ffmpegPath;
+                this.ffprobePath = ffprobePath;
+                logDebug('Using system FFmpeg at:', this.ffmpegPath);
+                logDebug('Using system FFprobe at:', this.ffprobePath);
+                return true;
+            }
+        }
+        
+        logDebug('No system FFmpeg found');
+        return false;
     }
 
     /**

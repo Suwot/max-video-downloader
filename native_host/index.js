@@ -18,6 +18,51 @@ const MessagingService = require('./lib/messaging');
 const ErrorHandler = require('./lib/error-handler');
 const CommandRunner = require('./lib/command-runner');
 const { logDebug } = require('./utils/logger');
+
+// Handle CLI commands before Chrome messaging setup
+const args = process.argv.slice(2);
+
+if (args.includes('-version')) {
+    const pkg = require('./package.json');
+    console.log(`Native Host v${pkg.version}`);
+    process.exit(0);
+}
+
+if (args.includes('-install')) {
+    // For built binaries, implement install directly
+    if (typeof process.pkg !== 'undefined') {
+        console.log('Install functionality will be implemented in the app bundle');
+        console.log('For now, use: ./build.sh -install from the source directory');
+    } else {
+        // Development mode - use build script
+        const { execSync } = require('child_process');
+        try {
+            execSync('./build.sh -install', { stdio: 'inherit' });
+        } catch (err) {
+            console.error('Installation failed:', err.message);
+            process.exit(1);
+        }
+    }
+    process.exit(0);
+}
+
+if (args.includes('-uninstall')) {
+    // For built binaries, implement uninstall directly
+    if (typeof process.pkg !== 'undefined') {
+        console.log('Uninstall functionality will be implemented in the app bundle');
+        console.log('For now, use: ./build.sh -uninstall from the source directory');
+    } else {
+        // Development mode - use build script
+        const { execSync } = require('child_process');
+        try {
+            execSync('./build.sh -uninstall', { stdio: 'inherit' });
+        } catch (err) {
+            console.error('Uninstallation failed:', err.message);
+            process.exit(1);
+        }
+    }
+    process.exit(0);
+}
 const servicesManager = require('./services');
 
 // Import command registry and commands

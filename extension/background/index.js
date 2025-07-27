@@ -1,5 +1,4 @@
 // Import services
-import { initStateManager } from './state/state-manager.js';
 import { SettingsManager } from './state/settings-manager.js';
 import { initHeaderTracking } from '../shared/utils/headers-utils.js';
 import { initTabTracking } from './state/tab-manager.js';
@@ -71,7 +70,7 @@ async function initializeServices() {
         // Initialize Settings Manager first since other services depend on it
         await settingsManager.initialize();
         
-        await initStateManager();        // Initialize state manager first since other services depend on it
+
         await initDownloadManager();     // Initialize download manager early since it uses state manager
         await initVideoDetector();       // Initialize video detector
         await initTabTracking();         // Initialize tab tracking
