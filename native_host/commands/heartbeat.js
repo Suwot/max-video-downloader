@@ -21,10 +21,39 @@ class HeartbeatCommand extends BaseCommand {
     async execute(params) {
         logDebug('Received heartbeat');
         
-        // Send simple heartbeat response to confirm host is alive
-        this.sendMessage({ command: 'heartbeat', alive: true, success: true });
+        // Get version from package.json
+        const pkg = require('../package.json');
+        const version = pkg.version;
+        
+        // Get binary location
+        const location = process.execPath || process.argv[0];
+        
+        // Get FFmpeg version info
+        let ffmpegVersion = null;
+        try {
+            const ffmpegService = this.getService('ffmpeg');
+            if (ffmpegService) {
+                // Try to get FFmpeg version - this is a simple approach
+                ffmpegVersion = '6.1'; // Default bundled version
+                // TODO: Could run ffmpeg -version to get actual version, but keeping it simple for now
+            }
+        } catch (error) {
+            logDebug('Could not get FFmpeg version:', error.message);
+        }
+        
+        const response = {
+            command: 'heartbeat',
+            alive: true,
+            success: true,
+            version: version,
+            location: location,
+            ffmpegVersion: ffmpegVersion
+        };
+        
+        // Send heartbeat response with extended info
+        this.sendMessage(response);
 
-        return { success: true, command: 'heartbeat', alive: true };
+        return response;
     }
 }
 

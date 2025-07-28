@@ -50,6 +50,9 @@ export async function initializeSettingsTab() {
 
     // Set up tooltip functionality
     setupTooltips();
+    
+    // Set up native host status handlers
+    setupNativeHostStatus();
 
     // Request current settings from background
     sendPortMessage({ command: 'getSettings' });
@@ -61,6 +64,59 @@ export async function initializeSettingsTab() {
 function createSettingsHTML() {
     return `
         <section class="settings-container">
+            <!-- Native Host Connection Section -->
+            <div class="settings-section">
+				<div class="status-info">
+					<div class="status-line">
+						<span class="status-label">Status:</span>
+						<div class="status-value">
+							<div class="status-dot disconnected" id="connection-status-dot"></div>
+							<span id="connection-status-text">Checking...</span>
+							<span id="connection-version"></span>
+							<button type="button" class="reconnect-icon hidden" id="reconnect-icon" title="Reconnect">
+								<svg width="10" height="10" viewBox="0 0 24 24" fill="none">
+									<path d="M1 4v6h6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+									<path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+								</svg>
+							</button>
+						</div>
+					</div>
+					<div class="status-line" id="connection-location-line" style="display: none;">
+						<span class="status-label">Location:</span>
+						<span class="status-value" id="connection-location"></span>
+					</div>
+					<div class="status-line" id="connection-ffmpeg-line" style="display: none;">
+						<span class="status-label">FFmpeg:</span>
+						<span class="status-value" id="connection-ffmpeg"></span>
+					</div>
+				</div>
+				<div class="status-actions hidden" id="status-actions">
+					<button type="button" class="action-button primary" id="reconnect-button" disabled>
+						<svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+							<path d="M1 4v6h6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+							<path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+						</svg>
+						Reconnect
+					</button>
+					<button type="button" class="action-button" id="download-button">
+						<svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+							<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+							<polyline points="7,10 12,15 17,10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+							<line x1="12" y1="15" x2="12" y2="3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+						</svg>
+						Download
+					</button>
+					<button type="button" class="action-button" id="help-button">
+						<svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+							<circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
+							<path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+							<path d="M12 17h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+						</svg>
+						Help
+					</button>
+				</div>
+            </div>
+            
             <!-- Downloads Settings Section -->
             <div class="settings-section">
 				<div class="input-group horizontal">
@@ -651,3 +707,249 @@ function addKeyboardHandlers(input) {
     });
 }
 
+/**
+ * Set up native host status handlers
+ */
+function setupNativeHostStatus() {
+    // Set up button event listeners
+    const reconnectButton = document.getElementById('reconnect-button');
+    const reconnectIcon = document.getElementById('reconnect-icon');
+    const downloadButton = document.getElementById('download-button');
+    const helpButton = document.getElementById('help-button');
+    
+    if (reconnectButton) {
+        reconnectButton.addEventListener('click', handleReconnectClick);
+    }
+    
+    if (reconnectIcon) {
+        reconnectIcon.addEventListener('click', handleReconnectClick);
+    }
+    
+    if (downloadButton) {
+        downloadButton.addEventListener('click', handleDownloadClick);
+    }
+    
+    if (helpButton) {
+        helpButton.addEventListener('click', handleHelpClick);
+    }
+    
+    // Request initial native host state
+    sendPortMessage({ command: 'getNativeHostState' });
+}
+
+/**
+ * Handle reconnect button click
+ */
+async function handleReconnectClick() {
+    const reconnectButton = document.getElementById('reconnect-button');
+    
+    if (reconnectButton) {
+        reconnectButton.disabled = true;
+        reconnectButton.textContent = 'Reconnecting...';
+    }
+    
+    updateConnectionStatus('connecting', null, 'Reconnecting...');
+    
+    try {
+        sendPortMessage({ command: 'reconnectNativeHost' });
+    } catch (error) {
+        logger.error('Error sending reconnect command:', error);
+        updateConnectionStatus('error', null, 'Reconnection failed');
+        
+        if (reconnectButton) {
+            reconnectButton.disabled = false;
+            reconnectButton.innerHTML = `
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+                    <path d="M1 4v6h6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                Reconnect
+            `;
+        }
+    }
+}
+
+/**
+ * Handle download button click
+ */
+function handleDownloadClick() {
+    // Open download page for native host
+    chrome.tabs.create({ 
+        url: 'https://github.com/maxvideodownloader/releases/latest',
+        active: true 
+    });
+}
+
+/**
+ * Handle help button click
+ */
+function handleHelpClick() {
+    // Open help/troubleshooting page
+    chrome.tabs.create({ 
+        url: 'https://github.com/maxvideodownloader/wiki/Native-Host-Troubleshooting',
+        active: true 
+    });
+}
+
+/**
+ * Update native host connection status display
+ */
+export function updateNativeHostStatus(connectionState) {
+    const { state, info, error } = connectionState;
+    
+    updateConnectionStatus(state, info, getStatusText(state, info, error));
+}
+
+/**
+ * Update connection status UI elements
+ */
+function updateConnectionStatus(state, info, statusText) {
+    const statusDot = document.getElementById('connection-status-dot');
+    const statusTextElement = document.getElementById('connection-status-text');
+    const statusVersion = document.getElementById('connection-version');
+    const statusLocation = document.getElementById('connection-location');
+    const statusLocationLine = document.getElementById('connection-location-line');
+    const statusFFmpeg = document.getElementById('connection-ffmpeg');
+    const statusFFmpegLine = document.getElementById('connection-ffmpeg-line');
+    const statusActions = document.getElementById('status-actions');
+    const reconnectButton = document.getElementById('reconnect-button');
+    const reconnectIcon = document.getElementById('reconnect-icon');
+    
+    if (statusDot) {
+        statusDot.className = `status-dot ${state}`;
+    }
+    
+    if (statusTextElement) {
+        statusTextElement.textContent = statusText;
+    }
+    
+    // Differentiate "not found" vs "found but disconnected"
+    const coappFound = info && (info.version || info.location || info.ffmpegVersion);
+    
+    if (coappFound) {
+        // CoApp found - show info lines and reconnect icon, hide action buttons
+        
+        // Update status text to include version
+        if (statusTextElement && info?.version) {
+            statusTextElement.textContent = `${statusText} (v${info.version})`;
+        }
+        
+        // Hide redundant version display
+        if (statusVersion) {
+            statusVersion.style.display = 'none';
+        }
+        
+        // Show location info
+        if (statusLocation && statusLocationLine && info?.location) {
+            statusLocation.textContent = info.location;
+            statusLocationLine.style.display = 'flex';
+        } else if (statusLocationLine) {
+            statusLocationLine.style.display = 'none';
+        }
+        
+        // Show FFmpeg info
+        if (statusFFmpeg && statusFFmpegLine && info?.ffmpegVersion) {
+            statusFFmpeg.textContent = `v${info.ffmpegVersion} (bundled)`;
+            statusFFmpegLine.style.display = 'flex';
+        } else if (statusFFmpegLine) {
+            statusFFmpegLine.style.display = 'none';
+        }
+        
+        // Hide action buttons when CoApp is found
+        if (statusActions) {
+            statusActions.classList.add('hidden');
+        }
+        
+        // Show reconnect icon when CoApp is found (any state)
+        if (reconnectIcon) {
+            reconnectIcon.classList.remove('hidden');
+        }
+        
+    } else {
+        // CoApp not found - show action buttons, hide info lines and reconnect icon
+        if (statusVersion) {
+            statusVersion.style.display = 'none';
+        }
+        
+        // Hide info lines
+        if (statusLocationLine) {
+            statusLocationLine.style.display = 'none';
+        }
+        if (statusFFmpegLine) {
+            statusFFmpegLine.style.display = 'none';
+        }
+        
+        // Show action buttons when CoApp is not found
+        if (statusActions) {
+            statusActions.classList.remove('hidden');
+        }
+        
+        // Hide reconnect icon when CoApp is not found
+        if (reconnectIcon) {
+            reconnectIcon.classList.add('hidden');
+        }
+    }
+    
+    if (reconnectButton) {
+        reconnectButton.disabled = state === 'connecting' || state === 'validating';
+        if (state !== 'connecting' && state !== 'validating') {
+            reconnectButton.innerHTML = `
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+                    <path d="M1 4v6h6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                Reconnect
+            `;
+        }
+    }
+}
+
+/**
+ * Get status text based on connection state
+ */
+function getStatusText(state, info, _error) {
+    switch (state) {
+        case 'connected':
+            return 'Connected';
+        case 'connecting':
+            return 'Connecting...';
+        case 'validating':
+            return 'Validating...';
+        case 'disconnected':
+            // Differentiate between "found but disconnected" vs "not found"
+            return info ? 'Disconnected' : 'Not found';
+        case 'error':
+            // Differentiate between "found but error" vs "not found"
+            return info ? 'Connection Error' : 'Not found';
+        default:
+            return 'Unknown';
+    }
+}
+
+
+
+/**
+ * Handle native host reconnect result
+ */
+export function handleNativeHostReconnectResult(result) {
+    const { success } = result;
+    
+    if (success) {
+        // Connection state will be updated via broadcast
+        logger.debug('Native host reconnection successful');
+    } else {
+        updateConnectionStatus('error', null, 'Reconnection failed');
+        
+        const reconnectButton = document.getElementById('reconnect-button');
+        if (reconnectButton) {
+            reconnectButton.disabled = false;
+            reconnectButton.innerHTML = `
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+                    <path d="M1 4v6h6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                Reconnect
+            `;
+        }
+    }
+}

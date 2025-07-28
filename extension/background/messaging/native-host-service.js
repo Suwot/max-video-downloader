@@ -6,22 +6,30 @@ export class NativeHostService {
         this.pendingMessages = new Map();
         this.eventListeners = new Map(); // For event-driven communication
         this.reconnectTimer = null;
-        this.heartbeatTimer = null;
         this.hostName = 'pro.maxvideodownloader.coapp';
         this.RECONNECT_DELAY = 2000;
-        this.HEARTBEAT_INTERVAL = 15000; // Match native host: 15 seconds
         
-        this.connect();
+        // Connection state management
+        this.connectionState = 'disconnected'; // disconnected, connecting, connected, validating, error
+        this.connectionInfo = null;
+        this.lastConnectionAttempt = null;
+        this.connectionError = null;
+        this.connectionTimeout = null;
+        this.CONNECTION_TIMEOUT = 15000; // 15 seconds idle timeout
     }
     
     connect() {
         try {
+            this.connectionState = 'connecting';
+            this.lastConnectionAttempt = Date.now();
+            this.connectionError = null;
+            this.broadcastConnectionState();
+            
             if (this.port) {
                 try { this.port.disconnect(); } catch (e) { console.warn("Error disconnecting port", e); }
             }
             
             // Clear timers
-            if (this.heartbeatTimer) clearInterval(this.heartbeatTimer);
             if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
             
             this.port = chrome.runtime.connectNative(this.hostName);
@@ -30,33 +38,55 @@ export class NativeHostService {
             this.port.onMessage.addListener(this.handleMessage.bind(this));
             this.port.onDisconnect.addListener(this.handleDisconnect.bind(this));
 
-            this.heartbeatTimer = setInterval(() => this.sendHeartbeat(), this.HEARTBEAT_INTERVAL);
+            // Validate connection immediately after connecting
+            this.validateConnection();
             
             return true;
         } catch (error) {
             console.error('Failed to connect to native host:', error);
+            this.connectionState = 'error';
+            this.connectionError = error.message || 'Connection failed';
+            // Clear connectionInfo on connection failure (coapp not found)
+            this.connectionInfo = null;
+            this.broadcastConnectionState();
             return false;
         }
     }
     
     handleDisconnect() {
         const error = chrome.runtime.lastError;
-        console.error('Native host disconnected:', error);
-        this.port = null;
+        if (error) {
+            console.warn('Native host disconnected with error:', error);
+        } else {
+            console.log('Native host disconnected gracefully');
+        }
+
+        // Clean up port reference
+        if (this.port) {
+            try {
+                this.port.disconnect();
+            } catch (e) {
+                // Port might already be closed
+            }
+            this.port = null;
+        }
+        
+        this.connectionState = 'disconnected';
+        // Preserve connectionInfo for "found but disconnected" state
+        this.connectionError = error?.message || 'Connection lost';
+        this.broadcastConnectionState();
+        
+        // Clear connection timeout
+        if (this.connectionTimeout) {
+            clearTimeout(this.connectionTimeout);
+            this.connectionTimeout = null;
+        }
         
         // Reject all pending promises
         for (const [id, { reject }] of this.pendingMessages.entries()) {
             reject(new Error('Connection to native host lost'));
         }
         this.pendingMessages.clear();
-        
-        // Try to reconnect
-        if (!this.reconnectTimer) {
-            this.reconnectTimer = setTimeout(() => {
-                this.reconnectTimer = null;
-                this.connect();
-            }, this.RECONNECT_DELAY);
-        }
     }
     
     handleMessage(response) {
@@ -104,7 +134,7 @@ export class NativeHostService {
      * @param {Object} event - Event message from native host
      */
     handleEventMessage(event) {
-        const { command, sessionId } = event;
+        const { command } = event;
         
         // Route to registered event listeners
         if (this.eventListeners.has(command)) {
@@ -154,16 +184,18 @@ export class NativeHostService {
         }
         
         // Promise-based message with optional progress callback
-        if (!this.port && !this.connect()) {
+        await this.ensureConnection();
+        
+        if (!this.port) {
             throw new Error('Could not connect to native host');
         }
         
         return new Promise((resolve, reject) => {
-            const id = `msg_${++this.messageId}`;
-            const messageWithId = { ...message, id };
+            const messageId = `msg_${++this.messageId}`;
+            const messageWithId = { ...message, id: messageId };
             
             // Store promise callbacks and optional progress callback
-            this.pendingMessages.set(id, { 
+            this.pendingMessages.set(messageId, { 
                 resolve, 
                 reject, 
                 callback: progressCallback,
@@ -176,9 +208,9 @@ export class NativeHostService {
             const timeout = isLongRunning ? 3600000 : (isFileSystemCommand ? 300000 : 30000); // 1 hour vs 5 minutes vs 30 seconds
 
             setTimeout(() => {
-                if (this.pendingMessages.has(id)) {
-                    const { reject } = this.pendingMessages.get(id);
-                    this.pendingMessages.delete(id);
+                if (this.pendingMessages.has(messageId)) {
+                    const { reject } = this.pendingMessages.get(messageId);
+                    this.pendingMessages.delete(messageId);
                     reject(new Error(`Message ${message.command} timed out after ${timeout/1000}s`));
                 }
             }, timeout);
@@ -187,13 +219,14 @@ export class NativeHostService {
             try {
                 this.port.postMessage(messageWithId);
             } catch (error) {
-                this.pendingMessages.delete(id);
-                reject(error);
+                this.pendingMessages.delete(messageId);
                 
-                // Try to reconnect on send error
-                if (error.message.includes('port closed') || !this.port) {
-                    this.connect();
+                // Handle port closed errors by triggering disconnect
+                if (error.message.includes('port closed') || error.message.includes('disconnected')) {
+                    this.handleDisconnect();
                 }
+                
+                reject(error);
             }
         });
     }
@@ -202,8 +235,10 @@ export class NativeHostService {
      * Send a fire-and-forget message (no response expected)
      * @param {Object} message - Message to send
      */
-    sendFireAndForget(message) {
-        if (!this.port && !this.connect()) {
+    async sendFireAndForget(message) {
+        await this.ensureConnection();
+        
+        if (!this.port) {
             console.error('Could not connect to native host for message:', message.command);
             return;
         }
@@ -214,31 +249,190 @@ export class NativeHostService {
         } catch (error) {
             console.error('Failed to send fire-and-forget message:', error);
             
-            // Try to reconnect on send error
-            if (error.message.includes('port closed') || !this.port) {
-                this.connect();
+            // Handle port closed errors by triggering disconnect
+            if (error.message.includes('port closed') || error.message.includes('disconnected')) {
+                this.handleDisconnect();
             }
         }
     }
     
-    async sendHeartbeat() {
+
+    
+    /**
+     * Ensure connection is established (on-demand pattern)
+     */
+    async ensureConnection() {
+        if (this.connectionState === 'connected' && this.port) {
+            this.resetConnectionTimeout();
+            return true;
+        }
+        
+        if (this.connectionState === 'connecting' || this.connectionState === 'validating') {
+            // Wait for current connection attempt
+            return new Promise((resolve) => {
+                const checkConnection = () => {
+                    if (this.connectionState === 'connected') {
+                        resolve(true);
+                    } else if (this.connectionState === 'error' || this.connectionState === 'disconnected') {
+                        resolve(false);
+                    } else {
+                        setTimeout(checkConnection, 100);
+                    }
+                };
+                checkConnection();
+            });
+        }
+        
+        return this.connect();
+    }
+    
+    /**
+     * Reset connection timeout (extend idle time)
+     */
+    resetConnectionTimeout() {
+        if (this.connectionTimeout) {
+            clearTimeout(this.connectionTimeout);
+        }
+        
+        this.connectionTimeout = setTimeout(() => {
+            console.log('Native host idle timeout - assuming disconnected');
+            if (this.connectionState === 'connected') {
+                // Manually trigger disconnect handling since Chrome doesn't always notify immediately
+                this.handleDisconnect();
+            }
+        }, this.CONNECTION_TIMEOUT);
+    }
+
+
+
+    /**
+     * Validate connection by sending heartbeat
+     */
+    async validateConnection() {
+        this.connectionState = 'validating';
+        this.broadcastConnectionState();
+        
         try {
-            const response = await this.sendMessage({ command: 'heartbeat' });
-            if (!response?.success || !response?.alive) {
-                console.error('Invalid heartbeat response:', response);
-                if (this.port) this.port.disconnect();
+            // Use direct port message to avoid recursion
+            const response = await new Promise((resolve, reject) => {
+                const messageId = `msg_${++this.messageId}`;
+                const messageWithId = { command: 'heartbeat', id: messageId };
+                
+                this.pendingMessages.set(messageId, { 
+                    resolve, 
+                    reject, 
+                    callback: null,
+                    timestamp: Date.now()
+                });
+                
+                setTimeout(() => {
+                    if (this.pendingMessages.has(messageId)) {
+                        this.pendingMessages.delete(messageId);
+                        reject(new Error('Heartbeat validation timeout'));
+                    }
+                }, 5000);
+                
+                this.port.postMessage(messageWithId);
+            });
+            
+            if (response?.success && response?.alive) {
+                this.connectionState = 'connected';
+                this.connectionInfo = {
+                    alive: response.alive,
+                    lastHeartbeat: Date.now(),
+                    version: response.version,
+                    location: response.location,
+                    ffmpegVersion: response.ffmpegVersion
+                };
+                this.connectionError = null;
+                
+                // Connection validated - start idle timeout
+                this.resetConnectionTimeout();
+            } else {
+                this.connectionState = 'error';
+                this.connectionError = 'Invalid heartbeat response';
+                // Don't clear connectionInfo - we got a response, so coapp exists
             }
         } catch (error) {
-            console.error('Heartbeat failed:', error);
-            if (this.port) this.port.disconnect();
+            this.connectionState = 'error';
+            this.connectionError = error.message || 'Validation failed';
+            // Clear connectionInfo on validation failure (coapp not responding properly)
+            this.connectionInfo = null;
         }
+        
+        this.broadcastConnectionState();
     }
     
+    /**
+     * Get current connection state and info
+     */
+    getConnectionState() {
+        return {
+            state: this.connectionState,
+            info: this.connectionInfo,
+            error: this.connectionError,
+            lastAttempt: this.lastConnectionAttempt
+        };
+    }
+    
+
+    
+    /**
+     * Manually reconnect (for UI button)
+     */
+    async reconnect() {
+        if (this.reconnectTimer) {
+            clearTimeout(this.reconnectTimer);
+            this.reconnectTimer = null;
+        }
+        
+        return this.connect();
+    }
+    
+    /**
+     * Set broadcast function (called from popup-communication.js to avoid circular dependency)
+     */
+    setBroadcastFunction(broadcastFn) {
+        this.broadcastFn = broadcastFn;
+    }
+    
+    /**
+     * Broadcast connection state to all popup instances
+     */
+    broadcastConnectionState() {
+        if (this.broadcastFn) {
+            try {
+                this.broadcastFn({
+                    command: 'nativeHostStateChanged',
+                    connectionState: this.getConnectionState()
+                });
+            } catch (err) {
+                console.warn('Failed to broadcast connection state:', err);
+            }
+        }
+    }
+
     // Clean up resources
     disconnect() {
-        if (this.heartbeatTimer) clearInterval(this.heartbeatTimer);
-        if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
-        if (this.port) this.port.disconnect();
+        this.connectionState = 'disconnected';
+        // Preserve connectionInfo - this is a manual disconnect, not "not found"
+        
+        if (this.heartbeatTimer) {
+            clearInterval(this.heartbeatTimer);
+            this.heartbeatTimer = null;
+        }
+        if (this.reconnectTimer) {
+            clearTimeout(this.reconnectTimer);
+            this.reconnectTimer = null;
+        }
+        if (this.connectionTimeout) {
+            clearTimeout(this.connectionTimeout);
+            this.connectionTimeout = null;
+        }
+        if (this.port) {
+            this.port.disconnect();
+            this.port = null;
+        }
         
         // Reject any pending messages
         for (const [id, { reject }] of this.pendingMessages.entries()) {
@@ -248,6 +442,8 @@ export class NativeHostService {
         
         // Clear event listeners
         this.eventListeners.clear();
+        
+        this.broadcastConnectionState();
     }
 }
 

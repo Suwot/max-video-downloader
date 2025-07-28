@@ -1,5 +1,6 @@
 // Import services
 import { SettingsManager } from './state/settings-manager.js';
+import nativeHostService from './messaging/native-host-service.js';
 import { initHeaderTracking } from '../shared/utils/headers-utils.js';
 import { initTabTracking } from './state/tab-manager.js';
 import { initUICommunication } from './messaging/popup-communication.js';
@@ -70,6 +71,11 @@ async function initializeServices() {
         // Initialize Settings Manager first since other services depend on it
         await settingsManager.initialize();
         
+        // Initialize native host connection early for UI readiness
+        nativeHostService.ensureConnection().catch(err => {
+            logger.debug('Initial native host connection failed:', err.message);
+        });
+        
 
         await initDownloadManager();     // Initialize download manager early since it uses state manager
         await initVideoDetector();       // Initialize video detector
@@ -90,6 +96,21 @@ startDebugLogger();
 initializeServices();
 
 logger.debug('Background script initialized');
+
+// Handle service worker wake events
+chrome.runtime.onStartup.addListener(() => {
+    logger.info('Extension startup - ensuring native host connection');
+    nativeHostService.ensureConnection().catch(err => {
+        logger.debug('Startup native host connection failed:', err.message);
+    });
+});
+
+chrome.runtime.onInstalled.addListener(() => {
+    logger.info('Extension installed - ensuring native host connection');
+    nativeHostService.ensureConnection().catch(err => {
+        logger.debug('Install native host connection failed:', err.message);
+    });
+});
 
 // Sleep handler
 chrome.runtime.onSuspend.addListener(() => {

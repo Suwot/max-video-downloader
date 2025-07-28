@@ -72,6 +72,21 @@ const GeneratePreviewCommand = require('./commands/generate-preview');
 const HeartbeatCommand = require('./commands/heartbeat');
 const FileSystemCommand = require('./commands/file-system');
 
+// Idle timeout management
+let idleTimer = null;
+const IDLE_TIMEOUT = 60000; // 60 seconds idle timeout
+
+function resetIdleTimer() {
+    if (idleTimer) {
+        clearTimeout(idleTimer);
+    }
+    
+    idleTimer = setTimeout(() => {
+        logDebug('Native host idle timeout - exiting gracefully');
+        process.exit(0);
+    }, IDLE_TIMEOUT);
+}
+
 /**
  * Application bootstrap
  */
@@ -103,11 +118,20 @@ async function bootstrap() {
         
         // 5. Initialize messaging with message handler function
         messagingService.initialize((request) => {
+            // Reset idle timer on any incoming message
+            resetIdleTimer();
+            
             processMessage(request, commandRunner).catch(err => {
                 logDebug('Error in message processing:', err.message || err);
                 messagingService.sendMessage({ error: err.message || 'Unknown error' }, request.id);
             });
         });
+        
+        // Pass resetIdleTimer function to messaging service for direct calls
+        messagingService.setIdleTimerReset(resetIdleTimer);
+        
+        // Start idle timer
+        resetIdleTimer();
         
         logDebug('Native host application started successfully');
     } catch (err) {
@@ -162,10 +186,12 @@ process.on('unhandledRejection', (reason, promise) => {
 // Handle process signals
 process.on('SIGINT', () => {
     logDebug('Received SIGINT, exiting gracefully');
+    if (idleTimer) clearTimeout(idleTimer);
     process.exit(0);
 });
 
 process.on('SIGTERM', () => {
     logDebug('Received SIGTERM, exiting gracefully');
+    if (idleTimer) clearTimeout(idleTimer);
     process.exit(0);
 });

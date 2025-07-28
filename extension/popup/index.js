@@ -49,6 +49,9 @@ document.addEventListener('DOMContentLoaded', async () => {
             url: normalizeUrl(activeTab.url)
         });
 
+        // Ensure native host connection for immediate UI state
+        sendPortMessage({ command: 'ensureNativeHostConnection' });
+
         // Request videos
         sendPortMessage({
             command: 'getVideos',

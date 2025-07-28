@@ -36,7 +36,7 @@ MAX Video Downloader - Chrome extension (Manifest V3) that downloads videos from
 - **download** - FFmpeg orchestration for video/audio downloads with progress tracking
 - **get-qualities** - Stream quality analysis using FFprobe metadata extraction
 - **generate-preview** - Thumbnail generation from video URLs with base64 conversion
-- **heartbeat** - Connection monitoring between extension and native host
+- **heartbeat** - Connection validation (not used for keep-alive, only for testing)
 - **file-system** - Cross-platform file operations (open, save dialogs, folder navigation)
 
 ## Native Host CLI Commands
@@ -68,12 +68,13 @@ extension/
 ├── background/
 │   ├── detection/          # webRequest detection, video-detector, url-filters
 │   ├── processing/         # container-detector, hls/dash parsers, video-store
-│   ├── messaging/          # popup-communication, native-host-service
+│   ├── messaging/          # popup-communication, native-host-service (connection management)
 │   ├── download/           # download-manager
-│   └── state/              # tab-manager (state-manager unused legacy)
+│   └── state/              # tab-manager, settings-manager
 ├── popup/
 │   ├── video/              # video-renderer, download-handler, dropdown, preview-hover
 │   ├── styles/             # SCSS partials with _variables.scss (CSS is autocompiled output)
+│   ├── settings-tab.js     # Settings UI with native host connection status
 │   └── [index,ui,state,communication].js
 └── shared/utils/           # logger, headers-utils, preview-cache, processing-utils
 
@@ -102,8 +103,9 @@ native_host/
 
 - **Memory management**: Rolling cleanup in webRequest handlers, immediate disposal of temporary data
 - **UI responsiveness**: Minimal DOM manipulation, direct HTML insertion over createElement chains
-- **Background efficiency**: Service worker hibernation-aware, persistent connections only when needed
+- **Background efficiency**: Service worker hibernation-aware, on-demand native host connections
 - **Native host**: Process spawning optimization, FFmpeg binary reuse, progress streaming
+- **Connection management**: UI displays real-time connection status, manual reconnect available
 - **Build efficiency**: Platform-specific builds, no duplication of binaries, smart path resolution
 - **Cross-platform**: Single codebase with platform-specific deployment
 
@@ -112,8 +114,9 @@ native_host/
 - **Single environment**: Production files used for development (no dev/prod separation)
 - **ESLint**: Chrome extension aware linting with ES6 modules (extension) + CommonJS (native_host)
 - **Test page**: Single HTML with all video types for simultaneous detection testing
-- **Settings UI**: Exists but empty, planned for comprehensive user options
-- **Build workflow**: `npm run build:mac` for quick rebuilds, `./build.sh -install` for testing
+- **Settings UI**: Fully implemented with connection status display and native host management
+- **Auto-compilation**: SCSS is built automatically on save by extensions, no CLI commands needed
+- **Build workflow**: Only run `npm run build` if editing native_host folder, otherwise works on save
 - **Path resolution**: Smart detection between dev (source) and built (pkg) environments
 
 ## Build Commands

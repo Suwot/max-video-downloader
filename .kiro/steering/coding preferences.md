@@ -17,6 +17,7 @@
 **Use native approaches**: Plain HTML insertion over DOM creation + querySelector for performance
 **Fallback chains**: Use `mostReliable || lessReliable || guaranteed` pattern, not weighted options
 **Avoid dynamic imports**: Use static imports when possible for better performance and bundling
+**Service worker restriction**: Background service worker (anything in `background/` folder) CAN'T use dynamic imports - it's a Chrome extension restriction
 **Leverage platform lifecycles**: Popup dies on close, service worker terminates, content scripts are per-tab
 **Return rich data**: Better to return more from one call than make multiple calls
 **Cache expensive operations only**: Don't cache cheap operations

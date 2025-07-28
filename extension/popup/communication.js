@@ -9,7 +9,7 @@ import { updateDownloadProgress } from './video/download-progress-handler.js';
 import { renderVideos, addVideoToUI, updateVideoInUI, removeVideoFromUI, renderHistoryItems } from './video/video-renderer.js';
 import { setVideos, updateVideo, clearVideos, getVideos } from './state.js';
 import { updateUICounters, showToast } from './ui-utils.js';
-import { updateSettingsUI } from './settings-tab.js';
+import { updateSettingsUI, updateNativeHostStatus, handleNativeHostReconnectResult } from './settings-tab.js';
 
 const logger = createLogger('Communication');
 
@@ -110,6 +110,15 @@ async function handleIncomingMessage(message) {
                 // Show toast notification
                 showToast(`${message.historyTrimmed} history entries were removed`, 'info');
             }
+            break;
+            
+        case 'nativeHostState':
+        case 'nativeHostStateChanged':
+            handleNativeHostStateUpdate(message.connectionState);
+            break;
+            
+        case 'nativeHostReconnectResult':
+            handleNativeHostReconnectResult(message);
             break;
 
         default:
@@ -224,6 +233,17 @@ function updateCacheStatsDisplay(stats) {
     const count = stats.count || 0;
     const sizeInKB = Math.round((stats.size || 0) / 1024);
     element.textContent = `${count} previews (${sizeInKB} KB)`;
+}
+
+/**
+ * Handle native host state updates
+ */
+function handleNativeHostStateUpdate(connectionState) {
+    // Only update if settings tab is active
+    const settingsTab = document.querySelector('.tab-content[data-tab-id="settings-tab"]');
+    if (settingsTab && !settingsTab.classList.contains('hidden')) {
+        updateNativeHostStatus(connectionState);
+    }
 }
 
 export {

@@ -41,7 +41,7 @@ async function handlePortMessage(message, port, portId) {
     }
     
     // Define commands that don't require tab ID (global operations)
-    const globalCommands = ['clearCaches', 'getPreviewCacheStats', 'getDownloadProgress', 'fileSystem', 'getSettings', 'updateSettings', 'chooseSavePath'];
+    const globalCommands = ['clearCaches', 'getPreviewCacheStats', 'getDownloadProgress', 'fileSystem', 'getSettings', 'updateSettings', 'chooseSavePath', 'getNativeHostState', 'reconnectNativeHost'];
     
     // Commands that require tab ID validation (tab-specific operations)
     const tabSpecificCommands = ['getVideos', 'generatePreview', 'download'];
@@ -175,6 +175,38 @@ async function handlePortMessage(message, port, portId) {
             }
             break;
             
+        case 'getNativeHostState':
+            // Send current native host connection state
+            port.postMessage({
+                command: 'nativeHostState',
+                connectionState: nativeHostService.getConnectionState()
+            });
+            break;
+            
+        case 'reconnectNativeHost':
+            try {
+                const success = await nativeHostService.reconnect();
+                port.postMessage({
+                    command: 'nativeHostReconnectResult',
+                    success: success
+                });
+            } catch (error) {
+                logger.error('Error reconnecting native host:', error);
+                port.postMessage({
+                    command: 'nativeHostReconnectResult',
+                    success: false,
+                    error: error.message
+                });
+            }
+            break;
+            
+        case 'ensureNativeHostConnection':
+            // Ensure native host connection for popup startup
+            nativeHostService.ensureConnection().catch(err => {
+                logger.debug('Popup native host connection failed:', err.message);
+            });
+            break;
+            
         case 'fileSystem':
             // Handle file system operations through native host
             try {
@@ -285,6 +317,9 @@ function broadcastToPopups(message) {
         logger.debug(`Cleaned up ${invalidPorts.length} invalid port(s)`);
     }
 }
+
+// Set up broadcast function for native host service to avoid circular dependency
+nativeHostService.setBroadcastFunction(broadcastToPopups);
 
 /**
  * Gets the active popup port for a specific tab
