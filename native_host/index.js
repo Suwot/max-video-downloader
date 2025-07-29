@@ -72,19 +72,55 @@ const GeneratePreviewCommand = require('./commands/generate-preview');
 const HeartbeatCommand = require('./commands/heartbeat');
 const FileSystemCommand = require('./commands/file-system');
 
-// Idle timeout management
+// Operation-based keep-alive management
+let activeOperations = 0;
 let idleTimer = null;
-const IDLE_TIMEOUT = 60000; // 60 seconds idle timeout
+const IDLE_TIMEOUT = 60000; // 60 seconds idle timeout (only when no active operations)
 
-function resetIdleTimer() {
+function incrementOperations() {
+    activeOperations++;
+    logDebug(`Active operations: ${activeOperations} (incremented)`);
+    clearIdleTimer();
+}
+
+function decrementOperations() {
+    activeOperations = Math.max(0, activeOperations - 1);
+    logDebug(`Active operations: ${activeOperations} (decremented)`);
+    if (activeOperations === 0) {
+        startIdleTimer();
+    }
+}
+
+function clearIdleTimer() {
     if (idleTimer) {
         clearTimeout(idleTimer);
+        idleTimer = null;
     }
-    
+}
+
+function startIdleTimer() {
+    clearIdleTimer();
     idleTimer = setTimeout(() => {
-        logDebug('Native host idle timeout - exiting gracefully');
-        process.exit(0);
+        if (activeOperations === 0) {
+            logDebug('Native host idle timeout - no active operations, exiting gracefully');
+            process.exit(0);
+        }
     }, IDLE_TIMEOUT);
+}
+
+function resetIdleTimer() {
+    // For backwards compatibility with messaging service
+    if (activeOperations === 0) {
+        startIdleTimer();
+    }
+}
+
+function handleGracefulShutdown() {
+    logDebug(`Extension disconnected. Active operations: ${activeOperations}`);
+    logDebug('Extension hibernation detected - operations will continue, idle timer will handle shutdown');
+    // Don't do anything - let the normal operation counter and idle timer handle lifecycle
+    // If there are active operations, they'll prevent the idle timer from running
+    // If there are no active operations, the idle timer will naturally exit after 60 seconds
 }
 
 /**
@@ -116,22 +152,22 @@ async function bootstrap() {
         // 4. Register all commands with command runner
         registerCommands(commandRunner);
         
-        // 5. Initialize messaging with message handler function
-        messagingService.initialize((request) => {
-            // Reset idle timer on any incoming message
-            resetIdleTimer();
-            
-            processMessage(request, commandRunner).catch(err => {
-                logDebug('Error in message processing:', err.message || err);
-                messagingService.sendMessage({ error: err.message || 'Unknown error' }, request.id);
-            });
-        });
+        // 5. Initialize messaging with message handler function and shutdown handler
+        messagingService.initialize(
+            (request) => {
+                processMessage(request, commandRunner).catch(err => {
+                    logDebug('Error in message processing:', err.message || err);
+                    messagingService.sendMessage({ error: err.message || 'Unknown error' }, request.id);
+                });
+            },
+            handleGracefulShutdown
+        );
         
         // Pass resetIdleTimer function to messaging service for direct calls
         messagingService.setIdleTimerReset(resetIdleTimer);
         
-        // Start idle timer
-        resetIdleTimer();
+        // Start idle timer (no active operations initially)
+        startIdleTimer();
         
         logDebug('Native host application started successfully');
     } catch (err) {
@@ -152,6 +188,13 @@ function registerCommands(commandRunner) {
     commandRunner.registerCommand('generatePreview', GeneratePreviewCommand);
     commandRunner.registerCommand('heartbeat', HeartbeatCommand);
     commandRunner.registerCommand('fileSystem', FileSystemCommand);
+    commandRunner.registerCommand('quit', {
+        execute: async (params, requestId, messagingService) => {
+            logDebug('Received quit command - exiting gracefully');
+            messagingService.sendMessage({ success: true, message: 'Shutting down' }, requestId);
+            process.exit(0);
+        }
+    });
     
     logDebug('All commands registered with CommandRunner');
 }
@@ -161,12 +204,24 @@ function registerCommands(commandRunner) {
  */
 async function processMessage(request, commandRunner) {
     const requestId = request.id;
-    
-    // Command type is in the request.command field
     const commandType = request.command;
     
-    // Execute the command through the command runner, passing the request ID
-    return await commandRunner.executeCommand(request, requestId);
+    // Track long-running operations
+    const isLongRunningOperation = ['download', 'getQualities', 'generatePreview'].includes(commandType);
+    
+    if (isLongRunningOperation) {
+        incrementOperations();
+    }
+    
+    try {
+        // Execute the command through the command runner, passing the request ID
+        const result = await commandRunner.executeCommand(request, requestId);
+        return result;
+    } finally {
+        if (isLongRunningOperation) {
+            decrementOperations();
+        }
+    }
 }
 
 // Start the application

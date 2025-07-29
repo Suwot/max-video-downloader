@@ -15,7 +15,7 @@ export class NativeHostService {
         this.lastConnectionAttempt = null;
         this.connectionError = null;
         this.connectionTimeout = null;
-        this.CONNECTION_TIMEOUT = 15000; // 15 seconds idle timeout
+        // No connection timeout - let native host manage its own lifecycle
     }
     
     connect() {
@@ -287,20 +287,15 @@ export class NativeHostService {
     }
     
     /**
-     * Reset connection timeout (extend idle time)
+     * Reset connection timeout (no-op - native host manages its own lifecycle)
      */
     resetConnectionTimeout() {
+        // Clear any existing timeout but don't set a new one
+        // Let the native host manage its own lifecycle based on active operations
         if (this.connectionTimeout) {
             clearTimeout(this.connectionTimeout);
+            this.connectionTimeout = null;
         }
-        
-        this.connectionTimeout = setTimeout(() => {
-            console.log('Native host idle timeout - assuming disconnected');
-            if (this.connectionState === 'connected') {
-                // Manually trigger disconnect handling since Chrome doesn't always notify immediately
-                this.handleDisconnect();
-            }
-        }, this.CONNECTION_TIMEOUT);
     }
 
 

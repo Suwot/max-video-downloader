@@ -114,5 +114,5 @@ chrome.runtime.onInstalled.addListener(() => {
 
 // Sleep handler
 chrome.runtime.onSuspend.addListener(() => {
-  logger.debug('Background going to sleep...');
+  logger.debug('Background going to sleep - native host will continue running active operations');
 });

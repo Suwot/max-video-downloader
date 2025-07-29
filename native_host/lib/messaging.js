@@ -32,9 +32,11 @@ class MessagingService {
     /**
      * Initialize the messaging service
      * @param {Function} messageHandler Function to handle parsed messages
+     * @param {Function} shutdownHandler Function to handle graceful shutdown (optional)
      */
-    initialize(messageHandler) {
+    initialize(messageHandler, shutdownHandler = null) {
         this.messageHandler = messageHandler;
+        this.shutdownHandler = shutdownHandler;
         
         // Set up stdin data handler
         process.stdin.on('data', (data) => this.handleIncomingData(data));
@@ -46,8 +48,9 @@ class MessagingService {
         });
         
         process.stdin.on('end', () => {
-            logDebug('STDIN ended - extension disconnected');
-            process.exit(0);
+            logDebug('STDIN ended - extension disconnected, continuing with active operations');
+            // Don't exit - let the operation counter handle lifecycle
+            // Extension hibernation is normal, operations should continue
         });
         
         // Enhanced error handling for stdout
@@ -56,10 +59,9 @@ class MessagingService {
             logDebug(`STDOUT ERROR: ${err.code} - ${err.message}`);
             
             if (err.code === 'EPIPE') {
-                logDebug('SIGPIPE: stdout closed unexpectedly');
-                
-                // Exit gracefully after a short delay
-                setTimeout(() => process.exit(0), 250);
+                logDebug('SIGPIPE: stdout closed - extension hibernated, entering silent mode');
+                // Don't exit - just stop sending messages
+                // Let operation counter handle shutdown when truly idle
             }
         });
         
@@ -125,8 +127,9 @@ class MessagingService {
             this.resetIdleTimer();
         }
         
-        // Prevent writes if pipe is already closed
+        // Prevent writes if pipe is already closed (silent mode)
         if (this.pipeClosed) {
+            logDebug('Skipping message send - pipe closed (extension hibernated)');
             return;
         }
         
