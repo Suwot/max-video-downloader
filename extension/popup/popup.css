@@ -2427,6 +2427,9 @@ header .heading-row {
       -ms-flex-direction: column;
           flex-direction: column;
 }
+.downloads-container .selected-option {
+  cursor: default;
+}
 
 .active-downloads,
 .downloads-history {

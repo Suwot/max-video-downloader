@@ -109,6 +109,7 @@ export class VideoItemComponent {
         // Create hardcoded HTML structure for simple mode
         const previewUrl = this.videoData.previewUrl || this.videoData.poster || chrome.runtime.getURL('icons/video-placeholder.png');
         const duration = this.videoData.duration ? formatDuration(this.videoData.duration) : '';
+        // Use filename from download request (includes container extension) or fallback to video title
         const title = this.filename || this.videoData.title || 'Untitled Video';
         
         const htmlTemplate = `
@@ -383,12 +384,31 @@ export class VideoItemComponent {
         // Get selected option text for UI restoration
         const selectedOptionOrigText = this.getSelectedOptionText();
         
+        // Create minimal video data for downloads tab (only essential fields)
+        const minimalVideoData = {
+            normalizedUrl: this.videoData.normalizedUrl,
+            title: this.videoData.title,
+            type: this.videoData.type,
+            duration: this.videoData.duration,
+            previewUrl: this.videoData.previewUrl,
+            poster: this.videoData.poster,
+            tabId: this.videoData.tabId,
+            pageUrl: this.videoData.pageUrl,
+            pageFavicon: this.videoData.pageFavicon
+        };
+        
         const command = {
             command: 'download',
             selectedOptionOrigText,
-            videoData: this.videoData, // Include full video data for downloads tab creation
+            videoData: minimalVideoData, // Use minimal video data instead of full object
             ...baseData
         };
+        
+        // Add container extension to filename for regular downloads (other modes handle their own extensions)
+        if (mode === 'download' && command.container) {
+            const baseFilename = command.filename || 'video';
+            command.filename = `${baseFilename}.${command.container}`;
+        }
         
         // Apply mode-specific modifications
         switch (mode) {
@@ -422,9 +442,12 @@ export class VideoItemComponent {
         // Single audio extraction for most cases
         if (selectedAudioTracks.length <= 1) {
             const audioTrack = selectedAudioTracks[0] || this.getDefaultAudioTrack();
+            const container = audioTrack?.audioContainer || 'm4a';
+            const baseFilename = baseCommand.filename || 'video';
             return { 
                 ...baseCommand,
-                container: audioTrack?.audioContainer || 'm4a',
+                container: container,
+                filename: `${baseFilename}.${container}`,
                 audioOnly: true,
                 ...options 
             };
@@ -433,9 +456,12 @@ export class VideoItemComponent {
         // Multi-track audio extraction - send individual commands
         return selectedAudioTracks.map((audioTrack, index) => {
             const trackCommand = { ...baseCommand };
+            const container = audioTrack.audioContainer || 'm4a';
+            const baseFilename = `${baseCommand.filename}_${audioTrack.label || audioTrack.name || `Audio_${index + 1}`}`;
+            
             trackCommand.audioOnly = true;
-            trackCommand.container = audioTrack.audioContainer || 'm4a';
-            trackCommand.filename = `${baseCommand.filename}_${audioTrack.label || audioTrack.name || `Audio_${index + 1}`}`;
+            trackCommand.container = container;
+            trackCommand.filename = `${baseFilename}.${container}`;
             
             if (this.videoData.type === 'dash') {
                 // DASH: Use specific stream selection
@@ -476,7 +502,7 @@ export class VideoItemComponent {
             case 'dash':
                 return this.getDashDownloadData(baseData);
             default:
-                return baseData;
+                return { ...baseData, container: 'mp4' };
         }
     }
     
@@ -694,9 +720,12 @@ export class VideoItemComponent {
         // Single subtitle extraction
         if (selectedSubtitleTracks.length === 1) {
             const subTrack = selectedSubtitleTracks[0];
+            const container = subTrack.subtitleContainer || 'srt';
+            const baseFilename = baseCommand.filename || 'video';
             return { 
                 ...baseCommand,
-                container: subTrack.subtitleContainer || 'srt',
+                container: container,
+                filename: `${baseFilename}.${container}`,
                 subsOnly: true,
                 ...options 
             };
@@ -705,9 +734,12 @@ export class VideoItemComponent {
         // Multi-track subtitle extraction - send individual commands
         return selectedSubtitleTracks.map((subTrack, index) => {
             const trackCommand = { ...baseCommand };
+            const container = subTrack.subtitleContainer || 'srt';
+            const baseFilename = `${baseCommand.filename}_${subTrack.label || subTrack.name || subTrack.lang || `Subtitle_${index + 1}`}`;
+            
             trackCommand.subsOnly = true;
-            trackCommand.container = subTrack.subtitleContainer || 'srt';
-            trackCommand.filename = `${baseCommand.filename}_${subTrack.label || subTrack.name || subTrack.lang || `Subtitle_${index + 1}`}`;
+            trackCommand.container = container;
+            trackCommand.filename = `${baseFilename}.${container}`;
             
             if (this.videoData.type === 'dash') {
                 // DASH: Use specific stream selection
