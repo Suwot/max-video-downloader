@@ -400,8 +400,8 @@ async function createVideoItemInDownloads(downloadRequestOrVideoData, initialSta
             return;
         }
 
-        // Create new video item component - VideoItemComponent will handle deconstructing
-        const videoComponent = new VideoItemComponent(downloadRequestOrVideoData, initialState);
+        // Create new video item component in simple mode for downloads tab
+        const videoComponent = new VideoItemComponent(downloadRequestOrVideoData, initialState, null, 'simple');
         const videoElement = videoComponent.render();
         
         // Hide initial message and append the element (queue order: oldest first)
@@ -471,11 +471,11 @@ export function handleActiveDownloadsData(activeDownloads) {
             initialMessage.style.display = 'none';
         }
         
-        // Recreate video items from in-memory data with proper initial states and downloadId
+        // Recreate video items from in-memory data with proper initial states and downloadId in simple mode
         activeDownloads.forEach(downloadEntry => {
             if (downloadEntry.videoData) {
                 const initialState = downloadEntry.status || 'queued';
-                const videoComponent = new VideoItemComponent(downloadEntry, initialState);
+                const videoComponent = new VideoItemComponent(downloadEntry, initialState, null, 'simple');
                 const videoElement = videoComponent.render();
                 activeDownloadsContainer.appendChild(videoElement);
                 

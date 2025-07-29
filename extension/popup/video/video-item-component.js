@@ -17,7 +17,7 @@ const logger = createLogger('VideoItemComponent');
  * VideoItemComponent - Manages complete video item state and UI
  */
 export class VideoItemComponent {
-    constructor(downloadRequestOrVideoData, initialDownloadState = 'default', downloadId = null) {
+    constructor(downloadRequestOrVideoData, initialDownloadState = 'default', downloadId = null, renderingMode = 'full') {
         // Handle both downloadRequest (with filename/downloadId) and plain videoData
         if (downloadRequestOrVideoData.videoData) {
             // This is a downloadRequest object - deconstruct it
@@ -32,6 +32,7 @@ export class VideoItemComponent {
         }
         
         this.initialDownloadState = initialDownloadState; // 'default', 'starting', 'downloading', 'queued'
+        this.renderingMode = renderingMode; // 'full' or 'simple'
         this.element = null;
         this.dropdown = null;
         this.downloadButton = null;
@@ -76,6 +77,10 @@ export class VideoItemComponent {
      * @returns {HTMLElement} The rendered video item element
      */
     render() {
+        if (this.renderingMode === 'simple') {
+            return this.renderSimpleMode();
+        }
+        
         this.element = document.createElement('div');
         this.element.className = 'video-item';
         this.element.dataset.url = this.videoData.normalizedUrl;
@@ -92,6 +97,65 @@ export class VideoItemComponent {
         const infoColumn = this.createInfoColumn();
         
         this.element.append(previewColumn, infoColumn);
+        
+        return this.element;
+    }
+    
+    /**
+     * Render simple mode for downloads tab - minimal structure with hardcoded HTML
+     * @returns {HTMLElement} The rendered simple video item element
+     */
+    renderSimpleMode() {
+        // Create hardcoded HTML structure for simple mode
+        const previewUrl = this.videoData.previewUrl || this.videoData.poster || chrome.runtime.getURL('icons/video-placeholder.png');
+        const duration = this.videoData.duration ? formatDuration(this.videoData.duration) : '';
+        const title = this.filename || this.videoData.title || 'Untitled Video';
+        
+        const htmlTemplate = `
+            <div class="preview-column">
+                <div class="preview-container has-preview">
+                    ${duration ? `<div class="video-duration">${duration}</div>` : ''}
+                    <img class="preview-image loaded" src="${previewUrl}" alt="Video preview">
+                </div>
+            </div>
+            <div class="info-column">
+                <div class="title-row">
+                    <h3 class="video-title item-title">${title}</h3>
+                </div>
+                <div class="download-group">
+                    <div class="custom-dropdown" data-type="${this.videoData.type || 'unknown'}">
+                        <div class="selected-option downloading" data-tooltip-content="" data-tooltip-quality="">
+                            <span class="label">Preparing...</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        // Create element and set up basic structure
+        this.element = document.createElement('div');
+        this.element.className = 'video-item';
+        this.element.dataset.url = this.videoData.normalizedUrl;
+        
+        // Set download ID for precise progress mapping
+        if (this.downloadId) {
+            this.element.dataset.downloadId = this.downloadId;
+        }
+        
+        // Store component reference for external access
+        this.element._component = this;
+        
+        // Set innerHTML with template
+        this.element.innerHTML = htmlTemplate;
+        
+        // Create only the download button component (no dropdown)
+        this.downloadButton = new VideoDownloadButtonComponent(this, this.element.querySelector('.download-group'));
+        this.downloadButton.render();
+        
+        // Apply initial download state if not default
+        if (this.initialDownloadState !== 'default') {
+            this.applyInitialDownloadState();
+        }
         
         return this.element;
     }
@@ -801,6 +865,12 @@ export class VideoItemComponent {
      * @returns {string} Selected option text
      */
     getSelectedOptionText() {
+        if (this.renderingMode === 'simple') {
+            // In simple mode, get text from the hardcoded selected-option element
+            const selectedDisplay = this.element?.querySelector('.selected-option .label');
+            return selectedDisplay?.textContent || '';
+        }
+        
         if (!this.dropdown || !this.dropdown.element) return '';
         
         const selectedDisplay = this.dropdown.element.querySelector('.selected-option .label');
