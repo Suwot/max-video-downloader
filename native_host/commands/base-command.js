@@ -8,7 +8,8 @@
  */
 
 const { logDebug } = require('../utils/logger');
-const servicesManager = require('../services');
+const ffmpegService = require('../services/ffmpeg');
+const configService = require('../services/config');
 
 /**
  * Base class for all commands
@@ -16,7 +17,8 @@ const servicesManager = require('../services');
 class BaseCommand {
     constructor(messagingService) {
         this.messaging = messagingService;
-        this.services = servicesManager;
+        this.ffmpegService = ffmpegService;
+        this.configService = configService;
         this.currentMessageId = null;
     }
     
@@ -28,10 +30,14 @@ class BaseCommand {
     }
 
     /**
-     * Get a required service for this command
+     * Get a service directly (for backwards compatibility)
      */
     getService(serviceName) {
-        return this.services.getService(serviceName);
+        switch (serviceName) {
+            case 'ffmpeg': return this.ffmpegService;
+            case 'config': return this.configService;
+            default: throw new Error(`Unknown service: ${serviceName}`);
+        }
     }
 
     /**

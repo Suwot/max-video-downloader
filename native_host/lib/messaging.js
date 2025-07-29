@@ -15,18 +15,7 @@ const { logDebug } = require('../utils/logger');
 class MessagingService {
     constructor() {
         this.buffer = Buffer.alloc(0);
-        this.lastHeartbeatTime = Date.now();
-        this.HEARTBEAT_INTERVAL = 15000; // 15 seconds
         this.pipeClosed = false; // Track if pipe is closed
-        this.resetIdleTimer = null; // Function to reset idle timer
-    }
-
-    /**
-     * Set the idle timer reset function
-     * @param {Function} resetFn Function to reset the idle timer
-     */
-    setIdleTimerReset(resetFn) {
-        this.resetIdleTimer = resetFn;
     }
 
     /**
@@ -98,9 +87,6 @@ class MessagingService {
                 const request = JSON.parse(message);
                 logDebug('Processing message:', request);
                 
-                // Update heartbeat time for any message
-                this.lastHeartbeatTime = Date.now();
-                
                 // Store message ID for responses
                 const requestId = request.id;
                 
@@ -122,11 +108,6 @@ class MessagingService {
      * @param {string} requestId Optional ID to include in response for request tracking
      */
     sendMessage(message, requestId = null) {
-        // Reset idle timer on any outgoing message (download events, progress, etc.)
-        if (this.resetIdleTimer) {
-            this.resetIdleTimer();
-        }
-        
         // Prevent writes if pipe is already closed (silent mode)
         if (this.pipeClosed) {
             logDebug('Skipping message send - pipe closed (extension hibernated)');
