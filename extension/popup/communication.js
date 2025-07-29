@@ -7,9 +7,9 @@
 import { createLogger } from '../shared/utils/logger.js';
 import { updateDownloadProgress } from './video/download-progress-handler.js';
 import { renderVideos, addVideoToUI, updateVideoInUI, removeVideoFromUI, renderHistoryItems } from './video/video-renderer.js';
-import { setVideos, updateVideo, clearVideos, getVideos } from './state.js';
+import { setVideos, updateVideo, clearVideos } from './state.js';
 import { updateUICounters, showToast } from './ui-utils.js';
-import { updateSettingsUI, updateNativeHostStatus, handleNativeHostReconnectResult } from './settings-tab.js';
+import { updateSettingsUI, updateNativeHostStatus } from './settings-tab.js';
 
 const logger = createLogger('Communication');
 
@@ -95,11 +95,7 @@ async function handleIncomingMessage(message) {
             }
             break;
 
-        case 'settingsResponse':
-            updateSettingsUI(message.settings);
-            break;
-
-        case 'settingsUpdated':
+        case 'settingsState':
             updateSettingsUI(message.settings);
             
             // Handle history trimming updates
@@ -112,13 +108,8 @@ async function handleIncomingMessage(message) {
             }
             break;
             
-        case 'nativeHostState':
-        case 'nativeHostStateChanged':
+        case 'nativeHostConnectionState':
             handleNativeHostStateUpdate(message.connectionState);
-            break;
-            
-        case 'nativeHostReconnectResult':
-            handleNativeHostReconnectResult(message);
             break;
 
         default:

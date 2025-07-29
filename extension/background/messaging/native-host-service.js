@@ -398,7 +398,7 @@ export class NativeHostService {
         if (this.broadcastFn) {
             try {
                 this.broadcastFn({
-                    command: 'nativeHostStateChanged',
+                    command: 'nativeHostConnectionState',
                     connectionState: this.getConnectionState()
                 });
             } catch (err) {

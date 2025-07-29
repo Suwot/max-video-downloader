@@ -902,7 +902,7 @@ async function handleDownloadAsFlow(downloadCommand) {
                     
                     // Broadcast updated settings to any open popups (for UI update)
                     broadcastToPopups({
-                        command: 'settingsResponse',
+                        command: 'settingsState',
                         settings: settingsManager.getAll(),
                         success: true
                     });

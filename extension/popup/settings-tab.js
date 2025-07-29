@@ -741,31 +741,11 @@ function setupNativeHostStatus() {
  * Handle reconnect button click
  */
 async function handleReconnectClick() {
-    const reconnectButton = document.getElementById('reconnect-button');
-    
-    if (reconnectButton) {
-        reconnectButton.disabled = true;
-        reconnectButton.textContent = 'Reconnecting...';
-    }
-    
-    updateConnectionStatus('connecting', null, 'Reconnecting...');
-    
     try {
         sendPortMessage({ command: 'reconnectNativeHost' });
+        // Connection state updates will be handled automatically via nativeHostConnectionState
     } catch (error) {
         logger.error('Error sending reconnect command:', error);
-        updateConnectionStatus('error', null, 'Reconnection failed');
-        
-        if (reconnectButton) {
-            reconnectButton.disabled = false;
-            reconnectButton.innerHTML = `
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
-                    <path d="M1 4v6h6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                    <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                </svg>
-                Reconnect
-            `;
-        }
     }
 }
 
@@ -891,16 +871,15 @@ function updateConnectionStatus(state, info, statusText) {
     }
     
     if (reconnectButton) {
-        reconnectButton.disabled = state === 'connecting' || state === 'validating';
-        if (state !== 'connecting' && state !== 'validating') {
-            reconnectButton.innerHTML = `
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
-                    <path d="M1 4v6h6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                    <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                </svg>
-                Reconnect
-            `;
-        }
+        const isConnecting = state === 'connecting' || state === 'validating';
+        reconnectButton.disabled = isConnecting;
+        reconnectButton.innerHTML = isConnecting ? 'Reconnecting...' : `
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+                <path d="M1 4v6h6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            Reconnect
+        `;
     }
 }
 
@@ -928,28 +907,3 @@ function getStatusText(state, info, _error) {
 
 
 
-/**
- * Handle native host reconnect result
- */
-export function handleNativeHostReconnectResult(result) {
-    const { success } = result;
-    
-    if (success) {
-        // Connection state will be updated via broadcast
-        logger.debug('Native host reconnection successful');
-    } else {
-        updateConnectionStatus('error', null, 'Reconnection failed');
-        
-        const reconnectButton = document.getElementById('reconnect-button');
-        if (reconnectButton) {
-            reconnectButton.disabled = false;
-            reconnectButton.innerHTML = `
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
-                    <path d="M1 4v6h6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                    <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                </svg>
-                Reconnect
-            `;
-        }
-    }
-}

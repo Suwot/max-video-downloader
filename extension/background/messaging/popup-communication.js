@@ -40,8 +40,7 @@ async function handlePortMessage(message, port, portId) {
         return;
     }
     
-    // Define commands that don't require tab ID (global operations)
-    const globalCommands = ['clearCaches', 'getPreviewCacheStats', 'getDownloadProgress', 'fileSystem', 'getSettings', 'updateSettings', 'chooseSavePath', 'getNativeHostState', 'reconnectNativeHost'];
+
     
     // Commands that require tab ID validation (tab-specific operations)
     const tabSpecificCommands = ['getVideos', 'generatePreview', 'download'];
@@ -155,19 +154,17 @@ async function handlePortMessage(message, port, portId) {
             break;
             
         case 'chooseSavePath':
-            // Handle save path selection through settings manager
             try {
                 const result = await settingsManager.chooseSavePath();
-                // Always send updated settings back to popup (unified flow)
                 port.postMessage({
-                    command: 'settingsResponse',
+                    command: 'settingsState',
                     settings: settingsManager.getAll(),
                     success: result.success
                 });
             } catch (error) {
                 logger.error('Error choosing save path:', error);
                 port.postMessage({
-                    command: 'settingsResponse',
+                    command: 'settingsState',
                     settings: settingsManager.getAll(),
                     success: false,
                     error: error.message
@@ -176,26 +173,22 @@ async function handlePortMessage(message, port, portId) {
             break;
             
         case 'getNativeHostState':
-            // Send current native host connection state
             port.postMessage({
-                command: 'nativeHostState',
+                command: 'nativeHostConnectionState',
                 connectionState: nativeHostService.getConnectionState()
             });
             break;
             
         case 'reconnectNativeHost':
             try {
-                const success = await nativeHostService.reconnect();
-                port.postMessage({
-                    command: 'nativeHostReconnectResult',
-                    success: success
-                });
+                await nativeHostService.reconnect();
+                // Connection state will be broadcast automatically via nativeHostConnectionState
             } catch (error) {
                 logger.error('Error reconnecting native host:', error);
+                // Send current state even on error - it contains the error info
                 port.postMessage({
-                    command: 'nativeHostReconnectResult',
-                    success: false,
-                    error: error.message
+                    command: 'nativeHostConnectionState',
+                    connectionState: nativeHostService.getConnectionState()
                 });
             }
             break;
@@ -224,18 +217,17 @@ async function handlePortMessage(message, port, portId) {
             break;
             
         case 'getSettings':
-            // Route settings request to Settings Manager
             try {
                 const settings = settingsManager.getAll();
                 port.postMessage({
-                    command: 'settingsResponse',
+                    command: 'settingsState',
                     settings: settings
                 });
                 logger.debug('Sent current settings to popup:', settings);
             } catch (error) {
                 logger.error('Error getting settings:', error);
                 port.postMessage({
-                    command: 'settingsResponse',
+                    command: 'settingsState',
                     settings: {},
                     error: error.message
                 });
@@ -243,12 +235,11 @@ async function handlePortMessage(message, port, portId) {
             break;
             
         case 'updateSettings':
-            // Route settings update to Settings Manager
             try {
                 const success = await settingsManager.updateAll(message.settings);
                 const updatedSettings = settingsManager.getAll();
                 port.postMessage({
-                    command: 'settingsResponse',
+                    command: 'settingsState',
                     settings: updatedSettings,
                     success: success
                 });
@@ -256,7 +247,7 @@ async function handlePortMessage(message, port, portId) {
             } catch (error) {
                 logger.error('Error updating settings:', error);
                 port.postMessage({
-                    command: 'settingsResponse',
+                    command: 'settingsState',
                     settings: settingsManager.getAll(),
                     success: false,
                     error: error.message

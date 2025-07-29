@@ -69,7 +69,7 @@ class SettingsManager {
       await chrome.storage.local.set({ settings: this.settings });
       
       broadcastToPopups({
-        command: 'settingsUpdated',
+        command: 'settingsState',
         settings: this.settings,
         historyTrimmed: removedCount || null
       });
