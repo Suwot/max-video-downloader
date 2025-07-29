@@ -95,6 +95,12 @@ async function handleIncomingMessage(message) {
             }
             break;
 
+        case 'activeDownloadsData':
+            // Handle active downloads data from background for UI restoration
+            const { handleActiveDownloadsData } = await import('./video/download-progress-handler.js');
+            handleActiveDownloadsData(message.activeDownloads);
+            break;
+
         case 'settingsState':
             updateSettingsUI(message.settings);
             

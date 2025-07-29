@@ -425,9 +425,6 @@ async function createVideoItemInDownloads(downloadRequestOrVideoData, initialSta
  */
 export async function restoreActiveDownloads() {
     try {
-        const result = await chrome.storage.local.get(['downloads_active']);
-        const activeDownloads = result.downloads_active || [];
-        
         const activeDownloadsContainer = document.querySelector('.active-downloads');
         if (!activeDownloadsContainer) {
             return;
@@ -438,18 +435,43 @@ export async function restoreActiveDownloads() {
                                 <p>Ongoing downloads will appear here</p>
                             </div>`;
 
+        // Request active downloads from background service worker
+        await sendPortMessage({ command: 'getActiveDownloads' });
+        
+        // The actual restoration will happen in handleActiveDownloadsData
+        // when the background responds with activeDownloadsData message
+        
+    } catch (error) {
+        logger.error('Error requesting active downloads:', error);
+    }
+}
+
+/**
+ * Handle active downloads data from background and restore UI
+ */
+export function handleActiveDownloadsData(activeDownloads) {
+    try {
+        const activeDownloadsContainer = document.querySelector('.active-downloads');
+        if (!activeDownloadsContainer) {
+            return;
+        }
+
         const initialMessage = activeDownloadsContainer.querySelector('.initial-message');
 
         if (activeDownloads.length === 0) {
             // Show initial message when no active downloads
-            initialMessage.style.display = 'flex';
+            if (initialMessage) {
+                initialMessage.style.display = 'flex';
+            }
             return;
         }
 
         // Hide initial message and restore downloads
-        initialMessage.style.display = 'none';
+        if (initialMessage) {
+            initialMessage.style.display = 'none';
+        }
         
-        // Recreate video items from stored video data with proper initial states and downloadId
+        // Recreate video items from in-memory data with proper initial states and downloadId
         activeDownloads.forEach(downloadEntry => {
             if (downloadEntry.videoData) {
                 const initialState = downloadEntry.status || 'queued';
@@ -466,13 +488,13 @@ export async function restoreActiveDownloads() {
             }
         });
 
-        logger.debug(`Restored ${activeDownloads.length} active downloads`);
+        logger.debug(`Restored ${activeDownloads.length} active downloads from in-memory Map`);
         
         // Restore button states for ongoing downloads in videos tab
         restoreDownloadStates(activeDownloads);
 
     } catch (error) {
-        logger.error('Error restoring active downloads:', error);
+        logger.error('Error handling active downloads data:', error);
     }
 }
 

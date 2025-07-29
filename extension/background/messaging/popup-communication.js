@@ -4,7 +4,7 @@
  */
 
 // Add static imports at the top
-import { processDownloadCommand, cancelDownload, getActiveDownloadProgress, getActiveDownloadCount } from '../download/download-manager.js';
+import { processDownloadCommand, cancelDownload, getActiveDownloadProgress, getActiveDownloadCount, getActiveDownloads } from '../download/download-manager.js';
 import { createLogger } from '../../shared/utils/logger.js';
 import { clearPreviewCache, getCacheStats } from '../../shared/utils/preview-cache.js';
 import { clearAllHeaderCaches } from '../../shared/utils/headers-utils.js';
@@ -77,6 +77,16 @@ async function handlePortMessage(message, port, portId) {
                     port.postMessage(progressData);
                 });
             }
+            break;
+
+        case 'getActiveDownloads':
+            // Send active downloads from in-memory Map for UI restoration
+            const activeDownloads = getActiveDownloads();
+            port.postMessage({
+                command: 'activeDownloadsData',
+                activeDownloads: activeDownloads
+            });
+            logger.debug(`Sent ${activeDownloads.length} active downloads for UI restoration`);
             break;
 
         case 'generatePreview':

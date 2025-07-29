@@ -16,9 +16,95 @@ const logger = createLogger('Download Manager');
 // Unified download state management - Single source of truth
 const allDownloads = new Map(); // downloadId -> downloadEntry
 
-// Storage operation queue to prevent race conditions
-const storageOperationQueue = [];
-let isProcessingStorageQueue = false;
+// Simple storage operation queue for history operations only
+const historyOperationQueue = [];
+let isProcessingHistoryQueue = false;
+
+/**
+ * Queue a history storage operation to prevent race conditions
+ * @param {Function} operation - Async function to execute
+ * @returns {Promise} Promise that resolves when operation completes
+ */
+function queueHistoryOperation(operation) {
+    return new Promise((resolve, reject) => {
+        const wrappedOperation = async () => {
+            try {
+                const result = await operation();
+                resolve(result);
+            } catch (error) {
+                reject(error);
+            }
+        };
+        
+        historyOperationQueue.push(wrappedOperation);
+        processHistoryQueue();
+    });
+}
+
+/**
+ * Process history storage operations sequentially
+ */
+async function processHistoryQueue() {
+    if (isProcessingHistoryQueue || historyOperationQueue.length === 0) {
+        return;
+    }
+    
+    isProcessingHistoryQueue = true;
+    
+    while (historyOperationQueue.length > 0) {
+        const operation = historyOperationQueue.shift();
+        try {
+            await operation();
+        } catch (error) {
+            logger.error('History storage operation failed:', error);
+        }
+    }
+    
+    isProcessingHistoryQueue = false;
+}
+
+/**
+ * Get active downloads from in-memory Map for UI restoration
+ */
+export function getActiveDownloads() {
+    const activeDownloads = [];
+    
+    for (const [downloadId, entry] of allDownloads.entries()) {
+        if (entry.downloadRequest && entry.downloadRequest.videoData) {
+            activeDownloads.push({
+                downloadId: entry.downloadId,
+                status: entry.status,
+                videoData: entry.downloadRequest.videoData,
+                downloadUrl: entry.downloadRequest.downloadUrl,
+                masterUrl: entry.downloadRequest.masterUrl,
+                filename: entry.downloadRequest.filename,
+                selectedOptionOrigText: entry.downloadRequest.selectedOptionOrigText,
+                streamSelection: entry.downloadRequest.streamSelection,
+                isRedownload: entry.downloadRequest.isRedownload || false
+            });
+        }
+    }
+    
+    return activeDownloads;
+}
+
+/**
+ * Notify UI about download count changes and update badge
+ */
+function notifyDownloadCountChange() {
+    const counts = getActiveDownloadCount();
+    
+    // Update badge icon
+    updateBadgeIcon(counts.total);
+    
+    // Broadcast to all connected popups
+    broadcastToPopups({
+        command: 'downloadCountUpdated',
+        counts: counts
+    });
+    
+    logger.debug('Download count updated:', counts);
+}
 
 /**
  * Initialize download manager
@@ -33,8 +119,16 @@ export async function initDownloadManager() {
         nativeHostService.addEventListener('download-error', handleDownloadEvent);
         nativeHostService.addEventListener('download-canceled', handleDownloadEvent);
         
-        // Initialize badge icon - restore count from storage or clear
-        await restoreBadgeFromStorage();
+        // One-time cleanup: Remove legacy active downloads storage
+        try {
+            await chrome.storage.local.remove(['downloads_active']);
+            logger.debug('Cleaned up legacy active downloads storage');
+        } catch (error) {
+            logger.debug('No legacy storage to clean up');
+        }
+        
+        // Initialize badge icon with current in-memory count
+        updateBadgeIcon(allDownloads.size);
         
         // Clean up old history items on startup
         await cleanupOldHistoryItems();
@@ -142,9 +236,6 @@ async function queueDownload(downloadCommand) {
         timestamp: Date.now()
     });
     
-    // Add to storage with queued status
-    await addToActiveDownloadsStorage(downloadCommand);
-    
     // Notify count change
     notifyDownloadCountChange();
     
@@ -186,11 +277,6 @@ async function startDownloadImmediately(downloadRequest) {
             downloadId: downloadId
         },
         timestamp: Date.now()
-    });
-    
-    // Add to storage or update status if already exists (from queue)
-    addToActiveDownloadsStorage(downloadRequest).then(() => {
-        updateActiveDownloadStatus(downloadRequest.downloadUrl, 'downloading');
     });
     
     // Notify count change
@@ -247,24 +333,6 @@ async function handleDownloadEvent(event) {
             }
         }
         
-        // Fallback to storage lookup
-        if (!downloadId) {
-            try {
-                const storedDownloads = await getActiveDownloadsStorage();
-                const candidates = storedDownloads.filter(d => d.downloadUrl === downloadUrl);
-                
-                if (candidates.length === 1) {
-                    downloadId = candidates[0].downloadId;
-                } else if (candidates.length > 1) {
-                    // Multiple candidates - find the one that's currently in our map
-                    const activeCandidate = candidates.find(d => d.downloadId && allDownloads.has(d.downloadId));
-                    downloadId = activeCandidate?.downloadId || candidates[0].downloadId;
-                }
-            } catch (error) {
-                logger.warn('Could not retrieve download request from storage:', error);
-            }
-        }
-        
         // Final fallback to URL for legacy compatibility
         if (!downloadId) {
             downloadId = downloadUrl;
@@ -287,8 +355,8 @@ async function handleDownloadEvent(event) {
         // Remove from unified downloads map
         allDownloads.delete(downloadId);
         
-        // Remove from active downloads storage using downloadId
-        await removeFromActiveDownloadsStorage(downloadId);
+        // Notify count change
+        notifyDownloadCountChange();
         
         // Add to history storage for success/error only
         if (command === 'download-success' || command === 'download-error') {
@@ -406,21 +474,7 @@ export function getActiveDownloadCount() {
     };
 }
 
-/**
- * Notify all popups about download count changes and update badge icon
- */
-function notifyDownloadCountChange() {
-    const counts = getActiveDownloadCount();
-    broadcastToPopups({
-        command: 'downloadCountUpdated',
-        counts: counts
-    });
-    
-    // Update badge icon with total count
-    updateBadgeIcon(counts.total);
-    
-    logger.debug('Download count updated:', counts);
-}
+
 
 // Check if a specific download is currently active
 export function isDownloadActive(downloadUrl) {
@@ -467,10 +521,7 @@ export async function cancelDownload(cancelRequest) {
         // Direct removal for queued items
         allDownloads.delete(downloadId);
         
-        // Remove from storage as well
-        await removeFromActiveDownloadsStorage(downloadId);
-        
-        // Notify count change after removal
+        // Notify count change
         notifyDownloadCountChange();
         
         // Broadcast cancellation to UI
@@ -557,8 +608,7 @@ async function processNextDownload() {
         downloadId: queuedEntry.downloadId
     });
     
-    // Update storage status
-    await updateActiveDownloadStatus(queuedEntry.downloadRequest.downloadUrl, 'downloading');
+
     
     // Send download command to native host
     nativeHostService.sendMessage(queuedEntry.downloadRequest, { expectResponse: false });
@@ -632,172 +682,7 @@ function updateBadgeIcon(count) {
     }
 }
 
-/**
- * Restore badge count from storage on extension startup
- */
-async function restoreBadgeFromStorage() {
-    try {
-        const activeDownloads = await getActiveDownloadsStorage();
-        const count = activeDownloads.length;
-        updateBadgeIcon(count);
-        logger.debug('Badge restored from storage with count:', count);
-    } catch (error) {
-        logger.error('Error restoring badge from storage:', error);
-        // Fallback to clear badge
-        updateBadgeIcon(0);
-    }
-}
 
-/**
- * Process storage operations sequentially to prevent race conditions
- */
-async function processStorageQueue() {
-    if (isProcessingStorageQueue || storageOperationQueue.length === 0) {
-        return;
-    }
-    
-    isProcessingStorageQueue = true;
-    
-    while (storageOperationQueue.length > 0) {
-        const operation = storageOperationQueue.shift();
-        try {
-            await operation();
-        } catch (error) {
-            logger.error('Storage operation failed:', error);
-        }
-    }
-    
-    isProcessingStorageQueue = false;
-}
-
-/**
- * Queue a storage operation to prevent race conditions
- * @param {Function} operation - Async function to execute
- * @returns {Promise} Promise that resolves when operation completes
- */
-function queueStorageOperation(operation) {
-    return new Promise((resolve, reject) => {
-        const wrappedOperation = async () => {
-            try {
-                const result = await operation();
-                resolve(result);
-            } catch (error) {
-                reject(error);
-            }
-        };
-        
-        storageOperationQueue.push(wrappedOperation);
-        processStorageQueue();
-    });
-}
-
-/**
- * Get active downloads from storage
- * @returns {Promise<Array>} Array of active downloads
- */
-async function getActiveDownloadsStorage() {
-    try {
-        const result = await chrome.storage.local.get(['downloads_active']);
-        return result.downloads_active || [];
-    } catch (error) {
-        logger.error('Error getting active downloads storage:', error);
-        return [];
-    }
-}
-
-/**
- * Add download to active downloads storage
- * @param {Object} downloadRequest - Download request data (includes elementHTML from UI)
- */
-async function addToActiveDownloadsStorage(downloadRequest) {
-    return queueStorageOperation(async () => {
-        try {
-            const result = await chrome.storage.local.get(['downloads_active']);
-            const activeDownloads = result.downloads_active || [];
-            
-        // Store the full download entry with video data for recreation
-        const downloadEntry = {
-            lookupUrl: downloadRequest.masterUrl || downloadRequest.downloadUrl,
-            downloadUrl: downloadRequest.downloadUrl,
-            masterUrl: downloadRequest.masterUrl || null,
-            filename: downloadRequest.filename, // Already includes container extension
-            videoData: downloadRequest.videoData, // Raw video data for recreation
-            timestamp: Date.now(),
-            selectedOptionOrigText: downloadRequest.selectedOptionOrigText || null,
-            status: 'queued', // Will be updated to 'downloading' when actually started
-            downloadId: downloadRequest.downloadId, // For precise progress mapping
-            // Store request data needed for downloadId generation
-            type: downloadRequest.type,
-            streamSelection: downloadRequest.streamSelection
-        };            activeDownloads.push(downloadEntry);
-            await chrome.storage.local.set({ downloads_active: activeDownloads });
-            
-            logger.debug('Added to active downloads storage:', downloadRequest.downloadUrl);
-        } catch (error) {
-            logger.error('Error adding to active downloads storage:', error);
-            throw error;
-        }
-    });
-}
-
-/**
- * Update download status in active downloads storage
- * @param {string} downloadUrl - Download URL to update
- * @param {string} status - New status ('downloading', 'queued')
- */
-async function updateActiveDownloadStatus(downloadUrl, status) {
-    return queueStorageOperation(async () => {
-        try {
-            const result = await chrome.storage.local.get(['downloads_active']);
-            const activeDownloads = result.downloads_active || [];
-            
-            const downloadIndex = activeDownloads.findIndex(entry => 
-                entry.downloadUrl === downloadUrl || entry.lookupUrl === downloadUrl
-            );
-            
-            if (downloadIndex !== -1) {
-                activeDownloads[downloadIndex].status = status;
-                await chrome.storage.local.set({ downloads_active: activeDownloads });
-                logger.debug('Updated download status in storage:', downloadUrl, status);
-            }
-        } catch (error) {
-            logger.error('Error updating download status:', error);
-            throw error;
-        }
-    });
-}
-
-/**
- * Remove download from active downloads storage using downloadId as primary key
- * @param {string} downloadId - Download ID to remove
- */
-async function removeFromActiveDownloadsStorage(downloadId) {
-    return queueStorageOperation(async () => {
-        try {
-            const result = await chrome.storage.local.get(['downloads_active']);
-            const activeDownloads = result.downloads_active || [];
-            
-            // Filter out the entry with matching downloadId
-            const updatedActiveDownloads = activeDownloads.filter(entry => {
-                // Primary match: downloadId (all new downloads have this)
-                if (entry.downloadId) {
-                    return entry.downloadId !== downloadId;
-                }
-            });
-            
-            const removedCount = activeDownloads.length - updatedActiveDownloads.length;
-            if (removedCount > 0) {
-                await chrome.storage.local.set({ downloads_active: updatedActiveDownloads });
-                logger.debug(`Removed ${removedCount} entry from active downloads storage:`, downloadId);
-            } else {
-                logger.debug('No matching entry found in active downloads storage:', downloadId);
-            }
-        } catch (error) {
-            logger.error('Error removing from active downloads storage:', error);
-            throw error;
-        }
-    });
-}
 
 /**
  * Add download to history storage (success/error only)
@@ -811,7 +696,7 @@ async function addToHistoryStorage(progressData) {
         return;
     }
 
-    return queueStorageOperation(async () => {
+    return queueHistoryOperation(async () => {
         try {
             const result = await chrome.storage.local.get(['downloads_history']);
             let history = result.downloads_history || [];
@@ -956,7 +841,7 @@ async function handleDownloadAsFlow(downloadCommand) {
  * Clean up old history items based on auto-remove interval setting
  */
 async function cleanupOldHistoryItems() {
-    return queueStorageOperation(async () => {
+    return queueHistoryOperation(async () => {
         try {
             const result = await chrome.storage.local.get(['downloads_history']);
             let history = result.downloads_history || [];
