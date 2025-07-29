@@ -9,9 +9,12 @@ const hostProcess = spawn('node', ['./index.js'], {
   stdio: ['pipe', 'pipe', 'pipe']
 });
 
-// Send a test heartbeat message
+// Send a test connection validation message
 function sendTestMessage() {
-  const message = { command: 'heartbeat' };
+  const message = { 
+    command: 'validateConnection',
+    id: 'test_msg_1'
+  };
   const messageBuffer = Buffer.from(JSON.stringify(message));
   
   // Create header with message length

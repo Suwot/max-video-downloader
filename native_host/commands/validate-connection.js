@@ -1,25 +1,25 @@
 /**
- * HeartbeatCommand – Connection status monitoring command
- * - Responds to periodic status check requests from the extension
+ * ValidateConnectionCommand – Connection validation and info retrieval command
+ * - Responds to connection validation requests from the extension
  * - Verifies that the native host is alive and responsive
- * - Maintains persistent connection between extension and native host
- * - Helps detect when the host process becomes unresponsive
- * - Provides simple diagnostics about host process status
+ * - Returns version, location, and FFmpeg info for UI display
+ * - Used during connection establishment and manual reconnection
+ * - Provides diagnostics about host process status
  */
 
 const BaseCommand = require('./base-command');
 const { logDebug } = require('../utils/logger');
 
 /**
- * Command for handling heartbeat messages to keep connection alive
+ * Command for validating connection and retrieving host information
  */
-class HeartbeatCommand extends BaseCommand {
+class ValidateConnectionCommand extends BaseCommand {
     /**
-     * Execute the heartbeat command
+     * Execute the connection validation command
      * @param {Object} params Command parameters
      */
     async execute(params) {
-        logDebug('Received heartbeat');
+        logDebug('Received connection validation request');
         
         // Get version from package.json
         const pkg = require('../package.json');
@@ -42,7 +42,7 @@ class HeartbeatCommand extends BaseCommand {
         }
         
         const response = {
-            command: 'heartbeat',
+            command: 'validateConnection',
             alive: true,
             success: true,
             version: version,
@@ -50,11 +50,11 @@ class HeartbeatCommand extends BaseCommand {
             ffmpegVersion: ffmpegVersion
         };
         
-        // Send heartbeat response with extended info
+        // Send connection validation response with host info
         this.sendMessage(response);
 
         return response;
     }
 }
 
-module.exports = HeartbeatCommand;
+module.exports = ValidateConnectionCommand;

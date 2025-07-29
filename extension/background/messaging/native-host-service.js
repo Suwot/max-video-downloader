@@ -311,7 +311,7 @@ export class NativeHostService {
             // Use direct port message to avoid recursion
             const response = await new Promise((resolve, reject) => {
                 const messageId = `msg_${++this.messageId}`;
-                const messageWithId = { command: 'heartbeat', id: messageId };
+                const messageWithId = { command: 'validateConnection', id: messageId };
                 
                 this.pendingMessages.set(messageId, { 
                     resolve, 
@@ -323,7 +323,7 @@ export class NativeHostService {
                 setTimeout(() => {
                     if (this.pendingMessages.has(messageId)) {
                         this.pendingMessages.delete(messageId);
-                        reject(new Error('Heartbeat validation timeout'));
+                        reject(new Error('Connection validation timeout'));
                     }
                 }, 5000);
                 
@@ -334,7 +334,7 @@ export class NativeHostService {
                 this.connectionState = 'connected';
                 this.connectionInfo = {
                     alive: response.alive,
-                    lastHeartbeat: Date.now(),
+                    lastValidation: Date.now(),
                     version: response.version,
                     location: response.location,
                     ffmpegVersion: response.ffmpegVersion
@@ -345,7 +345,7 @@ export class NativeHostService {
                 this.resetConnectionTimeout();
             } else {
                 this.connectionState = 'error';
-                this.connectionError = 'Invalid heartbeat response';
+                this.connectionError = 'Invalid connection validation response';
                 // Don't clear connectionInfo - we got a response, so coapp exists
             }
         } catch (error) {
@@ -412,9 +412,9 @@ export class NativeHostService {
         this.connectionState = 'disconnected';
         // Preserve connectionInfo - this is a manual disconnect, not "not found"
         
-        if (this.heartbeatTimer) {
-            clearInterval(this.heartbeatTimer);
-            this.heartbeatTimer = null;
+        if (this.validationTimer) {
+            clearInterval(this.validationTimer);
+            this.validationTimer = null;
         }
         if (this.reconnectTimer) {
             clearTimeout(this.reconnectTimer);

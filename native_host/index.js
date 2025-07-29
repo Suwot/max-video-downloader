@@ -67,7 +67,7 @@ const configService = require('./services/config');
 const DownloadCommand = require('./commands/download');
 const GetQualitiesCommand = require('./commands/get-qualities');
 const GeneratePreviewCommand = require('./commands/generate-preview');
-const HeartbeatCommand = require('./commands/heartbeat');
+const ValidateConnectionCommand = require('./commands/validate-connection');
 const FileSystemCommand = require('./commands/file-system');
 
 // Operation-based keep-alive management
@@ -165,7 +165,7 @@ const commands = {
     'cancel-download': DownloadCommand,
     'getQualities': GetQualitiesCommand,
     'generatePreview': GeneratePreviewCommand,
-    'heartbeat': HeartbeatCommand,
+    'validateConnection': ValidateConnectionCommand,
     'fileSystem': FileSystemCommand,
     'quit': {
         execute: async (params, requestId, messagingService) => {

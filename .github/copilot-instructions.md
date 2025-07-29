@@ -36,7 +36,7 @@ MAX Video Downloader - Chrome extension (Manifest V3) that downloads videos from
 - **download** - FFmpeg orchestration for video/audio downloads with progress tracking
 - **get-qualities** - Stream quality analysis using FFprobe metadata extraction
 - **generate-preview** - Thumbnail generation from video URLs with base64 conversion
-- **heartbeat** - Connection monitoring between extension and native host
+- **validateConnection** - Connection validation and host info retrieval
 - **file-system** - Cross-platform file operations (open, save dialogs, folder navigation)
 
 ## Current File Structure
@@ -57,7 +57,7 @@ extension/
 
 native_host/
 ├── bin/mac/bin/            # Bundled FFmpeg + FFprobe binaries
-├── commands/               # [download,get-qualities,generate-preview,heartbeat,file-system].js
+├── commands/               # [download,get-qualities,generate-preview,validate-connection,file-system].js
 ├── lib/                    # messaging, command-runner, error-handler, progress/
 └── services/               # config, ffmpeg integration
 ```
