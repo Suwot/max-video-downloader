@@ -24,12 +24,14 @@ class ProgressStrategy {
      * @param {number} options.fileSizeBytes File size in bytes (from Content-Length or fileSizeBytes)
      * @param {number} options.segmentCount Number of segments in the manifest (for HLS/DASH)
      * @param {boolean} options.audioOnly Whether this is an audio-only download
+     * @param {boolean} options.subsOnly Whether this is a subtitles-only download
      */
     constructor(options = {}) {
         this.onProgress = options.onProgress || (() => {});
         this.downloadUrl = options.downloadUrl || null;
         this.type = options.type || 'direct';
         this.audioOnly = options.audioOnly || false;
+        this.subsOnly = options.subsOnly || false;
         
         // Extract relevant metadata
         this.duration = options.duration || 0;

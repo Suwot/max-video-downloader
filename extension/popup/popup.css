@@ -178,8 +178,7 @@
 }
 
 .download-menu-dropdown, .custom-dropdown .selected-option.downloading.has-progress-tooltip:hover::after, .cache-stats, header {
-  -webkit-backdrop-filter: var(--backdrop-filter);
-          backdrop-filter: var(--backdrop-filter);
+  backdrop-filter: var(--backdrop-filter);
 }
 .theme-dark .download-menu-dropdown, .theme-dark .custom-dropdown .selected-option.downloading.has-progress-tooltip:hover::after, .custom-dropdown .theme-dark .selected-option.downloading.has-progress-tooltip:hover::after, .theme-dark .cache-stats, .theme-dark header {
   background: var(--bg-backdrop-dark);
@@ -363,8 +362,7 @@ header {
   transition: -webkit-box-shadow var(--transition-normal);
   transition: box-shadow var(--transition-normal);
   transition: box-shadow var(--transition-normal), -webkit-box-shadow var(--transition-normal);
-  -webkit-backdrop-filter: saturate(180%) blur(20px);
-          backdrop-filter: saturate(180%) blur(20px);
+  backdrop-filter: saturate(180%) blur(20px);
   padding: 8px;
   gap: 8px;
 }
@@ -776,8 +774,7 @@ header .heading-row {
   opacity: 0;
   visibility: hidden;
   width: 282px;
-  -webkit-backdrop-filter: var(--backdrop-filter);
-          backdrop-filter: var(--backdrop-filter);
+  backdrop-filter: var(--backdrop-filter);
   scrollbar-width: none;
 }
 .theme-dark .options-container {
@@ -2790,6 +2787,18 @@ header .heading-row {
   color: var(--color-red);
   line-height: 1.3;
   word-wrap: break-word;
+  cursor: pointer;
+}
+.error-message.truncated {
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.error-message:hover {
+  color: var(--color-red-hover);
 }
 
 .spinning {

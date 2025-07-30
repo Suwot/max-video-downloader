@@ -80,7 +80,9 @@ export function getActiveDownloads() {
                 filename: entry.downloadRequest.filename,
                 selectedOptionOrigText: entry.downloadRequest.selectedOptionOrigText,
                 streamSelection: entry.downloadRequest.streamSelection,
-                isRedownload: entry.downloadRequest.isRedownload || false
+                isRedownload: entry.downloadRequest.isRedownload || false,
+                audioOnly: entry.downloadRequest.audioOnly || false,
+                subsOnly: entry.downloadRequest.subsOnly || false
             });
         }
     }
@@ -274,6 +276,8 @@ async function startDownloadImmediately(downloadRequest) {
             selectedOptionOrigText: downloadRequest.selectedOptionOrigText || null,
             videoData: downloadRequest.videoData,
             isRedownload: downloadRequest.isRedownload || false,
+            audioOnly: downloadRequest.audioOnly || false,
+            subsOnly: downloadRequest.subsOnly || false,
             downloadId: downloadId
         },
         timestamp: Date.now()

@@ -41,6 +41,7 @@ class ProgressTracker {
      * @param {number} fileInfo.bitrate Media bitrate in bits per second
      * @param {number} fileInfo.segmentCount Number of segments
      * @param {boolean} fileInfo.audioOnly Whether this is an audio-only download
+     * @param {boolean} fileInfo.subsOnly Whether this is a subtitles-only download
      * @param {string} fileInfo.ffprobeOutput Optional FFprobe output for more accurate metadata
      */
     async initialize(fileInfo) {

@@ -200,7 +200,7 @@ function createHistoryItemElement(progressData) {
 
     // Build error message for failed downloads
     const errorMessageHtml = progressData.command === 'download-error' && progressData.ffmpegFinalMessage 
-        ? `<div class="error-message">${progressData.ffmpegFinalMessage}</div>` 
+        ? `<div class="error-message truncated" title="Click to expand">${progressData.ffmpegFinalMessage}</div>` 
         : '';
 
     // Build flags icons HTML
@@ -267,6 +267,13 @@ function buildFlagsHtml(progressData) {
             </span>
         `);
     }
+    if (progressData.subsOnly) {
+        icons.push(`
+            <span class="history-flag-icon" data-tooltip="Extracted Subtitles">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-captions w-3 h-3 flex-shrink-0 text-cyan-500" aria-hidden="true"><rect width="20" height="16" x="2" y="4" rx="3" ry="3"></rect><path d="M6 16h5M14 16h2M6 12h2M11 12h4"></path></svg>
+            </span>
+        `);
+    }
     if (progressData.isRedownload) {
         icons.push(`
             <span class="history-flag-icon" data-tooltip="Redownloaded">
@@ -280,6 +287,15 @@ function buildFlagsHtml(progressData) {
     // Add delete functionality
     const deleteBtn = historyItem.querySelector('.history-delete-btn');
     deleteBtn.addEventListener('click', () => deleteHistoryItem(progressData.completedAt));
+
+    // Add click-to-expand functionality for error messages
+    const errorMessage = historyItem.querySelector('.error-message');
+    if (errorMessage) {
+        errorMessage.addEventListener('click', () => {
+            errorMessage.classList.toggle('truncated');
+            errorMessage.title = errorMessage.classList.contains('truncated') ? 'Click to expand' : 'Click to collapse';
+        });
+    }
 
     // Add file system operation handlers (only for successful downloads)
     if (progressData.command === 'download-success' && progressData.path) {
@@ -368,7 +384,16 @@ function buildStatsHtml(progressData) {
                 ${bitrate}
             </span>
         `);
-    } else if (progressData.selectedOptionOrigText) {
+    } else if (progressData.subsOnly) {
+		stats.push(`
+			<span class="quality">
+				<svg width="4" height="4" viewBox="0 0 6 6" fill="none">
+					<circle cx="3" cy="3" r="3" fill="var(--text-primary-dark)"/>
+				</svg>
+				Subs
+			</span>
+		`);
+	} else if (progressData.selectedOptionOrigText) {
         const advancedDropdown = progressData.selectedOptionOrigText.includes('≈')
         const qualityText = advancedDropdown ? 
             progressData.selectedOptionOrigText.split('≈')[0]?.trim() : 

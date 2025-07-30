@@ -862,6 +862,7 @@ class DownloadCommand extends BaseCommand {
                             originalCommand,
                             isRedownload: effectiveProcessInfo?.isRedownload || false,
                             audioOnly,
+                            subsOnly,
                             headers: effectiveProcessInfo?.headers || null
                         }, { useMessageId: false }); // Event message, no response ID
                     }
@@ -900,6 +901,7 @@ class DownloadCommand extends BaseCommand {
                         originalCommand,
                         isRedownload,
                         audioOnly,
+                        subsOnly,
                         isPartial, // Add partial flag for UI
                         headers: effectiveProcessInfo?.headers || null
                     }, { useMessageId: false }); // Event message, no response ID
@@ -945,6 +947,7 @@ class DownloadCommand extends BaseCommand {
                         originalCommand,
                         isRedownload,
                         audioOnly,
+                        subsOnly,
                         headers: effectiveProcessInfo?.headers || null
                     }, { useMessageId: false }); // Event message, no response ID
                     resolve({ 
