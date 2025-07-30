@@ -45,7 +45,8 @@
 
 .history-play-btn,
 .history-folder-btn,
-.history-retry-btn, .download-menu-item, .action-button, .reconnect-icon, .section-header.collapsible, .btn, .toggle-switch, .custom-dropdown, .tab-button, .dismiss-button, .theme-toggle,
+.history-retry-btn,
+.history-delete-file-btn, .download-menu-item, .action-button, .reconnect-icon, .section-header.collapsible, .btn, .toggle-switch, .custom-dropdown, .tab-button, .dismiss-button, .theme-toggle,
 .clear-cache-button {
   cursor: pointer;
   -webkit-user-select: none;
@@ -57,7 +58,8 @@
 }
 .history-play-btn:disabled,
 .history-folder-btn:disabled,
-.history-retry-btn:disabled, .download-menu-item:disabled, .action-button:disabled, .reconnect-icon:disabled, .section-header.collapsible:disabled, .btn:disabled, .toggle-switch:disabled, .custom-dropdown:disabled, .tab-button:disabled, .dismiss-button:disabled, .theme-toggle:disabled,
+.history-retry-btn:disabled,
+.history-delete-file-btn:disabled, .download-menu-item:disabled, .action-button:disabled, .reconnect-icon:disabled, .section-header.collapsible:disabled, .btn:disabled, .toggle-switch:disabled, .custom-dropdown:disabled, .tab-button:disabled, .dismiss-button:disabled, .theme-toggle:disabled,
 .clear-cache-button:disabled {
   opacity: 0.6;
   cursor: not-allowed;
@@ -105,14 +107,18 @@
 .theme-dark .history-folder-btn:hover svg,
 .history-folder-btn:hover .theme-dark svg,
 .theme-dark .history-retry-btn:hover svg,
-.history-retry-btn:hover .theme-dark svg, .theme-dark .download-menu-item:hover, .theme-dark .status-line .status-label, .status-line .theme-dark .status-label, .theme-dark .tooltip-icon:hover svg, .tooltip-icon:hover .theme-dark svg, .theme-dark .input-group .input-label, .input-group .theme-dark .input-label, .theme-dark .track-option.selected, .theme-dark .column .column-title, .column .theme-dark .column-title, .theme-dark .dropdown-option.downloading, .theme-dark .dropdown-option:not(.selected):hover, .theme-dark .dropdown-option.selected, .theme-dark .tab-placeholder h3, .tab-placeholder .theme-dark h3, .theme-dark h3, .theme-dark .h3, .theme-dark .item-title, .theme-dark h2, .theme-dark .h2, .theme-dark .section-title, .theme-dark h1, .theme-dark .h1, .theme-dark .app-title {
+.history-retry-btn:hover .theme-dark svg,
+.theme-dark .history-delete-file-btn:hover svg,
+.history-delete-file-btn:hover .theme-dark svg, .theme-dark .download-menu-item:hover, .theme-dark .status-line .status-label, .status-line .theme-dark .status-label, .theme-dark .tooltip-icon:hover svg, .tooltip-icon:hover .theme-dark svg, .theme-dark .input-group .input-label, .input-group .theme-dark .input-label, .theme-dark .track-option.selected, .theme-dark .column .column-title, .column .theme-dark .column-title, .theme-dark .dropdown-option.downloading, .theme-dark .dropdown-option:not(.selected):hover, .theme-dark .dropdown-option.selected, .theme-dark .tab-placeholder h3, .tab-placeholder .theme-dark h3, .theme-dark h3, .theme-dark .h3, .theme-dark .item-title, .theme-dark h2, .theme-dark .h2, .theme-dark .section-title, .theme-dark h1, .theme-dark .h1, .theme-dark .app-title {
   color: var(--text-primary-dark);
 }
 .theme-light .history-item .filename, .history-item .theme-light .filename, .theme-light .history-play-btn:hover svg, .history-play-btn:hover .theme-light svg,
 .theme-light .history-folder-btn:hover svg,
 .history-folder-btn:hover .theme-light svg,
 .theme-light .history-retry-btn:hover svg,
-.history-retry-btn:hover .theme-light svg, .theme-light .download-menu-item:hover, .theme-light .status-line .status-label, .status-line .theme-light .status-label, .theme-light .tooltip-icon:hover svg, .tooltip-icon:hover .theme-light svg, .theme-light .input-group .input-label, .input-group .theme-light .input-label, .theme-light .track-option.selected, .theme-light .column .column-title, .column .theme-light .column-title, .theme-light .dropdown-option.downloading, .theme-light .dropdown-option:not(.selected):hover, .theme-light .dropdown-option.selected, .theme-light .tab-placeholder h3, .tab-placeholder .theme-light h3, .theme-light h3, .theme-light .h3, .theme-light .item-title, .theme-light h2, .theme-light .h2, .theme-light .section-title, .theme-light h1, .theme-light .h1, .theme-light .app-title {
+.history-retry-btn:hover .theme-light svg,
+.theme-light .history-delete-file-btn:hover svg,
+.history-delete-file-btn:hover .theme-light svg, .theme-light .download-menu-item:hover, .theme-light .status-line .status-label, .status-line .theme-light .status-label, .theme-light .tooltip-icon:hover svg, .tooltip-icon:hover .theme-light svg, .theme-light .input-group .input-label, .input-group .theme-light .input-label, .theme-light .track-option.selected, .theme-light .column .column-title, .column .theme-light .column-title, .theme-light .dropdown-option.downloading, .theme-light .dropdown-option:not(.selected):hover, .theme-light .dropdown-option.selected, .theme-light .tab-placeholder h3, .tab-placeholder .theme-light h3, .theme-light h3, .theme-light .h3, .theme-light .item-title, .theme-light h2, .theme-light .h2, .theme-light .section-title, .theme-light h1, .theme-light .h1, .theme-light .app-title {
   color: var(--text-primary-light);
 }
 
@@ -136,7 +142,9 @@
 .theme-dark .history-folder-btn svg,
 .history-folder-btn .theme-dark svg,
 .theme-dark .history-retry-btn svg,
-.history-retry-btn .theme-dark svg, .theme-dark .downloads-history .download-timestamp, .downloads-history .theme-dark .download-timestamp, .theme-dark .download-menu-item, .theme-dark .status-line .status-value, .status-line .theme-dark .status-value, .theme-dark .tooltip-icon svg, .tooltip-icon .theme-dark svg, .theme-dark .input-group .input-description, .input-group .theme-dark .input-description, .theme-dark .input-field::placeholder, .theme-dark .track-option, .theme-dark .dropdown-option, .theme-dark .tab-button, .theme-dark .cache-stats, .theme-dark .tab-placeholder p, .tab-placeholder .theme-dark p, .theme-dark .tab-placeholder .placeholder-icon svg, .tab-placeholder .placeholder-icon .theme-dark svg {
+.history-retry-btn .theme-dark svg,
+.theme-dark .history-delete-file-btn svg,
+.history-delete-file-btn .theme-dark svg, .theme-dark .downloads-history .download-timestamp, .downloads-history .theme-dark .download-timestamp, .theme-dark .download-menu-item, .theme-dark .status-line .status-value, .status-line .theme-dark .status-value, .theme-dark .tooltip-icon svg, .tooltip-icon .theme-dark svg, .theme-dark .input-group .input-description, .input-group .theme-dark .input-description, .theme-dark .input-field::placeholder, .theme-dark .track-option, .theme-dark .dropdown-option, .theme-dark .tab-button, .theme-dark .cache-stats, .theme-dark .tab-placeholder p, .tab-placeholder .theme-dark p, .theme-dark .tab-placeholder .placeholder-icon svg, .tab-placeholder .placeholder-icon .theme-dark svg {
   color: var(--text-secondary-dark);
 }
 .theme-light .input-field::-webkit-input-placeholder {
@@ -155,7 +163,9 @@
 .theme-light .history-folder-btn svg,
 .history-folder-btn .theme-light svg,
 .theme-light .history-retry-btn svg,
-.history-retry-btn .theme-light svg, .theme-light .downloads-history .download-timestamp, .downloads-history .theme-light .download-timestamp, .theme-light .download-menu-item, .theme-light .status-line .status-value, .status-line .theme-light .status-value, .theme-light .tooltip-icon svg, .tooltip-icon .theme-light svg, .theme-light .input-group .input-description, .input-group .theme-light .input-description, .theme-light .input-field::placeholder, .theme-light .track-option, .theme-light .dropdown-option, .theme-light .tab-button, .theme-light .cache-stats, .theme-light .tab-placeholder p, .tab-placeholder .theme-light p, .theme-light .tab-placeholder .placeholder-icon svg, .tab-placeholder .placeholder-icon .theme-light svg {
+.history-retry-btn .theme-light svg,
+.theme-light .history-delete-file-btn svg,
+.history-delete-file-btn .theme-light svg, .theme-light .downloads-history .download-timestamp, .downloads-history .theme-light .download-timestamp, .theme-light .download-menu-item, .theme-light .status-line .status-value, .status-line .theme-light .status-value, .theme-light .tooltip-icon svg, .tooltip-icon .theme-light svg, .theme-light .input-group .input-description, .input-group .theme-light .input-description, .theme-light .input-field::placeholder, .theme-light .track-option, .theme-light .dropdown-option, .theme-light .tab-button, .theme-light .cache-stats, .theme-light .tab-placeholder p, .tab-placeholder .theme-light p, .theme-light .tab-placeholder .placeholder-icon svg, .tab-placeholder .placeholder-icon .theme-light svg {
   color: var(--text-secondary-light);
 }
 
@@ -178,7 +188,8 @@
 }
 
 .download-menu-dropdown, .custom-dropdown .selected-option.downloading.has-progress-tooltip:hover::after, .cache-stats, header {
-  backdrop-filter: var(--backdrop-filter);
+  -webkit-backdrop-filter: var(--backdrop-filter);
+          backdrop-filter: var(--backdrop-filter);
 }
 .theme-dark .download-menu-dropdown, .theme-dark .custom-dropdown .selected-option.downloading.has-progress-tooltip:hover::after, .custom-dropdown .theme-dark .selected-option.downloading.has-progress-tooltip:hover::after, .theme-dark .cache-stats, .theme-dark header {
   background: var(--bg-backdrop-dark);
@@ -362,7 +373,8 @@ header {
   transition: -webkit-box-shadow var(--transition-normal);
   transition: box-shadow var(--transition-normal);
   transition: box-shadow var(--transition-normal), -webkit-box-shadow var(--transition-normal);
-  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+          backdrop-filter: saturate(180%) blur(20px);
   padding: 8px;
   gap: 8px;
 }
@@ -774,7 +786,8 @@ header .heading-row {
   opacity: 0;
   visibility: hidden;
   width: 282px;
-  backdrop-filter: var(--backdrop-filter);
+  -webkit-backdrop-filter: var(--backdrop-filter);
+          backdrop-filter: var(--backdrop-filter);
   scrollbar-width: none;
 }
 .theme-dark .options-container {
@@ -2558,6 +2571,16 @@ header .heading-row {
 .history-header .history-flag-icon .text-orange-500 {
   stroke: var(--color-orange);
 }
+.history-header .history-flag-text {
+  font-size: var(--font-badge);
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+.history-header .history-flag-text.deleted-flag {
+  background-color: rgba(255, 59, 66, 0.15);
+  color: var(--color-red);
+}
 
 .history-footer {
   display: -webkit-box;
@@ -2585,7 +2608,8 @@ header .heading-row {
 
 .history-play-btn,
 .history-folder-btn,
-.history-retry-btn {
+.history-retry-btn,
+.history-delete-file-btn {
   background: none;
   border: none;
   padding: 2px;
@@ -2605,25 +2629,39 @@ header .heading-row {
 }
 .history-play-btn:hover,
 .history-folder-btn:hover,
-.history-retry-btn:hover {
+.history-retry-btn:hover,
+.history-delete-file-btn:hover {
   opacity: 1;
 }
 .theme-dark .history-play-btn:hover,
 .theme-dark .history-folder-btn:hover,
-.theme-dark .history-retry-btn:hover {
+.theme-dark .history-retry-btn:hover,
+.theme-dark .history-delete-file-btn:hover {
   background-color: rgba(255, 255, 255, 0.05);
 }
 .theme-light .history-play-btn:hover,
 .theme-light .history-folder-btn:hover,
-.theme-light .history-retry-btn:hover {
+.theme-light .history-retry-btn:hover,
+.theme-light .history-delete-file-btn:hover {
   background-color: rgba(0, 0, 0, 0.05);
 }
 .history-play-btn svg,
 .history-folder-btn svg,
-.history-retry-btn svg {
+.history-retry-btn svg,
+.history-delete-file-btn svg {
   -ms-flex-negative: 0;
       flex-shrink: 0;
 }
+.theme-dark .history-delete-file-btn:hover {
+  background-color: rgba(255, 59, 66, 0.1);
+}
+.theme-light .history-delete-file-btn:hover {
+  background-color: rgba(255, 59, 66, 0.1);
+}
+.history-delete-file-btn svg {
+  stroke: var(--color-red) !important;
+}
+
 .completion-time {
   font-weight: 500;
   display: -webkit-box;

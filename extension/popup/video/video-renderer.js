@@ -234,6 +234,17 @@ function createHistoryItemElement(progressData) {
                             <path d="M3 3v5h5"></path>
                         </svg>
                 </button>
+                ${progressData.command === 'download-success' && progressData.path && !progressData.deleted ? `
+                    <button class="history-delete-file-btn" data-tooltip="Delete file" data-file-path="${progressData.path}">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-red)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-trash-2 w-3 h-3" aria-hidden="true">
+                            <path d="M3 6h18"></path>
+                            <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path>
+                            <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path>
+                            <line x1="10" x2="10" y1="11" y2="17"></line>
+                            <line x1="14" x2="14" y1="11" y2="17"></line>
+                        </svg>
+                    </button>
+                ` : ''}
                 ${progressData.command === 'download-success' && progressData.path ? `
                     
                     <button class="history-folder-btn" data-tooltip="Show in folder" data-file-path="${progressData.path}">
@@ -281,6 +292,11 @@ function buildFlagsHtml(progressData) {
             </span>
         `);
     }
+    if (progressData.deleted) {
+        icons.push(`
+            <span class="history-flag-text deleted-flag">DELETED</span>
+        `);
+    }
     return icons.join('');
 }
 
@@ -301,6 +317,7 @@ function buildFlagsHtml(progressData) {
     if (progressData.command === 'download-success' && progressData.path) {
         const playBtn = historyItem.querySelector('.history-play-btn');
         const folderBtn = historyItem.querySelector('.history-folder-btn');
+        const deleteFileBtn = historyItem.querySelector('.history-delete-file-btn');
         
         if (playBtn) {
             playBtn.addEventListener('click', (e) => {
@@ -320,12 +337,32 @@ function buildFlagsHtml(progressData) {
             folderBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 const filePath = folderBtn.getAttribute('data-file-path');
-                logger.debug('Showing file in folder:', filePath);
+                const isDeleted = historyItem.querySelector('.deleted-flag') !== null;
+                const completedAt = parseInt(historyItem.getAttribute('data-completion'), 10);
+                
+                logger.debug('Showing file in folder:', filePath, 'deleted:', isDeleted);
                 
                 sendPortMessage({
                     command: 'fileSystem',
                     operation: 'showInFolder',
-                    params: { filePath }
+                    params: { filePath, openFolderOnly: isDeleted },
+                    completedAt: completedAt
+                });
+            });
+        }
+        
+        if (deleteFileBtn) {
+            deleteFileBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const filePath = deleteFileBtn.getAttribute('data-file-path');
+                const completedAt = parseInt(historyItem.getAttribute('data-completion'), 10);
+                logger.debug('Deleting file:', filePath, completedAt);
+                
+                sendPortMessage({
+                    command: 'fileSystem',
+                    operation: 'deleteFile',
+                    params: { filePath },
+                    completedAt: completedAt
                 });
             });
         }
@@ -737,4 +774,53 @@ export async function removeVideoFromUI(videoUrl) {
     } catch (error) {
         logger.error('[RM] Error removing video from UI:', error);
     }
+}
+
+/**
+ * Update specific history item to show deleted state
+ * @param {string} completedAt - Completion timestamp to identify the history item
+ */
+export function updateHistoryItemDeleted(completedAt) {
+    const historyContainer = document.querySelector('.downloads-history');
+    const historyItem = historyContainer.querySelector(`.history-item[data-completion="${completedAt}"]`);
+    
+    if (!historyItem) {
+        logger.debug('History item not found for deleted file update:', completedAt);
+        return;
+    }
+    
+    // Add deleted flag to history-flags section
+    const historyFlags = historyItem.querySelector('.history-flags');
+    if (historyFlags) {
+        // Check if deleted flag already exists
+        if (!historyFlags.querySelector('.deleted-flag')) {
+            const deletedFlag = document.createElement('span');
+            deletedFlag.className = 'history-flag-text deleted-flag';
+            deletedFlag.textContent = 'DELETED';
+            historyFlags.appendChild(deletedFlag);
+        }
+    } else {
+        // Create history-flags section if it doesn't exist
+        const historyHeader = historyItem.querySelector('.history-header');
+        const pageInfo = historyHeader.querySelector('.page-info');
+        
+        const historyFlagsDiv = document.createElement('div');
+        historyFlagsDiv.className = 'history-flags';
+        
+        const deletedFlag = document.createElement('span');
+        deletedFlag.className = 'history-flag-text deleted-flag';
+        deletedFlag.textContent = 'DELETED';
+        historyFlagsDiv.appendChild(deletedFlag);
+        
+        // Insert before page-info
+        historyHeader.insertBefore(historyFlagsDiv, pageInfo);
+    }
+    
+    // Remove delete button
+    const deleteFileBtn = historyItem.querySelector('.history-delete-file-btn');
+    if (deleteFileBtn) {
+        deleteFileBtn.remove();
+    }
+    
+    logger.debug('Updated history item with deleted flag:', completedAt);
 }

@@ -6,9 +6,9 @@
 
 import { createLogger } from '../shared/utils/logger.js';
 import { updateDownloadProgress } from './video/download-progress-handler.js';
-import { renderVideos, addVideoToUI, updateVideoInUI, removeVideoFromUI, renderHistoryItems } from './video/video-renderer.js';
+import { renderVideos, addVideoToUI, updateVideoInUI, removeVideoFromUI, renderHistoryItems, updateHistoryItemDeleted } from './video/video-renderer.js';
 import { setVideos, updateVideo, clearVideos } from './state.js';
-import { updateUICounters, showToast } from './ui-utils.js';
+import { updateUICounters, showToast, showSuccess, showError } from './ui-utils.js';
 import { updateSettingsUI, updateNativeHostStatus } from './settings-tab.js';
 
 const logger = createLogger('Communication');
@@ -116,6 +116,23 @@ async function handleIncomingMessage(message) {
             
         case 'nativeHostConnectionState':
             handleNativeHostStateUpdate(message.connectionState);
+            break;
+            
+        case 'fileSystemResponse':
+            if (message.operation === 'deleteFile') {
+                if (message.success) {
+                    showSuccess('File deleted');
+                } else {
+                    const errorMessage = message.error === 'File not found' ? 'File not found' : 'Failed to delete file';
+                    showError(errorMessage);
+                }
+                // Always update UI regardless of success/error - file is considered "deleted" either way
+                updateHistoryItemDeleted(message.completedAt);
+            } else if (message.operation === 'showInFolder' && !message.success && message.error === 'File not found') {
+                // File not found when trying to show in folder - reuse same logic as deleteFile
+                showError('File not found');
+                updateHistoryItemDeleted(message.completedAt);
+            }
             break;
 
         default:

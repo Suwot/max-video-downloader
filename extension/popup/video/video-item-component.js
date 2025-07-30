@@ -791,7 +791,7 @@ export class VideoItemComponent {
             const subTrack = selectedSubtitleTracks[0];
             const container = subTrack.subtitleContainer || 'srt';
             const baseFilename = baseCommand.filename || 'video';
-            const subsLabel = subTrack.label || subTrack.name || subTrack.language || autoTrack.lang || 'nolabel';
+            const subsLabel = subTrack.label || subTrack.name || subTrack.language || subTrack.lang || 'nolabel';
             
             return this.createSingleSubtitleCommand(baseCommand, subTrack, baseFilename, subsLabel, container, options);
         }

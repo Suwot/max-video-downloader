@@ -38,6 +38,8 @@ class FileSystemCommand extends BaseCommand {
                     return await this.chooseDirectory(operationParams);
                 case 'chooseSaveLocation':
                     return await this.chooseSaveLocation(operationParams);
+                case 'deleteFile':
+                    return await this.deleteFile(operationParams);
 
                 default:
                     throw new Error(`Unknown file system operation: ${operation}`);
@@ -75,22 +77,31 @@ class FileSystemCommand extends BaseCommand {
 
     /**
      * Show file in folder with file manager focus
-     * @param {Object} params - { filePath: string }
+     * @param {Object} params - { filePath: string, openFolderOnly?: boolean }
      */
     async showInFolder(params) {
-        const { filePath } = params;
+        const { filePath, openFolderOnly = false } = params;
 
         if (!filePath) {
             throw new Error('File path is required');
         }
 
-        // Check if file exists
-        if (!fs.existsSync(filePath)) {
-            throw new Error('File not found');
+        if (openFolderOnly) {
+            // Open folder without pointing to file (file is known to be deleted)
+            const folderPath = path.dirname(filePath);
+            if (!fs.existsSync(folderPath)) {
+                throw new Error('Folder not found');
+            }
+            const command = this.getOpenFolderCommand(folderPath);
+            await this.executeCommand(command.cmd, command.args);
+        } else {
+            // Normal operation - check if file exists and show in folder
+            if (!fs.existsSync(filePath)) {
+                throw new Error('File not found');
+            }
+            const command = this.getShowInFolderCommand(filePath);
+            await this.executeCommand(command.cmd, command.args);
         }
-
-        const command = this.getShowInFolderCommand(filePath);
-        await this.executeCommand(command.cmd, command.args);
 
         const result = { success: true, operation: 'showInFolder', filePath };
         this.sendMessage(result);
@@ -256,6 +267,47 @@ return POSIX path of chosenFile`;
                 reject(new Error(`Failed to execute command: ${error.message}`));
             });
         });
+    }
+
+    /**
+     * Delete file from filesystem
+     * @param {Object} params - { filePath: string }
+     */
+    async deleteFile(params) {
+        const { filePath } = params;
+
+        if (!filePath) {
+            throw new Error('File path is required');
+        }
+
+        // Check if file exists
+        if (!fs.existsSync(filePath)) {
+            throw new Error('File not found');
+        }
+
+        try {
+            // Delete the file
+            fs.unlinkSync(filePath);
+            
+            const result = { success: true, operation: 'deleteFile', filePath };
+            this.sendMessage(result);
+            return result;
+        } catch (error) {
+            throw new Error(`Failed to delete file: ${error.message}`);
+        }
+    }
+
+    /**
+     * Get platform-specific command for opening folder
+     */
+    getOpenFolderCommand(folderPath) {
+        if (process.platform === 'darwin') {
+            return { cmd: 'open', args: [folderPath] };
+        } else if (process.platform === 'win32') {
+            return { cmd: 'explorer', args: [`"${folderPath}"`] };
+        } else {
+            throw new Error('Unsupported platform');
+        }
     }
 
     /**

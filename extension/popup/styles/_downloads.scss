@@ -131,6 +131,18 @@
             stroke: var(--color-orange);
         }
     }
+    
+    .history-flag-text {
+        font-size: var(--font-badge);
+        font-weight: 600;
+        padding: 2px 6px;
+        border-radius: 4px;
+        
+        &.deleted-flag {
+            background-color: rgba(255, 59, 66, 0.15);
+            color: var(--color-red);
+        }
+    }
 }
 
 .history-footer {
@@ -150,7 +162,8 @@
 
 .history-play-btn,
 .history-folder-btn,
-.history-retry-btn {
+.history-retry-btn,
+.history-delete-file-btn {
     @extend %interactive-base;
     background: none;
     border: none;
@@ -181,6 +194,22 @@
 
     &:hover svg {
         @extend %theme-text-primary;
+    }
+}
+
+.history-delete-file-btn {
+    &:hover {
+        .theme-dark & {
+            background-color: rgba(255, 59, 66, 0.1);
+        }
+
+        .theme-light & {
+            background-color: rgba(255, 59, 66, 0.1);
+        }
+    }
+    
+    svg {
+        stroke: var(--color-red) !important;
     }
 }
 
