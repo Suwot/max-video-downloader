@@ -7,10 +7,9 @@
 import { 
     processingRequests,
     calculateEstimatedFileSizeBytes,
-    resolveUrl,
-    fetchManifest,
-    validateManifestType
+    resolveUrl
 } from './parser-utils.js';
+import { fetchManifest } from './manifest-fetcher.js';
 import { createLogger } from '../../shared/utils/logger.js';
 import { getVideoByUrl } from './video-store.js';
 import { standardizeResolution, normalizeUrl, getBaseDirectory } from '../../shared/utils/processing-utils.js';
@@ -68,21 +67,19 @@ export async function parseHlsManifest(url) {
     }
     
     try {
-        logger.debug(`Validating manifest: ${url} with these headers:`, headers);
+        logger.debug(`Fetching manifest: ${url} with headers:`, headers);
         
-        // First perform universal validation to confirm this is an HLS manifest
-        const validation = await validateManifestType(videoObject);
+        // Fetch manifest content
+        const fetchResult = await fetchManifest(url, headers);
+        const timestampValidated = Date.now();
         
-        // Preserve the light parsing timestamp
-        const timestampLP = validation.timestampLP || Date.now();
-        
-        // Early return if not a valid manifest or if not HLS
-        if (!validation.isValid || validation.manifestType !== 'hls') {
-            logger.warn(`URL does not point to a valid HLS manifest: ${url} (${validation.status})`);
+        // Early return if fetch failed
+        if (!fetchResult.success) {
+            logger.warn(`Failed to fetch manifest: ${url} (${fetchResult.status})`);
             return {
-                status: validation.status || 'not-hls',
+                status: 'fetch-failed',
                 isValid: false,
-                timestampLP,
+                timestampValidated,
                 isMaster: false,
                 isVariant: false,
                 videoTracks: [],
@@ -93,22 +90,17 @@ export async function parseHlsManifest(url) {
             };
         }
         
-        // Use data from validation if available
-        let isMaster = validation.isMaster || false; 
-        let isVariant = validation.isVariant || false;
+        const content = fetchResult.content;
         
-        logger.debug(`Confirmed valid HLS ${isMaster ? 'master' : (isVariant ? 'variant' : 'unknown')} manifest, proceeding to full parse: ${url}`);
-        
-        // Always use content from validation (guaranteed to be available)
-        const content = validation.content;
-        if (!content) {
-            logger.error('No content available from validation - this should not happen');
-            return { 
-                status: 'no-content',
+        // Validate HLS format
+        if (!content.includes('#EXTM3U')) {
+            logger.warn(`Not a valid HLS manifest: ${url}`);
+            return {
+                status: 'invalid-format',
                 isValid: false,
-                timestampLP,
+                timestampValidated,
                 isMaster: false,
-                isVariant: false, 
+                isVariant: false,
                 videoTracks: [],
                 audioTracks: [],
                 subtitleTracks: [],
@@ -116,9 +108,12 @@ export async function parseHlsManifest(url) {
                 hasMediaGroups: false
             };
         }
-        logger.debug('Using content from validation for full parse');
         
-        // Trust validation results (no redundant type detection)
+        // Determine HLS type
+        const isMaster = content.includes('#EXT-X-STREAM-INF');
+        const isVariant = !isMaster && content.includes('#EXTINF');
+        
+        logger.debug(`Confirmed valid HLS ${isMaster ? 'master' : (isVariant ? 'variant' : 'unknown')} manifest: ${url}`);
         logger.debug(`Using validation results: isMaster=${isMaster}, isVariant=${isVariant}`);
         
         const baseUrl = getBaseDirectory(url);
@@ -289,8 +284,8 @@ export async function parseHlsManifest(url) {
             logger.debug(`Created standalone video track entry with container info: ${JSON.stringify(videoTracks[0])}`);
         }
         
-        // Set the full parse timestamp
-        const timestampFP = Date.now();
+        // Set the parsing completion timestamp
+        const timestampParsed = Date.now();
 
         // Construct the full result with standardized structure
         const result = {
@@ -300,8 +295,8 @@ export async function parseHlsManifest(url) {
             isValid: true,
             isMaster: isMaster,
             isVariant: isVariant,
-            timestampLP: timestampLP,
-            timestampFP: timestampFP,
+            timestampValidated: timestampValidated,
+            timestampParsed: timestampParsed,
             duration: duration,
             isEncrypted: isEncrypted,
             encryptionType: encryptionType,
@@ -323,7 +318,7 @@ export async function parseHlsManifest(url) {
             status: 'parse-error',
             error: error.message,
             isValid: false,
-            timestampLP: Date.now(),
+            timestampValidated: Date.now(),
             isMaster: false,
             isVariant: false,
             videoTracks: [],
@@ -536,13 +531,12 @@ async function parseHlsVariant(variantUrl, headers = null, _tabId) {
         logger.debug(`Fetching variant: ${variantUrl} with headers:`, headers);
         
         // Use the unified fetchManifest function with retry logic
-        const fetchResult = await fetchManifest(variantUrl, {
-            headers,
+        const fetchResult = await fetchManifest(variantUrl, headers, {
             timeoutMs: 10000,
             maxRetries: 2
         });
         
-        if (!fetchResult.ok) {
+        if (!fetchResult.success) {
             logger.warn(`❌ Failed fetching variant ${variantUrl}: ${fetchResult.status}`);
             return { 
                 duration: null, 
@@ -806,11 +800,10 @@ export async function extractHlsVariantUrls(url, headers = null, _tabId) {
     try {
         logger.debug(`Extracting variant URLs from master: ${url}`);
         // Fetch the master playlist content
-        const fetchResult = await fetchManifest(url, {
-            headers,
+        const fetchResult = await fetchManifest(url, headers, {
             maxRetries: 2
         });
-        if (!fetchResult.ok) {
+        if (!fetchResult.success) {
             logger.warn(`Failed to fetch master playlist for variant extraction: ${fetchResult.status}`);
             return [];
         }
@@ -875,11 +868,10 @@ export async function extractHlsMediaUrls(url, headers = null, _tabId) {
     try {
         logger.debug(`Extracting all media URLs from master: ${url}`);
         // Fetch the master playlist content
-        const fetchResult = await fetchManifest(url, {
-            headers,
+        const fetchResult = await fetchManifest(url, headers, {
             maxRetries: 2
         });
-        if (!fetchResult.ok) {
+        if (!fetchResult.success) {
             logger.warn(`Failed to fetch master playlist for media URL extraction: ${fetchResult.status}`);
             return { videoTracks: [], audioTracks: [], subtitleTracks: [] };
         }

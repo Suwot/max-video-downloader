@@ -125,11 +125,11 @@ function addDetectedVideo(tabId, videoInfo) {
         normalizedUrl,
         isBeingProcessed: willProcessImmediately,
         // Set parsing flags based on type and immediate processing
-        ...(willProcessImmediately && (videoInfo.type === 'hls' || videoInfo.type === 'dash') ? { parsingManifest: true } : {}),
+        ...(willProcessImmediately && (videoInfo.type === 'hls' || videoInfo.type === 'dash') ? { parsing: true } : {}),
         ...(willProcessImmediately && videoInfo.type === 'direct' ? { runningFFprobe: true } : {}),
         title: videoInfo.metadata?.filename || getFilenameFromUrl(videoInfo.url),
-        // Set isValid: true for direct videos immediately
-        ...(videoInfo.type === 'direct' ? { isValid: true } : {}),
+        // Set isValid: true optimistically for all video types
+        isValid: true,
         // Include containers at video level if set during detection
         ...(videoInfo.videoContainer && { videoContainer: videoInfo.videoContainer }),
         ...(videoInfo.audioContainer && { audioContainer: videoInfo.audioContainer }),
@@ -212,7 +212,7 @@ async function processNext() {
         if (video && !video.isBeingProcessed) {
             const processingFlags = {
                 isBeingProcessed: true,
-                ...(videoType === 'hls' || videoType === 'dash' ? { parsingManifest: true } : {}),
+                ...(videoType === 'hls' || videoType === 'dash' ? { parsing: true } : {}),
                 ...(videoType === 'direct' ? { runningFFprobe: true } : {})
             };
             updateVideo(`processNext-dequeued`, tabId, normalizedUrl, processingFlags);
@@ -232,7 +232,7 @@ async function processNext() {
         // Update video with error status and clear all processing flags
         updateVideo(`processNext-error`, tabId, normalizedUrl, { 
             isBeingProcessed: false, 
-            parsingManifest: false,
+            parsing: false,
             runningFFprobe: false,
             error: error.message 
         });
@@ -265,7 +265,7 @@ async function processHlsVideo(tabId, normalizedUrl) {
         const hlsUpdates = {
             ...hlsResult,
             isBeingProcessed: false,
-            parsingManifest: false
+            parsing: false
         };
         updateVideo('processHlsVideo', tabId, normalizedUrl, hlsUpdates);
 
@@ -290,9 +290,8 @@ async function processHlsVideo(tabId, normalizedUrl) {
         updateVideo('processHlsVideo-error', tabId, normalizedUrl, {
             isValid: false,
             isBeingProcessed: false,
-            parsingManifest: false,
-            isLightParsed: true,
-            timestampLP: hlsResult.timestampLP || Date.now(),
+            parsing: false,
+            timestampValidated: hlsResult.timestampValidated || Date.now(),
             parsingStatus: hlsResult.status,
             parsingError: hlsResult.error || 'Not a valid HLS manifest'
         });
@@ -328,12 +327,10 @@ async function processDashVideo(tabId, normalizedUrl) {
             isLive: dashResult.isLive,
             isEncrypted: dashResult.isEncrypted,
             encryptionType: dashResult.encryptionType,
-            isLightParsed: true,
-            isFullParsed: true,
-            timestampLP: dashResult.timestampLP,
-            timestampFP: dashResult.timestampFP,
+            timestampValidated: dashResult.timestampValidated,
+            timestampParsed: dashResult.timestampParsed,
             isBeingProcessed: false,
-            parsingManifest: false
+            parsing: false
         };
         
         updateVideo('processDashVideo', tabId, normalizedUrl, dashUpdates);
@@ -347,9 +344,8 @@ async function processDashVideo(tabId, normalizedUrl) {
         updateVideo('processDashVideo-error', tabId, normalizedUrl, {
             isValid: false,
             isBeingProcessed: false,
-            parsingManifest: false,
-            isLightParsed: true,
-            timestampLP: dashResult.timestampLP || Date.now(),
+            parsing: false,
+            timestampValidated: dashResult.timestampValidated || Date.now(),
             parsingStatus: dashResult.status,
             parsingError: dashResult.error || 'Not a valid DASH manifest'
         });

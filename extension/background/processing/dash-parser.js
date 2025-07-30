@@ -7,9 +7,9 @@ import {
     processingRequests,
     calculateEstimatedFileSizeBytes,
     parseFrameRate,
-    extractAttribute,
-    validateManifestType
+    extractAttribute
 } from './parser-utils.js';
+import { fetchManifest } from './manifest-fetcher.js';
 import { createLogger } from '../../shared/utils/logger.js';
 import { getVideoByUrl } from './video-store.js';
 import { standardizeResolution, normalizeUrl, getBaseDirectory } from '../../shared/utils/processing-utils.js';
@@ -168,10 +168,9 @@ function extractRoleInfo(adaptationSetContent) {
  * Extract quality label from representation
  * 
  * @param {string} representationContent - Representation XML content
- * @param {number} height - Video height for fallback quality detection
  * @returns {string|null} Quality label or null if not found
  */
-function extractTrackQuality(representationContent, height) {
+function extractTrackQuality(representationContent) {
     // Check for explicit quality attribute
     const qualityAttr = extractAttribute(representationContent, 'quality');
     if (qualityAttr) {
@@ -219,7 +218,7 @@ export async function parseDashManifest(url) {
         };
     }
     
-    const { tabId, headers, metadata } = videoObject;
+    const { headers } = videoObject;
     const normalizedUrl = normalizeUrl(url);
     
     // Skip if already being processed
@@ -239,45 +238,42 @@ export async function parseDashManifest(url) {
     }
     
     try {
-        logger.debug(`Validating manifest: ${url}, with these headers:`, headers);
+        logger.debug(`Fetching manifest: ${url} with headers:`, headers);
         
-        // First perform light parsing to validate this is actually a DASH manifest
-        const validation = await validateManifestType(videoObject);
+        // Fetch manifest content
+        const fetchResult = await fetchManifest(url, headers);
+        const timestampValidated = Date.now();
         
-        // Preserve the light parsing timestamp
-        const timestampLP = validation.timestampLP || Date.now();
-        
-        // Early return if not a valid manifest or if not DASH
-        if (!validation.isValid || validation.manifestType !== 'dash') {
-            logger.warn(`URL does not point to a valid DASH manifest: ${url} (${validation.status})`);
+        // Early return if fetch failed
+        if (!fetchResult.success) {
+            logger.warn(`Failed to fetch manifest: ${url} (${fetchResult.status})`);
             return {
-                status: validation.status || 'not-dash',
+                status: 'fetch-failed',
                 isValid: false,
-                timestampLP,
-                videoTracks: [],
-                audioTracks: [],
-                subtitleTracks: [],
-            };
-        }
-        
-        logger.debug(`Confirmed valid DASH manifest, proceeding to full parse: ${url}`);
-        
-        // Always use content from validation (guaranteed to be available)
-        const content = validation.content;
-        if (!content) {
-            logger.error('No content available from validation - this should not happen');
-            return { 
-                status: 'no-content',
-                isValid: false,
-                timestampLP,
+                timestampValidated,
                 videoTracks: [],
                 audioTracks: [],
                 subtitleTracks: []
             };
         }
-        logger.debug('Using content from validation for full parse');
         
-        const baseUrl = getBaseDirectory(url);
+        const content = fetchResult.content;
+        
+        // Validate DASH format
+        if (!content.includes('<MPD') || 
+            (!content.includes('xmlns="urn:mpeg:dash:schema:mpd') && !content.includes('</MPD>'))) {
+            logger.warn(`Not a valid DASH manifest: ${url}`);
+            return {
+                status: 'invalid-format',
+                isValid: false,
+                timestampValidated,
+                videoTracks: [],
+                audioTracks: [],
+                subtitleTracks: []
+            };
+        }
+        
+        logger.debug(`Confirmed valid DASH manifest: ${url}`);
         
         // Extract basic MPD properties
         const durationMatch = content.match(/mediaPresentationDuration="([^"]+)"/);
@@ -384,7 +380,7 @@ export async function parseDashManifest(url) {
                     flatRepresentation.standardizedResolution = flatRepresentation.height ? 
                         standardizeResolution(flatRepresentation.height) : null;
                     flatRepresentation.frameRate = parseFrameRate(extractAttribute(representation, 'frameRate') || null);
-                    flatRepresentation.trackQuality = extractTrackQuality(representation, flatRepresentation.height);
+                    flatRepresentation.trackQuality = extractTrackQuality(representation);
                     
                     // Calculate resolution string
                     if (flatRepresentation.width && flatRepresentation.height) {
@@ -473,17 +469,17 @@ export async function parseDashManifest(url) {
         sortTracks(videoTracks);
         sortTracks(audioTracks);
                 
-        // Set the full parse timestamp only at the end of successful parsing
-        const timestampFP = Date.now();
+        // Set the parsing completion timestamp
+        const timestampParsed = Date.now();
         
-        // Construct the full result with both timestamps
+        // Construct the full result
         const result = {
             url: url,
             normalizedUrl: normalizedUrl,
             type: 'dash',
             isValid: true,
-            timestampLP: timestampLP, // Preserve the light parsing timestamp
-            timestampFP: timestampFP, // Set full parsing timestamp
+            timestampValidated: timestampValidated,
+            timestampParsed: timestampParsed,
             duration: duration,
             isLive: isLive,
             isEncrypted: isEncrypted,
@@ -491,7 +487,6 @@ export async function parseDashManifest(url) {
             videoTracks: videoTracks,
             audioTracks: audioTracks,
             subtitleTracks: subtitleTracks,
-
             status: 'success'
         };
         
@@ -502,11 +497,11 @@ export async function parseDashManifest(url) {
         return { 
             status: 'parse-error',
             isValid: false,
-            timestampLP: Date.now(), // In case of error without light parsing completed
+            timestampValidated: Date.now(),
             error: error.message,
             videoTracks: [],
             audioTracks: [],
-            subtitleTracks: [],
+            subtitleTracks: []
         };
     } finally {
         // Clean up
