@@ -5,7 +5,7 @@
 
 // Add static imports at the top
 import { createLogger } from "../../shared/utils/logger.js";
-import { cleanupHeaderRulesForTab } from "../../shared/utils/headers-utils.js";
+
 import { cleanupMPDContextForTab } from "../detection/video-detector.js";
 import {
   cleanupVideosForTab,
@@ -111,7 +111,6 @@ function initTabTracking() {
       cleanupVideosForTab(tabId, false);
       cleanupProcessingQueueForTab(tabId);
       cleanupMPDContextForTab(tabId);
-      cleanupHeaderRulesForTab(tabId);
 
       // Clean up domain tracking
       if (tabDomains.has(tabId)) {

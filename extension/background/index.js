@@ -2,6 +2,7 @@
 import { SettingsManager } from './state/settings-manager.js';
 import nativeHostService from './messaging/native-host-service.js';
 import { initHeaderTracking } from '../shared/utils/headers-utils.js';
+import { cleanupOrphanedRules } from './processing/parsing-dnr.js';
 import { initTabTracking } from './state/tab-manager.js';
 import { initUICommunication } from './messaging/popup-communication.js';
 import { initDownloadManager } from './download/download-manager.js';
@@ -82,6 +83,7 @@ async function initializeServices() {
         await initTabTracking();         // Initialize tab tracking
         await initUICommunication();     // Initialize UI communication
         await initHeaderTracking();      // Initialize header tracking
+        await cleanupOrphanedRules();    // Clean up orphaned parsing rules
 
         logger.info('All background services initialized');
     } catch (error) {

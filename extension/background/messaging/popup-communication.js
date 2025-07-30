@@ -7,7 +7,7 @@
 import { processDownloadCommand, cancelDownload, getActiveDownloadProgress, getActiveDownloadCount, getActiveDownloads } from '../download/download-manager.js';
 import { createLogger } from '../../shared/utils/logger.js';
 import { clearPreviewCache, getCacheStats } from '../../shared/utils/preview-cache.js';
-import { clearAllHeaderCaches } from '../../shared/utils/headers-utils.js';
+import { clearAllHeaders } from '../../shared/utils/headers-utils.js';
 import { getVideosForDisplay, getVideo, dismissVideoFromTab, cleanupAllVideos, getVideoTypeCounts } from '../processing/video-store.js';
 import nativeHostService from './native-host-service.js';
 import { updateTabIcon } from '../state/tab-manager.js';
@@ -133,7 +133,7 @@ async function handlePortMessage(message, port, portId) {
             
         case 'clearCaches':
             updateTabIcon();
-            clearAllHeaderCaches(); 
+            clearAllHeaders(); 
             cleanupAllVideos(); // Includes icon reset for all tabs
             await clearPreviewCache(); // Clear preview cache
             logger.debug('Cleared all caches (video + headers + preview + icons)');

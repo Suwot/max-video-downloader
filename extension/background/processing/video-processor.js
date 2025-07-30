@@ -7,7 +7,7 @@ import { normalizeUrl } from '../../shared/utils/processing-utils.js';
 import { createLogger } from '../../shared/utils/logger.js';
 import { standardizeResolution, getFilenameFromUrl } from '../../shared/utils/processing-utils.js';
 import { detectAllContainers } from './container-detector.js';
-import { applyDNRRule } from '../../shared/utils/headers-utils.js';
+
 import { getPreview, storePreview } from '../../shared/utils/preview-cache.js';
 import { parseHlsManifest, extractHlsMediaUrls } from './hls-parser.js';
 import { parseDashManifest } from './dash-parser.js';
@@ -488,9 +488,6 @@ async function generateVideoPreview(tabId, normalizedUrl, headers, sourceUrl = n
         const urlToUse = sourceUrl || video.url;
         logger.debug(`Generating preview for ${normalizedUrl} using source: ${urlToUse}`);
         
-        // Apply header rule before sending to native host
-        await applyDNRRule(tabId, urlToUse, headers);
-
         // Direct call to NHS - generates preview and expects response
         const response = await nativeHostService.sendMessage({
             command: 'generatePreview',
@@ -535,9 +532,6 @@ async function getFFprobeMetadata(tabId, normalizedUrl, headers) {
         }
 
         logger.debug(`Getting FFprobe metadata for ${video.url}`);
-
-        // Apply header rule before sending to native host
-        await applyDNRRule(tabId, video.url, headers);
 
         // Direct call to NHS - gets ffprobe data and expects response
         const response = await nativeHostService.sendMessage({

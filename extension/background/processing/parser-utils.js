@@ -3,8 +3,8 @@
  * Common utilities for HLS and DASH parsing operations
  */
 
-import { applyDNRRule } from '../../shared/utils/headers-utils.js';
 import { createLogger } from '../../shared/utils/logger.js';
+import { applyParsingRule, removeParsingRule } from './parsing-dnr.js';
 
 const logger = createLogger('Parser Utils');
 logger.setLevel('ERROR');
@@ -104,7 +104,7 @@ export function resolveUrl(baseUrl, relativeUrl) {
 }
 
 /**
- * Fetch manifest content with built-in retry logic
+ * Fetch manifest content with parsing-scoped DNR rules
  * 
  * @param {string} url - URL to fetch
  * @param {Object} [options] - Fetch options
@@ -113,7 +113,6 @@ export function resolveUrl(baseUrl, relativeUrl) {
  * @param {number} [options.timeoutMs=10000] - Timeout in milliseconds
  * @param {number} [options.maxRetries=2] - Maximum number of retry attempts
  * @param {number} [options.retryDelayMs=500] - Base delay between retries in milliseconds
- * @param {number} [options.tabId] - Tab ID for context to use with declarativeNetRequest
  * @returns {Promise<{content: string, ok: boolean, status: number, retryCount: number}>}
  */
 export async function fetchManifest(url, options = {}) {
@@ -122,8 +121,7 @@ export async function fetchManifest(url, options = {}) {
         rangeBytes = null,
         timeoutMs = 10000,
         maxRetries = 2,
-        retryDelayMs = 500,
-        tabId = null
+        retryDelayMs = 500
     } = options;
     
     const logger = createLogger('Fetch');
@@ -131,26 +129,18 @@ export async function fetchManifest(url, options = {}) {
     
     let attempt = 0;
     let lastError = null;
-    let ruleApplied = false;
+    let ruleId = null;
 
     // Configure range header if needed
-    if (rangeBytes) {
-        if (headers) {
-            headers['Range'] = `bytes=0-${rangeBytes - 1}`;
-        }
-        logger.debug(`Fetching ${fetchMode} of ${url}`);
-    } else {
-        // Remove any Range header to ensure we get the full content
-        if (headers && headers['Range']) {
-            delete headers['Range'];
-        }
-        logger.debug(`Fetching ${fetchMode} of ${url}`);
+    if (rangeBytes && headers) {
+        headers['Range'] = `bytes=0-${rangeBytes - 1}`;
     }
     
-    // Use declarativeNetRequest if possible (tabId > 0 and not in a native host context)
-    if (tabId > 0 && typeof chrome !== 'undefined' && chrome.declarativeNetRequest) {
-        try { ruleApplied = await applyDNRRule(tabId, url, headers); } 
-        catch (e) { logger.error('Error applying header rule:', e); }
+    logger.debug(`Fetching ${fetchMode} of ${url}`);
+    
+    // Apply parsing rule for manifest access
+    if (headers) {
+        ruleId = await applyParsingRule(url, headers);
     }
     
     try {
@@ -159,22 +149,13 @@ export async function fetchManifest(url, options = {}) {
                 const controller = new AbortController();
                 const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
                 
-                // Log retry attempts after the first one
                 if (attempt > 0) {
                     logger.debug(`Retry attempt ${attempt}/${maxRetries} for ${url}`);
                 }
                 
-                // If we're using declarativeNetRequest, don't pass headers directly
-                const fetchOptions = {
+                const response = await fetch(url, {
                     signal: controller.signal
-                };
-                
-                // Only pass headers directly if we're not using declarativeNetRequest
-                if (!ruleApplied && headers) {
-                    fetchOptions.headers = headers;
-                }
-                
-                const response = await fetch(url, fetchOptions);
+                });
                 
                 clearTimeout(timeoutId);
                 
@@ -206,11 +187,10 @@ export async function fetchManifest(url, options = {}) {
                     let delay = retryDelayMs * Math.pow(2, attempt);
                     
                     if (response.status === 429) {
-                        // Check for Retry-After header
                         const retryAfter = response.headers.get('Retry-After');
                         if (retryAfter) {
                             if (!isNaN(retryAfter)) {
-                                delay = parseInt(retryAfter, 10) * 1000; // Convert to ms
+                                delay = parseInt(retryAfter, 10) * 1000;
                             } else {
                                 const retryDate = new Date(retryAfter).getTime();
                                 if (!isNaN(retryDate)) {
@@ -221,25 +201,21 @@ export async function fetchManifest(url, options = {}) {
                         }
                     }
                     
-                    // Increment attempt and retry after delay
                     attempt++;
                     logger.debug(`HTTP error ${response.status}, retrying in ${delay}ms (attempt ${attempt}/${maxRetries})`);
                     await new Promise(resolve => setTimeout(resolve, delay));
                     continue;
                 }
                 
-                // On successful response, extract content
                 const content = await response.text();
                 return { 
                     content, 
                     ok: true, 
                     status: response.status, 
-                    retryCount: attempt,
-                    url: url // Include the original URL for rule cleanup
+                    retryCount: attempt
                 };
                 
             } catch (error) {
-                // Network error or timeout
                 lastError = error;
                 
                 if (attempt >= maxRetries) {
@@ -249,30 +225,28 @@ export async function fetchManifest(url, options = {}) {
                         ok: false, 
                         status: 0, 
                         error: error.message, 
-                        retryCount: attempt,
-                        url: url // Include the original URL for rule cleanup
+                        retryCount: attempt
                     };
                 }
                 
-                // Increment attempt and retry with minimal delay for network errors
                 attempt++;
                 logger.debug(`Network error: ${error.message}, retrying immediately (attempt ${attempt}/${maxRetries})`);
-                await new Promise(resolve => setTimeout(resolve, 100)); // Small delay before retry
+                await new Promise(resolve => setTimeout(resolve, 100));
             }
         }
         
-        // Should never reach here but just in case
         return { 
             content: '', 
             ok: false, 
             status: 0, 
             error: lastError?.message || 'Unknown error', 
-            retryCount: attempt,
-            url: url // Include the original URL for rule cleanup
+            retryCount: attempt
         };
     } finally {
-        // Don't automatically clean up the rule at this level
-        // Let the caller handle cleanup after all related requests
+        // Clean up parsing rule immediately after fetch completes
+        if (ruleId) {
+            await removeParsingRule(ruleId);
+        }
     }
 }
 
@@ -285,7 +259,7 @@ export async function fetchManifest(url, options = {}) {
  * @returns {Promise<Object>} - Validation result with additional metadata
  */
 export async function validateManifestType(videoObject) {
-    const { url, headers, metadata, tabId } = videoObject;
+    const { url, headers, metadata } = videoObject;
     const logger = createLogger('Manifest Validator');
     try {
         logger.debug(`Checking manifest type for ${url}`);
@@ -354,8 +328,7 @@ export async function validateManifestType(videoObject) {
             try {
                 const fullFetchResult = await fetchManifest(url, {
                     headers: reqHeaders,
-                    maxRetries: 3,
-                    tabId: tabId
+                    maxRetries: 3
                 });
                 
                 if (!fullFetchResult.ok) {
@@ -422,8 +395,7 @@ export async function validateManifestType(videoObject) {
             const result = await fetchManifest(url, {
                 headers: reqHeaders,
                 rangeBytes: 10 * 1024,
-                maxRetries: 3,
-                tabId: tabId
+                maxRetries: 3
             });
 
             if (!result.ok) {

@@ -44,7 +44,7 @@ export async function parseHlsManifest(url) {
         };
     }
     
-    const { tabId, headers, metadata } = videoObject;
+    const { headers, metadata, tabId } = videoObject;
     const normalizedUrl = normalizeUrl(url);
     
     // Skip if already being processed
@@ -531,7 +531,7 @@ function parseHlsMaster(content, baseUrl, masterUrl) {
  * @param {Object} [headers] - Optional headers to use for the request
  * @returns {Promise<Object>} - Complete variant metadata
  */
-async function parseHlsVariant(variantUrl, headers = null, tabId) {
+async function parseHlsVariant(variantUrl, headers = null, _tabId) {
     try {
         logger.debug(`Fetching variant: ${variantUrl} with headers:`, headers);
         
@@ -539,8 +539,7 @@ async function parseHlsVariant(variantUrl, headers = null, tabId) {
         const fetchResult = await fetchManifest(variantUrl, {
             headers,
             timeoutMs: 10000,
-            maxRetries: 2,
-            tabId: tabId
+            maxRetries: 2
         });
         
         if (!fetchResult.ok) {
@@ -803,14 +802,13 @@ function extractHlsVersion(content) {
  * @param {Object} [headers] - Optional request headers
  * @returns {Promise<Array<string>>} Array of normalized variant URLs
  */
-export async function extractHlsVariantUrls(url, headers = null, tabId) {
+export async function extractHlsVariantUrls(url, headers = null, _tabId) {
     try {
         logger.debug(`Extracting variant URLs from master: ${url}`);
         // Fetch the master playlist content
         const fetchResult = await fetchManifest(url, {
             headers,
-            maxRetries: 2,
-            tabId: tabId
+            maxRetries: 2
         });
         if (!fetchResult.ok) {
             logger.warn(`Failed to fetch master playlist for variant extraction: ${fetchResult.status}`);
@@ -873,14 +871,13 @@ function extractMasterVariantEntries(content, baseUrl, masterUrl) {
  * @param {number} tabId - Tab ID
  * @returns {Promise<Object>} Object containing arrays of normalized URLs for videoTracks, audioTracks, and subtitleTracks
  */
-export async function extractHlsMediaUrls(url, headers = null, tabId) {
+export async function extractHlsMediaUrls(url, headers = null, _tabId) {
     try {
         logger.debug(`Extracting all media URLs from master: ${url}`);
         // Fetch the master playlist content
         const fetchResult = await fetchManifest(url, {
             headers,
-            maxRetries: 2,
-            tabId: tabId
+            maxRetries: 2
         });
         if (!fetchResult.ok) {
             logger.warn(`Failed to fetch master playlist for media URL extraction: ${fetchResult.status}`);

@@ -7,9 +7,7 @@ import {
     processingRequests,
     calculateEstimatedFileSizeBytes,
     parseFrameRate,
-    resolveUrl,
     extractAttribute,
-    fetchManifest,
     validateManifestType
 } from './parser-utils.js';
 import { createLogger } from '../../shared/utils/logger.js';
