@@ -235,7 +235,7 @@ async function handlePortMessage(message, port, portId) {
                         });
                         
                         await chrome.storage.local.set({ downloads_history: updatedHistory });
-                        logger.debug('Updated history with deleted flag:', message.completedAt, updatedHistory);
+                        logger.debug('Updated history with deleted flag:', message.completedAt);
                         
                         // Send response back to popup for UI update (pass through original result)
                         port.postMessage({
@@ -257,7 +257,7 @@ async function handlePortMessage(message, port, portId) {
                     }
                 }
             } catch (error) {
-                logger.error(`File system operation failed: ${message.operation}`, error);
+                logger.warn(`File system operation failed: ${message.operation}`, error);
                 
                 // Handle showInFolder errors - treat "File not found" as deleted file (reuse existing logic)
                 if (message.operation === 'showInFolder' && error.message === 'File not found' && message.completedAt) {
@@ -304,7 +304,7 @@ async function handlePortMessage(message, port, portId) {
                         });
                         
                         await chrome.storage.local.set({ downloads_history: updatedHistory });
-                        logger.debug('Updated history with deleted flag after error:', message.completedAt, updatedHistory);
+                        logger.debug('Updated history with deleted flag after error:', message.completedAt);
                     } catch (storageError) {
                         logger.error('Failed to update history after file deletion error:', storageError);
                     }
