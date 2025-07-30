@@ -156,14 +156,14 @@ function extractChannelCount(adaptationSetContent, representationContent) {
  * Extract role information from adaptation set
  * 
  * @param {string} adaptationSetContent - AdaptationSet XML content
- * @returns {Object} Role information with role and isDefault properties
+ * @returns {Object} Role information with role and _default properties
  */
 function extractRoleInfo(adaptationSetContent) {
     const roleMatch = adaptationSetContent.match(/<Role[^>]*value="([^"]+)"[^>]*\/>/);
     const role = roleMatch ? roleMatch[1] : null;
-    const isDefault = role === 'main';
+    const _default = role === 'main';
     
-    return { role, isDefault };
+    return { role, _default };
 }
 
 /**
@@ -369,7 +369,7 @@ export async function parseDashManifest(url) {
                     lang: lang,
                     label: label,
                     role: roleInfo.role,
-                    isDefault: roleInfo.isDefault,
+                    default: roleInfo._default,
                     hasAccessibility: accessibilityInfo.hasAccessibility,
                     isForced: accessibilityInfo.isForced,
                     estimatedFileSizeBytes: calculateEstimatedFileSizeBytes(bandwidth, duration)

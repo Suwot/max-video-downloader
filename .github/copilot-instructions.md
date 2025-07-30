@@ -39,6 +39,28 @@ MAX Video Downloader - Chrome extension (Manifest V3) that downloads videos from
 - **validateConnection** - Connection validation and host info retrieval
 - **file-system** - Cross-platform file operations (open, save dialogs, folder navigation)
 
+## Native Host CLI Commands
+
+- **-version** - Show version (0.1.0)
+- **-build [platform]** - Build for specific platform (mac-arm64, mac-x64, win-x64, win-arm64)
+- **-install** - Install native host for all detected browsers
+- **-uninstall** - Remove native host from all browsers
+- **-detect-browsers** - Show detected browsers on system
+- **-package-app** - Create macOS .app bundle
+- **--dry-run** - Test commands without making changes
+
+## Browser Support
+
+**Chromium-based (same extension ID: bkblnddclhmmgjlmbofhakhhbklkcofd):**
+- Chrome (Stable + Canary), Arc, Edge (all channels), Brave, Opera, Vivaldi, Epic, Yandex
+
+**Firefox-based (different extension ID: max-video-downloader@rostislav.dev):**
+- Firefox, Tor Browser
+
+**Installation Methods:**
+- macOS/Linux: Manifest files in browser directories
+- Windows: Registry entries + manifest files
+
 ## Current File Structure
 
 ```
@@ -46,48 +68,74 @@ extension/
 ├── background/
 │   ├── detection/          # webRequest detection, video-detector, url-filters
 │   ├── processing/         # container-detector, hls/dash parsers, video-store
-│   ├── messaging/          # popup-communication, native-host-service
+│   ├── messaging/          # popup-communication, native-host-service (connection management)
 │   ├── download/           # download-manager
-│   └── state/              # tab-manager (state-manager unused legacy)
+│   └── state/              # tab-manager, settings-manager
 ├── popup/
 │   ├── video/              # video-renderer, download-handler, dropdown, preview-hover
 │   ├── styles/             # SCSS partials with _variables.scss (CSS is autocompiled output)
+│   ├── settings-tab.js     # Settings UI with native host connection status
 │   └── [index,ui,state,communication].js
 └── shared/utils/           # logger, headers-utils, preview-cache, processing-utils
 
 native_host/
 ├── bin/mac/bin/            # Bundled FFmpeg + FFprobe binaries
+├── build/                  # Build outputs (gitignored)
+│   ├── mac-arm64/         # Built binaries: mvdcoapp, ffmpeg, ffprobe
+│   └── pro.maxvideodownloader.coapp.app/  # macOS app bundle
 ├── commands/               # [download,get-qualities,generate-preview,validate-connection,file-system].js
 ├── lib/                    # messaging, command-runner, error-handler, progress/
-└── services/               # config, ffmpeg integration
+├── services/               # config, ffmpeg integration
+├── build.sh               # Cross-platform build & install script
+└── package.json           # Version 0.1.0, executable: mvdcoapp
 ```
 
 ## Technology Stack
 
 - **Extension**: ES6 modules, Chrome APIs (webRequest, scripting, downloads, nativeMessaging, storage, tabs)
 - **Native Host**: Node.js, pkg binary packaging, bundled FFmpeg/FFprobe binaries
+- **Build System**: Cross-platform bash script with platform detection, browser detection, registry management
 - **Styling**: SCSS with partials system (\_variables.scss used for all styles in all partials, CSS is autocompilation output by liveSass extension)
 - **Communication**: Port messaging (popup), connectNative (native host)
+- **Distribution**: Standalone executables (mvdcoapp), macOS app bundles, multi-browser installation
 
 ## Performance Considerations
 
 - **Memory management**: Rolling cleanup in webRequest handlers, immediate disposal of temporary data
 - **UI responsiveness**: Minimal DOM manipulation, direct HTML insertion over createElement chains
-- **Background efficiency**: Service worker hibernation-aware, persistent connections only when needed
+- **Background efficiency**: Service worker hibernation-aware, on-demand native host connections
 - **Native host**: Process spawning optimization, FFmpeg binary reuse, progress streaming
+- **Connection management**: UI displays real-time connection status, manual reconnect available
+- **Build efficiency**: Platform-specific builds, no duplication of binaries, smart path resolution
+- **Cross-platform**: Single codebase with platform-specific deployment
 
 ## Development Environment
 
 - **Single environment**: Production files used for development (no dev/prod separation)
 - **ESLint**: Chrome extension aware linting with ES6 modules (extension) + CommonJS (native_host)
 - **Test page**: Single HTML with all video types for simultaneous detection testing
-- **Settings UI**: Exists but empty, planned for comprehensive user options
+- **Settings UI**: Fully implemented with connection status display and native host management
+- **Auto-compilation**: SCSS is built automatically on save by extensions, no CLI commands needed
+- **Build workflow**: Only run `npm run build` if editing native_host folder, otherwise works on save
+- **Path resolution**: Smart detection between dev (source) and built (pkg) environments
 
 ## Build Commands
 
 ```bash
-# Build native host
-cd native_host && npm run build && ./install.sh
+# Build native host (new system)
+cd native_host && npm run build:mac     # Quick rebuild for mac-arm64
+cd native_host && ./build.sh -build     # Build for current platform
+cd native_host && ./build.sh -install   # Install for all detected browsers
+
+# Cross-platform builds
+./build.sh -build mac-arm64              # macOS Apple Silicon
+./build.sh -build win-x64                # Windows x64
+./build.sh -package-app                  # Create macOS .app bundle
+
+# Browser management
+./build.sh -detect-browsers              # Show detected browsers
+./build.sh -uninstall                    # Remove from all browsers
+./build.sh --dry-run -install            # Test without changes
 
 # Linting
 npm run lint          # Check for errors
@@ -141,6 +189,7 @@ cd native_host && node test-host.js
 **Use native approaches**: Plain HTML insertion over DOM creation + querySelector for performance
 **Fallback chains**: Use `mostReliable || lessReliable || guaranteed` pattern, not weighted options
 **Avoid dynamic imports**: Use static imports when possible for better performance and bundling
+**Service worker restriction**: Background service worker (anything in `background/` folder) CAN'T use dynamic imports - it's a Chrome extension restriction
 **Leverage platform lifecycles**: Popup dies on close, service worker terminates, content scripts are per-tab
 **Return rich data**: Better to return more from one call than make multiple calls
 **Cache expensive operations only**: Don't cache cheap operations

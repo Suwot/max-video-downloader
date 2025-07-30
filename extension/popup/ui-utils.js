@@ -77,6 +77,9 @@ export function showToast(message, type = 'info', duration = 3000) {
         }
     });
     
+    // Click to dismiss
+    toast.addEventListener('click', dismiss);
+    
     // Show toast immediately
     toast.classList.add('show');
     updateProgress();

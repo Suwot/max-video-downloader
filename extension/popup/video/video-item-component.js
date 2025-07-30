@@ -10,6 +10,7 @@ import { createLogger } from '../../shared/utils/logger.js';
 import { VideoDropdownComponent } from './video-dropdown-component.js';
 import { VideoDownloadButtonComponent } from './video-download-button-component.js';
 import { isTrackCompatibleWithVideo } from '../../background/processing/container-detector.js';
+import { showInfo } from '../ui-utils.js';
 
 const logger = createLogger('VideoItemComponent');
 
@@ -438,43 +439,93 @@ export class VideoItemComponent {
      */
     createAudioExtractionCommands(baseCommand, options = {}) {
         const selectedAudioTracks = this.getSelectedAudioTracks();
+        const availableAudioTracks = this.videoData.audioTracks || [];
         
-        // Single audio extraction for most cases
-        if (selectedAudioTracks.length <= 1) {
-            const audioTrack = selectedAudioTracks[0] || this.getDefaultAudioTrack();
-            const container = audioTrack?.audioContainer || 'm4a';
+        // If no tracks selected, use auto-selection (works for both advanced and simple dropdowns)
+        if (selectedAudioTracks.length === 0) {
+            // For simple dropdowns, create a basic audio extraction command
+            if (availableAudioTracks.length === 0) {
+                // Simple dropdown - extract audio from the main video
+                const baseFilename = baseCommand.filename || 'video';
+                const videoTrack = this.selectedTracks.videoTrack || this.videoData.videoTracks?.[0] || this.videoData;
+                const container = videoTrack.audioContainer || 'm4a';
+                
+                return { 
+                    ...baseCommand,
+                    container: container,
+                    filename: `${baseFilename}_audio.${container}`,
+                    audioOnly: true,
+                    ...options 
+                };
+            }
+            
+            // Advanced dropdown - use default or best track
+            const autoTrack = this.getDefaultOrBestAudioTrack();
+            const container = autoTrack.audioContainer || 'm4a';
             const baseFilename = baseCommand.filename || 'video';
-            return { 
-                ...baseCommand,
-                container: container,
-                filename: `${baseFilename}.${container}`,
-                audioOnly: true,
-                ...options 
-            };
+            const audioLabel = autoTrack.label || autoTrack.name || autoTrack.language || autoTrack.lang || 'nolabel';
+            
+            // Show appropriate toast message
+            if (autoTrack.isDefault) {
+                showInfo('Extracting default audio track, as nothing was selected');
+            } else {
+                showInfo('Extracting best-quality audio track, as nothing was selected');
+            }
+            
+            return this.createSingleAudioCommand(baseCommand, autoTrack, baseFilename, audioLabel, container, options);
+        }
+        
+        // Single audio extraction for selected tracks
+        if (selectedAudioTracks.length === 1) {
+            const audioTrack = selectedAudioTracks[0];
+            const container = audioTrack.audioContainer || 'm4a';
+            const baseFilename = baseCommand.filename || 'video';
+            const audioLabel = audioTrack.label || audioTrack.name || audioTrack.language || audioTrack.lang || 'nolabel';
+            
+            return this.createSingleAudioCommand(baseCommand, audioTrack, baseFilename, audioLabel, container, options);
         }
         
         // Multi-track audio extraction - send individual commands
         return selectedAudioTracks.map((audioTrack, index) => {
-            const trackCommand = { ...baseCommand };
             const container = audioTrack.audioContainer || 'm4a';
-            const baseFilename = `${baseCommand.filename}_${audioTrack.label || audioTrack.name || `Audio_${index + 1}`}`;
+            const baseFilename = baseCommand.filename || 'video';
+            const audioLabel = audioTrack.label || audioTrack.name || audioTrack.language || audioTrack.lang || `audio_${index + 1}`;
             
-            trackCommand.audioOnly = true;
-            trackCommand.container = container;
-            trackCommand.filename = `${baseFilename}.${container}`;
-            
-            if (this.videoData.type === 'dash') {
-                // DASH: Use specific stream selection
-                trackCommand.streamSelection = audioTrack.ffmpegStreamIndex;
-            } else if (this.videoData.type === 'hls') {
-                // HLS: Use specific audio track URL
-                trackCommand.downloadUrl = audioTrack.url;
-                // Clear inputs array for single audio track download
-                delete trackCommand.inputs;
-            }
-            
-            return { ...trackCommand, ...options };
+            return this.createSingleAudioCommand(baseCommand, audioTrack, baseFilename, audioLabel, container, options);
         });
+    }
+
+    /**
+     * Create a single audio extraction command
+     * @param {Object} baseCommand - Base download command
+     * @param {Object} audioTrack - Audio track data
+     * @param {string} baseFilename - Base filename
+     * @param {string} audioLabel - Audio track label
+     * @param {string} container - Audio container
+     * @param {Object} options - Additional options
+     * @returns {Object} Single audio command
+     */
+    createSingleAudioCommand(baseCommand, audioTrack, baseFilename, audioLabel, container, options) {
+        const command = { 
+            ...baseCommand,
+            container: container,
+            filename: `${baseFilename}_audio_${audioLabel}.${container}`,
+            audioOnly: true,
+            ...options 
+        };
+        
+        // Add track-specific data for DASH/HLS advanced dropdowns
+        if (this.videoData.type === 'dash' && audioTrack.ffmpegStreamIndex) {
+            command.streamSelection = audioTrack.ffmpegStreamIndex;
+            delete command.inputs; // Clear inputs to avoid sending all selected tracks
+        } else if (this.videoData.type === 'hls' && audioTrack.url) {
+            command.downloadUrl = audioTrack.url;
+            delete command.inputs; // Clear inputs array for single audio track download
+        }
+        // For simple dropdowns, the base command already has the correct downloadUrl and container
+        // The audioOnly flag tells the native host to extract only audio from the video
+        
+        return command;
     }
 
     /**
@@ -711,9 +762,27 @@ export class VideoItemComponent {
      */
     createSubtitleExtractionCommands(baseCommand, options = {}) {
         const selectedSubtitleTracks = this.selectedTracks.subtitleTracks || [];
+        const availableSubtitleTracks = this.videoData.subtitleTracks || [];
+        
+        // If no tracks selected but tracks are available, use default or best track
+        if (selectedSubtitleTracks.length === 0 && availableSubtitleTracks.length > 0) {
+            const autoTrack = this.getDefaultOrBestSubtitleTrack();
+            const container = autoTrack.subtitleContainer || 'srt';
+            const baseFilename = baseCommand.filename || 'noname';
+            const subsLabel = autoTrack.label || autoTrack.name || autoTrack.language || autoTrack.lang || 'nolabel';
+            
+            // Show appropriate toast message based on track selection reason
+            if (autoTrack.isDefault) {
+                showInfo('Extracting default subtitle track, as nothing was selected');
+            } else {
+                showInfo('Extracting first subtitle track, as nothing was selected');
+            }
+            
+            return this.createSingleSubtitleCommand(baseCommand, autoTrack, baseFilename, subsLabel, container, options);
+        }
         
         if (selectedSubtitleTracks.length === 0) {
-            // No subtitles selected - return empty to prevent command execution
+            // No subtitles available at all - return empty to prevent command execution
             return [];
         }
         
@@ -722,36 +791,18 @@ export class VideoItemComponent {
             const subTrack = selectedSubtitleTracks[0];
             const container = subTrack.subtitleContainer || 'srt';
             const baseFilename = baseCommand.filename || 'video';
-            return { 
-                ...baseCommand,
-                container: container,
-                filename: `${baseFilename}.${container}`,
-                subsOnly: true,
-                ...options 
-            };
+            const subsLabel = subTrack.label || subTrack.name || subTrack.language || autoTrack.lang || 'nolabel';
+            
+            return this.createSingleSubtitleCommand(baseCommand, subTrack, baseFilename, subsLabel, container, options);
         }
         
         // Multi-track subtitle extraction - send individual commands
         return selectedSubtitleTracks.map((subTrack, index) => {
-            const trackCommand = { ...baseCommand };
             const container = subTrack.subtitleContainer || 'srt';
-            const baseFilename = `${baseCommand.filename}_${subTrack.label || subTrack.name || subTrack.lang || `Subtitle_${index + 1}`}`;
+            const baseFilename = baseCommand.filename || 'video';
+            const subsLabel = subTrack.label || subTrack.name || subTrack.language || subTrack.lang || `subtitles_${index + 1}`;
             
-            trackCommand.subsOnly = true;
-            trackCommand.container = container;
-            trackCommand.filename = `${baseFilename}.${container}`;
-            
-            if (this.videoData.type === 'dash') {
-                // DASH: Use specific stream selection
-                trackCommand.streamSelection = subTrack.ffmpegStreamIndex;
-            } else if (this.videoData.type === 'hls') {
-                // HLS: Use specific subtitle track URL
-                trackCommand.downloadUrl = subTrack.url;
-                // Clear inputs array for single subtitle track download
-                delete trackCommand.inputs;
-            }
-            
-            return { ...trackCommand, ...options };
+            return this.createSingleSubtitleCommand(baseCommand, subTrack, baseFilename, subsLabel, container, options);
         });
     }
 
@@ -761,37 +812,111 @@ export class VideoItemComponent {
      */
     getSelectedAudioTracks() {
         if (!this.selectedTracks.audioTracks || this.selectedTracks.audioTracks.length === 0) {
-            // Fallback to first available audio track if none selected
-            const defaultTrack = this.getDefaultAudioTrack();
-            return defaultTrack ? [defaultTrack] : [];
+            // Return empty array - let the command creation handle fallbacks and toasts
+            return [];
         }
         
         return this.selectedTracks.audioTracks.map((track, index) => ({
             ...track,
-            label: track.name || track.label || track.lang || `Audio ${index + 1}`,
+            label: track.name || track.label || track.lang || `audio_${index + 1}`,
             audioContainer: track.audioContainer || 'm4a'
         }));
     }
 
     /**
-     * Get default audio track for single audio extraction
-     * @returns {Object|null} Default audio track
+     * Get default or best quality audio track for auto-selection
+     * @returns {Object} Audio track with isDefault flag
      */
-    getDefaultAudioTrack() {
-        if (this.videoData.audioTracks && this.videoData.audioTracks.length > 0) {
+    getDefaultOrBestAudioTrack() {
+        const availableAudioTracks = this.videoData.audioTracks || [];
+        
+        if (availableAudioTracks.length > 0) {
+            // First, look for a track marked as default
+            const defaultTrack = availableAudioTracks.find(track => track.default === true);
+            if (defaultTrack) {
+                return {
+                    ...defaultTrack,
+                    label: defaultTrack.name || defaultTrack.label || defaultTrack.language || defaultTrack.lang || 'nolabel',
+                    audioContainer: defaultTrack.audioContainer || 'm4a',
+                    isDefault: true
+                };
+            }
+            
+            // If no default track, use the first track (best quality, as tracks are sorted)
+            const bestTrack = availableAudioTracks[0];
             return {
-                ...this.videoData.audioTracks[0],
-                label: this.videoData.audioTracks[0].name || this.videoData.audioTracks[0].label || this.videoData.audioTracks[0].lang || 'Audio',
-                audioContainer: this.videoData.audioTracks[0].audioContainer || 'm4a'
+                ...bestTrack,
+                label: bestTrack.name || bestTrack.label || bestTrack.language || bestTrack.lang || 'nolabel',
+                audioContainer: bestTrack.audioContainer || 'm4a',
+                isDefault: false
             };
         }
         
         // For simple dropdown or direct videos, use the selected video track's audio
-        const videoTrack = this.selectedTracks.videoTrack || this.videoData;
+        const videoTrack = this.selectedTracks.videoTrack || this.videoData.videoTracks?.[0] || this.videoData;
         return {
             audioContainer: videoTrack.audioContainer || 'm4a',
-            label: 'Audio'
+            label: 'audio',
+            isDefault: false
         };
+    }
+
+    /**
+     * Get default or best quality subtitle track for auto-selection
+     * @returns {Object} Subtitle track with isDefault flag
+     */
+    getDefaultOrBestSubtitleTrack() {
+        const availableSubtitleTracks = this.videoData.subtitleTracks || [];
+        
+        // First, look for a track marked as default
+        const defaultTrack = availableSubtitleTracks.find(track => track.default === true);
+        if (defaultTrack) {
+            return {
+                ...defaultTrack,
+                label: defaultTrack.name || defaultTrack.label || defaultTrack.language || defaultTrack.lang || 'nolabel',
+                subtitleContainer: defaultTrack.subtitleContainer || 'srt',
+                isDefault: true
+            };
+        }
+        
+        // If no default track, use the first track (best quality, as tracks are sorted)
+        const bestTrack = availableSubtitleTracks[0];
+        return {
+            ...bestTrack,
+            label: bestTrack.name || bestTrack.label || bestTrack.language || bestTrack.lang || 'nolabel',
+            subtitleContainer: bestTrack.subtitleContainer || 'srt',
+            isDefault: false
+        };
+    }
+
+    /**
+     * Create a single subtitle extraction command
+     * @param {Object} baseCommand - Base download command
+     * @param {Object} subTrack - Subtitle track data
+     * @param {string} baseFilename - Base filename
+     * @param {string} subsLabel - Subtitle track label
+     * @param {string} container - Subtitle container
+     * @param {Object} options - Additional options
+     * @returns {Object} Single subtitle command
+     */
+    createSingleSubtitleCommand(baseCommand, subTrack, baseFilename, subsLabel, container, options) {
+        const command = { 
+            ...baseCommand,
+            container: container,
+            filename: `${baseFilename}_subtitles_${subsLabel}.${container}`,
+            subsOnly: true,
+            ...options 
+        };
+        
+        // Add track-specific data for DASH/HLS
+        if (this.videoData.type === 'dash') {
+            command.streamSelection = subTrack.ffmpegStreamIndex;
+        } else if (this.videoData.type === 'hls') {
+            command.downloadUrl = subTrack.url;
+            delete command.inputs; // Clear inputs array for single subtitle track download
+        }
+        
+        return command;
     }
     
     /**

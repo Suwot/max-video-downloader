@@ -513,7 +513,7 @@ export class VideoDropdownComponent {
                 codecs = null; // HLS audio codecs not specified in master
             } else {
                 // DASH audio track structure
-                language = track.isDefault ? `${track.label || track.lang}*` : 
+                language = track.default ? `${track.label || track.lang}*` : 
                           (track.label || track.lang);
                 channels = track.channels ? `${track.channels}ch` : null;
                 fileSizeBytes = track.estimatedFileSizeBytes ? 
@@ -535,7 +535,7 @@ export class VideoDropdownComponent {
                           (track.name || track.language || 'Subtitle');
             } else {
                 // DASH subtitle track structure
-                language = track.isDefault ? `${track.label || track.lang || 'Subtitle'}*` : 
+                language = track.default ? `${track.label || track.lang || 'Subtitle'}*` : 
                           (track.label || track.lang || 'Subtitle');
             }
 
