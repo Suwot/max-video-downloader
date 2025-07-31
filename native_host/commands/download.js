@@ -421,15 +421,8 @@ class DownloadCommand extends BaseCommand {
         // Input arguments based on media type and inputs array
         if (inputs && inputs.length > 0) {
             // Advanced mode: multiple inputs (HLS with separate tracks)
+            // Global headers already applied above, no need to repeat per input
             inputs.forEach(input => {
-                // Add headers for each input if provided
-                if (headers && Object.keys(headers).length > 0) {
-                    const headerLines = Object.entries(headers)
-                        .map(([key, value]) => `${key}: ${value}`)
-                        .join('\r\n');
-                    args.push('-headers', headerLines + '\r\n');
-                }
-                
                 if (type === 'hls') {
                     args.push('-protocol_whitelist', 'file,http,https,tcp,tls,crypto');
                 }
