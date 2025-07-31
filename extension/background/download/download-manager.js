@@ -560,7 +560,8 @@ export async function cancelDownload(cancelRequest) {
         nativeHostService.sendMessage({
             command: 'cancel-download',
             downloadUrl: entry.downloadRequest.downloadUrl,
-            type: entry.downloadRequest.type
+            type: entry.downloadRequest.type,
+            downloadId: downloadId // Pass downloadId for consistent tracking
         }, { expectResponse: false });
         
         logger.debug('Cancellation command sent, status set to stopping:', downloadId);

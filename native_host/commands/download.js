@@ -24,36 +24,51 @@ const ProgressTracker = require('../lib/progress/progress-tracker');
  * Command for downloading videos
  */
 class DownloadCommand extends BaseCommand {
-    // Static Map shared across all instances for process tracking
-    static activeProcesses = new Map();
-    
-    // Static Set to track canceled downloads (survives process cleanup)
-    static canceledDownloads = new Set();
-    
-    // Static Map to store process metadata for canceled downloads (for partial success reporting)
-    static canceledProcessMetadata = new Map();
+    // Static Map for download tracking keyed by downloadId
+    static activeDownloads = new Map();
 
     /**
-     * Cancel an ongoing download by downloadUrl
+     * Cancel an ongoing download by downloadId
      * @param {Object} params Command parameters
-     * @param {string} params.downloadUrl The download URL to cancel
+     * @param {string} params.downloadId The download ID to cancel
+     * @param {string} params.downloadUrl The download URL to cancel (fallback lookup)
+     * @param {string} params.type Media type for cleanup decisions
      */
     async cancelDownload(params) {
-        const { downloadUrl, type } = params;
+        const { downloadId, downloadUrl, type } = params;
         
-        logDebug('Canceling download for:', downloadUrl);
-        logDebug('Active processes Map has', DownloadCommand.activeProcesses.size, 'entries');
-        logDebug('Active process URLs:', Array.from(DownloadCommand.activeProcesses.keys()));
+        logDebug('Canceling download with downloadId:', downloadId, 'downloadUrl:', downloadUrl);
+        logDebug('Active downloads Map has', DownloadCommand.activeDownloads.size, 'entries');
+        logDebug('Active download IDs:', Array.from(DownloadCommand.activeDownloads.keys()));
         
-        const processInfo = DownloadCommand.activeProcesses.get(downloadUrl);
-        if (!processInfo) {
-            logDebug('No active process found for:', downloadUrl);
+        // Find download by downloadId first, then fallback to URL lookup
+        let downloadEntry = null;
+        let lookupKey = null;
+        
+        if (downloadId && DownloadCommand.activeDownloads.has(downloadId)) {
+            downloadEntry = DownloadCommand.activeDownloads.get(downloadId);
+            lookupKey = downloadId;
+            logDebug('Found download by downloadId:', downloadId);
+        } else if (downloadUrl) {
+            // Fallback: search by downloadUrl in stored data
+            for (const [id, entry] of DownloadCommand.activeDownloads.entries()) {
+                if (entry.originalCommand && entry.originalCommand.downloadUrl === downloadUrl) {
+                    downloadEntry = entry;
+                    lookupKey = id;
+                    logDebug('Found download by downloadUrl lookup:', downloadUrl, '-> downloadId:', id);
+                    break;
+                }
+            }
+        }
+        
+        if (!downloadEntry) {
+            logDebug('No active download found for:', downloadId || downloadUrl);
             logDebug('Cancel request ignored - no matching download process');
             
-                        // Send response even when no process exists - UI needs confirmation
+            // Send response even when no process exists - UI needs confirmation
             this.sendMessage({
                 command: 'download-canceled',
-                downloadId: null, // No downloadId available for non-existent process
+                downloadId: downloadId || null,
                 downloadUrl,
                 message: 'Download already stopped or not found',
                 downloadStats: null,
@@ -63,45 +78,33 @@ class DownloadCommand extends BaseCommand {
             return;
         }
         
-        const { ffmpegProcess, progressTracker, outputPath, downloadId: processDownloadId } = processInfo;
+        const { process, outputPath, originalCommand } = downloadEntry;
+        const processDownloadId = lookupKey; // Use the found downloadId
         
         try {
-            // Mark download as canceled in persistent set
-            DownloadCommand.canceledDownloads.add(downloadUrl);
-            logDebug('Added to canceled downloads set:', downloadUrl);
+            // IMMEDIATELY remove from activeDownloads to prevent repeated cancels
+            DownloadCommand.activeDownloads.delete(lookupKey);
+            logDebug('Removed download from activeDownloads Map immediately. Remaining downloads:', DownloadCommand.activeDownloads.size);
             
-            // Store essential process info before deletion (for partial success detection)
-            DownloadCommand.canceledProcessMetadata.set(downloadUrl, {
-                startTime: processInfo.startTime,
-                pid: processInfo.pid,
-                isRedownload: processInfo.isRedownload,
-                downloadId: processInfo.downloadId, // Store downloadId for progress mapping
-                headers: processInfo.headers || null
-            });
-            
-            // IMMEDIATELY remove from activeProcesses to prevent repeated cancels
-            DownloadCommand.activeProcesses.delete(downloadUrl);
-            logDebug('Removed process from activeProcesses Map immediately. Remaining processes:', DownloadCommand.activeProcesses.size);
-            
-            // Gracefully terminate FFmpeg process
-            if (ffmpegProcess && !ffmpegProcess.killed) {
-                logDebug('Terminating FFmpeg process with SIGTERM');
-                ffmpegProcess.kill('SIGTERM');
+            // Gracefully terminate FFmpeg process using PID
+            if (process && process.pid && !process.killed) {
+                logDebug('Terminating FFmpeg process with PID:', process.pid, 'using SIGTERM');
+                process.kill('SIGTERM');
                 
                 // Give it a moment to clean up, then force kill if needed
                 setTimeout(() => {
-                    if (ffmpegProcess && !ffmpegProcess.killed) {
-                        logDebug('Force killing FFmpeg process with SIGKILL');
-                        ffmpegProcess.kill('SIGKILL');
+                    if (process && !process.killed) {
+                        logDebug('Force killing FFmpeg process with PID:', process.pid, 'using SIGKILL');
+                        process.kill('SIGKILL');
                     }
                 }, 2000);
             } else {
                 logDebug('FFmpeg process already terminated or killed');
             }
             
-            // Clean up progress tracker
-            if (progressTracker) {
-                progressTracker.cleanup();
+            // Clean up progress tracker if available
+            if (downloadEntry.progressTracker) {
+                downloadEntry.progressTracker.cleanup();
             }
             
             // Remove partial file if it exists and type is not 'direct'
@@ -114,7 +117,7 @@ class DownloadCommand extends BaseCommand {
                 }
             }
             
-            logDebug('Download cancellation completed for:', downloadUrl);
+            logDebug('Download cancellation completed for downloadId:', processDownloadId);
             
             // For direct types, defer cancellation message to close handler
             // The close handler will determine final outcome based on file existence
@@ -126,26 +129,19 @@ class DownloadCommand extends BaseCommand {
             // For HLS/DASH types, send immediate cancellation message
             this.sendMessage({
                 command: 'download-canceled',
-                downloadId: processDownloadId, // Use downloadId from process info
-                downloadUrl,
-                duration: progressTracker.getDuration(),
-                downloadStats: progressTracker.getDownloadStats() || null,
+                downloadId: processDownloadId,
+                downloadUrl: originalCommand?.downloadUrl || downloadUrl,
+                duration: downloadEntry.progressTracker?.getDuration(),
+                downloadStats: downloadEntry.progressTracker?.getDownloadStats() || null,
                 message: 'Download was canceled',
                 completedAt: Date.now(),
-                isRedownload: processInfo.isRedownload || false,
-                headers: processInfo.headers || null
+                isRedownload: originalCommand?.isRedownload || false,
+                headers: downloadEntry.headers || null
             }, { useMessageId: false }); // Event message, no response ID
             
         } catch (error) {
             logDebug('Error during download cancellation:', error);
             logDebug('Cancel operation failed, but not sending error message to extension');
-        } finally {
-            // Clean up canceled downloads set after a delay to allow close event to process
-            setTimeout(() => {
-                DownloadCommand.canceledDownloads.delete(downloadUrl);
-                DownloadCommand.canceledProcessMetadata.delete(downloadUrl);
-                logDebug('Cleaned up canceled download from sets:', downloadUrl);
-            }, 5000); // 5 second cleanup delay
         }
     }
 
@@ -352,8 +348,8 @@ class DownloadCommand extends BaseCommand {
 
         // Helper to check if output path is in use by any active download
         const isPathInUse = (candidatePath) => {
-            for (const proc of DownloadCommand.activeProcesses.values()) {
-                if (proc && proc.outputPath === candidatePath) {
+            for (const downloadEntry of DownloadCommand.activeDownloads.values()) {
+                if (downloadEntry && downloadEntry.outputPath === candidatePath) {
                     return true;
                 }
             }
@@ -690,99 +686,101 @@ class DownloadCommand extends BaseCommand {
         downloadId, // Use downloadId instead of sessionId
         selectedOptionOrigText
     }) {
-        return new Promise(async (resolve, _reject) => {
-            // Probe duration upfront if not provided to avoid race conditions
-            let finalDuration = duration;
-            if (!duration || typeof duration !== 'number' || duration <= 0) {
-                logDebug('No valid duration provided, probing media...');
-                finalDuration = await this.probeMediaDuration(ffmpegService, downloadUrl, headers);
-                if (finalDuration) {
-                    logDebug('Got duration from probe:', finalDuration);
-                } else {
-                    logDebug('Could not probe duration, will rely on FFmpeg output parsing');
+        return new Promise((resolve, _reject) => {
+            // Use an IIFE to handle async operations properly
+            (async () => {
+                // Probe duration upfront if not provided to avoid race conditions
+                let finalDuration = duration;
+                if (!duration || typeof duration !== 'number' || duration <= 0) {
+                    logDebug('No valid duration provided, probing media...');
+                    finalDuration = await this.probeMediaDuration(ffmpegService, downloadUrl, headers);
+                    if (finalDuration) {
+                        logDebug('Got duration from probe:', finalDuration);
+                    } else {
+                        logDebug('Could not probe duration, will rely on FFmpeg output parsing');
+                    }
                 }
-            }
             
-            // Create progress tracker with complete file information
-            const progressTracker = new ProgressTracker({
-                onProgress: (data) => {
-                    this.sendMessage({
-                        command: 'download-progress',
-                        downloadId, // Use downloadId for both session and progress mapping
-                        downloadUrl,
-                        filename: path.basename(uniqueOutput),
-                        selectedOptionOrigText, // Pass through selected option text
-                        downloadStartTime, // Add start time for UI elapsed time calculation
-                        isRedownload,
-                        ...data
-                    }, { useMessageId: false }); // Event message, no response ID
-                },
-                updateInterval: 200,
-                debug: true
-            });
-            
-            // Initialize once with all available metadata
-            const fileInfo = {
-                downloadUrl,
-                type,
-                masterUrl,
-                outputPath: uniqueOutput,
-                duration: finalDuration,
-                fileSizeBytes,
-                segmentCount,
-                audioOnly
-            };
-            
-            logDebug('Initializing progress tracker with:', fileInfo);
-            
-            try {
-                const success = await progressTracker.initialize(fileInfo);
-                if (!success) {
-                    logDebug('Progress tracker initialization failed, continuing with basic tracking');
+                // Create progress tracker with complete file information
+                const progressTracker = new ProgressTracker({
+                    onProgress: (data) => {
+                        this.sendMessage({
+                            command: 'download-progress',
+                            downloadId, // Use downloadId for both session and progress mapping
+                            downloadUrl,
+                            filename: path.basename(uniqueOutput),
+                            selectedOptionOrigText, // Pass through selected option text
+                            downloadStartTime, // Add start time for UI elapsed time calculation
+                            isRedownload,
+                            ...data
+                        }, { useMessageId: false }); // Event message, no response ID
+                    },
+                    updateInterval: 200,
+                    debug: true
+                });
+                
+                // Initialize once with all available metadata
+                const fileInfo = {
+                    downloadUrl,
+                    type,
+                    masterUrl,
+                    outputPath: uniqueOutput,
+                    duration: finalDuration,
+                    fileSizeBytes,
+                    segmentCount,
+                    audioOnly
+                };
+                
+                logDebug('Initializing progress tracker with:', fileInfo);
+                
+                try {
+                    const success = await progressTracker.initialize(fileInfo);
+                    if (!success) {
+                        logDebug('Progress tracker initialization failed, continuing with basic tracking');
+                    }
+                } catch (error) {
+                    logDebug('Error initializing progress tracker:', error);
+                    // Continue without progress tracking rather than failing
                 }
-            } catch (error) {
-                logDebug('Error initializing progress tracker:', error);
-                // Continue without progress tracking rather than failing
-            }
-            
-            // Start FFmpeg process
-            const downloadStartTime = Date.now();
-            const ffmpeg = spawn(ffmpegService.getFFmpegPath(), ffmpegArgs, { 
-                env: getFullEnv(),
-                windowsVerbatimArguments: process.platform === 'win32',
-                stdio: ['ignore', 'pipe', 'pipe']
-            });
-            
-            logDebug('FFmpeg process started with PID:', ffmpeg.pid);
-            
-            // Track this process as active (use downloadUrl as key, store downloadId for tracking)
-            DownloadCommand.activeProcesses.set(downloadUrl, {
-                ffmpegProcess: ffmpeg,
-                progressTracker,
-                outputPath: uniqueOutput,
-                wasCanceled: false,
-                startTime: downloadStartTime,
-                pid: ffmpeg.pid,
-                isRedownload,
-                downloadId, // Store downloadId instead of sessionId
-                headers: headers || null
-            });
-            
-            logDebug('Added process to activeProcesses Map. Total processes:', DownloadCommand.activeProcesses.size);
-            
-            let errorOutput = '';
-            let hasError = false;
-            
-            // Simple data flow: FFmpeg output → ProgressTracker → UI
-            ffmpeg.stderr.on('data', (data) => {
-                if (hasError) return;
                 
-                const output = data.toString();
-                errorOutput += output;
+                // Start FFmpeg process
+                const downloadStartTime = Date.now();
+                const ffmpeg = spawn(ffmpegService.getFFmpegPath(), ffmpegArgs, { 
+                    env: getFullEnv(),
+                    windowsVerbatimArguments: process.platform === 'win32',
+                    stdio: ['ignore', 'pipe', 'pipe']
+                });
                 
-                // Single responsibility: just pass output to tracker
-                progressTracker.processOutput(output);
-            });
+                logDebug('FFmpeg process started with PID:', ffmpeg.pid);
+                
+                // Track this process as active (keyed by downloadId with minimal data)
+                DownloadCommand.activeDownloads.set(downloadId, {
+                    process: ffmpeg,
+                    startTime: downloadStartTime,
+                    outputPath: uniqueOutput,
+                    type,
+                    headers: headers || null,
+                    progressTracker,
+                    originalCommand,
+                    selectedOptionOrigText,
+                    isRedownload
+                });
+                
+                logDebug('Added download to activeDownloads Map. Total downloads:', DownloadCommand.activeDownloads.size);
+                
+                let errorOutput = '';
+                let hasError = false;
+                
+                // Simple data flow: FFmpeg output → ProgressTracker → UI
+                ffmpeg.stderr.on('data', (data) => {
+                    if (hasError) return;
+                    
+                    const output = data.toString();
+                    errorOutput += output;
+                    
+                    // Single responsibility: just pass output to tracker
+                    progressTracker.processOutput(output);
+                });
             
             ffmpeg.on('close', (code, signal) => {
                 // Guard against multiple event handling
@@ -790,12 +788,9 @@ class DownloadCommand extends BaseCommand {
                 
                 progressTracker.cleanup();
                 
-                // Get process info before deletion (might be deleted in cancelDownload)
-                const processInfo = DownloadCommand.activeProcesses.get(downloadUrl);
-                const canceledMetadata = DownloadCommand.canceledProcessMetadata.get(downloadUrl);
-                
-                // Use process info from activeProcesses or from canceled metadata
-                const effectiveProcessInfo = processInfo || canceledMetadata;
+                // Get download info from activeDownloads BEFORE deletion
+                const downloadEntry = DownloadCommand.activeDownloads.get(downloadId);
+                const wasCanceled = !downloadEntry; // Check if it was already removed by cancelDownload
                 
                 const originalDuration = progressTracker.getDuration();
                 const finalProcessedDuration = progressTracker.getFinalProcessedDuration();
@@ -808,11 +803,11 @@ class DownloadCommand extends BaseCommand {
                     logDebug(`Duration difference: original=${originalDuration}s, processed=${finalProcessedDuration}s`);
                 }
                 
-                const downloadDuration = effectiveProcessInfo?.startTime ? Date.now() - effectiveProcessInfo.startTime : null;
+                const downloadDuration = downloadEntry?.startTime ? Date.now() - downloadEntry.startTime : null;
                 
-                // Clean up activeProcesses if not already done
-                if (DownloadCommand.activeProcesses.has(downloadUrl)) {
-                    DownloadCommand.activeProcesses.delete(downloadUrl);
+                // Clean up activeDownloads if not already done by cancelDownload
+                if (DownloadCommand.activeDownloads.has(downloadId)) {
+                    DownloadCommand.activeDownloads.delete(downloadId);
                 }
                 
                 const ffmpegFinalMessage = progressTracker.getFFmpegFinalMessage();
@@ -820,8 +815,9 @@ class DownloadCommand extends BaseCommand {
                 const downloadStats = progressTracker.getDownloadStats();
 
                 // Determine termination reason using signal, exit code, and output file verification
-                const terminationInfo = this.analyzeProcessTermination(code, signal, downloadUrl, uniqueOutput, type, subsOnly);
-                logDebug(`FFmpeg process (PID: ${effectiveProcessInfo?.pid}) terminated after ${downloadDuration}ms:`, terminationInfo);
+                // Pass wasCanceled state directly instead of relying on Map lookup
+                const terminationInfo = this.analyzeProcessTermination(code, signal, wasCanceled, uniqueOutput, type, subsOnly);
+                logDebug(`FFmpeg process (PID: ${downloadEntry?.process?.pid}) terminated after ${downloadDuration}ms:`, terminationInfo);
                 
                 if (terminationInfo.wasCanceled && !terminationInfo.isPartialSuccess) {
                     logDebug('Download was canceled by user.');
@@ -839,10 +835,10 @@ class DownloadCommand extends BaseCommand {
                             pageUrl,
                             pageFavicon,
                             originalCommand,
-                            isRedownload: effectiveProcessInfo?.isRedownload || false,
+                            isRedownload: downloadEntry?.isRedownload || false,
                             audioOnly,
                             subsOnly,
-                            headers: effectiveProcessInfo?.headers || null
+                            headers: downloadEntry?.headers || null
                         }, { useMessageId: false }); // Event message, no response ID
                     }
                     
@@ -870,7 +866,7 @@ class DownloadCommand extends BaseCommand {
                         ffmpegFinalMessage: ffmpegFinalMessage || null,
                         terminationInfo,
                         processInfo: {
-                            pid: effectiveProcessInfo?.pid,
+                            pid: downloadEntry?.process?.pid,
                             downloadDuration
                         },
                         completedAt: Date.now(),
@@ -881,7 +877,7 @@ class DownloadCommand extends BaseCommand {
                         audioOnly,
                         subsOnly,
                         isPartial, // Add partial flag for UI
-                        headers: effectiveProcessInfo?.headers || null
+                        headers: downloadEntry?.headers || null
                     }, { useMessageId: false }); // Event message, no response ID
                     resolve({ 
                         success: true, 
@@ -915,7 +911,7 @@ class DownloadCommand extends BaseCommand {
                         downloadStats: downloadStats || null,
                         terminationInfo,
                         processInfo: {
-                            pid: effectiveProcessInfo?.pid,
+                            pid: downloadEntry?.process?.pid,
                             downloadDuration
                         },
                         completedAt: Date.now(),
@@ -925,7 +921,7 @@ class DownloadCommand extends BaseCommand {
                         isRedownload,
                         audioOnly,
                         subsOnly,
-                        headers: effectiveProcessInfo?.headers || null
+                        headers: downloadEntry?.headers || null
                     }, { useMessageId: false }); // Event message, no response ID
                     resolve({ 
                         success: false, 
@@ -940,9 +936,9 @@ class DownloadCommand extends BaseCommand {
                 if (hasError) return;
                 
                 hasError = true;
-                // Clean up activeProcesses if not already done
-                if (DownloadCommand.activeProcesses.has(downloadUrl)) {
-                    DownloadCommand.activeProcesses.delete(downloadUrl);
+                // Clean up activeDownloads if not already done
+                if (DownloadCommand.activeDownloads.has(downloadId)) {
+                    DownloadCommand.activeDownloads.delete(downloadId);
                 }
                 
                 progressTracker.cleanup();
@@ -950,17 +946,15 @@ class DownloadCommand extends BaseCommand {
                 const derivedErrorMessage = progressTracker.getDerivedErrorMessage();
                 const downloadStats = progressTracker.getDownloadStats();
                 
-                // Get process info and calculate durations (same logic as close handler)
-                const processInfo = DownloadCommand.activeProcesses.get(downloadUrl);
-                const canceledMetadata = DownloadCommand.canceledProcessMetadata.get(downloadUrl);
-                const effectiveProcessInfo = processInfo || canceledMetadata;
+                // Get download info and calculate durations (same logic as close handler)
+                const downloadEntry = DownloadCommand.activeDownloads.get(downloadId);
                 
                 const originalDuration = progressTracker.getDuration();
                 const finalProcessedDuration = progressTracker.getFinalProcessedDuration();
                 const duration = finalProcessedDuration || originalDuration;
-                const downloadDuration = effectiveProcessInfo?.startTime ? Date.now() - effectiveProcessInfo.startTime : null;
+                const downloadDuration = downloadEntry?.startTime ? Date.now() - downloadEntry.startTime : null;
 
-                logDebug(`FFmpeg spawn error (PID: ${effectiveProcessInfo?.pid}) after ${downloadDuration}ms:`, err);
+                logDebug(`FFmpeg spawn error (PID: ${downloadEntry?.process?.pid}) after ${downloadDuration}ms:`, err);
                 if (ffmpegFinalMessage) {
                     logDebug('FFmpeg final message:', ffmpegFinalMessage);
                 } else if (derivedErrorMessage) {
@@ -981,7 +975,7 @@ class DownloadCommand extends BaseCommand {
                     ffmpegFinalMessage: ffmpegFinalMessage || derivedErrorMessage || null,
                     downloadStats: downloadStats || null,
                     processInfo: {
-                        pid: effectiveProcessInfo?.pid,
+                        pid: downloadEntry?.process?.pid,
                         downloadDuration
                     },
                     completedAt: Date.now(),
@@ -990,7 +984,7 @@ class DownloadCommand extends BaseCommand {
                     originalCommand,
                     isRedownload,
                     audioOnly,
-                    headers: effectiveProcessInfo?.headers || null
+                    headers: downloadEntry?.headers || null
                 }, { useMessageId: false }); // Event message, no response ID
 
                 resolve({ 
@@ -999,6 +993,7 @@ class DownloadCommand extends BaseCommand {
                     error: `FFmpeg spawn error: ${err.message}`
                 });
             });
+            })(); // Close the IIFE
         });
     }
     
@@ -1006,14 +1001,14 @@ class DownloadCommand extends BaseCommand {
      * Analyze process termination to determine the exact reason
      * @param {number} exitCode - Process exit code
      * @param {string|null} signal - Termination signal (SIGTERM, SIGKILL, etc.)
-     * @param {string} downloadUrl - Download URL to check cancellation status
+     * @param {boolean} wasCanceled - Whether the download was canceled (determined by caller)
      * @param {string} outputPath - Expected output file path
      * @param {string} type - Media type ('hls', 'dash', 'direct')
+     * @param {boolean} subsOnly - Whether this was a subtitle-only download
      * @returns {Object} Termination analysis with reason, type, and flags
      * @private
      */
-    analyzeProcessTermination(exitCode, signal, downloadUrl, outputPath = null, type = null, subsOnly = false) {
-        const wasCanceled = DownloadCommand.canceledDownloads.has(downloadUrl);
+    analyzeProcessTermination(exitCode, signal, wasCanceled, outputPath = null, type = null, subsOnly = false) {
         const hasValidFile = outputPath && this.verifyDownloadCompletion(outputPath, type, subsOnly);
         
         logDebug('Termination analysis:', { exitCode, signal, wasCanceled, hasValidFile, type, outputPath, subsOnly });
