@@ -34,13 +34,6 @@ class DownloadCommand extends BaseCommand {
     static canceledProcessMetadata = new Map();
 
     /**
-     * Generate unique session ID for download
-     */
-    generateSessionId() {
-        return `download_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    }
-
-    /**
      * Cancel an ongoing download by downloadUrl
      * @param {Object} params Command parameters
      * @param {string} params.downloadUrl The download URL to cancel
@@ -57,12 +50,11 @@ class DownloadCommand extends BaseCommand {
             logDebug('No active process found for:', downloadUrl);
             logDebug('Cancel request ignored - no matching download process');
             
-            // Send response even when no process exists - UI needs confirmation
+                        // Send response even when no process exists - UI needs confirmation
             this.sendMessage({
                 command: 'download-canceled',
-                sessionId: null, // No session ID since no process exists
-                downloadUrl,
                 downloadId: null, // No downloadId available for non-existent process
+                downloadUrl,
                 message: 'Download already stopped or not found',
                 downloadStats: null,
                 duration: null,
@@ -71,7 +63,7 @@ class DownloadCommand extends BaseCommand {
             return;
         }
         
-        const { ffmpegProcess, progressTracker, outputPath, sessionId } = processInfo;
+        const { ffmpegProcess, progressTracker, outputPath, downloadId: processDownloadId } = processInfo;
         
         try {
             // Mark download as canceled in persistent set
@@ -83,7 +75,6 @@ class DownloadCommand extends BaseCommand {
                 startTime: processInfo.startTime,
                 pid: processInfo.pid,
                 isRedownload: processInfo.isRedownload,
-                sessionId: processInfo.sessionId,
                 downloadId: processInfo.downloadId, // Store downloadId for progress mapping
                 headers: processInfo.headers || null
             });
@@ -135,9 +126,8 @@ class DownloadCommand extends BaseCommand {
             // For HLS/DASH types, send immediate cancellation message
             this.sendMessage({
                 command: 'download-canceled',
-                sessionId,
+                downloadId: processDownloadId, // Use downloadId from process info
                 downloadUrl,
-                downloadId: processInfo.downloadId || null, // Pass through downloadId
                 duration: progressTracker.getDuration(),
                 downloadStats: progressTracker.getDownloadStats() || null,
                 message: 'Download was canceled',
@@ -218,12 +208,14 @@ class DownloadCommand extends BaseCommand {
             // Re-download flag
             isRedownload = false,
             videoData,
-            // Download ID for progress mapping
+            // Download ID for progress mapping (replaces sessionId)
             downloadId = null
         } = params;
 
-        // Generate unique session ID for this download
-        const sessionId = this.generateSessionId();
+        // Use downloadId directly from extension (no need to generate sessionId)
+        if (!downloadId) {
+            throw new Error('downloadId is required for download tracking');
+        }
 
         // Store original command for error reporting and potential re-downloads
         const originalCommand = {
@@ -247,15 +239,14 @@ class DownloadCommand extends BaseCommand {
             isRedownload,
             sourceAudioCodec,
             sourceAudioBitrate,
-            sessionId,
             videoData: videoData ? {
                 ...videoData,
                 previewUrl: undefined // Remove heavy preview data for storage efficiency
             } : undefined,
-			downloadId
+            downloadId
         };
 
-        logDebug('Starting download with session ID:', sessionId, params);
+        logDebug('Starting download with downloadId:', downloadId, params);
         
         if (isRedownload) {
             logDebug('🔄 This is a re-download request');
@@ -314,8 +305,7 @@ class DownloadCommand extends BaseCommand {
                 isRedownload, 
                 audioOnly,
                 subsOnly,
-                sessionId, 
-                downloadId,
+                downloadId, // Use downloadId instead of sessionId
                 selectedOptionOrigText
             });
             
@@ -697,11 +687,10 @@ class DownloadCommand extends BaseCommand {
         isRedownload, 
         audioOnly,
         subsOnly,
-        sessionId,
-        downloadId,
+        downloadId, // Use downloadId instead of sessionId
         selectedOptionOrigText
     }) {
-        return new Promise(async (resolve, reject) => {
+        return new Promise(async (resolve, _reject) => {
             // Probe duration upfront if not provided to avoid race conditions
             let finalDuration = duration;
             if (!duration || typeof duration !== 'number' || duration <= 0) {
@@ -719,9 +708,8 @@ class DownloadCommand extends BaseCommand {
                 onProgress: (data) => {
                     this.sendMessage({
                         command: 'download-progress',
-                        sessionId,
+                        downloadId, // Use downloadId for both session and progress mapping
                         downloadUrl,
-                        downloadId, // Pass through downloadId for progress mapping
                         filename: path.basename(uniqueOutput),
                         selectedOptionOrigText, // Pass through selected option text
                         downloadStartTime, // Add start time for UI elapsed time calculation
@@ -767,7 +755,7 @@ class DownloadCommand extends BaseCommand {
             
             logDebug('FFmpeg process started with PID:', ffmpeg.pid);
             
-            // Track this process as active (use both downloadUrl and sessionId for tracking)
+            // Track this process as active (use downloadUrl as key, store downloadId for tracking)
             DownloadCommand.activeProcesses.set(downloadUrl, {
                 ffmpegProcess: ffmpeg,
                 progressTracker,
@@ -776,8 +764,7 @@ class DownloadCommand extends BaseCommand {
                 startTime: downloadStartTime,
                 pid: ffmpeg.pid,
                 isRedownload,
-                sessionId,
-                downloadId, // Store downloadId for progress mapping
+                downloadId, // Store downloadId instead of sessionId
                 headers: headers || null
             });
             
@@ -843,9 +830,8 @@ class DownloadCommand extends BaseCommand {
                     if (type === 'direct') {
                         this.sendMessage({
                             command: 'download-canceled',
-                            sessionId,
+                            downloadId, // Use downloadId for both session and progress mapping
                             downloadUrl,
-                            downloadId, // Pass through downloadId
                             duration,
                             downloadStats: downloadStats || null,
                             message: 'Download was canceled',
@@ -873,8 +859,7 @@ class DownloadCommand extends BaseCommand {
                     
                     this.sendMessage({ 
                         command: 'download-success',
-                        sessionId,
-                        downloadId, // Pass through downloadId
+                        downloadId, // Use downloadId instead of sessionId
                         path: uniqueOutput,
                         filename: path.basename(uniqueOutput),
                         downloadUrl,
@@ -918,8 +903,7 @@ class DownloadCommand extends BaseCommand {
                     // Send error as event - this resolves the promise
                     this.sendMessage({
                         command: 'download-error',
-                        sessionId,
-                        downloadId, // Pass through downloadId
+                        downloadId, // Use downloadId instead of sessionId
                         success: false,
                         message: errorMessage,
                         ffmpegOutput: errorOutput || null,
@@ -987,8 +971,7 @@ class DownloadCommand extends BaseCommand {
                 this.sendMessage({
                     success: false,
                     command: 'download-error',
-                    sessionId,
-                    downloadId, // Pass through downloadId
+                    downloadId, // Use downloadId instead of sessionId
                     message: `FFmpeg spawn error: ${err.message}`,
                     ffmpegOutput: null,
                     downloadUrl,
