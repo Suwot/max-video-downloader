@@ -86,18 +86,25 @@ class DownloadCommand extends BaseCommand {
             DownloadCommand.activeDownloads.delete(lookupKey);
             logDebug('Removed download from activeDownloads Map immediately. Remaining downloads:', DownloadCommand.activeDownloads.size);
             
-            // Gracefully terminate FFmpeg process using PID
+            // Terminate FFmpeg process: q command -> 5s timeout -> SIGKILL
             if (process && process.pid && !process.killed) {
-                logDebug('Terminating FFmpeg process with PID:', process.pid, 'using SIGTERM');
-                process.kill('SIGTERM');
+                logDebug('Terminating FFmpeg process PID:', process.pid);
                 
-                // Give it a moment to clean up, then force kill if needed
+                try {
+                    // Send 'q' command for graceful shutdown
+                    process.stdin.write('q\n');
+                    logDebug('Sent "q" command to FFmpeg stdin');
+                } catch (err) {
+                    logDebug('Error sending "q" command:', err.message);
+                }
+                
+                // Force kill after 5 seconds if still running
                 setTimeout(() => {
                     if (process && !process.killed) {
-                        logDebug('Force killing FFmpeg process with PID:', process.pid, 'using SIGKILL');
+                        logDebug('Force killing FFmpeg PID:', process.pid);
                         process.kill('SIGKILL');
                     }
-                }, 2000);
+                }, 5000);
             } else {
                 logDebug('FFmpeg process already terminated or killed');
             }
@@ -748,7 +755,7 @@ class DownloadCommand extends BaseCommand {
                 const ffmpeg = spawn(ffmpegService.getFFmpegPath(), ffmpegArgs, { 
                     env: getFullEnv(),
                     windowsVerbatimArguments: process.platform === 'win32',
-                    stdio: ['ignore', 'pipe', 'pipe']
+                    stdio: ['pipe', 'pipe', 'pipe'] // Enable stdin for graceful termination
                 });
                 
                 logDebug('FFmpeg process started with PID:', ffmpeg.pid);
