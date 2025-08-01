@@ -395,7 +395,8 @@ export class VideoItemComponent {
             poster: this.videoData.poster,
             tabId: this.videoData.tabId,
             pageUrl: this.videoData.pageUrl,
-            pageFavicon: this.videoData.pageFavicon
+            pageFavicon: this.videoData.pageFavicon,
+			pageTitle: this.videoData.pageTitle
         };
         
         const command = {

@@ -222,11 +222,11 @@ async function resolveDownloadPaths(downloadCommand) {
 async function queueDownload(downloadCommand) {
     const downloadId = downloadCommand.downloadId;
     
-    // Add to unified downloads map
+    // Add to unified downloads map (keep previewUrl for UI recreation during download)
     allDownloads.set(downloadId, {
         downloadId: downloadId,
         status: 'queued',
-        downloadRequest: downloadCommand,
+        downloadRequest: downloadCommand, // This serves as originalCommand for retry functionality
         progressData: {
             command: 'download-queued',
             downloadUrl: downloadCommand.downloadUrl,
@@ -364,14 +364,45 @@ async function handleDownloadEvent(event) {
         
         // Add to history storage for success/error only
         if (command === 'download-success' || command === 'download-error') {
-            await addToHistoryStorage({
-                ...event,
-                downloadUrl: downloadUrl,
-                masterUrl: downloadEntry?.downloadRequest?.masterUrl || null,
+            // Create clean originalCommand for history storage (remove heavy previewUrl)
+            const cleanOriginalCommand = downloadEntry?.downloadRequest ? {
+                ...downloadEntry.downloadRequest,
+                videoData: downloadEntry.downloadRequest.videoData ? {
+                    ...downloadEntry.downloadRequest.videoData,
+                    previewUrl: undefined // Remove heavy preview data for storage efficiency
+                } : undefined
+            } : undefined;
+
+            // Create minimal storage object - keep only essential fields for UI and retry
+            const minimalStorageData = {
+                // Essential completion data
+                command: event.command,
+                completedAt: event.completedAt,
+                path: event.path,
                 filename: event.filename,
-                selectedOptionOrigText: event.originalCommand.selectedOptionOrigText || null
-                // originalCommand already includes videoData from native host (robust approach)
-            });
+                downloadUrl: downloadUrl, // Keep - used as filename fallback in UI
+                selectedOptionOrigText: downloadEntry?.downloadRequest?.selectedOptionOrigText || null,
+                type: event.type,
+                downloadStats: event.downloadStats,
+                
+                // Actual processed duration (different from manifest duration in originalCommand)
+                duration: event.duration,
+                
+                // Flags for UI display
+                isPartial: event.isPartial,
+                audioOnly: event.audioOnly,
+                subsOnly: event.subsOnly,
+                isRedownload: event.isRedownload,
+                
+                // Error and diagnostic info
+                errorMessage: event.errorMessage,
+                terminationInfo: event.terminationInfo,
+                
+                // Complete originalCommand for retry functionality (with previewUrl removed)
+                originalCommand: cleanOriginalCommand
+            };
+
+            await addToHistoryStorage(minimalStorageData);
         }
         
         // Notify count change
@@ -407,9 +438,20 @@ async function handleDownloadEvent(event) {
             error: event.error,
             selectedOptionOrigText: downloadEntry?.downloadRequest?.selectedOptionOrigText || null,
             downloadId: downloadId,
-            addedToHistory: settingsManager.get('saveDownloadsInHistory') && (command === 'download-success' || command === 'download-error')
+            addedToHistory: settingsManager.get('saveDownloadsInHistory') && (command === 'download-success' || command === 'download-error'),
+            // downloadRequest serves as originalCommand (includes complete videoData and context)
+            originalCommand: downloadEntry?.downloadRequest,
+            // // Add missing context data that was previously sent by native host
+            // masterUrl: downloadEntry?.downloadRequest?.masterUrl || null,
+            // pageUrl: downloadEntry?.downloadRequest?.pageUrl || null,
+            // pageFavicon: downloadEntry?.downloadRequest?.pageFavicon || null
         }
-        : { ...event, downloadId: downloadId };
+        : { 
+            ...event, 
+            downloadId: downloadId,
+            // Add masterUrl for progress mapping (moved from native host)
+            masterUrl: downloadEntry?.downloadRequest?.masterUrl || null
+        };
 
     // Always notify UI with progress data via direct broadcast
     broadcastToPopups(broadcastData);

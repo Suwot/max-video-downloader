@@ -180,12 +180,13 @@ function createHistoryItemElement(progressData) {
 
     // Extract host from pageUrl for display
     let pageHost = 'Unknown';
-    let pageTitle = progressData.pageUrl || '';
-    if (progressData.pageUrl) {
+	let pageUrl = progressData.originalCommand?.videoData?.pageUrl;
+    let pageTitle = progressData.originalCommand?.videoData?.pageTitle || pageUrl || '';
+	let pageFavicon = progressData.originalCommand?.videoData?.pageFavicon;
+    if (pageUrl) {
         try {
-            const url = new URL(progressData.pageUrl);
+            const url = new URL(pageUrl);
             pageHost = url.hostname;
-            pageTitle = progressData.pageUrl;
         } catch (e) {
             pageHost = progressData.pageUrl.substring(0, 20) + '...';
         }
@@ -214,8 +215,8 @@ function createHistoryItemElement(progressData) {
             </div>
             ${flagsHtml ? `<div class="history-flags">${flagsHtml}</div>` : ''}
             <div class="page-info">
-                ${progressData.pageFavicon ? `<img class="favicon" src="${progressData.pageFavicon}" alt="">` : ''}
-                <a class="page-url" target="_blank" href="${progressData.pageUrl}" title="${pageTitle}">${pageHost}</a>
+                ${pageFavicon ? `<img class="favicon" src="${pageFavicon}" alt="favicon">` : ''}
+                <a class="page-url" target="_blank" href="${pageUrl}" title="${pageTitle}">${pageHost}</a>
             </div>
             <button class="history-delete-btn" title="Remove from history">
                 <svg width="10" height="10" viewBox="0 0 10 10" fill="var(--text-secondary-dark)" xmlns="http://www.w3.org/2000/svg">

@@ -209,7 +209,7 @@ class DownloadCommand extends BaseCommand {
                 command: 'download-progress',
                 downloadId: progressState.downloadId,
                 downloadUrl: progressState.downloadUrl,
-                masterUrl: downloadEntry?.originalCommand?.masterUrl || null, // Add masterUrl for progress mapping
+                masterUrl: null, // masterUrl will be added by extension download manager
                 filename: path.basename(downloadEntry?.outputPath || ''),
                 selectedOptionOrigText: downloadEntry?.selectedOptionOrigText,
                 downloadStartTime: progressState.startTime,
@@ -291,16 +291,6 @@ class DownloadCommand extends BaseCommand {
             downloadEntry = DownloadCommand.activeDownloads.get(downloadId);
             lookupKey = downloadId;
             logDebug('Found download by downloadId:', downloadId);
-        } else if (downloadUrl) {
-            // Fallback: search by downloadUrl in stored data
-            for (const [id, entry] of DownloadCommand.activeDownloads.entries()) {
-                if (entry.originalCommand && entry.originalCommand.downloadUrl === downloadUrl) {
-                    downloadEntry = entry;
-                    lookupKey = id;
-                    logDebug('Found download by downloadUrl lookup:', downloadUrl, '-> downloadId:', id);
-                    break;
-                }
-            }
         }
         
         if (!downloadEntry) {
@@ -320,7 +310,7 @@ class DownloadCommand extends BaseCommand {
             return;
         }
         
-        const { process, outputPath, originalCommand } = downloadEntry;
+        const { process, outputPath } = downloadEntry;
         const processDownloadId = lookupKey; // Use the found downloadId
         
         try {
@@ -380,12 +370,12 @@ class DownloadCommand extends BaseCommand {
             this.sendMessage({
                 command: 'download-canceled',
                 downloadId: processDownloadId,
-                downloadUrl: originalCommand?.downloadUrl || downloadUrl,
+                downloadUrl: downloadUrl,
                 duration: downloadEntry.progressState?.duration || null,
                 downloadStats: downloadEntry.progressState?.finalStats || null,
                 message: 'Download was canceled',
                 completedAt: Date.now(),
-                isRedownload: originalCommand?.isRedownload || false,
+                isRedownload: false,
                 headers: downloadEntry.headers || null
             }, { useMessageId: false }); // Event message, no response ID
             
@@ -442,19 +432,11 @@ class DownloadCommand extends BaseCommand {
             headers = {},
             sourceAudioCodec = null,
             sourceAudioBitrate = null,
-            // Progress tracking fields
             fileSizeBytes = null,
             duration = null,
             segmentCount = null,
-            // Page context fields
-            pageUrl = null,
-            pageFavicon = null,
-            // UI context fields
             selectedOptionOrigText = null,
-            // Re-download flag
             isRedownload = false,
-            videoData,
-            // Download ID for progress mapping (replaces sessionId)
             downloadId = null
         } = params;
 
@@ -462,35 +444,6 @@ class DownloadCommand extends BaseCommand {
         if (!downloadId) {
             throw new Error('downloadId is required for download tracking');
         }
-
-        // Store original command for error reporting and potential re-downloads
-        const originalCommand = {
-            command: 'download',
-            downloadUrl,
-            filename,
-            savePath,
-            type,
-            container,
-            audioOnly,
-            subsOnly,
-            streamSelection,
-            masterUrl,
-            headers,
-            fileSizeBytes,
-            duration,
-            segmentCount,
-            pageUrl,
-            pageFavicon,
-            selectedOptionOrigText,
-            isRedownload,
-            sourceAudioCodec,
-            sourceAudioBitrate,
-            videoData: videoData ? {
-                ...videoData,
-                previewUrl: undefined // Remove heavy preview data for storage efficiency
-            } : undefined,
-            downloadId
-        };
 
         logDebug('Starting download with downloadId:', downloadId, params);
         
@@ -507,7 +460,6 @@ class DownloadCommand extends BaseCommand {
             const ffmpegService = this.getService('ffmpeg');
             
             // Use container from extension (trusted completely)
-            const container = params.container || 'mp4';
             logDebug('📦 Using container from extension:', container);
             
             // Generate clean output filename
@@ -545,9 +497,6 @@ class DownloadCommand extends BaseCommand {
                 duration,
                 fileSizeBytes,
                 segmentCount,
-                pageUrl,
-                pageFavicon,
-                originalCommand,
                 isRedownload, 
                 audioOnly,
                 subsOnly,
@@ -927,9 +876,6 @@ class DownloadCommand extends BaseCommand {
         duration,
         fileSizeBytes,
         segmentCount,
-        pageUrl,
-        pageFavicon,
-        originalCommand,
         isRedownload, 
         audioOnly,
         subsOnly,
@@ -980,7 +926,6 @@ class DownloadCommand extends BaseCommand {
                     type,
                     headers: headers || null,
                     progressState,
-                    originalCommand,
                     selectedOptionOrigText,
                     isRedownload
                 });
@@ -1036,9 +981,6 @@ class DownloadCommand extends BaseCommand {
                             downloadStats: downloadStats || null,
                             message: 'Download was canceled',
                             completedAt: Date.now(),
-                            pageUrl,
-                            pageFavicon,
-                            originalCommand,
                             isRedownload: downloadEntry?.isRedownload || false,
                             audioOnly,
                             subsOnly,
@@ -1074,9 +1016,6 @@ class DownloadCommand extends BaseCommand {
                             downloadDuration
                         },
                         completedAt: Date.now(),
-                        pageUrl,
-                        pageFavicon,
-                        originalCommand,
                         isRedownload,
                         audioOnly,
                         subsOnly,
@@ -1118,9 +1057,6 @@ class DownloadCommand extends BaseCommand {
                             downloadDuration
                         },
                         completedAt: Date.now(),
-                        pageUrl,
-                        pageFavicon,
-                        originalCommand,
                         isRedownload,
                         audioOnly,
                         subsOnly,
@@ -1175,9 +1111,6 @@ class DownloadCommand extends BaseCommand {
                         downloadDuration
                     },
                     completedAt: Date.now(),
-                    pageUrl,
-                    pageFavicon,
-                    originalCommand,
                     isRedownload,
                     audioOnly,
                     headers: downloadEntry?.headers || null
