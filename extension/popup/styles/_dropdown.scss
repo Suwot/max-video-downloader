@@ -291,6 +291,8 @@
     cursor: pointer;
     transition: background-color var(--transition-fast);
     border-radius: 2px;
+	
+	&:not(:last-child) { margin-bottom: 1px;}
 
     &:hover {
         position: relative;
