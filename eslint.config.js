@@ -35,7 +35,7 @@ export default [
       },
     },
     rules: {
-      "no-unused-vars": ["warn", { argsIgnorePattern: "^_" }],
+      "no-unused-vars": "off",
       "no-console": "off",
       "no-case-declarations": "off",
       "no-useless-escape": "warn",
@@ -66,7 +66,7 @@ export default [
       },
     },
     rules: {
-      "no-unused-vars": ["warn", { argsIgnorePattern: "^_" }],
+      "no-unused-vars": "off",
       "no-console": "off",
       "no-async-promise-executor": "warn",
     },
@@ -82,7 +82,7 @@ export default [
       },
     },
     rules: {
-      "no-unused-vars": ["warn", { argsIgnorePattern: "^_" }],
+      "no-unused-vars": "off",
       "no-console": "off",
     },
   },
