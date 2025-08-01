@@ -199,8 +199,8 @@ function createHistoryItemElement(progressData) {
     const statsHtml = buildStatsHtml(progressData);
 
     // Build error message for failed downloads
-    const errorMessageHtml = progressData.command === 'download-error' && progressData.ffmpegFinalMessage 
-        ? `<div class="error-message truncated" title="Click to expand">${progressData.ffmpegFinalMessage}</div>` 
+    const errorMessageHtml = progressData.command === 'download-error' && progressData.errorMessage 
+        ? `<div class="error-message truncated" title="Click to expand">${progressData.errorMessage}</div>` 
         : '';
 
     // Build flags icons HTML
@@ -246,17 +246,16 @@ function createHistoryItemElement(progressData) {
                     </button>
                 ` : ''}
                 ${progressData.command === 'download-success' && progressData.path ? `
-                    
                     <button class="history-folder-btn" data-tooltip="Show in folder" data-file-path="${progressData.path}">
                         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-folder-open w-3 h-3" aria-hidden="true">
                             <path d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2"></path>
                         </svg>
                     </button>
-                    <button class="history-play-btn" data-tooltip="Open file" data-file-path="${progressData.path}">
+                    ${!progressData.deleted ? `<button class="history-play-btn" data-tooltip="Open file" data-file-path="${progressData.path}">
                         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-play w-3 h-3" aria-hidden="true">
                             <polygon points="6 3 20 12 6 21 6 3"></polygon>
                         </svg>
-                    </button>
+                    </button>` : ''}
                 ` : ''}
              </div>
         </div>
@@ -422,15 +421,15 @@ function buildStatsHtml(progressData) {
             </span>
         `);
     } else if (progressData.subsOnly) {
-		stats.push(`
-			<span class="quality">
-				<svg width="4" height="4" viewBox="0 0 6 6" fill="none">
-					<circle cx="3" cy="3" r="3" fill="var(--text-primary-dark)"/>
-				</svg>
-				Subs
-			</span>
-		`);
-	} else if (progressData.selectedOptionOrigText) {
+        stats.push(`
+            <span class="quality">
+                <svg width="4" height="4" viewBox="0 0 6 6" fill="none">
+                    <circle cx="3" cy="3" r="3" fill="var(--text-primary-dark)"/>
+                </svg>
+                Subs
+            </span>
+        `);
+    } else if (progressData.selectedOptionOrigText) {
         const advancedDropdown = progressData.selectedOptionOrigText.includes('≈')
         const qualityText = advancedDropdown ? 
             progressData.selectedOptionOrigText.split('≈')[0]?.trim() : 
@@ -821,6 +820,12 @@ export function updateHistoryItemDeleted(completedAt) {
     if (deleteFileBtn) {
         deleteFileBtn.remove();
     }
-    
+
+    // Remove open file button
+    const playBtn = historyItem.querySelector('.history-play-btn');
+    if (playBtn) {
+        playBtn.remove();
+    }
+
     logger.debug('Updated history item with deleted flag:', completedAt);
 }

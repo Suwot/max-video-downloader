@@ -18,7 +18,6 @@ const { spawn } = require('child_process');
 const BaseCommand = require('./base-command');
 const { logDebug } = require('../utils/logger');
 const { getFullEnv } = require('../utils/resources');
-const ProgressTracker = require('../lib/progress/progress-tracker');
 
 /**
  * Command for downloading videos
@@ -26,6 +25,249 @@ const ProgressTracker = require('../lib/progress/progress-tracker');
 class DownloadCommand extends BaseCommand {
     // Static Map for download tracking keyed by downloadId
     static activeDownloads = new Map();
+
+    /**
+     * Initialize progress tracking state for a download
+     * @private
+     */
+    initProgressState(downloadId, { type, duration, fileSizeBytes, downloadUrl, segmentCount }) {
+        const now = Date.now();
+        return {
+            // Basic info
+            downloadId,
+            type,
+            downloadUrl,
+            startTime: now,
+            
+            // Metadata
+            duration: duration || 0,
+            fileSizeBytes: fileSizeBytes || 0,
+            totalSegments: segmentCount || 0, // For HLS progress tracking
+            
+            // Current progress
+            currentTime: 0,
+            downloadedBytes: 0,
+            currentSegment: 0,
+            
+            // For termination messages
+            finalProcessedTime: null, // Final processed time from FFmpeg
+            
+            // For progress throttling
+            lastProgressUpdate: 0,
+            lastProgressPercent: 0,
+            
+            // Error collection (only used on exitCode !== 0)
+            errorLines: [],
+            
+            // Final stats (parsed on close)
+            finalStats: null
+        };
+    }
+
+    /**
+     * Process FFmpeg stderr output for progress and error collection
+     * @private
+     */
+    processFFmpegOutput(output, progressState) {
+        // Always collect potential error lines
+        this.collectErrorLines(output, progressState);
+        
+        // Parse progress data and send updates
+        this.parseAndSendProgress(output, progressState);
+        
+        // Parse final stats if this is the end
+        if (output.includes('progress=end')) {
+            this.parseFinalStats(output, progressState);
+        }
+    }
+
+    /**
+     * Collect error lines for later use (only attached to message on exitCode !== 0)
+     * @private
+     */
+    collectErrorLines(output, progressState) {
+        const errorKeywords = ['error', 'failed', 'not found', 'permission denied', 'connection refused', 'no such file'];
+        
+        const lines = output.split('\n');
+        for (const line of lines) {
+            const trimmed = line.trim();
+            if (trimmed && errorKeywords.some(keyword => trimmed.toLowerCase().includes(keyword))) {
+                progressState.errorLines.push(trimmed);
+                // Keep only last 10 error lines to prevent memory bloat
+                if (progressState.errorLines.length > 10) {
+                    progressState.errorLines.shift();
+                }
+            }
+        }
+    }
+
+    /**
+     * Parse progress data and send throttled updates to UI
+     * @private
+     */
+    parseAndSendProgress(output, progressState) {
+        let hasUpdate = false;
+        
+        // Parse time data (out_time_ms is in microseconds despite the name)
+        const outTimeMs = output.match(/out_time_ms=(\d+)/);
+        if (outTimeMs) {
+            const timeUs = parseInt(outTimeMs[1], 10);
+            progressState.currentTime = timeUs / 1000000; // Convert to seconds
+            progressState.finalProcessedTime = timeUs / 1000000; // Store for termination messages
+            hasUpdate = true;
+        }
+        
+        // Parse size data
+        const totalSize = output.match(/total_size=(\d+)/);
+        if (totalSize) {
+            progressState.downloadedBytes = parseInt(totalSize[1], 10);
+            hasUpdate = true;
+        }
+
+        // Only track segments for HLS type
+        if (progressState.type === 'hls') {
+            if (output.includes('Opening ') && output.includes(' for reading')) {
+                const segmentMatch = output.match(/Opening\s+['"]([^'"]*\.(ts|mp4|m4s))['"] for reading/);
+                if (segmentMatch) {
+                    progressState.currentSegment++;
+                    hasUpdate = true;
+                }
+            }
+        }
+        
+        // Send throttled progress updates
+        if (hasUpdate) {
+            this.sendProgressUpdate(progressState);
+        }
+    }
+
+    /**
+     * Calculate and send progress update (throttled)
+     * @private
+     */
+    sendProgressUpdate(progressState) {
+        const now = Date.now();
+        
+        // Calculate progress based on media type and available data
+        let progress = 0;
+        let strategy = 'unknown';
+        
+        // Prefer duration-based progress for all types (more reliable, especially for audio/subs extraction)
+        if (progressState.duration > 0 && progressState.currentTime > 0) {
+            progress = (progressState.currentTime / progressState.duration) * 100;
+            strategy = 'time';
+        } else if (progressState.fileSizeBytes > 0 && progressState.downloadedBytes > 0) {
+            progress = (progressState.downloadedBytes / progressState.fileSizeBytes) * 100;
+            strategy = 'size';
+        }
+        
+        // Cap at 99.9% until we get final completion
+        progress = Math.min(99.9, Math.max(0, progress));
+        const progressPercent = Math.round(progress * 10) / 10; // 1 decimal place
+        
+        // Throttle updates: only send if significant change or time elapsed
+        const significantChange = Math.abs(progressPercent - progressState.lastProgressPercent) >= 0.5;
+        const timeElapsed = now - progressState.lastProgressUpdate > 250; // 250ms throttle
+        
+        if (significantChange || timeElapsed) {
+            // Get download entry for additional context
+            const downloadEntry = DownloadCommand.activeDownloads.get(progressState.downloadId);
+            
+            // Calculate speed (simple 3-second window)
+            const elapsedSeconds = (now - progressState.startTime) / 1000;
+            const speed = elapsedSeconds > 0 ? progressState.downloadedBytes / elapsedSeconds : 0;
+            
+            // Build progress data matching original structure
+            const progressData = {
+                // Core progress data
+                progress: progressPercent,
+                speed: Math.round(speed),
+                elapsedTime: Math.round(elapsedSeconds),
+                type: progressState.type,
+                strategy,
+                
+                // Byte data
+                downloadedBytes: progressState.downloadedBytes,
+                totalBytes: progressState.fileSizeBytes || null,
+                
+                // Time data
+                currentTime: Math.round(progressState.currentTime),
+                totalDuration: Math.round(progressState.duration),
+                
+                // ETA calculation
+                eta: progress > 0 && speed > 0 ? Math.round(((100 - progress) / 100) * (progressState.fileSizeBytes || (progressState.downloadedBytes / (progress / 100))) / speed) : null
+            };
+
+            // Add segment data for HLS (include totalSegments)
+            if (progressState.type === 'hls') {
+                progressData.currentSegment = progressState.currentSegment;
+                progressData.totalSegments = progressState.totalSegments; // Important for HLS progress tracking
+            }
+            
+            // Send progress message with complete context
+            this.sendMessage({
+                command: 'download-progress',
+                downloadId: progressState.downloadId,
+                downloadUrl: progressState.downloadUrl,
+                masterUrl: downloadEntry?.originalCommand?.masterUrl || null, // Add masterUrl for progress mapping
+                filename: path.basename(downloadEntry?.outputPath || ''),
+                selectedOptionOrigText: downloadEntry?.selectedOptionOrigText,
+                downloadStartTime: progressState.startTime,
+                isRedownload: downloadEntry?.isRedownload || false,
+                
+                // Spread all progress data
+                ...progressData
+            }, { useMessageId: false });
+            
+            progressState.lastProgressUpdate = now;
+            progressState.lastProgressPercent = progressPercent;
+        }
+    }
+
+    /**
+     * Parse final download statistics from FFmpeg output
+     * @private
+     */
+    parseFinalStats(output, progressState) {
+        const stats = {};
+        
+        // Parse stream sizes: video:0kB audio:7405kB subtitle:0kB other streams:0kB
+        // Convert to bytes for consistency with original structure
+        const streamMatch = output.match(/video:(\d+)kB audio:(\d+)kB subtitle:(\d+)kB other streams:(\d+)kB/);
+        if (streamMatch) {
+            stats.videoSize = parseInt(streamMatch[1], 10) * 1024; // Convert KB to bytes
+            stats.audioSize = parseInt(streamMatch[2], 10) * 1024; // Convert KB to bytes  
+            stats.subtitleSize = parseInt(streamMatch[3], 10) * 1024; // Convert KB to bytes
+            stats.otherSize = parseInt(streamMatch[4], 10) * 1024; // Convert KB to bytes
+        }
+        
+        // Parse total size: total_size=7694941
+        const totalSizeMatch = output.match(/total_size=(\d+)/);
+        if (totalSizeMatch) {
+            stats.totalSize = parseInt(totalSizeMatch[1], 10);
+        }
+        
+        // Parse final bitrate: bitrate=  95.0kbits/s (keep as kbps, round to integer)
+        const bitrateMatch = output.match(/bitrate=\s*([\d.]+)kbits\/s/);
+        if (bitrateMatch) {
+            stats.bitrateKbps = Math.round(parseFloat(bitrateMatch[1]));
+        }
+        
+        progressState.finalStats = stats;
+        logDebug('Parsed final download stats:', stats);
+    }
+
+    /**
+     * Get error message from collected error lines (for any error case)
+     * @private
+     */
+    getErrorMessage(progressState) {
+        if (!progressState.errorLines.length) {
+            return null;
+        }
+        
+        return progressState.errorLines.join('\n');
+    }
 
     /**
      * Cancel an ongoing download by downloadId
@@ -109,9 +351,10 @@ class DownloadCommand extends BaseCommand {
                 logDebug('FFmpeg process already terminated or killed');
             }
             
-            // Clean up progress tracker if available
-            if (downloadEntry.progressTracker) {
-                downloadEntry.progressTracker.cleanup();
+            // Clean up progress state if available
+            if (downloadEntry.progressState) {
+                // No cleanup needed for simple progress state
+                logDebug('Progress state cleanup completed');
             }
             
             // Remove partial file if it exists and type is not 'direct'
@@ -138,8 +381,8 @@ class DownloadCommand extends BaseCommand {
                 command: 'download-canceled',
                 downloadId: processDownloadId,
                 downloadUrl: originalCommand?.downloadUrl || downloadUrl,
-                duration: downloadEntry.progressTracker?.getDuration(),
-                downloadStats: downloadEntry.progressTracker?.getDownloadStats() || null,
+                duration: downloadEntry.progressState?.duration || null,
+                downloadStats: downloadEntry.progressState?.finalStats || null,
                 message: 'Download was canceled',
                 completedAt: Date.now(),
                 isRedownload: originalCommand?.isRedownload || false,
@@ -708,47 +951,16 @@ class DownloadCommand extends BaseCommand {
                     }
                 }
             
-                // Create progress tracker with complete file information
-                const progressTracker = new ProgressTracker({
-                    onProgress: (data) => {
-                        this.sendMessage({
-                            command: 'download-progress',
-                            downloadId, // Use downloadId for both session and progress mapping
-                            downloadUrl,
-                            filename: path.basename(uniqueOutput),
-                            selectedOptionOrigText, // Pass through selected option text
-                            downloadStartTime, // Add start time for UI elapsed time calculation
-                            isRedownload,
-                            ...data
-                        }, { useMessageId: false }); // Event message, no response ID
-                    },
-                    updateInterval: 200,
-                    debug: true
-                });
-                
-                // Initialize once with all available metadata
-                const fileInfo = {
-                    downloadUrl,
+                // Initialize progress state
+                const progressState = this.initProgressState(downloadId, {
                     type,
-                    masterUrl,
-                    outputPath: uniqueOutput,
                     duration: finalDuration,
                     fileSizeBytes,
-                    segmentCount,
-                    audioOnly
-                };
+                    downloadUrl,
+                    segmentCount
+                });
                 
-                logDebug('Initializing progress tracker with:', fileInfo);
-                
-                try {
-                    const success = await progressTracker.initialize(fileInfo);
-                    if (!success) {
-                        logDebug('Progress tracker initialization failed, continuing with basic tracking');
-                    }
-                } catch (error) {
-                    logDebug('Error initializing progress tracker:', error);
-                    // Continue without progress tracking rather than failing
-                }
+                logDebug('Initialized progress state for downloadId:', downloadId);
                 
                 // Start FFmpeg process
                 const downloadStartTime = Date.now();
@@ -767,7 +979,7 @@ class DownloadCommand extends BaseCommand {
                     outputPath: uniqueOutput,
                     type,
                     headers: headers || null,
-                    progressTracker,
+                    progressState,
                     originalCommand,
                     selectedOptionOrigText,
                     isRedownload
@@ -775,56 +987,41 @@ class DownloadCommand extends BaseCommand {
                 
                 logDebug('Added download to activeDownloads Map. Total downloads:', DownloadCommand.activeDownloads.size);
                 
-                let errorOutput = '';
                 let hasError = false;
                 
-                // Simple data flow: FFmpeg output → ProgressTracker → UI
+                // Direct FFmpeg output processing
                 ffmpeg.stderr.on('data', (data) => {
                     if (hasError) return;
                     
                     const output = data.toString();
-                    errorOutput += output;
                     
-                    // Single responsibility: just pass output to tracker
-                    progressTracker.processOutput(output);
+                    // Process output directly for progress and error collection
+                    this.processFFmpegOutput(output, progressState);
                 });
             
             ffmpeg.on('close', (code, signal) => {
                 // Guard against multiple event handling
                 if (hasError) return;
                 
-                progressTracker.cleanup();
-                
                 // Get download info from activeDownloads BEFORE deletion
                 const downloadEntry = DownloadCommand.activeDownloads.get(downloadId);
                 const wasCanceled = !downloadEntry; // Check if it was already removed by cancelDownload
                 
-                const originalDuration = progressTracker.getDuration();
-                const finalProcessedDuration = progressTracker.getFinalProcessedDuration();
+                // Get data from progress state
+                const finalDuration = progressState.finalProcessedTime || progressState.duration;
+                const downloadStats = progressState.finalStats;
                 
-                // Use final processed duration if available (actual processed time), fallback to original
-                const duration = finalProcessedDuration || originalDuration;
-                
-                // Log duration information for debugging
-                if (finalProcessedDuration && originalDuration && Math.abs(finalProcessedDuration - originalDuration) > 1) {
-                    logDebug(`Duration difference: original=${originalDuration}s, processed=${finalProcessedDuration}s`);
-                }
-                
-                const downloadDuration = downloadEntry?.startTime ? Date.now() - downloadEntry.startTime : null;
+                const downloadDuration = downloadEntry?.startTime ? Math.round((Date.now() - downloadEntry.startTime) / 1000) : null;
                 
                 // Clean up activeDownloads if not already done by cancelDownload
                 if (DownloadCommand.activeDownloads.has(downloadId)) {
                     DownloadCommand.activeDownloads.delete(downloadId);
                 }
-                
-                const ffmpegFinalMessage = progressTracker.getFFmpegFinalMessage();
-                const derivedErrorMessage = progressTracker.getDerivedErrorMessage();
-                const downloadStats = progressTracker.getDownloadStats();
 
                 // Determine termination reason using signal, exit code, and output file verification
                 // Pass wasCanceled state directly instead of relying on Map lookup
                 const terminationInfo = this.analyzeProcessTermination(code, signal, wasCanceled, uniqueOutput, type, subsOnly);
-                logDebug(`FFmpeg process (PID: ${downloadEntry?.process?.pid}) terminated after ${downloadDuration}ms:`, terminationInfo);
+                logDebug(`FFmpeg process (PID: ${downloadEntry?.process?.pid}) terminated after ${downloadDuration}s:`, terminationInfo);
                 
                 if (terminationInfo.wasCanceled && !terminationInfo.isPartialSuccess) {
                     logDebug('Download was canceled by user.');
@@ -835,7 +1032,7 @@ class DownloadCommand extends BaseCommand {
                             command: 'download-canceled',
                             downloadId, // Use downloadId for both session and progress mapping
                             downloadUrl,
-                            duration,
+                            duration: finalDuration,
                             downloadStats: downloadStats || null,
                             message: 'Download was canceled',
                             completedAt: Date.now(),
@@ -868,9 +1065,9 @@ class DownloadCommand extends BaseCommand {
                         downloadUrl,
                         masterUrl,
                         type,
-                        duration,
+                        duration: finalDuration,
                         downloadStats: downloadStats || null,
-                        ffmpegFinalMessage: ffmpegFinalMessage || null,
+                        errorMessage: this.getErrorMessage(progressState) || null,
                         terminationInfo,
                         processInfo: {
                             pid: downloadEntry?.process?.pid,
@@ -897,10 +1094,10 @@ class DownloadCommand extends BaseCommand {
                     hasError = true;
                     const errorMessage = `FFmpeg exited with code ${code}${signal ? ` (signal: ${signal})` : ''}`;
                     logDebug('Download failed:', errorMessage);
-                    if (ffmpegFinalMessage) {
-                        logDebug('FFmpeg final message:', ffmpegFinalMessage);
-                    } else if (derivedErrorMessage) {
-                        logDebug('Derived error message:', derivedErrorMessage);
+                    
+                    const collectedErrors = this.getErrorMessage(progressState);
+                    if (collectedErrors) {
+                        logDebug('Collected error lines:', collectedErrors);
                     }
                     
                     // Send error as event - this resolves the promise
@@ -909,12 +1106,11 @@ class DownloadCommand extends BaseCommand {
                         downloadId, // Use downloadId instead of sessionId
                         success: false,
                         message: errorMessage,
-                        ffmpegOutput: errorOutput || null,
+                        errorMessage: collectedErrors || null,
                         downloadUrl,
                         masterUrl,
                         type,
-                        duration,
-                        ffmpegFinalMessage: ffmpegFinalMessage || derivedErrorMessage || null,
+                        duration: finalDuration,
                         downloadStats: downloadStats || null,
                         terminationInfo,
                         processInfo: {
@@ -948,24 +1144,18 @@ class DownloadCommand extends BaseCommand {
                     DownloadCommand.activeDownloads.delete(downloadId);
                 }
                 
-                progressTracker.cleanup();
-                const ffmpegFinalMessage = progressTracker.getFFmpegFinalMessage();
-                const derivedErrorMessage = progressTracker.getDerivedErrorMessage();
-                const downloadStats = progressTracker.getDownloadStats();
+                // Get data from progress state
+                const finalDuration = progressState.finalProcessedTime || progressState.duration;
+                const downloadStats = progressState.finalStats;
+                const collectedErrors = this.getErrorMessage(progressState);
                 
                 // Get download info and calculate durations (same logic as close handler)
                 const downloadEntry = DownloadCommand.activeDownloads.get(downloadId);
-                
-                const originalDuration = progressTracker.getDuration();
-                const finalProcessedDuration = progressTracker.getFinalProcessedDuration();
-                const duration = finalProcessedDuration || originalDuration;
-                const downloadDuration = downloadEntry?.startTime ? Date.now() - downloadEntry.startTime : null;
+                const downloadDuration = downloadEntry?.startTime ? Math.round((Date.now() - downloadEntry.startTime) / 1000) : null;
 
-                logDebug(`FFmpeg spawn error (PID: ${downloadEntry?.process?.pid}) after ${downloadDuration}ms:`, err);
-                if (ffmpegFinalMessage) {
-                    logDebug('FFmpeg final message:', ffmpegFinalMessage);
-                } else if (derivedErrorMessage) {
-                    logDebug('Derived error message:', derivedErrorMessage);
+                logDebug(`FFmpeg spawn error (PID: ${downloadEntry?.process?.pid}) after ${downloadDuration}s:`, err);
+                if (collectedErrors) {
+                    logDebug('Collected error lines:', collectedErrors);
                 }
 
                 // Send spawn error as event - this resolves the promise
@@ -974,12 +1164,11 @@ class DownloadCommand extends BaseCommand {
                     command: 'download-error',
                     downloadId, // Use downloadId instead of sessionId
                     message: `FFmpeg spawn error: ${err.message}`,
-                    ffmpegOutput: null,
+                    errorMessage: collectedErrors || null,
                     downloadUrl,
                     masterUrl,
                     type,
-                    duration,
-                    ffmpegFinalMessage: ffmpegFinalMessage || derivedErrorMessage || null,
+                    duration: finalDuration,
                     downloadStats: downloadStats || null,
                     processInfo: {
                         pid: downloadEntry?.process?.pid,
