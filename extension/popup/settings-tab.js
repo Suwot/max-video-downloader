@@ -27,7 +27,14 @@ const SETTING_CONFIGS = {
   autoGeneratePreviews: { type: 'boolean' },
   saveDownloadsInHistory: { type: 'boolean' },
   maxHistorySize: { type: 'number', min: 0, max: 200, confirmReduce: true },
-  historyAutoRemoveInterval: { type: 'number', min: 1, max: 365 }
+  historyAutoRemoveInterval: { type: 'number', min: 1, max: 365 },
+  theme: {
+    type: 'unit',
+    units: [
+      { label: 'Dark', value: 'dark' },
+      { label: 'Light', value: 'light' }
+    ]
+  }
 };
 
 /**
@@ -42,10 +49,7 @@ export async function initializeSettingsTab() {
         return;
     }
 
-    // Replace placeholder content with settings UI
-    settingsTab.innerHTML = createSettingsHTML();
-
-    // Set up event listeners
+    // Settings HTML is now in popup.html - just set up event listeners
     setupEventListeners();
 
     // Set up tooltip functionality
@@ -56,275 +60,6 @@ export async function initializeSettingsTab() {
 
     // Request current settings from background
     sendPortMessage({ command: 'getSettings' });
-}
-
-/**
- * Create the settings HTML structure using existing patterns
- */
-function createSettingsHTML() {
-    return `
-        <section class="settings-container">
-            <!-- Native Host Connection Section -->
-            <div class="settings-section">
-				<div class="status-info">
-					<div class="status-line">
-						<span class="status-label">Status:</span>
-						<div class="status-value">
-							<div class="status-dot disconnected" id="connection-status-dot"></div>
-							<span id="connection-status-text">Checking...</span>
-							<span id="connection-version"></span>
-							<button type="button" class="reconnect-icon hidden" id="reconnect-icon" title="Reconnect">
-								<svg width="10" height="10" viewBox="0 0 24 24" fill="none">
-									<path d="M1 4v6h6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-									<path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-								</svg>
-							</button>
-						</div>
-					</div>
-					<div class="status-line" id="connection-location-line" style="display: none;">
-						<span class="status-label">Location:</span>
-						<span class="status-value" id="connection-location"></span>
-					</div>
-					<div class="status-line" id="connection-ffmpeg-line" style="display: none;">
-						<span class="status-label">FFmpeg:</span>
-						<span class="status-value" id="connection-ffmpeg"></span>
-					</div>
-				</div>
-				<div class="status-actions hidden" id="status-actions">
-					<button type="button" class="action-button primary" id="reconnect-button" disabled>
-						<svg width="12" height="12" viewBox="0 0 24 24" fill="none">
-							<path d="M1 4v6h6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-							<path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-						</svg>
-						Reconnect
-					</button>
-					<button type="button" class="action-button" id="download-button">
-						<svg width="12" height="12" viewBox="0 0 24 24" fill="none">
-							<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-							<polyline points="7,10 12,15 17,10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-							<line x1="12" y1="15" x2="12" y2="3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-						</svg>
-						Download
-					</button>
-					<button type="button" class="action-button" id="help-button">
-						<svg width="12" height="12" viewBox="0 0 24 24" fill="none">
-							<circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
-							<path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-							<path d="M12 17h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-						</svg>
-						Help
-					</button>
-				</div>
-            </div>
-            
-            <!-- Downloads Settings Section -->
-            <div class="settings-section">
-				<div class="input-group horizontal">
-					<label class="input-label">
-						Concurrent Downloads
-						<div class="tooltip-icon" data-tooltip="Maximum number of simultaneous downloads">
-							<svg width="12" height="12" viewBox="0 0 24 24" fill="none">
-								<circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
-								<path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-								<path d="M12 17h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-							</svg>
-						</div>
-					</label>
-					<div class="input-container">
-						<div class="input-constraint-wrapper" data-constraint="1-10">
-							<input 
-								type="number" 
-								data-setting="maxConcurrentDownloads"
-								class="input-field" 
-								min="1" 
-								max="10" 
-								value="1"
-								placeholder="1"
-							/>
-						</div>
-					</div>
-				</div>
-				
-				<div class="input-group horizontal path-input-group">
-					<label class="input-label">
-						Default Save Path
-						<div class="tooltip-icon" data-tooltip="Default folder for saving downloaded videos">
-							<svg width="12" height="12" viewBox="0 0 24 24" fill="none">
-								<circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
-								<path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-								<path d="M12 17h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-							</svg>
-						</div>
-					</label>
-					<div class="input-container">
-						<div class="input-constraint-wrapper" data-constraint="Do not choose root folders!">
-							<input 
-								type="text" 
-								data-setting="defaultSavePath"
-								class="input-field path-input clickable" 
-								readonly
-								placeholder="Click to choose folder"
-							/>
-						</div>
-					</div>
-				</div>
-				
-				<div class="input-group horizontal">
-					<label class="input-label">
-						Show Download Notifications
-						<div class="tooltip-icon" data-tooltip="Show system notifications when downloads start and complete">
-							<svg width="12" height="12" viewBox="0 0 24 24" fill="none">
-								<circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
-								<path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-								<path d="M12 17h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-							</svg>
-						</div>
-					</label>
-					<label class="toggle-switch">
-						<input 
-							type="checkbox" 
-							data-setting="showDownloadNotifications"
-							checked
-						/>
-						<span class="toggle-slider"></span>
-					</label>
-				</div>
-            </div>
-
-            <!-- Detection Settings Section -->
-            <div class="settings-section">
-				<div class="input-group horizontal">
-					<label class="input-label">
-						Min. File Size
-						<div class="tooltip-icon" data-tooltip="Skip video files smaller than this size">
-							<svg width="12" height="12" viewBox="0 0 24 24" fill="none">
-								<circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
-								<path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-								<path d="M12 17h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-							</svg>
-						</div>
-					</label>
-					<div class="input-container">
-						<div class="unit-input-group">
-							<div class="unit-toggle" data-unit-toggle="minFileSizeFilter">
-								<button type="button" class="unit-option active" data-multiplier="1024">KB</button>
-								<button type="button" class="unit-option" data-multiplier="1048576">MB</button>
-							</div>
-							<div class="input-constraint-wrapper" data-constraint="Max: 100 MB">
-								<input 
-									type="number" 
-									data-setting="minFileSizeFilter"
-									class="input-field unit-number-input" 
-									min="0" 
-									max="102400"
-									step="0.01"
-									value="100"
-									placeholder="100"
-								/>
-							</div>
-						</div>
-					</div>
-				</div>
-				
-				<div class="input-group horizontal">
-					<label class="input-label">
-						Auto-Generate Previews
-						<div class="tooltip-icon" data-tooltip="Automatically generate video thumbnails for detected videos">
-							<svg width="12" height="12" viewBox="0 0 24 24" fill="none">
-								<circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
-								<path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-								<path d="M12 17h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-							</svg>
-						</div>
-					</label>
-					<label class="toggle-switch">
-						<input 
-							type="checkbox" 
-							data-setting="autoGeneratePreviews"
-							checked
-						/>
-						<span class="toggle-slider"></span>
-					</label>
-				</div>
-            </div>
-
-            <!-- History Settings Section -->		
-            <div class="settings-section">
-				<div class="input-group horizontal">
-					<label class="input-label">
-						Save Downloads in History
-						<div class="tooltip-icon" data-tooltip="Save completed downloads to history for tracking">
-							<svg width="12" height="12" viewBox="0 0 24 24" fill="none">
-								<circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
-								<path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-								<path d="M12 17h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-							</svg>
-						</div>
-					</label>
-					<label class="toggle-switch">
-						<input 
-							type="checkbox" 
-							data-setting="saveDownloadsInHistory"
-							checked
-						/>
-						<span class="toggle-slider"></span>
-					</label>
-				</div>
-				
-				<div class="input-group horizontal">
-					<label class="input-label">
-						Max. History Items
-						<div class="tooltip-icon" data-tooltip="Maximum number of download history items to keep">
-							<svg width="12" height="12" viewBox="0 0 24 24" fill="none">
-								<circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
-								<path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-								<path d="M12 17h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-							</svg>
-						</div>
-					</label>
-					<div class="input-container">
-						<div class="input-constraint-wrapper" data-constraint="0-200">
-							<input 
-								type="number" 
-								data-setting="maxHistorySize"
-								class="input-field" 
-								min="0" 
-								max="200"
-								value="50"
-								placeholder="50"
-							/>
-						</div>
-					</div>
-				</div>
-				
-				<div class="input-group horizontal">
-					<label class="input-label">
-						Auto-Remove After (Days)
-						<div class="tooltip-icon" data-tooltip="Automatically remove history items older than this many days">
-							<svg width="12" height="12" viewBox="0 0 24 24" fill="none">
-								<circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
-								<path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-								<path d="M12 17h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-							</svg>
-						</div>
-					</label>
-					<div class="input-container">
-						<div class="input-constraint-wrapper" data-constraint="1-365">
-							<input 
-								type="number" 
-								data-setting="historyAutoRemoveInterval"
-								class="input-field" 
-								min="1" 
-								max="365"
-								value="30"
-								placeholder="30"
-							/>
-						</div>
-					</div>
-				</div>
-            </div>
-        </section>
-    `;
 }
 
 /**
@@ -363,6 +98,15 @@ function setupEventListeners() {
                 unitToggle.addEventListener('click', (e) => {
                     if (e.target.classList.contains('unit-option')) {
                         handleUnitToggleClick(settingKey, e.target);
+                    }
+                });
+            }
+        } else if (config.type === 'unit') {
+            // For unit type, the element itself is the unit-toggle
+            if (element) {
+                element.addEventListener('click', (e) => {
+                    if (e.target.classList.contains('unit-option')) {
+                        handleUnitClick(settingKey, e.target);
                     }
                 });
             }
@@ -524,6 +268,11 @@ function setupTooltips() {
 export function updateSettingsUI(settings) {
     logger.debug('Updating settings UI:', settings);
     currentSettings = settings;
+    
+    // Apply theme immediately when settings are loaded
+    if (settings.theme) {
+        applyThemeFromSettings(settings.theme);
+    }
 
     // Update all settings inputs using unified approach
     Object.entries(SETTING_CONFIGS).forEach(([settingKey, config]) => {
@@ -569,6 +318,14 @@ export function updateSettingsUI(settings) {
             if (unitToggle) {
                 unitToggle.querySelectorAll('.unit-option').forEach(opt => {
                     const isActive = parseInt(opt.dataset.multiplier, 10) === preferredUnit;
+                    opt.classList.toggle('active', isActive);
+                });
+            }
+        } else if (config.type === 'unit') {
+            // Handle simple unit toggles (like theme) - element is the unit-toggle itself
+            if (element) {
+                element.querySelectorAll('.unit-option').forEach(opt => {
+                    const isActive = opt.dataset.value === settings[settingKey];
                     opt.classList.toggle('active', isActive);
                 });
             }
@@ -678,6 +435,52 @@ function handleUnitToggleClick(settingKey, clickedUnit) {
 function getActiveUnitOption(settingKey) {
     const unitToggle = document.querySelector(`[data-unit-toggle="${settingKey}"]`);
     return unitToggle ? unitToggle.querySelector('.unit-option.active') : null;
+}
+
+/**
+ * Handle unit toggle click for simple unit settings (like theme)
+ */
+function handleUnitClick(settingKey, clickedUnit) {
+    const unitToggle = document.querySelector(`[data-setting="${settingKey}"]`);
+    
+    if (!unitToggle || !currentSettings) return;
+
+    // Don't do anything if clicking the already active unit
+    if (clickedUnit.classList.contains('active')) return;
+
+    // Update active state
+    unitToggle.querySelectorAll('.unit-option').forEach(opt => opt.classList.remove('active'));
+    clickedUnit.classList.add('active');
+
+    // Get the new value and update settings
+    const newValue = clickedUnit.dataset.value;
+    handleSettingChange(settingKey, newValue);
+    
+    // Apply theme immediately if this is the theme setting
+    if (settingKey === 'theme') {
+        applyThemeFromSettings(newValue);
+    }
+}
+
+/**
+ * Apply theme from settings value - direct DOM manipulation
+ */
+function applyThemeFromSettings(themeValue) {
+    if (!themeValue || (themeValue !== 'dark' && themeValue !== 'light')) {
+        logger.warn('Invalid theme value, using dark as fallback:', themeValue);
+        themeValue = 'dark';
+    }
+    
+    // Apply theme to DOM directly - same as other settings
+    if (themeValue === 'dark') {
+        document.body.classList.add('theme-dark');
+        document.body.classList.remove('theme-light');
+    } else {
+        document.body.classList.add('theme-light');
+        document.body.classList.remove('theme-dark');
+    }
+    
+    logger.debug('Applied theme from settings:', themeValue);
 }
 
 /**

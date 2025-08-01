@@ -2,8 +2,7 @@
 // NAVIGATION & INTERACTIVE BUTTONS
 // =====================================================
 
-// Theme toggle and clear cache buttons
-.theme-toggle,
+// Clear cache buttons
 .clear-cache-button {
     display: flex;
     align-items: center;
@@ -13,7 +12,6 @@
     border-radius: 50%;
     padding: 0;
     position: relative;
-    @extend %interactive-base;
     @extend %theme-bg-primary;
 
     .theme-light & {
@@ -129,7 +127,6 @@
     font-size: var(--font-h2);
     font-weight: 500;
     position: relative;
-    transition: all var(--transition-fast);
     text-align: center;
     border-radius: 16px;
     display: flex;

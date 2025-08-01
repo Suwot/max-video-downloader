@@ -14,7 +14,8 @@ const SETTINGS_DEFAULTS = {
   autoGeneratePreviews: true,
   saveDownloadsInHistory: true,
   maxHistorySize: 50,
-  historyAutoRemoveInterval: 30
+  historyAutoRemoveInterval: 30,
+  theme: 'dark' // Default theme
 };
 
 // Simplified validation - just clamp numbers to valid ranges

@@ -5,13 +5,15 @@
 import { initializeUI } from './ui.js';
 import { createLogger } from '../shared/utils/logger.js';
 import { normalizeUrl } from '../shared/utils/processing-utils.js';
-import { setTabId, getGroupState, setGroupState } from './state.js';
 import { connect, disconnect, sendPortMessage } from './communication.js';
 import { restoreActiveDownloads, cleanupAllElapsedTimeTimers } from './video/download-progress-handler.js';
 import { renderHistoryItems } from './video/video-renderer.js';
 import { initializeSettingsTab } from './settings-tab.js';
 
 const logger = createLogger('Popup');
+
+// Simple local tab ID - no need for separate state management
+let currentTabId = null;
 
 /**
  * Get current active tab
@@ -31,7 +33,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         // Get active tab and set tab ID first
         const activeTab = await getActiveTab();
-        setTabId(activeTab.id);
+        currentTabId = activeTab.id;
         logger.debug('Active tab ID set:', activeTab.id);
 
         // Initialize UI (theme will be handled there)
@@ -89,7 +91,5 @@ window.addEventListener('beforeunload', () => {
 
 // Export functions for use by other modules
 export {
-    getGroupState,
-    setGroupState,
     getActiveTab,
 };

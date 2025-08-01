@@ -1,4 +1,3 @@
-import { getVideos, getTabId } from '../state.js';
 import { sendPortMessage } from '../communication.js';
 import { createLogger } from '../../shared/utils/logger.js';
 import { formatSize, formatDuration, formatBitrate } from '../../shared/utils/processing-utils.js';
@@ -7,10 +6,10 @@ import { VideoItemComponent } from './video-item-component.js';
 const logger = createLogger('Video Renderer');
 
 /**
- * Render current videos from state using static group structure
+ * Render videos using static group structure
+ * @param {Array} videos - Videos array to render
  */
-export async function renderVideos() {
-    const videos = getVideos();
+export async function renderVideos(videos = []) {
     const container = document.getElementById('videos-list');
     
     if (!videos || videos.length === 0) {

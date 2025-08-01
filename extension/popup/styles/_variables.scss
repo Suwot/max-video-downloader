@@ -77,7 +77,6 @@
 %interactive-base {
     cursor: pointer;
     user-select: none;
-    transition: all var(--transition-normal);
     
     &:disabled {
         opacity: 0.6;

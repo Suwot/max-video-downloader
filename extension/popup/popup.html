@@ -6,7 +6,7 @@
     <title>MAX Video Downloader</title>
     <link rel="stylesheet" href="popup.css">
 </head>
-<body>
+<body class="theme-dark">
     <header>
         <section class="heading-row">
             <div class="left-buttons-container"></div>
@@ -100,17 +100,290 @@
             </div>
             
             <div class="tab-content" data-tab-id="settings-tab">
-                <div class="tab-placeholder">
-                    <div class="placeholder-icon">
-                        <svg viewBox="0 0 24 24" width="48" height="48">
-                            <path d="M19.14,12.94c0.04-0.3,0.06-0.61,0.06-0.94c0-0.32-0.02-0.64-0.07-0.94l2.03-1.58c0.18-0.14,0.23-0.41,0.12-0.61 l-1.92-3.32c-0.12-0.22-0.37-0.29-0.59-0.22l-2.39,0.96c-0.5-0.38-1.03-0.7-1.62-0.94L14.4,2.81c-0.04-0.24-0.24-0.41-0.48-0.41 h-3.84c-0.24,0-0.43,0.17-0.47,0.41L9.25,5.35C8.66,5.59,8.12,5.92,7.63,6.29L5.24,5.33c-0.22-0.08-0.47,0-0.59,0.22L2.74,8.87 C2.62,9.08,2.66,9.34,2.86,9.48l2.03,1.58C4.84,11.36,4.8,11.69,4.8,12s0.02,0.64,0.07,0.94l-2.03,1.58 c-0.18,0.14-0.23,0.41-0.12,0.61l1.92,3.32c0.12,0.22,0.37,0.29,0.59,0.22l2.39-0.96c0.5,0.38,1.03,0.7,1.62,0.94l0.36,2.54 c0.05,0.24,0.24,0.41,0.48,0.41h3.84c0.24,0,0.44-0.17,0.47-0.41l0.36-2.54c0.59-0.24,1.13-0.56,1.62-0.94l2.39,0.96 c0.22,0.08,0.47,0,0.59-0.22l1.92-3.32c0.12-0.22,0.07-0.47-0.12-0.61L19.14,12.94z M12,15.6c-1.98,0-3.6-1.62-3.6-3.6 s1.62-3.6,3.6-3.6s3.6,1.62,3.6,3.6S13.98,15.6,12,15.6z"/>
-                        </svg>
-                    </div>
-                    <h3>Settings</h3>
-                    <p>Configure your download preferences</p>
-                </div>
+				<section class="settings-container">
+					<!-- Native Host Connection Section -->
+					<div class="settings-section">
+						<div class="status-info">
+							<div class="status-line">
+								<span class="status-label">Status:</span>
+								<div class="status-value">
+									<div class="status-dot disconnected" id="connection-status-dot"></div>
+									<span id="connection-status-text">Checking...</span>
+									<span id="connection-version"></span>
+									<button type="button" class="reconnect-icon hidden" id="reconnect-icon" title="Reconnect">
+										<svg width="10" height="10" viewBox="0 0 24 24" fill="none">
+											<path d="M1 4v6h6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+											<path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+										</svg>
+									</button>
+								</div>
+							</div>
+							<div class="status-line" id="connection-location-line" style="display: none;">
+								<span class="status-label">Location:</span>
+								<span class="status-value" id="connection-location"></span>
+							</div>
+							<div class="status-line" id="connection-ffmpeg-line" style="display: none;">
+								<span class="status-label">FFmpeg:</span>
+								<span class="status-value" id="connection-ffmpeg"></span>
+							</div>
+						</div>
+						<div class="status-actions hidden" id="status-actions">
+							<button type="button" class="action-button primary" id="reconnect-button" disabled>
+								<svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+									<path d="M1 4v6h6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+									<path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+								</svg>
+								Reconnect
+							</button>
+							<button type="button" class="action-button" id="download-button">
+								<svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+									<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+									<polyline points="7,10 12,15 17,10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+									<line x1="12" y1="15" x2="12" y2="3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+								</svg>
+								Download
+							</button>
+							<button type="button" class="action-button" id="help-button">
+								<svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+									<circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
+									<path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+									<path d="M12 17h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+								</svg>
+								Help
+							</button>
+						</div>
+					</div>
+					
+					<!-- Appearance Settings Section -->
+                    <div class="settings-section">
+                        <div class="input-group horizontal">
+                            <label class="input-label">
+                                Theme
+                                <div class="tooltip-icon" data-tooltip="Choose your preferred theme">
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+                                        <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
+                                        <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                        <path d="M12 17h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                    </svg>
+                                </div>
+                            </label>
+                            <div class="input-container">
+                                <div class="unit-toggle" data-setting="theme" data-unit-toggle="theme">
+                                    <div class="unit-option active" data-value="dark">Dark</div>
+                                    <div class="unit-option" data-value="light">Light</div>
+                                </div>
+                            </div>
+                        </div>
+					</div>
+					
+					<!-- Downloads Settings Section -->
+					<div class="settings-section">
+						<div class="input-group horizontal">
+							<label class="input-label">
+								Concurrent Downloads
+								<div class="tooltip-icon" data-tooltip="Maximum number of simultaneous downloads">
+									<svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+										<circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
+										<path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+										<path d="M12 17h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+									</svg>
+								</div>
+							</label>
+							<div class="input-container">
+								<div class="input-constraint-wrapper" data-constraint="1-10">
+									<input 
+										type="number" 
+										data-setting="maxConcurrentDownloads"
+										class="input-field" 
+										min="1" 
+										max="10" 
+										value="1"
+										placeholder="1"
+									/>
+								</div>
+							</div>
+						</div>
+						
+						<div class="input-group horizontal path-input-group">
+							<label class="input-label">
+								Default Save Path
+								<div class="tooltip-icon" data-tooltip="Default folder for saving downloaded videos">
+									<svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+										<circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
+										<path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+										<path d="M12 17h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+									</svg>
+								</div>
+							</label>
+							<div class="input-container">
+								<div class="input-constraint-wrapper" data-constraint="Do not choose root folders!">
+									<input 
+										type="text" 
+										data-setting="defaultSavePath"
+										class="input-field path-input clickable" 
+										readonly
+										placeholder="Click to choose folder"
+									/>
+								</div>
+							</div>
+						</div>
+						
+						<div class="input-group horizontal">
+							<label class="input-label">
+								Show Download Notifications
+								<div class="tooltip-icon" data-tooltip="Show system notifications when downloads start and complete">
+									<svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+										<circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
+										<path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+										<path d="M12 17h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+									</svg>
+								</div>
+							</label>
+							<label class="toggle-switch">
+								<input 
+									type="checkbox" 
+									data-setting="showDownloadNotifications"
+									checked
+								/>
+								<span class="toggle-slider"></span>
+							</label>
+						</div>
+					</div>
+
+					<!-- Detection Settings Section -->
+					<div class="settings-section">
+						<div class="input-group horizontal">
+							<label class="input-label">
+								Min. File Size
+								<div class="tooltip-icon" data-tooltip="Skip video files smaller than this size">
+									<svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+										<circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
+										<path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+										<path d="M12 17h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+									</svg>
+								</div>
+							</label>
+							<div class="input-container">
+								<div class="unit-input-group">
+									<div class="unit-toggle" data-unit-toggle="minFileSizeFilter">
+										<button type="button" class="unit-option active" data-multiplier="1024">KB</button>
+										<button type="button" class="unit-option" data-multiplier="1048576">MB</button>
+									</div>
+									<div class="input-constraint-wrapper" data-constraint="Max: 100 MB">
+										<input 
+											type="number" 
+											data-setting="minFileSizeFilter"
+											class="input-field unit-number-input" 
+											min="0" 
+											max="102400"
+											step="0.01"
+											value="100"
+											placeholder="100"
+										/>
+									</div>
+								</div>
+							</div>
+						</div>
+						
+						<div class="input-group horizontal">
+							<label class="input-label">
+								Auto-Generate Previews
+								<div class="tooltip-icon" data-tooltip="Automatically generate video thumbnails for detected videos">
+									<svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+										<circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
+										<path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+										<path d="M12 17h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+									</svg>
+								</div>
+							</label>
+							<label class="toggle-switch">
+								<input 
+									type="checkbox" 
+									data-setting="autoGeneratePreviews"
+									checked
+								/>
+								<span class="toggle-slider"></span>
+							</label>
+						</div>
+					</div>
+
+					<!-- History Settings Section -->		
+					<div class="settings-section">
+						<div class="input-group horizontal">
+							<label class="input-label">
+								Save Downloads in History
+								<div class="tooltip-icon" data-tooltip="Save completed downloads to history for tracking">
+									<svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+										<circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
+										<path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+										<path d="M12 17h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+									</svg>
+								</div>
+							</label>
+							<label class="toggle-switch">
+								<input 
+									type="checkbox" 
+									data-setting="saveDownloadsInHistory"
+									checked
+								/>
+								<span class="toggle-slider"></span>
+							</label>
+						</div>
+						
+						<div class="input-group horizontal">
+							<label class="input-label">
+								Max. History Items
+								<div class="tooltip-icon" data-tooltip="Maximum number of download history items to keep">
+									<svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+										<circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
+										<path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+										<path d="M12 17h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+									</svg>
+								</div>
+							</label>
+							<div class="input-container">
+								<div class="input-constraint-wrapper" data-constraint="0-200">
+									<input 
+										type="number" 
+										data-setting="maxHistorySize"
+										class="input-field" 
+										min="0" 
+										max="200"
+										value="50"
+										placeholder="50"
+									/>
+								</div>
+							</div>
+						</div>
+						
+						<div class="input-group horizontal">
+							<label class="input-label">
+								Auto-Remove After (Days)
+								<div class="tooltip-icon" data-tooltip="Automatically remove history items older than this many days">
+									<svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+										<circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
+										<path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+										<path d="M12 17h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+									</svg>
+								</div>
+							</label>
+							<div class="input-container">
+								<div class="input-constraint-wrapper" data-constraint="1-365">
+									<input 
+										type="number" 
+										data-setting="historyAutoRemoveInterval"
+										class="input-field" 
+										min="1" 
+										max="365"
+										value="30"
+										placeholder="30"
+									/>
+								</div>
+							</div>
+						</div>
+					</div>
+				</section>
             </div>
-            
         </section>
     </main>
     <div id="preview-hover" class="preview-hover">

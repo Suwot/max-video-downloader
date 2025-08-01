@@ -7,7 +7,6 @@
 import { createLogger } from '../shared/utils/logger.js';
 import { updateDownloadProgress } from './video/download-progress-handler.js';
 import { renderVideos, addVideoToUI, updateVideoInUI, removeVideoFromUI, renderHistoryItems, updateHistoryItemDeleted } from './video/video-renderer.js';
-import { setVideos, updateVideo, clearVideos } from './state.js';
 import { updateUICounters, showToast, showSuccess, showError } from './ui-utils.js';
 import { updateSettingsUI, updateNativeHostStatus } from './settings-tab.js';
 
@@ -19,6 +18,8 @@ let isConnected = false;
 
 // Store download counts for tab counter
 let downloadCounts = { active: 0, queued: 0, total: 0 };
+
+// No need for currentVideos abstraction - pass data directly to render functions
 
 /**
  * Connect to background script
@@ -69,8 +70,7 @@ async function handleIncomingMessage(message) {
             break;
 
         case 'cachesCleared':
-            clearVideos();
-            await renderVideos();
+            await renderVideos([]); // Pass empty array directly
             updateUICounters({ videos: { hls: 0, dash: 0, direct: 0, unknown: 0, total: 0 } });
             break;
 
@@ -150,18 +150,14 @@ async function handleVideoStateUpdate(message) {
         switch (message.action) {
             case 'add':
                 if (message.video) {
-                    // Update state first
-                    updateVideo(message.videoUrl, message.video);
-                    // Add to UI
+                    // Add to UI directly - no need for local state
                     await addVideoToUI(message.video);
                 }
                 break;
                 
             case 'update':
                 if (message.video) {
-                    // Update state first
-                    updateVideo(message.videoUrl, message.video);
-                    // Update in UI with updateType
+                    // Update in UI directly - no need for local state
                     await updateVideoInUI(message.videoUrl, message.video, message.updateType);
                 }
                 break;
@@ -176,8 +172,7 @@ async function handleVideoStateUpdate(message) {
                 
             case 'full-refresh':
                 if (message.videos) {
-                    setVideos(message.videos);
-                    await renderVideos();
+                    await renderVideos(message.videos || []);
                 }
                 break;
                 
@@ -188,8 +183,7 @@ async function handleVideoStateUpdate(message) {
         logger.error('Error handling video state update:', error);
         // Fallback to full refresh on error
         if (message.videos) {
-            setVideos(message.videos);
-            await renderVideos();
+            await renderVideos(message.videos || []);
         }
     }
 }

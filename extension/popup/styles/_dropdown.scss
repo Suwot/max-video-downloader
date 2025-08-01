@@ -334,21 +334,3 @@
     text-overflow: ellipsis;
     white-space: nowrap;
 }
-
-.apply-button {
-    display: block;
-    width: calc(100% - 16px);
-    margin: 0 8px 8px;
-    padding: 6px;
-    background: var(--color-blue);
-    color: white;
-    border: none;
-    border-radius: 6px;
-    font-size: var(--font-h2);
-    cursor: pointer;
-    transition: background-color var(--transition-normal);
-
-    &:hover {
-        background: var(--color-blue-hover);
-    }
-}
