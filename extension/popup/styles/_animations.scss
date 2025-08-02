@@ -36,8 +36,8 @@
     }
 }
 
-// Show loader when preview container has loading class
-.preview-container.loading .loader {
+// Show loader when video item has generating-preview class
+.video-item.generating-preview .preview-container .loader {
     display: flex;
 }
 
@@ -73,8 +73,8 @@
     }
 }
 
-// Show retry button when container is not loading and has no preview
-.preview-container:not(.loading):not(.has-preview) .retry-preview-btn {
+// Show retry button when video item is not generating preview and container has no preview
+.video-item:not(.generating-preview) .preview-container:not(.has-preview) .retry-preview-btn {
     display: flex;
 }
 

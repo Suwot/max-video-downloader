@@ -11,7 +11,7 @@ import {
   cleanupVideosForTab,
   getVideosForDisplay,
 } from "../processing/video-store.js";
-import { cleanupProcessingQueueForTab } from "../processing/video-processor.js";
+
 
 // Create a logger instance for the Tab Tracker module
 const logger = createLogger("Tab Tracker");
@@ -109,7 +109,6 @@ function initTabTracking() {
 
       // Cleanup all tab-related data
       cleanupVideosForTab(tabId, false);
-      cleanupProcessingQueueForTab(tabId);
       cleanupMPDContextForTab(tabId);
 
       // Clean up domain tracking

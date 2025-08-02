@@ -144,15 +144,12 @@ async function handleIncomingMessage(message) {
  * Handle action-based video state updates
  */
 async function handleVideoStateUpdate(message) {
-    logger.debug(`Delegated '${message.action}' action for video: ${message.videoUrl}`);
-    logger.debug('Full message:', message);
+    logger.debug(`Handling '${message.action}' action for video: ${message.videoUrl} (${message.updateType || 'structural'})`);
 
     try {
         switch (message.action) {
             case 'add':
                 if (message.video) {
-                    logger.debug('Adding video to UI:', message.video);
-                    // Add to UI directly - no need for local state
                     await addVideoToUI(message.video);
                 } else {
                     logger.warn('Add message missing video data:', message);
@@ -161,9 +158,7 @@ async function handleVideoStateUpdate(message) {
                 
             case 'update':
                 if (message.video) {
-                    logger.debug('Updating video in UI:', message.video);
-                    // Always structural updates - flags are handled via CSS classes
-                    await updateVideoInUI(message.videoUrl, message.video);
+                    await updateVideoInUI(message.videoUrl, message.video, message.updateType);
                 } else {
                     logger.warn('Update message missing video data:', message);
                 }
@@ -171,7 +166,6 @@ async function handleVideoStateUpdate(message) {
                 
             case 'remove':
                 if (message.videoUrl) {
-                    // Remove from UI only
                     await removeVideoFromUI(message.videoUrl);
                 }
                 break;

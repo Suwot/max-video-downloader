@@ -3,26 +3,22 @@
  * Manages the flow of videos from detection through processing to UI display
  */
 
-import { normalizeUrl } from '../../shared/utils/processing-utils.js';
+import { normalizeUrl, standardizeResolution, getFilenameFromUrl, calculateValidForDisplay } from '../../shared/utils/processing-utils.js';
 import { createLogger } from '../../shared/utils/logger.js';
-import { standardizeResolution, getFilenameFromUrl } from '../../shared/utils/processing-utils.js';
 import { detectAllContainers } from './container-detector.js';
 
 import { getPreview, storePreview } from '../../shared/utils/preview-cache.js';
 import { parseHlsManifest, extractHlsMediaUrls } from './hls-parser.js';
 import { parseDashManifest } from './dash-parser.js';
 import nativeHostService from '../messaging/native-host-service.js';
-import { getVideo, updateVideo } from './video-store.js';
+import { getVideo, storeAndNotifyUI } from './video-store.js';
 import { settingsManager } from '../index.js';
 
 // Create a logger instance for the Video Processing Pipeline module
 const logger = createLogger('Video Processor');
 
 // Module-level state for video processing
-const processingQueue = [];
-const processingMap = new Map();
-const MAX_CONCURRENT = 8; // Reduced since NHS handles connection management
-
+const processingMap = new Map(); // Track active processing to prevent duplicates
 
 /**
  * Add detected video to the central tracking map and enqueue for processing
@@ -32,7 +28,7 @@ const MAX_CONCURRENT = 8; // Reduced since NHS handles connection management
  * @returns {boolean|string} - True if this is a new video, 'updated' if an existing video was updated, false otherwise
  */
 function addDetectedVideo(tabId, videoInfo) {
-    logger.debug(`Received video for Tab ${tabId}, with this info:`, videoInfo);
+    logger.info(`[DETECT] Tab ${tabId}: ${videoInfo.url} (${videoInfo.type})`);
     // Normalize URL for deduplication
     const normalizedUrl = normalizeUrl(videoInfo.url);
 
@@ -59,13 +55,13 @@ function addDetectedVideo(tabId, videoInfo) {
                     hasKnownMaster: true,
                     masterUrl: tabVariantMap.get(normalizedUrl),
                     normalizedUrl,
-                    isBeingProcessed: false,
+                    tabId,
                     title: videoInfo.metadata?.filename || getFilenameFromUrl(videoInfo.url),
-                    isValid: true // it's a known media item, so we consider it valid
+                    isValid: true, // it's a known media item, so we consider it valid
+                    validForDisplay: false // Known media items are not displayed
                 };
-                // validForDisplay will be set by updateVideo
-                updateVideo('addDetectedVideo-knownMediaItem', tabId, normalizedUrl, newVideo, true, false);
-                // Note: No UI update for known media items as they're filtered out from display
+                // Store directly without UI update (known media items are filtered out)
+                tabMap.set(normalizedUrl, newVideo);
             }
             // Do not enqueue for processing or update UI
             return;
@@ -116,17 +112,12 @@ function addDetectedVideo(tabId, videoInfo) {
         return;
     }
     
-    // Determine initial processing state based on queue capacity
-    const willProcessImmediately = processingMap.size < MAX_CONCURRENT;
-    
-    // Add to tab's collection with basic info and initial processing state
+    // Add to tab's collection with basic info and processing flags (processing starts immediately)
     const newVideo = {
         ...videoInfo,
         normalizedUrl,
-        isBeingProcessed: willProcessImmediately,
-        // Set parsing flags based on type and immediate processing
-        ...(willProcessImmediately && (videoInfo.type === 'hls' || videoInfo.type === 'dash') ? { parsing: true } : {}),
-        ...(willProcessImmediately && videoInfo.type === 'direct' ? { runningFFprobe: true } : {}),
+        // Set processing flags - processing starts immediately on detection
+        processing: true,
         title: videoInfo.metadata?.filename || getFilenameFromUrl(videoInfo.url),
         // Set isValid: true optimistically for all video types
         isValid: true,
@@ -149,13 +140,12 @@ function addDetectedVideo(tabId, videoInfo) {
             subtitleTracks: []
         } : {})
     };
-    
-    // validForDisplay will be set by updateVideo
-    updateVideo('addDetectedVideo', tabId, normalizedUrl, newVideo, true);
-    logger.debug(`Added new video to detection map: ${videoInfo.url} (type: ${videoInfo.type}, source: ${sourceOfVideo}, immediate processing: ${willProcessImmediately})`);
+    // Store and send to UI (structural update with processing flag)
+    storeAndNotifyUI(newVideo, 'structural', 'add');
+    logger.info(`[DETECT] Added: ${videoInfo.url} (${videoInfo.type})`);
 
-    // Enqueue for processing
-    enqueue(tabId, normalizedUrl, newVideo.type);
+    // Start processing immediately
+    processVideo(tabId, normalizedUrl, newVideo.type, newVideo);
     
     return true;
 }
@@ -166,40 +156,23 @@ function addDetectedVideo(tabId, videoInfo) {
  * @param {string} normalizedUrl - Normalized video URL
  * @param {string} videoType - Type of video (hls, dash, direct)
  */
-function enqueue(tabId, normalizedUrl, videoType) {
-    // Skip if dismissed
-    const video = getVideo(tabId, normalizedUrl);
-    if (video?.timestampDismissed) {
-        logger.debug(`Not enqueueing dismissed video: ${normalizedUrl}`);
-        return;
-    }
-    // Don't add duplicates to the queue
-    if (processingQueue.some(item => item.normalizedUrl === normalizedUrl) || 
-        processingMap.has(normalizedUrl)) {
-        logger.debug(`Skipping duplicate: ${normalizedUrl} (in queue or processing)`);
-        return;
-    }
-    
-    processingQueue.push({ tabId, normalizedUrl, videoType });
-    processNext();
-    
-    logger.debug(`Video queued for processing: ${normalizedUrl} (${videoType})`);
-}
-    
 /**
- * Process next video in queue
+ * Process video immediately (no queue)
+ * @param {number} tabId - Tab ID
+ * @param {string} normalizedUrl - Normalized video URL
+ * @param {string} videoType - Type of video (hls, dash, direct)
+ * @param {Object} videoData - Video data object
  */
-async function processNext() {
-    // Skip if nothing to process or already at capacity
-    if (processingQueue.length === 0 || processingMap.size >= MAX_CONCURRENT) {
+async function processVideo(tabId, normalizedUrl, videoType, videoData) {
+    // Skip if already being processed
+    if (processingMap.has(normalizedUrl)) {
+        logger.debug(`Skipping duplicate processing: ${normalizedUrl}`);
         return;
     }
     
-    const { tabId, normalizedUrl, videoType } = processingQueue.shift();
-    
-    // Skip if already processed or being processed
-    if (processingMap.has(normalizedUrl)) {
-        processNext(); // Try processing next item
+    // Skip if dismissed
+    if (videoData?.timestampDismissed) {
+        logger.debug(`Not processing dismissed video: ${normalizedUrl}`);
         return;
     }
     
@@ -207,67 +180,57 @@ async function processNext() {
     processingMap.set(normalizedUrl, Date.now());
     
     try {
-        // Only update processing status if video was queued (not immediately processed)
-        const video = getVideo(tabId, normalizedUrl);
-        if (video && !video.isBeingProcessed) {
-            const processingFlags = {
-                isBeingProcessed: true,
-                ...(videoType === 'hls' || videoType === 'dash' ? { parsing: true } : {}),
-                ...(videoType === 'direct' ? { runningFFprobe: true } : {})
-            };
-            updateVideo(`processNext-dequeued`, tabId, normalizedUrl, processingFlags);
-        }
-
         // Route to appropriate processor based on type
         if (videoType === 'hls') {
-            await processHlsVideo(tabId, normalizedUrl);
+            await processHlsVideo(tabId, normalizedUrl, videoData);
         } else if (videoType === 'dash') {
-            await processDashVideo(tabId, normalizedUrl);
+            await processDashVideo(tabId, normalizedUrl, videoData);
         } else {
-            await processDirectVideo(tabId, normalizedUrl);
+            await processDirectVideo(tabId, normalizedUrl, videoData);
         }
 
     } catch (error) {
         logger.error(`Error processing ${normalizedUrl}:`, error);
-        // Update video with error status and clear all processing flags
-        updateVideo(`processNext-error`, tabId, normalizedUrl, { 
-            isBeingProcessed: false, 
-            parsing: false,
-            runningFFprobe: false,
-            error: error.message 
-        });
+        // Send flags-only update to clear processing flags and show error
+        const flagData = {
+            ...videoData,
+            processing: false,
+            processingError: error.message 
+        };
+        storeAndNotifyUI(flagData, 'flags');
     } finally {
         processingMap.delete(normalizedUrl);
-        // Process next item in queue
-        processNext();
     }
 }
+    
+/**
+ * Process next video in queue
+ */
+
     
 /**
  * Process an HLS video
  * @param {number} tabId - Tab ID
  * @param {string} normalizedUrl - Normalized video URL
  */
-async function processHlsVideo(tabId, normalizedUrl) {
+async function processHlsVideo(tabId, normalizedUrl, videoData) {
     logger.debug(`Processing HLS video: ${normalizedUrl}`);
     
-    const video = getVideo(tabId, normalizedUrl);
-    if (!video) return;
-    
     // Get headers for the request
-    const headers = video.headers || {};
+    const headers = videoData.headers || {};
     
     // Run combined validation and parsing
-    const hlsResult = await parseHlsManifest(video.url);
+    const hlsResult = await parseHlsManifest(videoData.url);
     
     if (hlsResult.status === 'success') {
-        // HLS parser now outputs standardized structure with videoTracks[]
-        const hlsUpdates = {
+        // Merge HLS results with original video data
+        const mergedData = {
+            ...videoData,
             ...hlsResult,
-            isBeingProcessed: false,
-            parsing: false
+            processing: false,
+            validForDisplay: calculateValidForDisplay({ ...videoData, ...hlsResult })
         };
-        updateVideo('processHlsVideo', tabId, normalizedUrl, hlsUpdates);
+        storeAndNotifyUI(mergedData, 'structural', 'update');
 
         // Track variant-master relationships if this is a master playlist
         if (hlsResult.isMaster && hlsResult.videoTracks?.length > 0) {
@@ -279,22 +242,21 @@ async function processHlsVideo(tabId, normalizedUrl) {
                 normalizedUrl
             );
 
-            // Generate preview for the master using the first video track as source (if enabled)
-            if (settingsManager.get('autoGeneratePreviews')) {
+            // Generate preview for the master using the first video track as source (if enabled and has video codecs)
+            if (settingsManager.get('autoGeneratePreviews') && hlsResult.videoTracks?.length > 0) {
                 const firstVideoTrack = hlsResult.videoTracks[0];
                 await generateVideoPreview(tabId, normalizedUrl, headers, firstVideoTrack.url);
             }
         }
     } else {
-        // Update with error information and clear processing flags
-        updateVideo('processHlsVideo-error', tabId, normalizedUrl, {
-            isValid: false,
-            isBeingProcessed: false,
-            parsing: false,
-            timestampValidated: hlsResult.timestampValidated || Date.now(),
-            parsingStatus: hlsResult.status,
-            parsingError: hlsResult.error || 'Not a valid HLS manifest'
-        });
+        // Parsing failed - remove from UI as it's not a valid HLS manifest
+        const failedData = {
+            ...videoData,
+            processing: false,
+            processingError: hlsResult.error || 'Not a valid HLS manifest',
+            validForDisplay: false
+        };
+        storeAndNotifyUI(failedData, 'structural', 'remove');
     }
 }
     
@@ -303,17 +265,14 @@ async function processHlsVideo(tabId, normalizedUrl) {
  * @param {number} tabId - Tab ID
  * @param {string} normalizedUrl - Normalized video URL
  */
-async function processDashVideo(tabId, normalizedUrl) {
+async function processDashVideo(tabId, normalizedUrl, videoData) {
     logger.debug(`Processing DASH video: ${normalizedUrl}`);
     
-    const video = getVideo(tabId, normalizedUrl);
-    if (!video) return;
-    
     // Get headers for the request
-    const headers = video.headers || {};
+    const headers = videoData.headers || {};
     
     // Run combined validation and parsing
-    const dashResult = await parseDashManifest(video.url);
+    const dashResult = await parseDashManifest(videoData.url);
     
     if (dashResult.status === 'success') {
         // DASH already has standardized structure with videoTracks[]
@@ -329,26 +288,30 @@ async function processDashVideo(tabId, normalizedUrl) {
             encryptionType: dashResult.encryptionType,
             timestampValidated: dashResult.timestampValidated,
             timestampParsed: dashResult.timestampParsed,
-            isBeingProcessed: false,
-            parsing: false
+            processing: false
         };
         
-        updateVideo('processDashVideo', tabId, normalizedUrl, dashUpdates);
+        // Merge DASH results with original video data
+        const mergedData = {
+            ...videoData,
+            ...dashUpdates,
+            validForDisplay: calculateValidForDisplay({ ...videoData, ...dashUpdates })
+        };
+        storeAndNotifyUI(mergedData, 'structural', 'update');
         
-        // Generate preview for the manifest (if enabled)
-        if (settingsManager.get('autoGeneratePreviews')) {
+        // Generate preview for the manifest (if enabled and has video codecs)
+        if (settingsManager.get('autoGeneratePreviews') && dashResult.videoTracks?.length > 0) {
             await generateVideoPreview(tabId, normalizedUrl, headers);
         }
     } else {
-        // Update with error information and clear processing flags
-        updateVideo('processDashVideo-error', tabId, normalizedUrl, {
-            isValid: false,
-            isBeingProcessed: false,
-            parsing: false,
-            timestampValidated: dashResult.timestampValidated || Date.now(),
-            parsingStatus: dashResult.status,
-            parsingError: dashResult.error || 'Not a valid DASH manifest'
-        });
+        // Parsing failed - remove from UI as we couldn't verify it's a valid DASH manifest
+        const failedData = {
+            ...videoData,
+            processing: false,
+            processingError: dashResult.error || 'Not a valid DASH manifest',
+            validForDisplay: false
+        };
+        storeAndNotifyUI(failedData, 'structural', 'remove');
     }
 }
     
@@ -357,37 +320,29 @@ async function processDashVideo(tabId, normalizedUrl) {
  * @param {number} tabId - Tab ID
  * @param {string} normalizedUrl - Normalized video URL
  */
-async function processDirectVideo(tabId, normalizedUrl) {
+async function processDirectVideo(tabId, normalizedUrl, videoData) {
     logger.debug(`Processing direct video: ${normalizedUrl}`);
     
-    const video = getVideo(tabId, normalizedUrl);
-    if (!video) return;
-    
     // Get headers for the request
-    const headers = video.headers || {};
+    const headers = videoData.headers || {};
 
-    const isAudio = video.mediaType === 'audio';
+    const isAudio = videoData.mediaType === 'audio';
 
     if (isAudio) {
         logger.debug(`Skipping processing for 'audio' mediaType: ${normalizedUrl}`);
-        // Clear processing flags for audio files
-        updateVideo('processDirectVideo-audio', tabId, normalizedUrl, {
-            isBeingProcessed: false,
-            runningFFprobe: false
-        });
+        // Send flags-only update to clear processing flags for audio files
+        const flagData = {
+            ...videoData,
+            processing: false
+        };
+        storeAndNotifyUI(flagData, 'flags');
     } else {
         logger.debug(`Processing as video content: ${normalizedUrl}`);
         
         // Get metadata (FFprobe will override containers if successful)
-        await getFFprobeMetadata(tabId, normalizedUrl, headers);
+        await getFFprobeMetadata(tabId, normalizedUrl, headers, videoData);
         
-        // Get updated video with metadata for preview generation (if enabled)
-        if (settingsManager.get('autoGeneratePreviews')) {
-            const updatedVideo = getVideo(tabId, normalizedUrl);
-            if (updatedVideo.metaFFprobe?.hasVideo) {
-                await generateVideoPreview(tabId, normalizedUrl, headers);
-            }
-        }
+        // Preview generation will be handled by getFFprobeMetadata on success
     }
 }
 
@@ -423,17 +378,29 @@ function handleVariantMasterRelationships(tabId, videoTracks, audioTracks, subti
             logger.debug(`Tracked ${itemType} ${item.normalizedUrl} as belonging to master ${masterUrl}`);
             // If this item exists as standalone, update it
             if (tabVideos.has(item.normalizedUrl)) {
-                const updatedVideo = updateVideo('handleVariantMasterRelationships', tabId, item.normalizedUrl, {
+                const existingVideo = tabVideos.get(item.normalizedUrl);
+                const wasValidForDisplay = existingVideo.validForDisplay;
+                
+                const updatedVideo = {
+                    ...existingVideo,
                     hasKnownMaster: true,
                     masterUrl: masterUrl,
                     isVariant: itemType === 'videoTrack', // Only video tracks are marked as isVariant
                     isAudioTrack: itemType === 'audio',
-                    isSubtitleTrack: itemType === 'subtitle'
-                });
-                if (updatedVideo) {
-                    logger.debug(`Updated existing standalone ${itemType} ${item.normalizedUrl} with master info`);
-                    updatedVideos.push({ url: item.normalizedUrl, updatedVideo, type: itemType });
+                    isSubtitleTrack: itemType === 'subtitle',
+                    validForDisplay: false // Variants should not be displayed individually
+                };
+                
+                // Determine action based on validForDisplay state change
+                let action = 'update';
+                if (wasValidForDisplay && !updatedVideo.validForDisplay) {
+                    action = 'remove'; // Remove from UI since it's now a known variant
                 }
+                
+                // Store and notify UI with appropriate action
+                storeAndNotifyUI(updatedVideo, 'structural', action);
+                logger.debug(`Updated existing standalone ${itemType} ${item.normalizedUrl} with master info (action: ${action})`);
+                updatedVideos.push({ url: item.normalizedUrl, updatedVideo, type: itemType });
             }
         }
     };
@@ -473,12 +440,14 @@ async function generateVideoPreview(tabId, normalizedUrl, headers, sourceUrl = n
         const cachedPreview = await getPreview(normalizedUrl);
         if (cachedPreview) {
             logger.debug(`Using cached preview for: ${normalizedUrl}`);
-            updateVideo('generateVideoPreview-cache', tabId, normalizedUrl, { previewUrl: cachedPreview });
+            const mergedData = { ...video, previewUrl: cachedPreview };
+            storeAndNotifyUI(mergedData, 'structural');
             return;
         }
         
         // Set generating flag before starting
-        updateVideo('generateVideoPreview-start', tabId, normalizedUrl, { generatingPreview: true });
+        const flagData = { ...video, generatingPreview: true };
+        storeAndNotifyUI(flagData, 'flags');
         
         // Determine source URL for preview generation
         const urlToUse = sourceUrl || video.url;
@@ -498,18 +467,26 @@ async function generateVideoPreview(tabId, normalizedUrl, headers, sourceUrl = n
             // Cache the generated preview
             await storePreview(normalizedUrl, response.previewUrl);
             
-            updateVideo('generateVideoPreview-success', tabId, normalizedUrl, {
+            // Get current video data and merge preview results
+            const currentVideo = getVideo(tabId, normalizedUrl);
+            const mergedData = {
+                ...currentVideo,
                 generatingPreview: false,
                 previewUrl: response.previewUrl,
                 previewSourceUrl: sourceUrl || null // Track where preview came from
-            });
+            };
+            storeAndNotifyUI(mergedData, 'structural');
         } else {
             logger.debug(`No preview URL in response for: ${normalizedUrl}`);
-            updateVideo('generateVideoPreview-no-response', tabId, normalizedUrl, { generatingPreview: false });
+            const currentVideo = getVideo(tabId, normalizedUrl);
+            const flagData = { ...currentVideo, generatingPreview: false };
+            storeAndNotifyUI(flagData, 'flags');
         }
     } catch (error) {
         logger.error(`Error generating preview for ${normalizedUrl}: ${error.message}`);
-        updateVideo('generateVideoPreview-error', tabId, normalizedUrl, { generatingPreview: false });
+        const currentVideo = getVideo(tabId, normalizedUrl);
+        const flagData = { ...currentVideo, generatingPreview: false };
+        storeAndNotifyUI(flagData, 'flags');
     }
 }
 
@@ -519,21 +496,15 @@ async function generateVideoPreview(tabId, normalizedUrl, headers, sourceUrl = n
  * @param {string} normalizedUrl - Normalized video URL
  * @param {Object} headers - Request headers
  */
-async function getFFprobeMetadata(tabId, normalizedUrl, headers) {
+async function getFFprobeMetadata(tabId, normalizedUrl, headers, videoData) {
     try {
-        const video = getVideo(tabId, normalizedUrl);
-        if (!video) {
-            logger.debug(`No video found for FFprobe: ${normalizedUrl}`);
-            return;
-        }
-
-        logger.debug(`Getting FFprobe metadata for ${video.url}`);
+        logger.debug(`Getting FFprobe metadata for ${videoData.url}`);
 
         // Direct call to NHS - gets ffprobe data and expects response
         const response = await nativeHostService.sendMessage({
             command: 'getQualities',
-            url: video.url,
-            type: video.type || 'direct',
+            url: videoData.url,
+            type: videoData.type || 'direct',
             headers: headers
         });
 
@@ -554,19 +525,19 @@ async function getFFprobeMetadata(tabId, normalizedUrl, headers) {
             // Determine container using unified detection system (FFprobe override)
             const containerDetection = detectAllContainers({
                 ffprobeContainer: streamInfo.container,
-                mimeType: video.metadata?.contentType,
-                url: video.url,
-                mediaType: video.mediaType || 'video',
+                mimeType: videoData.metadata?.contentType,
+                url: videoData.url,
+                mediaType: videoData.mediaType || 'video',
                 videoType: 'direct'
             });
 
             // Update the videoTracks[0] with FFprobe metadata
             const updatedVideoTracks = [{
-                url: video.url,
+                url: videoData.url,
                 normalizedUrl: normalizedUrl,
                 type: 'direct',
                 standardizedResolution: standardizedRes,
-                estimatedFileSizeBytes: streamInfo.estimatedFileSizeBytes || video.fileSize,
+                estimatedFileSizeBytes: streamInfo.estimatedFileSizeBytes || videoData.fileSize,
                 fileSize: streamInfo.sizeBytes || null,
                 metaFFprobe: streamInfo,
                 videoContainer: containerDetection.container,
@@ -574,14 +545,15 @@ async function getFFprobeMetadata(tabId, normalizedUrl, headers) {
                 containerDetectionReason: `ffprobe-${containerDetection.reason}`
             }];
 
-            updateVideo('getFFprobeMetadata', tabId, normalizedUrl, {
+            // Merge FFprobe results with original video data
+            const mergedData = {
+                ...videoData,
                 isValid,
-                isBeingProcessed: false,
-                runningFFprobe: false,
+                processing: false,
                 metaFFprobe: streamInfo,
                 duration: streamInfo.duration,
                 standardizedResolution: standardizedRes,
-                estimatedFileSizeBytes: streamInfo.estimatedFileSizeBytes || video.fileSize,
+                estimatedFileSizeBytes: streamInfo.estimatedFileSizeBytes || videoData.fileSize,
                 fileSize: streamInfo.sizeBytes || null,
                 // Use new unified container detection (FFprobe override)
                 defaultContainer: containerDetection.container,
@@ -590,23 +562,41 @@ async function getFFprobeMetadata(tabId, normalizedUrl, headers) {
                 videoContainer: containerDetection.container,
                 audioContainer: containerDetection.container === 'webm' ? 'webm' : 'mp3',
                 // Update standardized videoTracks
-                videoTracks: updatedVideoTracks
-            });
+                videoTracks: updatedVideoTracks,
+                validForDisplay: calculateValidForDisplay({ ...videoData, isValid })
+            };
+            
+            // If FFprobe failed (not a valid video), remove from UI
+            if (!isValid) {
+                mergedData.validForDisplay = false;
+                storeAndNotifyUI(mergedData, 'structural', 'remove');
+            } else {
+                storeAndNotifyUI(mergedData, 'structural', 'update');
+                
+                // Generate preview if enabled and has video
+                if (settingsManager.get('autoGeneratePreviews') && streamInfo.hasVideo) {
+                    await generateVideoPreview(tabId, normalizedUrl, headers);
+                }
+            }
         } else {
-            logger.warn(`No stream info in ffprobe response for: ${normalizedUrl}`);
-            // Clear processing flags but keep fallback containers
-            updateVideo('getFFprobeMetadata-no-stream', tabId, normalizedUrl, {
-                isBeingProcessed: false,
-                runningFFprobe: false
-            });
+            logger.warn(`No stream info in ffprobe response for: ${normalizedUrl} - removing from UI`);
+            // FFprobe failed - remove from UI as it means video is not valid
+            const failedData = {
+                ...videoData,
+                processing: false,
+                isValid: false,
+                validForDisplay: false
+            };
+            storeAndNotifyUI(failedData, 'structural', 'remove');
         }
     } catch (error) {
         logger.error(`Error getting FFprobe metadata for ${normalizedUrl}: ${error.message}`);
-        // Clear processing flags but keep fallback containers
-        updateVideo('getFFprobeMetadata-error', tabId, normalizedUrl, {
-            isBeingProcessed: false,
-            runningFFprobe: false
-        });
+        // Send flags-only update to clear processing flags
+        const flagData = {
+            ...videoData,
+            processing: false
+        };
+        storeAndNotifyUI(flagData, 'flags');
     }
 }
 
@@ -614,33 +604,16 @@ async function getFFprobeMetadata(tabId, normalizedUrl, headers) {
  * Clean up processing queue for a specific tab
  * @param {number} tabId - Tab ID
  */
-function cleanupProcessingQueueForTab(tabId) {
-    if (processingQueue.length > 0) {
-        const originalCount = processingQueue.length;
-        const filteredQueue = processingQueue.filter(item => item.tabId !== tabId);
-        const removedCount = originalCount - filteredQueue.length;
-        if (removedCount > 0) {
-            logger.debug(`Removed ${removedCount} queued items for tab ${tabId}`);
-        }
-        // Replace array contents to maintain reference
-        processingQueue.length = 0;
-        processingQueue.push(...filteredQueue);
-    }
-}
-
 /**
- * Clear all processing queues
+ * Clear all processing state
  */
 function clearAll() {
-    processingQueue.length = 0;
     processingMap.clear();
 }
 
 export {
-    enqueue,
     addDetectedVideo,
     handleVariantMasterRelationships,
-    cleanupProcessingQueueForTab,
     clearAll,
     generateVideoPreview
 };

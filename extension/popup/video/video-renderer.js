@@ -636,10 +636,8 @@ export async function addVideoToUI(video) {
  * @param {string} videoUrl - Video URL to update
  * @param {Object} video - Updated video object
  */
-export async function updateVideoInUI(videoUrl, video) {
-    logger.debug(`[UPD] Updating video in UI: ${videoUrl}`);
+export async function updateVideoInUI(videoUrl, video, updateType = 'structural') {
     try {
-        // Full structural update - find existing element and replace
         const container = document.getElementById('videos-list');
         const existingElement = container.querySelector(`.video-item[data-url="${videoUrl}"]`);
         
@@ -649,14 +647,36 @@ export async function updateVideoInUI(videoUrl, video) {
             return;
         }
         
-        // Create new element with current video state (including flags)
+        // For flag-only updates, just update CSS classes
+        if (updateType === 'flags') {
+            const flagClasses = ['processing', 'generating-preview', 'error'];
+            
+            // Remove all flag classes first
+            existingElement.classList.remove(...flagClasses);
+            
+            // Add appropriate classes based on video state
+            if (video.processing) {
+                existingElement.classList.add('processing');
+            }
+            if (video.generatingPreview) {
+                existingElement.classList.add('generating-preview');
+            }
+            if (video.processingError || video.previewError) {
+                existingElement.classList.add('error');
+            }
+            
+            logger.debug(`[FLAG-UPD] Updated flags for video: ${videoUrl}`);
+            return;
+        }
+        
+        // Full structural update - create new element with all current state
         const videoComponent = new VideoItemComponent(video, 'default');
         const newElement = videoComponent.render();
         
         // Replace the existing element
         existingElement.parentNode.replaceChild(newElement, existingElement);
         
-        logger.debug(`[UPD] Updated video in UI: ${videoUrl}`);
+        logger.debug(`[UPD] Updated video in UI: ${videoUrl} (${updateType})`);
         
     } catch (error) {
         logger.error('[UPD] Error updating video in UI:', error);

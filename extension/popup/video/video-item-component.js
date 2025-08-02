@@ -92,14 +92,11 @@ export class VideoItemComponent {
         }
         
         // Apply processing state classes based on flags
-        if (this.videoData.parsing) {
-            this.element.classList.add('state-parsing');
-        }
-        if (this.videoData.runningFFprobe) {
-            this.element.classList.add('state-probing');
-        }
-        if (this.videoData.isBeingProcessed) {
+        if (this.videoData.processing) {
             this.element.classList.add('state-processing');
+        }
+        if (this.videoData.generatingPreview) {
+            this.element.classList.add('generating-preview');
         }
         
         // Store component reference for external access
@@ -124,10 +121,34 @@ export class VideoItemComponent {
         // Use filename from download request (includes container extension) or fallback to video title
         const title = this.filename || this.videoData.title || 'Untitled Video';
         
+        // Create status badge HTML if needed
+        let statusBadgeHtml = '';
+        if (this.videoData.isLive || this.videoData.isEncrypted) {
+            const tooltipAttr = this.videoData.isEncrypted ? 
+                `title="${this.videoData.encryptionType ? `Encryption: ${this.videoData.encryptionType}` : 'Encrypted content'}"` : '';
+            
+            statusBadgeHtml = `<div class="status-badge" ${tooltipAttr}>`;
+            
+            if (this.videoData.isLive) {
+                statusBadgeHtml += '<span class="live-text">LIVE</span>';
+            }
+            
+            if (this.videoData.isEncrypted) {
+                statusBadgeHtml += `<span class="lock-icon">
+                    <svg viewBox="0 0 7 8" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M6.25 3.5H5.875V2.375C5.875 1.06562 4.80937 0 3.5 0C2.19062 0 1.125 1.06562 1.125 2.375V3.5H0.75C0.335938 3.5 0 3.83594 0 4.25V7.25C0 7.66406 0.335938 8 0.75 8H6.25C6.66406 8 7 7.66406 7 7.25V4.25C7 3.83594 6.66406 3.5 6.25 3.5ZM4.625 3.5H2.375V2.375C2.375 1.75469 2.87969 1.25 3.5 1.25C4.12031 1.25 4.625 1.75469 4.625 2.375V3.5Z" fill="#DB6B67"/>
+                    </svg>
+                </span>`;
+            }
+            
+            statusBadgeHtml += '</div>';
+        }
+        
         const htmlTemplate = `
             <div class="preview-column">
                 <div class="preview-container has-preview">
                     ${duration ? `<div class="video-duration">${duration}</div>` : ''}
+                    ${statusBadgeHtml}
                     <img class="preview-image loaded" src="${previewUrl}" alt="Video preview">
                 </div>
             </div>
@@ -273,11 +294,8 @@ export class VideoItemComponent {
     setupPreviewHandling(previewContainer, previewImage) {
         const previewUrl = this.videoData.previewUrl || this.videoData.poster;
         
-        // Handle loader visibility and retry button based on preview generation status
-        if (this.videoData.generatingPreview) {
-            previewContainer.classList.add('loading');
-            previewImage.classList.add('generating');
-        } else if (previewUrl) {
+        // Handle preview loading based on available preview URL
+        if (previewUrl) {
             previewContainer.classList.add('has-preview');
             previewImage.onload = () => {
                 previewImage.classList.remove('placeholder');
@@ -407,7 +425,11 @@ export class VideoItemComponent {
             tabId: this.videoData.tabId,
             pageUrl: this.videoData.pageUrl,
             pageFavicon: this.videoData.pageFavicon,
-			pageTitle: this.videoData.pageTitle
+            pageTitle: this.videoData.pageTitle,
+            // Status badge fields for Live/Encrypted display
+            isLive: this.videoData.isLive,
+            isEncrypted: this.videoData.isEncrypted,
+            encryptionType: this.videoData.encryptionType
         };
         
         const command = {

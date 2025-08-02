@@ -577,10 +577,10 @@
 
 // Processing state styling for video items
 .video-item {
-    // Parsing state - substitute dropdown text
-    &.state-parsing {
+    // Processing state - substitute dropdown text
+    &.processing {
         .custom-dropdown .selected-option .label::after {
-            content: 'Parsing...';
+            content: 'Processing...';
             position: absolute;
             left: 0;
             top: 0;
@@ -599,33 +599,28 @@
         }
     }
     
-    // Probing state - substitute dropdown text  
-    &.state-probing {
-        .custom-dropdown .selected-option .label::after {
-            content: 'Probing...';
-            position: absolute;
-            left: 0;
-            top: 0;
-            right: 0;
-            bottom: 0;
-            background: inherit;
-            display: flex;
-            align-items: center;
-            font-weight: 500;
-    		@extend %theme-text-secondary;
-        }
-        
-        .custom-dropdown .selected-option .label {
-            position: relative;
-            color: transparent !important;
-        }
-    }
-    
-    // General processing state - add subtle animation
+    // Processing state - substitute dropdown text  
     &.state-processing {
-        opacity: 0.9;
+        .custom-dropdown .selected-option .label::after {
+            content: 'Processing...';
+            position: absolute;
+            left: 0;
+            top: 0;
+            right: 0;
+            bottom: 0;
+            background: inherit;
+            display: flex;
+            align-items: center;
+            font-weight: 500;
+    		@extend %theme-text-secondary;
+        }
         
-        .preview-container {
+        .custom-dropdown .selected-option .label {
+            position: relative;
+            color: transparent !important;
+        }
+		
+		.preview-container {
             position: relative;
             
             &::after {
@@ -641,6 +636,8 @@
             }
         }
     }
+    
+
 }
 
 // Processing shimmer animation
