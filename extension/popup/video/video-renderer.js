@@ -591,6 +591,7 @@ export function groupVideosByType(videos) {
  * @param {Object} video - Video object to add
  */
 export async function addVideoToUI(video) {
+    logger.debug(`[ADD] Adding video to UI: ${video.normalizedUrl}, type: ${video.type}`);
     try {
         const container = document.getElementById('videos-list');
         const group = container.querySelector(`[data-video-type="${video.type}"]`);
@@ -631,84 +632,14 @@ export async function addVideoToUI(video) {
 }
 
 /**
- * Update video flags without full re-render
- * @param {string} videoUrl - Video URL to update
- * @param {Object} video - Updated video object with flags
- */
-export function updateVideoFlags(videoUrl, video) {
-    try {
-        const container = document.getElementById('videos-list');
-        const existingElement = container.querySelector(`.video-item[data-url="${videoUrl}"]`);
-        
-        if (!existingElement) {
-            logger.debug(`[FLAG] Video element not found for flag update: ${videoUrl}`);
-            return false;
-        }
-        
-        const previewContainer = existingElement.querySelector('.preview-container');
-        const previewImage = existingElement.querySelector('.preview-image');
-        
-        // Handle preview generation flag
-        if ('generatingPreview' in video) {
-            if (video.generatingPreview) {
-                if (previewContainer) previewContainer.classList.add('loading');
-                if (previewImage) previewImage.classList.add('generating');
-            } else {
-                if (previewContainer) previewContainer.classList.remove('loading');
-                if (previewImage) previewImage.classList.remove('generating');
-            }
-        }
-        
-        // Handle preview URL update
-        if (video.previewUrl && previewImage) {
-            if (previewContainer) previewContainer.classList.add('has-preview');
-            previewImage.onload = () => {
-                previewImage.classList.remove('placeholder');
-                previewImage.classList.add('loaded');
-                if (previewContainer) previewContainer.classList.remove('loading');
-            };
-            previewImage.src = video.previewUrl;
-        }
-        
-        // Handle processing flags (could add visual indicators later)
-        if ('isBeingProcessed' in video || 'parsing' in video || 'runningFFprobe' in video) {
-            // For now, just log - can add visual indicators later
-            logger.debug(`[FLAG] Processing flags updated for ${videoUrl}:`, {
-                isBeingProcessed: video.isBeingProcessed,
-                parsing: video.parsing,
-                runningFFprobe: video.runningFFprobe
-            });
-        }
-        
-        logger.debug(`[FLAG] Updated flags for video: ${videoUrl}`);
-        return true;
-        
-    } catch (error) {
-        logger.error('[FLAG] Error updating video flags:', error);
-        return false;
-    }
-}
-
-/**
- * Update an existing video in the UI
+ * Update an existing video in the UI (full re-render)
  * @param {string} videoUrl - Video URL to update
  * @param {Object} video - Updated video object
- * @param {string} [updateType='structural'] - Type of update: 'flags' or 'structural'
  */
-export async function updateVideoInUI(videoUrl, video, updateType = 'structural') {
+export async function updateVideoInUI(videoUrl, video) {
+    logger.debug(`[UPD] Updating video in UI: ${videoUrl}`);
     try {
-        // For flag-only updates, use selective update
-        if (updateType === 'flags') {
-            const success = updateVideoFlags(videoUrl, video);
-            if (success) {
-                logger.debug(`[FLAG-UPD] Updated flags for video: ${videoUrl}`);
-                return;
-            }
-            // Fall back to full update if flag update failed
-            logger.debug(`[FLAG-UPD] Flag update failed, falling back to full update: ${videoUrl}`);
-        }
-        
-        // Full structural update
+        // Full structural update - find existing element and replace
         const container = document.getElementById('videos-list');
         const existingElement = container.querySelector(`.video-item[data-url="${videoUrl}"]`);
         
@@ -718,14 +649,14 @@ export async function updateVideoInUI(videoUrl, video, updateType = 'structural'
             return;
         }
         
-        // Create new element
+        // Create new element with current video state (including flags)
         const videoComponent = new VideoItemComponent(video, 'default');
         const newElement = videoComponent.render();
         
         // Replace the existing element
         existingElement.parentNode.replaceChild(newElement, existingElement);
         
-        logger.debug(`[UPD] Updated video in UI: ${videoUrl} (${updateType})`);
+        logger.debug(`[UPD] Updated video in UI: ${videoUrl}`);
         
     } catch (error) {
         logger.error('[UPD] Error updating video in UI:', error);

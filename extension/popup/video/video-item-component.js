@@ -91,6 +91,17 @@ export class VideoItemComponent {
             this.element.dataset.downloadId = this.downloadId;
         }
         
+        // Apply processing state classes based on flags
+        if (this.videoData.parsing) {
+            this.element.classList.add('state-parsing');
+        }
+        if (this.videoData.runningFFprobe) {
+            this.element.classList.add('state-probing');
+        }
+        if (this.videoData.isBeingProcessed) {
+            this.element.classList.add('state-processing');
+        }
+        
         // Store component reference for external access
         this.element._component = this;
         

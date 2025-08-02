@@ -570,3 +570,85 @@
         flex-shrink: 0;
     }
 }
+
+// =====================================================
+// PROCESSING STATES
+// =====================================================
+
+// Processing state styling for video items
+.video-item {
+    // Parsing state - substitute dropdown text
+    &.state-parsing {
+        .custom-dropdown .selected-option .label::after {
+            content: 'Parsing...';
+            position: absolute;
+            left: 0;
+            top: 0;
+            right: 0;
+            bottom: 0;
+            background: inherit;
+    		@extend %theme-text-secondary;
+            display: flex;
+            align-items: center;
+            font-weight: 500;
+        }
+        
+        .custom-dropdown .selected-option .label {
+            position: relative;
+            color: transparent !important;
+        }
+    }
+    
+    // Probing state - substitute dropdown text  
+    &.state-probing {
+        .custom-dropdown .selected-option .label::after {
+            content: 'Probing...';
+            position: absolute;
+            left: 0;
+            top: 0;
+            right: 0;
+            bottom: 0;
+            background: inherit;
+            display: flex;
+            align-items: center;
+            font-weight: 500;
+    		@extend %theme-text-secondary;
+        }
+        
+        .custom-dropdown .selected-option .label {
+            position: relative;
+            color: transparent !important;
+        }
+    }
+    
+    // General processing state - add subtle animation
+    &.state-processing {
+        opacity: 0.9;
+        
+        .preview-container {
+            position: relative;
+            
+            &::after {
+                content: '';
+                position: absolute;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                background: linear-gradient(45deg, transparent 30%, rgba(3, 122, 251, 0.1) 50%, transparent 70%);
+                animation: processing-shimmer 2s infinite;
+                pointer-events: none;
+            }
+        }
+    }
+}
+
+// Processing shimmer animation
+@keyframes processing-shimmer {
+    0% {
+        transform: translateX(-100%);
+    }
+    100% {
+        transform: translateX(100%);
+    }
+}

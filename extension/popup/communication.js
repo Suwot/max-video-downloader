@@ -145,28 +145,34 @@ async function handleIncomingMessage(message) {
  */
 async function handleVideoStateUpdate(message) {
     logger.debug(`Delegated '${message.action}' action for video: ${message.videoUrl}`);
+    logger.debug('Full message:', message);
 
     try {
         switch (message.action) {
             case 'add':
                 if (message.video) {
+                    logger.debug('Adding video to UI:', message.video);
                     // Add to UI directly - no need for local state
                     await addVideoToUI(message.video);
+                } else {
+                    logger.warn('Add message missing video data:', message);
                 }
                 break;
                 
             case 'update':
                 if (message.video) {
-                    // Update in UI directly - no need for local state
-                    await updateVideoInUI(message.videoUrl, message.video, message.updateType);
+                    logger.debug('Updating video in UI:', message.video);
+                    // Always structural updates - flags are handled via CSS classes
+                    await updateVideoInUI(message.videoUrl, message.video);
+                } else {
+                    logger.warn('Update message missing video data:', message);
                 }
                 break;
                 
             case 'remove':
                 if (message.videoUrl) {
-                    // Remove from UI first
+                    // Remove from UI only
                     await removeVideoFromUI(message.videoUrl);
-                    // Note: We don't remove from state as it might be needed for restoration
                 }
                 break;
                 
