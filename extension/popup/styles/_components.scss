@@ -427,7 +427,6 @@
     gap: 8px;
     transition: max-height var(--transition-fast) ease, opacity var(--transition-fast) ease;
     overflow-y: visible;
-    max-height: 2000px; // Large enough for any reasonable content
     opacity: 1;
     
     &.collapsed {

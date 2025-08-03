@@ -121,6 +121,7 @@ export async function parseHlsManifest(url) {
         // For master playlists, parse video tracks
         let videoTracks = [];
         let duration = null;
+        let segmentCount = null;
         let isEncrypted = false;
         let encryptionType = null;
         let version = null; 
@@ -141,102 +142,101 @@ export async function parseHlsManifest(url) {
             audioTracks = masterParseResult.audioTracks || [];
             hasMediaGroups = masterParseResult.hasMediaGroups || false;
 
-            if (masterParseResult.videoTracks && masterParseResult.videoTracks.length > 0) {
-                // Get basic video track information
-                const basicVideoTracks = masterParseResult.videoTracks;
-                logger.debug(`Found ${basicVideoTracks.length} basic video tracks in master playlist`);
-
-                // Attach headers directly to each video track for explicit downstream use
-                if (headers) {
-                    for (const videoTrack of basicVideoTracks) {
-                        videoTrack.headers = headers;
+            // Prepare video tracks array with basic info
+            videoTracks = masterParseResult.videoTracks || [];
+            
+            // Attach headers to video tracks for downstream use
+            if (headers) {
+                for (const videoTrack of videoTracks) {
+                    videoTrack.headers = headers;
+                }
+            }
+            
+            // Combine all tracks for duration extraction attempt (all tracks have URLs by design)
+            const allTracksWithUrls = [
+                ...videoTracks,
+                ...audioTracks,
+                ...subtitleTracks
+            ];
+            
+            logger.debug(`Found ${allTracksWithUrls.length} tracks for metadata extraction (${videoTracks.length} video, ${audioTracks.length} audio, ${subtitleTracks.length} subtitle)`);
+            
+            // Try up to 3 tracks for metadata extraction
+            let variantInfo = null;
+            let successfulTrackIndex = -1;
+            
+            for (let i = 0; i < Math.min(3, allTracksWithUrls.length); i++) {
+                try {
+                    const currentTrack = allTracksWithUrls[i];
+                    const trackType = videoTracks.includes(currentTrack) ? 'video' : 
+                                     audioTracks.includes(currentTrack) ? 'audio' : 'subtitle';
+                    
+                    logger.debug(`Trying track ${i + 1}/${Math.min(3, allTracksWithUrls.length)} (${trackType}): ${currentTrack.url}`);
+                    
+                    variantInfo = await parseHlsVariant(currentTrack.url, headers, tabId);
+                    
+                    if (variantInfo && variantInfo.duration !== null) {
+                        logger.debug(`Successfully extracted metadata from ${trackType} track ${i + 1}`);
+                        successfulTrackIndex = i;
+                        break;
                     }
+                } catch (error) {
+                    logger.warn(`Failed to fetch track ${i + 1}: ${error.message}`);
                 }
-
-                // Prepare video tracks array with basic info
-                videoTracks = [...basicVideoTracks];
-
-                // Try to fetch the highest quality variant first
-                let variantInfo = null;
-                let processedVariantIndex = 0;
-
-                // Try highest quality first, then fall back to others if needed
-                while (!variantInfo && processedVariantIndex < Math.min(3, basicVideoTracks.length)) {
-                    try {
-                        const currentVideoTrack = basicVideoTracks[processedVariantIndex];
-                        logger.debug(`Processing video track ${processedVariantIndex+1}: ${currentVideoTrack.url}`);
-
-                        variantInfo = await parseHlsVariant(currentVideoTrack.url, headers, tabId);
-
-                        if (variantInfo) {
-                            logger.debug(`Successfully fetched video track ${processedVariantIndex+1}`);
-                            break;
-                        }
-                    } catch (error) {
-                        logger.warn(`Failed to fetch video track ${processedVariantIndex+1}: ${error.message}`);
+            }
+            
+            if (variantInfo && variantInfo.duration !== null) {
+                // Extract metadata from successful track
+                duration = variantInfo.duration;
+                segmentCount = variantInfo.segmentCount;
+                isEncrypted = variantInfo.isEncrypted || false;
+                encryptionType = variantInfo.encryptionType;
+                const isLive = variantInfo.isLive || false;
+                
+                // Propagate metadata to all video tracks
+                videoTracks = videoTracks.map((videoTrack, index) => {
+                    const updatedVideoTrack = { ...videoTrack };
+                    updatedVideoTrack.metaJS.duration = duration;
+                    updatedVideoTrack.metaJS.isLive = isLive;
+                    updatedVideoTrack.metaJS.isEncrypted = isEncrypted;
+                    updatedVideoTrack.metaJS.encryptionType = encryptionType;
+                    updatedVideoTrack.metaJS.segmentCount = segmentCount;
+                    updatedVideoTrack.metaJS.version = variantInfo.version || version;
+                    
+                    // Mark the track that was actually fetched
+                    if (successfulTrackIndex >= 0 && videoTrack === allTracksWithUrls[successfulTrackIndex]) {
+                        updatedVideoTrack.metaJS.directlyFetched = true;
                     }
-
-                    processedVariantIndex++;
-                }
-
-                if (variantInfo) {
-                    // Extract metadata for all video tracks from this one
-                    duration = variantInfo.duration;
-                    isEncrypted = variantInfo.isEncrypted || false;
-                    encryptionType = variantInfo.encryptionType;
-                    const isLive = variantInfo.isLive || false;
-                    const segmentCount = variantInfo.segmentCount;
-
-                    // Apply this metadata to all video tracks
-                    videoTracks = videoTracks.map(videoTrack => {
-                        // Create a new video track object with detailed information
-                        const updatedVideoTrack = {...videoTrack};
-
-                        // Apply metadata from the processed video track
-                        updatedVideoTrack.metaJS.duration = duration;
-                        updatedVideoTrack.metaJS.isLive = isLive;
-                        updatedVideoTrack.metaJS.isEncrypted = isEncrypted;
-                        updatedVideoTrack.metaJS.encryptionType = encryptionType;
-                        updatedVideoTrack.metaJS.segmentCount = segmentCount;
-                        updatedVideoTrack.metaJS.version = variantInfo.version || version;
-
-                        // Distinguish the actually fetched video track
-                        if (videoTrack.url === basicVideoTracks[processedVariantIndex].url) {
-                            updatedVideoTrack.metaJS.directlyFetched = true;
-                        }
-
-                        // Calculate estimated file size based on bandwidth and duration
-                        if (duration !== null && duration >= 0) {
-                            const effectiveBandwidth = updatedVideoTrack.metaJS.averageBandwidth || updatedVideoTrack.metaJS.bandwidth;
-                            updatedVideoTrack.metaJS.estimatedFileSizeBytes = calculateEstimatedFileSizeBytes(
-                                effectiveBandwidth, 
-                                duration
-                            );
-                        }
-
-                        return updatedVideoTrack;
-                    });
-
-                    // --- Propagate metadata to all audio tracks with a URL ---
-                    // Only propagate universally relevant fields for audio tracks
-                    // (duration, isLive, version). Others require parsing the audio playlist itself.
-                    audioTracks = audioTracks.map(track => {
-                        if (track.url) {
-                            const updatedTrack = { ...track };
-                            updatedTrack.duration = duration;
-                            updatedTrack.isLive = isLive;
-                            updatedTrack.version = variantInfo.version || version;
-                            return updatedTrack;
-                        }
-                        return track;
-                    });
-                    logger.debug(`Propagated duration, isLive, and version to ${audioTracks.filter(t => t.url).length} audio track(s)`);
-                } else {
-                    // If all fetches failed, return basic video tracks
-                    logger.warn('Failed to fetch any video track for metadata extraction');
-                }
+                    
+                    // Calculate estimated file size based on bandwidth and duration
+                    if (duration !== null && duration >= 0) {
+                        const effectiveBandwidth = updatedVideoTrack.metaJS.averageBandwidth || updatedVideoTrack.metaJS.bandwidth;
+                        updatedVideoTrack.metaJS.estimatedFileSizeBytes = calculateEstimatedFileSizeBytes(
+                            effectiveBandwidth, 
+                            duration
+                        );
+                    }
+                    
+                    return updatedVideoTrack;
+                });
+                
+                // Propagate metadata to all audio tracks
+                audioTracks = audioTracks.map(track => {
+                    if (track.url) {
+                        const updatedTrack = { ...track };
+                        updatedTrack.duration = duration;
+                        updatedTrack.isLive = isLive;
+                        updatedTrack.segmentCount = segmentCount;  // Add missing segmentCount
+                        updatedTrack.version = variantInfo.version || version;
+                        return updatedTrack;
+                    }
+                    return track;
+                });
+                
+                logger.debug(`Propagated metadata to ${videoTracks.length} video tracks and ${audioTracks.filter(t => t.url).length} audio tracks`);
             } else {
-                logger.debug(`No video tracks found in master playlist`);
+                logger.warn('No valid tracks found for metadata extraction - will set noDuration flag');
+                duration = null;
             }
         }
         else if (isVariant) {
@@ -244,9 +244,10 @@ export async function parseHlsManifest(url) {
             logger.debug(`Parsing standalone variant playlist`);
             const variantInfo = calculateHlsVariantDuration(content);
             duration = variantInfo.duration;
+            segmentCount = variantInfo.segmentCount;
             const isLive = variantInfo.isLive;
             
-            logger.debug(`Variant duration: ${duration}s, isLive: ${isLive}`);
+            logger.debug(`Variant duration: ${duration}s, segmentCount: ${segmentCount}, isLive: ${isLive}`);
             
             // Extract encryption info
             const encryptionInfo = extractHlsEncryptionInfo(content);
@@ -298,6 +299,7 @@ export async function parseHlsManifest(url) {
             timestampValidated: timestampValidated,
             timestampParsed: timestampParsed,
             duration: duration,
+            segmentCount: segmentCount,  // Add segmentCount at main level for easy access
             isEncrypted: isEncrypted,
             encryptionType: encryptionType,
             version: version,
@@ -309,6 +311,12 @@ export async function parseHlsManifest(url) {
             hasMediaGroups: hasMediaGroups,
             status: 'success'
         };
+        
+        // Add noDuration flag if no duration could be extracted from any track
+        if (duration === null && isMaster) {
+            result.noDuration = true;
+            logger.debug('Added noDuration flag - no valid tracks found for duration extraction');
+        }
 
         logger.info(`Successfully parsed HLS: found ${videoTracks.length} video tracks, ${audioTracks.length} audio tracks, ${subtitleTracks.length} subtitle tracks, ${closedCaptions.length} closed caption tracks`);
         return result;
@@ -347,9 +355,7 @@ export async function parseHlsManifest(url) {
 function parseHlsMaster(content, baseUrl, masterUrl) {
     // Extract the HLS version from the master playlist
     const version = extractHlsVersion(content);
-    logger.debug(`HLS master playlist version: ${version}`);
-    logger.debug(`Processing master playlist with ${content.split(/\r?\n/).length} lines`);
-    logger.debug(`First few lines: ${content.split(/\r?\n/).slice(0, 3).join('\n')}`);
+    logger.debug(`Processing master playlist v: ${version} with ${content.split(/\r?\n/).length} lines`);
 
     // Use the unified variant entry extraction
     const variantEntries = extractMasterVariantEntries(content, baseUrl, masterUrl);
@@ -384,6 +390,7 @@ function parseHlsMaster(content, baseUrl, masterUrl) {
             hasKnownMaster: true,
             type: 'hls',
             isVariant: true,
+            isUsedForEmbeddedAudio: false,  // Flag for tracking embedded audio usage
             // Container information for download
             videoContainer: containerDetection.videoContainer,
             audioContainer: audioContainer,
@@ -432,52 +439,79 @@ function parseHlsMaster(content, baseUrl, masterUrl) {
             if (/TYPE=AUDIO/.test(line)) {
                 // Detect audio container - HLS audio tracks are typically AAC in M4A (MP4 audio)
                 // Since HLS is almost always MP4-compatible, audio should be M4A not MP3
-                const audioContainer = detectAllContainers({
-                    url: attrs['URI'] ? resolveUrl(baseUrl, attrs['URI']) : null,
-                    mediaType: 'audio',
-                    videoType: 'hls'
-                });
+                let audioUrl = null;
+                let matchedVideoTrack = null;
+                let isEmbedded = false;
                 
-                audioTracks.push({
-                    id: `audio-${attrs['GROUP-ID'] || 'default'}-${attrs['NAME'] || audioTracks.length}`,
-                    groupId: attrs['GROUP-ID'] || null,
-                    name: attrs['NAME'] || null,
-                    language: attrs['LANGUAGE'] || null,
-                    url: attrs['URI'] ? resolveUrl(baseUrl, attrs['URI']) : null,
-                    normalizedUrl: attrs['URI'] ? normalizeUrl(resolveUrl(baseUrl, attrs['URI'])) : null,
-                    default: attrs['DEFAULT'] === 'YES',
-                    autoselect: attrs['AUTOSELECT'] === 'YES',
-                    characteristics: attrs['CHARACTERISTICS'] || null,
-                    channels: attrs['CHANNELS'] || null,
-                    assocLanguage: attrs['ASSOC-LANGUAGE'] || null,
-                    // Container information for download
-                    audioContainer: audioContainer.container,
-                    containerDetectionReason: audioContainer.reason
-                });
+                if (attrs['URI']) {
+                    // Has URI - use directly
+                    audioUrl = resolveUrl(baseUrl, attrs['URI']);
+                } else {
+                    // No URI - find matching video track by group
+                    const audioGroupId = attrs['GROUP-ID'];
+                    matchedVideoTrack = videoTracks.find(vt => vt.metaJS.audioGroup === audioGroupId);
+                    
+                    if (matchedVideoTrack) {
+                        audioUrl = matchedVideoTrack.url;
+                        matchedVideoTrack.isUsedForEmbeddedAudio = true;  // Mark as used
+                        isEmbedded = true;
+                    }
+                    // If no match found, audioUrl stays null → track will be omitted
+                }
+                
+                // Only add if we have a valid URL
+                if (audioUrl) {
+                    const audioContainer = detectAllContainers({
+                        url: audioUrl,
+                        mediaType: 'audio',
+                        videoType: 'hls'
+                    });
+                    
+                    audioTracks.push({
+                        id: `audio-${attrs['GROUP-ID'] || 'default'}-${attrs['NAME'] || audioTracks.length}`,
+                        groupId: attrs['GROUP-ID'] || null,
+                        name: attrs['NAME'] || null,
+                        language: attrs['LANGUAGE'] || null,
+                        url: audioUrl,
+                        normalizedUrl: normalizeUrl(audioUrl),
+                        default: attrs['DEFAULT'] === 'YES',
+                        autoselect: attrs['AUTOSELECT'] === 'YES',
+                        characteristics: attrs['CHARACTERISTICS'] || null,
+                        channels: attrs['CHANNELS'] || null,
+                        assocLanguage: attrs['ASSOC-LANGUAGE'] || null,
+                        isEmbedded: isEmbedded,  // Flag for embedded audio
+                        // Container information for download
+                        audioContainer: audioContainer.container,
+                        containerDetectionReason: audioContainer.reason
+                    });
+                }
             } else if (/TYPE=SUBTITLES/.test(line)) {
-                // Detect subtitle container with HLS context
-                const subtitleContainerDetection = detectAllContainers({
-                    url: attrs['URI'] ? resolveUrl(baseUrl, attrs['URI']) : null,
-                    mediaType: 'subtitle',
-                    videoType: 'hls'
-                });
-                
-                subtitleTracks.push({
-                    id: `subtitle-${attrs['GROUP-ID'] || 'default'}-${attrs['NAME'] || subtitleTracks.length}`,
-                    groupId: attrs['GROUP-ID'] || null,
-                    name: attrs['NAME'] || null,
-                    language: attrs['LANGUAGE'] || null,
-                    url: attrs['URI'] ? resolveUrl(baseUrl, attrs['URI']) : null,
-                    normalizedUrl: attrs['URI'] ? normalizeUrl(resolveUrl(baseUrl, attrs['URI'])) : null,
-                    default: attrs['DEFAULT'] === 'YES',
-                    autoselect: attrs['AUTOSELECT'] === 'YES',
-                    forced: attrs['FORCED'] === 'YES',
-                    characteristics: attrs['CHARACTERISTICS'] || null,
-                    instreamId: attrs['INSTREAM-ID'] || null,
-                    // Container information for download
-                    subtitleContainer: subtitleContainerDetection.container,
-                    containerDetectionReason: subtitleContainerDetection.reason
-                });
+                // Only add subtitle tracks that have URIs
+                if (attrs['URI']) {
+                    const subtitleUrl = resolveUrl(baseUrl, attrs['URI']);
+                    const subtitleContainerDetection = detectAllContainers({
+                        url: subtitleUrl,
+                        mediaType: 'subtitle',
+                        videoType: 'hls'
+                    });
+                    
+                    subtitleTracks.push({
+                        id: `subtitle-${attrs['GROUP-ID'] || 'default'}-${attrs['NAME'] || subtitleTracks.length}`,
+                        groupId: attrs['GROUP-ID'] || null,
+                        name: attrs['NAME'] || null,
+                        language: attrs['LANGUAGE'] || null,
+                        url: subtitleUrl,
+                        normalizedUrl: normalizeUrl(subtitleUrl),
+                        default: attrs['DEFAULT'] === 'YES',
+                        autoselect: attrs['AUTOSELECT'] === 'YES',
+                        forced: attrs['FORCED'] === 'YES',
+                        characteristics: attrs['CHARACTERISTICS'] || null,
+                        instreamId: attrs['INSTREAM-ID'] || null,
+                        // Container information for download
+                        subtitleContainer: subtitleContainerDetection.container,
+                        containerDetectionReason: subtitleContainerDetection.reason
+                    });
+                }
             } else if (/TYPE=CLOSED-CAPTIONS/.test(line)) {
                 closedCaptions.push({
                     groupId: attrs['GROUP-ID'] || null,
@@ -493,24 +527,18 @@ function parseHlsMaster(content, baseUrl, masterUrl) {
     }
     logger.debug(`Found ${audioTracks.length} audio track(s), ${subtitleTracks.length} subtitle track(s) and ${closedCaptions.length} closed caption track(s) in HLS master: ${masterUrl}`);
 
-    // Filter out audio-only video tracks
-    const filteredVideoTracks = videoTracks.filter(videoTrack => !(!videoTrack.metaJS.hasVideoCodec && videoTrack.metaJS.hasAudioCodec));
-    if (videoTracks.length !== filteredVideoTracks.length) {
-        logger.debug(`Filtered out ${videoTracks.length - filteredVideoTracks.length} audio-only video tracks`);
-    }
-
     // Sort video tracks by bandwidth (highest first for best quality)
-    if (filteredVideoTracks.length > 0) {
-        filteredVideoTracks.sort((a, b) => {
+    if (videoTracks.length > 0) {
+        videoTracks.sort((a, b) => {
             const aBandwidth = a.metaJS.averageBandwidth || a.metaJS.bandwidth || 0;
             const bBandwidth = b.metaJS.averageBandwidth || b.metaJS.bandwidth || 0;
             return bBandwidth - aBandwidth;
         });
-        logger.debug(`Video tracks sorted by bandwidth, highest: ${filteredVideoTracks[0].metaJS.bandwidth}`);
+        logger.debug(`Video tracks sorted by bandwidth, highest: ${videoTracks[0].metaJS.bandwidth}`);
     }
 
     return {
-        videoTracks: filteredVideoTracks,
+        videoTracks: videoTracks,
         audioTracks: audioTracks,
         subtitleTracks: subtitleTracks,
         closedCaptions: closedCaptions,
@@ -738,8 +766,9 @@ function parseStreamInf(line) {
                     const hasVideoCodec = /avc1|hvc1|hev1|vp\d|av01/.test(value);
                     const hasAudioCodec = /mp4a|ac-3|ec-3|mp3/.test(value);
 
-                    if (hasAudioCodec) {result.hasAudioCodec = true;}
-                    if (hasVideoCodec) {result.hasVideoCodec = true;}
+                    // Explicitly set both flags
+                    result.hasAudioCodec = hasAudioCodec;
+                    result.hasVideoCodec = hasVideoCodec;
                 }
                 break;
             case 'RESOLUTION':

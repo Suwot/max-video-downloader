@@ -105,18 +105,36 @@ export class VideoDownloadButtonComponent {
      * Setup event handlers with preserved original handler (like old system)
      */
     setupEventHandlers() {
-        // Create and preserve the original download handler
-        this.originalHandler = async () => {
-            const cancelHandler = () => this.sendCancelMessage();
-            this.updateState(BUTTON_STATES.STARTING, {
-                text: 'Starting...',
-                handler: cancelHandler
-            });
-            
-            this.videoItemComponent.executeDownload('download');
-        };
+        // Detect if this is an audio-only advanced scenario
+        const hasVideoTracks = (this.videoItemComponent.videoData.videoTracks?.length || 0) > 0;
+        const hasAudioTracks = (this.videoItemComponent.videoData.audioTracks?.length || 0) > 0;
+        const isAdvancedMode = this.videoItemComponent.dropdown?.isAdvancedMode;
         
-        // Set the original handler as the default click handler
+        // If advanced mode but no video tracks, wire to audio extraction
+        if (isAdvancedMode && !hasVideoTracks && hasAudioTracks) {
+            this.originalHandler = async () => {
+                const cancelHandler = () => this.sendCancelMessage();
+                this.updateState(BUTTON_STATES.STARTING, {
+                    text: 'Extracting...',
+                    handler: cancelHandler
+                });
+                
+                this.videoItemComponent.executeDownload('extract-audio');
+            };
+        } else {
+            // Standard video download handler
+            this.originalHandler = async () => {
+                const cancelHandler = () => this.sendCancelMessage();
+                this.updateState(BUTTON_STATES.STARTING, {
+                    text: 'Starting...',
+                    handler: cancelHandler
+                });
+                
+                this.videoItemComponent.executeDownload('download');
+            };
+        }
+        
+        // Set the determined handler as the default click handler
         this.downloadBtn.onclick = this.originalHandler;
     }
     

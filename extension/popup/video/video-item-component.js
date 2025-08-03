@@ -10,7 +10,7 @@ import { createLogger } from '../../shared/utils/logger.js';
 import { VideoDropdownComponent } from './video-dropdown-component.js';
 import { VideoDownloadButtonComponent } from './video-download-button-component.js';
 import { isTrackCompatibleWithVideo } from '../../background/processing/container-detector.js';
-import { showInfo } from '../ui-utils.js';
+import { showInfo, showError } from '../ui-utils.js';
 
 const logger = createLogger('VideoItemComponent');
 
@@ -367,6 +367,20 @@ export class VideoItemComponent {
             return;
         }
         
+        // Check for missing URLs in commands
+        for (const command of validCommands) {
+            if (!command.downloadUrl) {
+                showError('URL is missing, can\'t download');
+                logger.error(`Missing downloadUrl in command for ${mode}:`, command);
+                
+                // Reset button state to default since operation failed
+                if (this.downloadButton) {
+                    this.downloadButton.updateState('default');
+                }
+                return;
+            }
+        }
+        
         validCommands.forEach(command => {
             sendPortMessage(command);
             logger.debug(`Executed ${mode} command:`, command);
@@ -593,7 +607,7 @@ export class VideoItemComponent {
                 inputs: this.buildHlsInputsArray(),
                 container: this.getOptimalContainer(),
                 fileSizeBytes: this.calculateTotalFileSize(),
-                segmentCount: this.selectedTracks.videoTrack?.metaJS?.segmentCount || null
+                segmentCount: this.videoData.segmentCount || null
             };
         } else {
             // Simple HLS mode
@@ -603,7 +617,7 @@ export class VideoItemComponent {
                 downloadUrl: videoTrack?.url,
                 container: videoTrack?.videoContainer || 'mp4',
                 fileSizeBytes: videoTrack?.metaJS?.estimatedFileSizeBytes || null,
-                segmentCount: videoTrack?.metaJS?.segmentCount || null
+                segmentCount: this.videoData.segmentCount || null
             };
         }
     }

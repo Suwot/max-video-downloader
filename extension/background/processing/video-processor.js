@@ -261,30 +261,62 @@ async function processHlsVideo(tabId, normalizedUrl) {
     const hlsResult = await parseHlsManifest(video.url);
     
     if (hlsResult.status === 'success') {
-        // HLS parser now outputs standardized structure with videoTracks[]
+        // Track variant-master relationships if this is a master playlist
+        if (hlsResult.isMaster) {
+            // First: Track ALL URLs for deduplication (including video tracks that might be filtered)
+            const allVideoTracks = hlsResult.videoTracks || [];
+            const allAudioTracks = hlsResult.audioTracks || [];
+            const allSubtitleTracks = hlsResult.subtitleTracks || [];
+            
+            if (allVideoTracks.length > 0 || allAudioTracks.length > 0 || allSubtitleTracks.length > 0) {
+                handleVariantMasterRelationships(
+                    tabId, 
+                    allVideoTracks, 
+                    allAudioTracks, 
+                    allSubtitleTracks, 
+                    normalizedUrl
+                );
+            }
+            
+            // Second: Filter video tracks safely (only remove audio-only tracks used for embedding)
+            if (allVideoTracks.length > 0) {
+                const filteredVideoTracks = allVideoTracks.filter(videoTrack => {
+                    // Only remove if ALL conditions are true:
+                    const shouldRemove = (
+                        videoTrack.isUsedForEmbeddedAudio &&           // Used for embedded audio
+                        videoTrack.metaJS.hasVideoCodec === false &&   // Explicitly no video codec
+                        videoTrack.metaJS.codecs !== null               // Codecs info available
+                    );
+                    return !shouldRemove;
+                });
+                
+                // Clean up the temporary flag
+                filteredVideoTracks.forEach(track => {
+                    delete track.isUsedForEmbeddedAudio;
+                });
+                
+                // Update the result with filtered tracks
+                hlsResult.videoTracks = filteredVideoTracks;
+                
+                if (allVideoTracks.length !== filteredVideoTracks.length) {
+                    logger.debug(`Filtered out ${allVideoTracks.length - filteredVideoTracks.length} audio-only video tracks used for embedded audio`);
+                }
+            }
+
+            // Generate preview for the master using the first remaining video track as source (if enabled)
+            if (settingsManager.get('autoGeneratePreviews') && hlsResult.videoTracks?.length > 0) {
+                const firstVideoTrack = hlsResult.videoTracks[0];
+                await generateVideoPreview(tabId, normalizedUrl, headers, firstVideoTrack.url);
+            }
+        }
+        
+        // Update UI with final processed result (including filtered tracks)
         const hlsUpdates = {
             ...hlsResult,
             isBeingProcessed: false,
             parsing: false
         };
         updateVideo('processHlsVideo', tabId, normalizedUrl, hlsUpdates);
-
-        // Track variant-master relationships if this is a master playlist
-        if (hlsResult.isMaster && hlsResult.videoTracks?.length > 0) {
-            handleVariantMasterRelationships(
-                tabId, 
-                hlsResult.videoTracks, 
-                hlsResult.audioTracks, 
-                hlsResult.subtitleTracks, 
-                normalizedUrl
-            );
-
-            // Generate preview for the master using the first video track as source (if enabled)
-            if (settingsManager.get('autoGeneratePreviews')) {
-                const firstVideoTrack = hlsResult.videoTracks[0];
-                await generateVideoPreview(tabId, normalizedUrl, headers, firstVideoTrack.url);
-            }
-        }
     } else {
         // Update with error information and clear processing flags
         updateVideo('processHlsVideo-error', tabId, normalizedUrl, {

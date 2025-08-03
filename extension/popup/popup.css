@@ -1679,7 +1679,6 @@ header .heading-row {
   -webkit-transition: max-height var(--transition-fast) ease, opacity var(--transition-fast) ease;
   transition: max-height var(--transition-fast) ease, opacity var(--transition-fast) ease;
   overflow-y: visible;
-  max-height: 2000px;
   opacity: 1;
 }
 .section-content.collapsed {

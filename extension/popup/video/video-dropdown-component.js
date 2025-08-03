@@ -32,9 +32,11 @@ export class VideoDropdownComponent {
      * @returns {boolean} True if advanced mode should be used
      */
     determineMode() {
-        const hasOnlyVideoTracks = (this.videoData.audioTracks?.length || 0) === 0 && 
-                                  (this.videoData.subtitleTracks?.length || 0) === 0;
-        return !hasOnlyVideoTracks;
+        const hasAudioTracks = (this.videoData.audioTracks?.length || 0) > 0;
+        const hasSubtitleTracks = (this.videoData.subtitleTracks?.length || 0) > 0;
+        
+        // Advanced mode if we have any audio or subtitle tracks
+        return hasAudioTracks || hasSubtitleTracks;
     }
     
     /**
