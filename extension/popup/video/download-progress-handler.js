@@ -21,9 +21,20 @@ export async function updateDownloadProgress(progressData = {}) {
     
     // Handle downloads tab creation for new downloads (efficient one-time events)
     if (progressData.command === 'download-queued' && progressData.videoData) {
-        await createVideoItemInDownloads(progressData, 'queued');
+        // Check if item already exists (from restoration)
+        const downloadId = progressData.downloadId;
+        const activeDownloadsContainer = document.querySelector('.active-downloads');
+        const existingItem = downloadId ? 
+            activeDownloadsContainer?.querySelector(`.video-item[data-download-id="${downloadId}"]`) : null;
+            
+        if (!existingItem) {
+            await createVideoItemInDownloads(progressData, 'queued');
+            logger.debug('Created new queued download item:', downloadId);
+        } else {
+            logger.debug('Download item already exists, skipping creation:', downloadId);
+        }
     } else if (progressData.command === 'download-started' && progressData.videoData) {
-        // Smart UI updates: update existing queued items instead of creating duplicates
+        // Smart UI updates: update existing items instead of creating duplicates
         const downloadId = progressData.downloadId;
         const activeDownloadsContainer = document.querySelector('.active-downloads');
         
@@ -34,13 +45,15 @@ export async function updateDownloadProgress(progressData = {}) {
         }
         
         if (existingItem) {
-            // Update existing queued item to downloading state
+            // Update existing item to downloading state
             const component = existingItem._component;
             if (component && component.downloadButton) {
                 component.downloadButton.updateState('starting');
             }
+            logger.debug('Updated existing download item to starting state:', downloadId);
         } else {
-            // Create new item (for direct downloads)
+            // Only create new item if none exists (shouldn't happen with proper restoration)
+            logger.debug('Creating new download item for started download:', downloadId);
             await createVideoItemInDownloads(progressData, 'starting');
         }
     }
@@ -436,6 +449,7 @@ export async function restoreActiveDownloads() {
                             </div>`;
 
         // Request active downloads from background service worker
+        // This will trigger both activeDownloadsData and any pending progress updates
         await sendPortMessage({ command: 'getActiveDownloads' });
         
         // The actual restoration will happen in handleActiveDownloadsData
@@ -471,13 +485,20 @@ export function handleActiveDownloadsData(activeDownloads) {
             initialMessage.style.display = 'none';
         }
         
-        // Recreate video items from in-memory data with proper initial states and downloadId in simple mode
+        // Recreate video items from unified data (includes both download info and progress)
         activeDownloads.forEach(downloadEntry => {
             if (downloadEntry.videoData) {
                 const initialState = downloadEntry.status || 'queued';
                 const videoComponent = new VideoItemComponent(downloadEntry, initialState, null, 'simple');
                 const videoElement = videoComponent.render();
                 activeDownloadsContainer.appendChild(videoElement);
+                
+                // Apply any existing progress data immediately
+                if (downloadEntry.progressData && downloadEntry.progressData.progress !== undefined) {
+                    // Update progress immediately if available
+                    updateDownloadButton(downloadEntry.progressData);
+                    updateDropdown(downloadEntry.progressData);
+                }
                 
                 // Clear any stale timers for this downloadId (in case of popup reopen)
                 if (downloadEntry.downloadId) {

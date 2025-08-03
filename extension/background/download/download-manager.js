@@ -82,7 +82,10 @@ export function getActiveDownloads() {
                 streamSelection: entry.downloadRequest.streamSelection,
                 isRedownload: entry.downloadRequest.isRedownload || false,
                 audioOnly: entry.downloadRequest.audioOnly || false,
-                subsOnly: entry.downloadRequest.subsOnly || false
+                subsOnly: entry.downloadRequest.subsOnly || false,
+                // Include progress data for complete UI restoration
+                progressData: entry.progressData,
+                timestamp: entry.timestamp
             });
         }
     }
@@ -485,26 +488,6 @@ function createCompletionNotification(filename) {
         title: 'Download Complete',
         message: `Finished: ${filename}`
     });
-}
-
-/**
- * Get all active download progress for popup restoration
- * @returns {Array} Array of progress objects with completion flags
- */
-export function getActiveDownloadProgress() {
-    const progressArray = [];
-    
-    for (const [downloadId, entry] of allDownloads.entries()) {
-        // Add completion flags that UI expects
-        progressArray.push({
-            ...entry.progressData,
-            success: entry.progressData.success,
-            error: entry.progressData.error
-        });
-    }
-    
-    logger.debug(`Returning ${progressArray.length} active download progress states`);
-    return progressArray;
 }
 
 //Get count of active downloads and queue

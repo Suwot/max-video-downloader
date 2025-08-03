@@ -124,6 +124,7 @@ export async function parseHlsManifest(url) {
         let segmentCount = null;
         let isEncrypted = false;
         let encryptionType = null;
+        let isLive = false;
         let version = null; 
         let subtitleTracks = [];
         let closedCaptions = [];
@@ -191,7 +192,7 @@ export async function parseHlsManifest(url) {
                 segmentCount = variantInfo.segmentCount;
                 isEncrypted = variantInfo.isEncrypted || false;
                 encryptionType = variantInfo.encryptionType;
-                const isLive = variantInfo.isLive || false;
+                isLive = variantInfo.isLive || false;
                 
                 // Propagate metadata to all video tracks
                 videoTracks = videoTracks.map((videoTrack, index) => {
@@ -245,7 +246,7 @@ export async function parseHlsManifest(url) {
             const variantInfo = calculateHlsVariantDuration(content);
             duration = variantInfo.duration;
             segmentCount = variantInfo.segmentCount;
-            const isLive = variantInfo.isLive;
+            isLive = variantInfo.isLive;
             
             logger.debug(`Variant duration: ${duration}s, segmentCount: ${segmentCount}, isLive: ${isLive}`);
             
@@ -299,6 +300,7 @@ export async function parseHlsManifest(url) {
             timestampParsed: timestampParsed,
             duration: duration,
             segmentCount: segmentCount,  // Add segmentCount at main level for easy access
+            isLive: isLive,
             isEncrypted: isEncrypted,
             encryptionType: encryptionType,
             version: version,

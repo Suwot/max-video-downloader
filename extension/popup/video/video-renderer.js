@@ -70,9 +70,6 @@ export async function renderVideos(videos = []) {
             }
         }
     }
-
-    // Request cache stats and download progress restoration
-    sendPortMessage({ command: 'getDownloadProgress' }); // Restore download progress during rerender
 }
 
 /**

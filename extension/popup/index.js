@@ -57,17 +57,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         // Request videos
         sendPortMessage({
             command: 'getVideos',
-            tabId: activeTab.id,
-            forceRefresh: true
+            tabId: activeTab.id
         });
 
-        // Restore downloads data
+        // Restore downloads data (this will handle both active downloads and progress)
         await restoreActiveDownloads();
         await renderHistoryItems();
-        
-        // Request current download progress for restored active downloads
-        sendPortMessage({ command: 'getDownloadProgress' });
-        
     } catch (error) {
         logger.error('Initialization error:', error);
         const container = document.getElementById('videos-list');

@@ -4,7 +4,7 @@
  */
 
 // Add static imports at the top
-import { processDownloadCommand, cancelDownload, getActiveDownloadProgress, getActiveDownloadCount, getActiveDownloads } from '../download/download-manager.js';
+import { processDownloadCommand, cancelDownload, getActiveDownloadCount, getActiveDownloads } from '../download/download-manager.js';
 import { createLogger } from '../../shared/utils/logger.js';
 import { clearPreviewCache, getCacheStats } from '../../shared/utils/preview-cache.js';
 import { clearAllHeaders } from '../../shared/utils/headers-utils.js';
@@ -68,17 +68,6 @@ async function handlePortMessage(message, port, portId) {
             });
             break;
 
-        case 'getDownloadProgress':
-            // Send only download progress states (no video updates)
-            const downloadProgress = getActiveDownloadProgress();
-            if (downloadProgress.length > 0) {
-                logger.debug(`Sending ${downloadProgress.length} download progress states for rerender`);
-                downloadProgress.forEach(progressData => {
-                    port.postMessage(progressData);
-                });
-            }
-            break;
-
         case 'getActiveDownloads':
             // Send active downloads from in-memory Map for UI restoration
             const activeDownloads = getActiveDownloads();
@@ -86,7 +75,7 @@ async function handlePortMessage(message, port, portId) {
                 command: 'activeDownloadsData',
                 activeDownloads: activeDownloads
             });
-            logger.debug(`Sent ${activeDownloads.length} active downloads for UI restoration`);
+            logger.debug(`Sent ${activeDownloads.length} active downloads with progress data for UI restoration`);
             break;
 
         case 'generatePreview':
