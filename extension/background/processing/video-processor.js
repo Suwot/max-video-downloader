@@ -270,10 +270,10 @@ async function processHlsVideo(tabId, normalizedUrl) {
             
             if (allVideoTracks.length > 0 || allAudioTracks.length > 0 || allSubtitleTracks.length > 0) {
                 handleVariantMasterRelationships(
-                    tabId, 
-                    allVideoTracks, 
-                    allAudioTracks, 
-                    allSubtitleTracks, 
+                    tabId,
+                    allVideoTracks,
+                    allAudioTracks,
+                    allSubtitleTracks,
                     normalizedUrl
                 );
             }
@@ -285,7 +285,7 @@ async function processHlsVideo(tabId, normalizedUrl) {
                     const shouldRemove = (
                         videoTrack.isUsedForEmbeddedAudio &&           // Used for embedded audio
                         !videoTrack.videoContainer &&                  // No video container (audio-only)
-                        videoTrack.audioContainer                       // Has audio container
+                        videoTrack.audioContainer                      // Has audio container
                     );
                     return !shouldRemove;
                 });
@@ -302,21 +302,21 @@ async function processHlsVideo(tabId, normalizedUrl) {
                     logger.debug(`Filtered out ${allVideoTracks.length - filteredVideoTracks.length} audio-only video tracks used for embedded audio`);
                 }
             }
-
-            // Generate preview for the master using the first remaining video track as source (if enabled)
-            if (settingsManager.get('autoGeneratePreviews') && hlsResult.videoTracks?.length > 0) {
-                const firstVideoTrack = hlsResult.videoTracks[0];
-                await generateVideoPreview(tabId, normalizedUrl, headers, firstVideoTrack.url);
-            }
         }
-        
-        // Update UI with final processed result (including filtered tracks)
+
+        // Update UI with final processed result (including filtered tracks) IMMEDIATELY after filtering
         const hlsUpdates = {
             ...hlsResult,
             isBeingProcessed: false,
             parsing: false
         };
         updateVideo('processHlsVideo', tabId, normalizedUrl, hlsUpdates);
+
+        // Generate preview for the master using the first remaining video track as source (if enabled)
+        if (hlsResult.isMaster && settingsManager.get('autoGeneratePreviews') && hlsResult.videoTracks?.length > 0) {
+            const firstVideoTrack = hlsResult.videoTracks[0];
+            await generateVideoPreview(tabId, normalizedUrl, headers, firstVideoTrack.url);
+        }
     } else {
         // Update with error information and clear processing flags
         updateVideo('processHlsVideo-error', tabId, normalizedUrl, {
