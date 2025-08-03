@@ -19,13 +19,11 @@ import { settingsManager } from '../index.js';
 const logger = createLogger('Video Processor');
 
 // Module-level state for video processing
-const processingQueue = [];
-const processingMap = new Map();
-const MAX_CONCURRENT = 8; // Reduced since NHS handles connection management
+const processingMap = new Map(); // Track active processing to prevent duplicates
 
 
 /**
- * Add detected video to the central tracking map and enqueue for processing
+ * Add detected video to the central tracking map and start processing immediately
  * This is the main entry point for video processing orchestration
  * @param {number} tabId - The tab ID where the video was detected
  * @param {Object} videoInfo - Information about the detected video
@@ -67,7 +65,7 @@ function addDetectedVideo(tabId, videoInfo) {
                 updateVideo('addDetectedVideo-knownMediaItem', tabId, normalizedUrl, newVideo, true, false);
                 // Note: No UI update for known media items as they're filtered out from display
             }
-            // Do not enqueue for processing or update UI
+            // Do not process or update UI
             return;
         }
     }
@@ -116,17 +114,14 @@ function addDetectedVideo(tabId, videoInfo) {
         return;
     }
     
-    // Determine initial processing state based on queue capacity
-    const willProcessImmediately = processingMap.size < MAX_CONCURRENT;
-    
-    // Add to tab's collection with basic info and initial processing state
+    // All videos start processing immediately
     const newVideo = {
         ...videoInfo,
         normalizedUrl,
-        isBeingProcessed: willProcessImmediately,
-        // Set parsing flags based on type and immediate processing
-        ...(willProcessImmediately && (videoInfo.type === 'hls' || videoInfo.type === 'dash') ? { parsing: true } : {}),
-        ...(willProcessImmediately && videoInfo.type === 'direct' ? { runningFFprobe: true } : {}),
+        isBeingProcessed: true,
+        // Set parsing flags based on type for immediate processing
+        ...((videoInfo.type === 'hls' || videoInfo.type === 'dash') ? { parsing: true } : {}),
+        ...(videoInfo.type === 'direct' ? { runningFFprobe: true } : {}),
         title: videoInfo.metadata?.filename || getFilenameFromUrl(videoInfo.url),
         // Set isValid: true optimistically for all video types
         isValid: true,
@@ -152,54 +147,31 @@ function addDetectedVideo(tabId, videoInfo) {
     
     // validForDisplay will be set by updateVideo
     updateVideo('addDetectedVideo', tabId, normalizedUrl, newVideo, true);
-    logger.debug(`Added new video to detection map: ${videoInfo.url} (type: ${videoInfo.type}, source: ${sourceOfVideo}, immediate processing: ${willProcessImmediately})`);
+    logger.debug(`Added new video to detection map: ${videoInfo.url} (type: ${videoInfo.type}, source: ${sourceOfVideo})`);
 
-    // Enqueue for processing
-    enqueue(tabId, normalizedUrl, newVideo.type);
+    // Start processing immediately
+    processVideo(tabId, normalizedUrl, newVideo.type);
     
     return true;
 }
     
 /**
- * Enqueue a video for processing
+ * Process a video immediately
  * @param {number} tabId - Tab ID
  * @param {string} normalizedUrl - Normalized video URL
  * @param {string} videoType - Type of video (hls, dash, direct)
  */
-function enqueue(tabId, normalizedUrl, videoType) {
+async function processVideo(tabId, normalizedUrl, videoType) {
     // Skip if dismissed
     const video = getVideo(tabId, normalizedUrl);
     if (video?.timestampDismissed) {
-        logger.debug(`Not enqueueing dismissed video: ${normalizedUrl}`);
-        return;
-    }
-    // Don't add duplicates to the queue
-    if (processingQueue.some(item => item.normalizedUrl === normalizedUrl) || 
-        processingMap.has(normalizedUrl)) {
-        logger.debug(`Skipping duplicate: ${normalizedUrl} (in queue or processing)`);
+        logger.debug(`Not processing dismissed video: ${normalizedUrl}`);
         return;
     }
     
-    processingQueue.push({ tabId, normalizedUrl, videoType });
-    processNext();
-    
-    logger.debug(`Video queued for processing: ${normalizedUrl} (${videoType})`);
-}
-    
-/**
- * Process next video in queue
- */
-async function processNext() {
-    // Skip if nothing to process or already at capacity
-    if (processingQueue.length === 0 || processingMap.size >= MAX_CONCURRENT) {
-        return;
-    }
-    
-    const { tabId, normalizedUrl, videoType } = processingQueue.shift();
-    
-    // Skip if already processed or being processed
+    // Skip if already being processed
     if (processingMap.has(normalizedUrl)) {
-        processNext(); // Try processing next item
+        logger.debug(`Skipping duplicate processing: ${normalizedUrl}`);
         return;
     }
     
@@ -207,16 +179,7 @@ async function processNext() {
     processingMap.set(normalizedUrl, Date.now());
     
     try {
-        // Only update processing status if video was queued (not immediately processed)
-        const video = getVideo(tabId, normalizedUrl);
-        if (video && !video.isBeingProcessed) {
-            const processingFlags = {
-                isBeingProcessed: true,
-                ...(videoType === 'hls' || videoType === 'dash' ? { parsing: true } : {}),
-                ...(videoType === 'direct' ? { runningFFprobe: true } : {})
-            };
-            updateVideo(`processNext-dequeued`, tabId, normalizedUrl, processingFlags);
-        }
+        logger.debug(`Processing video: ${normalizedUrl} (${videoType})`);
 
         // Route to appropriate processor based on type
         if (videoType === 'hls') {
@@ -230,7 +193,7 @@ async function processNext() {
     } catch (error) {
         logger.error(`Error processing ${normalizedUrl}:`, error);
         // Update video with error status and clear all processing flags
-        updateVideo(`processNext-error`, tabId, normalizedUrl, { 
+        updateVideo(`processVideo-error`, tabId, normalizedUrl, { 
             isBeingProcessed: false, 
             parsing: false,
             runningFFprobe: false,
@@ -238,8 +201,6 @@ async function processNext() {
         });
     } finally {
         processingMap.delete(normalizedUrl);
-        // Process next item in queue
-        processNext();
     }
 }
     
@@ -643,36 +604,37 @@ async function getFFprobeMetadata(tabId, normalizedUrl, headers) {
 }
 
 /**
- * Clean up processing queue for a specific tab
+ * Clean up processing state for a specific tab
  * @param {number} tabId - Tab ID
  */
-function cleanupProcessingQueueForTab(tabId) {
-    if (processingQueue.length > 0) {
-        const originalCount = processingQueue.length;
-        const filteredQueue = processingQueue.filter(item => item.tabId !== tabId);
-        const removedCount = originalCount - filteredQueue.length;
-        if (removedCount > 0) {
-            logger.debug(`Removed ${removedCount} queued items for tab ${tabId}`);
+function cleanupProcessingForTab(tabId) {
+    // Clean up any active processing for this tab
+    const activeProcessing = [];
+    for (const [normalizedUrl, timestamp] of processingMap.entries()) {
+        const video = getVideo(tabId, normalizedUrl);
+        if (video) {
+            activeProcessing.push(normalizedUrl);
         }
-        // Replace array contents to maintain reference
-        processingQueue.length = 0;
-        processingQueue.push(...filteredQueue);
+    }
+    
+    if (activeProcessing.length > 0) {
+        activeProcessing.forEach(url => processingMap.delete(url));
+        logger.debug(`Cleaned up ${activeProcessing.length} active processing items for tab ${tabId}`);
     }
 }
 
 /**
- * Clear all processing queues
+ * Clear all processing state
  */
 function clearAll() {
-    processingQueue.length = 0;
     processingMap.clear();
 }
 
 export {
-    enqueue,
+    processVideo,
     addDetectedVideo,
     handleVariantMasterRelationships,
-    cleanupProcessingQueueForTab,
+    cleanupProcessingForTab,
     clearAll,
     generateVideoPreview
 };
