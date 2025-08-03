@@ -45,12 +45,28 @@ export async function updateDownloadProgress(progressData = {}) {
         }
         
         if (existingItem) {
-            // Update existing item to downloading state
+            // Update existing item to starting state with cancel handler
             const component = existingItem._component;
             if (component && component.downloadButton) {
-                component.downloadButton.updateState('starting');
+                // Create cancel handler for immediate cancellation
+                const cancelHandler = () => {
+                    const cancelMessage = {
+                        command: 'cancel-download',
+                        downloadId: progressData.downloadId || progressData.downloadUrl,
+                        type: progressData.type,
+                        downloadUrl: progressData.downloadUrl,
+                        masterUrl: progressData.masterUrl || null,
+                        selectedOptionOrigText: progressData.selectedOptionOrigText
+                    };
+                    sendPortMessage(cancelMessage);
+                };
+                
+                component.downloadButton.updateState('starting', {
+                    text: 'Starting...',
+                    handler: cancelHandler
+                });
             }
-            logger.debug('Updated existing download item to starting state:', downloadId);
+            logger.debug('Updated existing download item to starting state with cancel handler:', downloadId);
         } else {
             // Only create new item if none exists (shouldn't happen with proper restoration)
             logger.debug('Creating new download item for started download:', downloadId);
@@ -128,6 +144,11 @@ export function restoreDownloadStates(activeDownloads = []) {
                     });
                 } else if (downloadEntry.status === 'stopping') {
                     component.downloadButton.updateState('stopping');
+                } else if (downloadEntry.status === 'starting') {
+                    component.downloadButton.updateState('starting', {
+                        text: 'Starting...',
+                        handler: cancelHandler
+                    });
                 } else {
                     // Unknown status, set to downloading as fallback
                     component.downloadButton.updateState('downloading', {
@@ -238,6 +259,15 @@ function updateComponentButtonState(downloadButtonComponent, progressData = {}) 
                 handler: cancelHandler
             });
             logger.debug('Component download button set to queued state');
+            break;
+            
+        case 'download-started':
+            // Set to starting state with cancel functionality
+            downloadButtonComponent.updateState('starting', {
+                text: 'Starting...',
+                handler: cancelHandler
+            });
+            logger.debug('Component download button set to starting state with cancel handler');
             break;
             
         case 'download-progress':
