@@ -65,9 +65,7 @@ function getVideoByUrl(url) {
  */
 function determineUpdateType(updates) {
     const flagOnlyProps = [
-        'isBeingProcessed', 
-        'parsing', 
-        'runningFFprobe', 
+        'processing', 
         'generatingPreview',
         'error' // Simple error messages are treated as flags
     ];

@@ -667,13 +667,11 @@ export function updateVideoFlags(videoUrl, video) {
             previewImage.src = video.previewUrl;
         }
         
-        // Handle processing flags (could add visual indicators later)
-        if ('isBeingProcessed' in video || 'parsing' in video || 'runningFFprobe' in video) {
+        // Handle processing flag (could add visual indicators later)
+        if ('processing' in video) {
             // For now, just log - can add visual indicators later
-            logger.debug(`[FLAG] Processing flags updated for ${videoUrl}:`, {
-                isBeingProcessed: video.isBeingProcessed,
-                parsing: video.parsing,
-                runningFFprobe: video.runningFFprobe
+            logger.debug(`[FLAG] Processing flag updated for ${videoUrl}:`, {
+                processing: video.processing
             });
         }
         

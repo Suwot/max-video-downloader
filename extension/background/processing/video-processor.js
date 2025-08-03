@@ -7,7 +7,6 @@ import { normalizeUrl } from '../../shared/utils/processing-utils.js';
 import { createLogger } from '../../shared/utils/logger.js';
 import { standardizeResolution, getFilenameFromUrl } from '../../shared/utils/processing-utils.js';
 import { detectAllContainers } from './container-detector.js';
-
 import { getPreview, storePreview } from '../../shared/utils/preview-cache.js';
 import { parseHlsManifest, extractHlsMediaUrls } from './hls-parser.js';
 import { parseDashManifest } from './dash-parser.js';
@@ -20,7 +19,6 @@ const logger = createLogger('Video Processor');
 
 // Module-level state for video processing
 const processingMap = new Map(); // Track active processing to prevent duplicates
-
 
 /**
  * Add detected video to the central tracking map and start processing immediately
@@ -57,7 +55,7 @@ function addDetectedVideo(tabId, videoInfo) {
                     hasKnownMaster: true,
                     masterUrl: tabVariantMap.get(normalizedUrl),
                     normalizedUrl,
-                    isBeingProcessed: false,
+                    processing: false,
                     title: videoInfo.metadata?.filename || getFilenameFromUrl(videoInfo.url),
                     isValid: true // it's a known media item, so we consider it valid
                 };
@@ -118,10 +116,7 @@ function addDetectedVideo(tabId, videoInfo) {
     const newVideo = {
         ...videoInfo,
         normalizedUrl,
-        isBeingProcessed: true,
-        // Set parsing flags based on type for immediate processing
-        ...((videoInfo.type === 'hls' || videoInfo.type === 'dash') ? { parsing: true } : {}),
-        ...(videoInfo.type === 'direct' ? { runningFFprobe: true } : {}),
+        processing: true, // Single flag for all processing states
         title: videoInfo.metadata?.filename || getFilenameFromUrl(videoInfo.url),
         // Set isValid: true optimistically for all video types
         isValid: true,
@@ -192,11 +187,9 @@ async function processVideo(tabId, normalizedUrl, videoType) {
 
     } catch (error) {
         logger.error(`Error processing ${normalizedUrl}:`, error);
-        // Update video with error status and clear all processing flags
+        // Update video with error status and clear processing flag
         updateVideo(`processVideo-error`, tabId, normalizedUrl, { 
-            isBeingProcessed: false, 
-            parsing: false,
-            runningFFprobe: false,
+            processing: false,
             error: error.message 
         });
     } finally {
@@ -268,8 +261,7 @@ async function processHlsVideo(tabId, normalizedUrl) {
         // Update UI with final processed result (including filtered tracks) IMMEDIATELY after filtering
         const hlsUpdates = {
             ...hlsResult,
-            isBeingProcessed: false,
-            parsing: false
+            processing: false
         };
         updateVideo('processHlsVideo', tabId, normalizedUrl, hlsUpdates);
 
@@ -279,11 +271,10 @@ async function processHlsVideo(tabId, normalizedUrl) {
             await generateVideoPreview(tabId, normalizedUrl, headers, firstVideoTrack.url);
         }
     } else {
-        // Update with error information and clear processing flags
+        // Update with error information and clear processing flag
         updateVideo('processHlsVideo-error', tabId, normalizedUrl, {
             isValid: false,
-            isBeingProcessed: false,
-            parsing: false,
+            processing: false,
             timestampValidated: hlsResult.timestampValidated || Date.now(),
             parsingStatus: hlsResult.status,
             parsingError: hlsResult.error || 'Not a valid HLS manifest'
@@ -322,8 +313,7 @@ async function processDashVideo(tabId, normalizedUrl) {
             encryptionType: dashResult.encryptionType,
             timestampValidated: dashResult.timestampValidated,
             timestampParsed: dashResult.timestampParsed,
-            isBeingProcessed: false,
-            parsing: false
+            processing: false
         };
         
         updateVideo('processDashVideo', tabId, normalizedUrl, dashUpdates);
@@ -333,11 +323,10 @@ async function processDashVideo(tabId, normalizedUrl) {
             await generateVideoPreview(tabId, normalizedUrl, headers);
         }
     } else {
-        // Update with error information and clear processing flags
+        // Update with error information and clear processing flag
         updateVideo('processDashVideo-error', tabId, normalizedUrl, {
             isValid: false,
-            isBeingProcessed: false,
-            parsing: false,
+            processing: false,
             timestampValidated: dashResult.timestampValidated || Date.now(),
             parsingStatus: dashResult.status,
             parsingError: dashResult.error || 'Not a valid DASH manifest'
@@ -363,10 +352,9 @@ async function processDirectVideo(tabId, normalizedUrl) {
 
     if (isAudio) {
         logger.debug(`Skipping processing for 'audio' mediaType: ${normalizedUrl}`);
-        // Clear processing flags for audio files
+        // Clear processing flag for audio files
         updateVideo('processDirectVideo-audio', tabId, normalizedUrl, {
-            isBeingProcessed: false,
-            runningFFprobe: false
+            processing: false
         });
     } else {
         logger.debug(`Processing as video content: ${normalizedUrl}`);
@@ -569,8 +557,7 @@ async function getFFprobeMetadata(tabId, normalizedUrl, headers) {
 
             updateVideo('getFFprobeMetadata', tabId, normalizedUrl, {
                 isValid,
-                isBeingProcessed: false,
-                runningFFprobe: false,
+                processing: false,
                 metaFFprobe: streamInfo,
                 duration: streamInfo.duration,
                 standardizedResolution: standardizedRes,
@@ -587,18 +574,16 @@ async function getFFprobeMetadata(tabId, normalizedUrl, headers) {
             });
         } else {
             logger.warn(`No stream info in ffprobe response for: ${normalizedUrl}`);
-            // Clear processing flags but keep fallback containers
+            // Clear processing flag but keep fallback containers
             updateVideo('getFFprobeMetadata-no-stream', tabId, normalizedUrl, {
-                isBeingProcessed: false,
-                runningFFprobe: false
+                processing: false
             });
         }
     } catch (error) {
         logger.error(`Error getting FFprobe metadata for ${normalizedUrl}: ${error.message}`);
-        // Clear processing flags but keep fallback containers
+        // Clear processing flag but keep fallback containers
         updateVideo('getFFprobeMetadata-error', tabId, normalizedUrl, {
-            isBeingProcessed: false,
-            runningFFprobe: false
+            processing: false
         });
     }
 }
@@ -610,7 +595,7 @@ async function getFFprobeMetadata(tabId, normalizedUrl, headers) {
 function cleanupProcessingForTab(tabId) {
     // Clean up any active processing for this tab
     const activeProcessing = [];
-    for (const [normalizedUrl, timestamp] of processingMap.entries()) {
+    for (const [normalizedUrl] of processingMap.entries()) {
         const video = getVideo(tabId, normalizedUrl);
         if (video) {
             activeProcessing.push(normalizedUrl);
