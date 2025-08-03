@@ -570,6 +570,35 @@ class DownloadCommand extends BaseCommand {
     }
     
     /**
+     * Determine download type based on container and explicit flags
+     * @param {string} container - Container format from extension
+     * @param {boolean} audioOnly - Explicit audio extraction flag
+     * @param {boolean} subsOnly - Explicit subtitle extraction flag
+     * @returns {string} Download type: 'audio', 'video', or 'subs'
+     * @private
+     */
+    determineDownloadType(container, audioOnly, subsOnly) {
+        // 1. Explicit flags take priority (specific extraction requests)
+        if (audioOnly) return 'audio';
+        if (subsOnly) return 'subs';
+        
+        // 2. Container-based detection for general downloads
+        const audioContainers = ['m4a', 'mp3', 'flac', 'ogg', 'aac', 'wav', 'wma'];
+        const videoContainers = ['mp4', 'webm', 'mkv', 'avi', 'mov', 'flv', 'ts', 'm4v'];
+        const subtitleContainers = ['vtt', 'srt', 'ass', 'ssa', 'sub'];
+        
+        if (audioContainers.includes(container?.toLowerCase())) {
+            return 'audio';  // Same as audioOnly flag behavior
+        } else if (videoContainers.includes(container?.toLowerCase())) {
+            return 'video';  // Copy streams
+        } else if (subtitleContainers.includes(container?.toLowerCase())) {
+            return 'subs';   // Subtitle extraction
+        } else {
+            return 'video';  // Default fallback
+        }
+    }
+
+    /**
      * Builds FFmpeg command arguments based on input parameters
      * @private
      */
@@ -587,6 +616,10 @@ class DownloadCommand extends BaseCommand {
         sourceAudioBitrate = null
     }) {
         const args = [];
+        
+        // Determine download type using container-first logic
+        const downloadType = this.determineDownloadType(container, audioOnly, subsOnly);
+        logDebug('📦 Container-first detection:', { container, downloadType, audioOnly, subsOnly });
         
         // Progress tracking arguments
         args.push('-stats', '-progress', 'pipe:2');
@@ -625,8 +658,8 @@ class DownloadCommand extends BaseCommand {
             }
         }
         
-        // Stream selection and codec configuration
-        if (audioOnly) {
+        // Stream selection and codec configuration based on download type
+        if (downloadType === 'audio') {
             if (streamSelection && type === 'dash') {
                 // For DASH audio extraction, use the specific audio track from streamSelection
                 streamSelection.split(',').forEach(streamSpec => {
@@ -653,7 +686,7 @@ class DownloadCommand extends BaseCommand {
             // Smart codec selection for audio-only
             this.addAudioCodecArgs(args, container, sourceAudioCodec, sourceAudioBitrate);
         } 
-        else if (subsOnly) {
+        else if (downloadType === 'subs') {
             if (streamSelection && type === 'dash') {
                 // For DASH subtitle extraction, use the specific subtitle track from streamSelection
                 streamSelection.split(',').forEach(streamSpec => {
@@ -705,16 +738,16 @@ class DownloadCommand extends BaseCommand {
         }
         
         // Format-specific optimizations
-        if (type === 'hls' && !audioOnly && !subsOnly) {
+        if (type === 'hls' && downloadType === 'video') {
             // Fix for certain audio streams commonly found in HLS (only for regular video downloads)
             args.push('-bsf:a', 'aac_adtstoasc');
-        } else if (audioOnly && container === 'm4a') {
+        } else if (downloadType === 'audio' && container === 'm4a') {
             // For audio-only AAC → M4A, apply the bitstream filter
             args.push('-bsf:a', 'aac_adtstoasc');
         }
         
         // MP4/MOV optimizations (only for video/audio, not subtitles)
-        if (!subsOnly && ['mp4', 'mov', 'm4v'].includes(container.toLowerCase())) {
+        if (downloadType !== 'subs' && ['mp4', 'mov', 'm4v'].includes(container.toLowerCase())) {
             args.push('-movflags', '+faststart');
         }
         

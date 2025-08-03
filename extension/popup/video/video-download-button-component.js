@@ -319,7 +319,7 @@ export class VideoDownloadButtonComponent {
         
         if (type === 'hls') {
             if (videoData.isMaster) {
-                return videoData.audioTracks?.length > 0 || videoData.videoTracks?.[0]?.metaJS?.hasAudioCodec;
+                return videoData.audioTracks?.length > 0 || videoData.videoTracks?.[0]?.audioContainer;
             } else {
                 return true; // assume audio exists in a variant
             }

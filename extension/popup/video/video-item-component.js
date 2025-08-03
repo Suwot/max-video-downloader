@@ -413,17 +413,24 @@ export class VideoItemComponent {
 			pageTitle: this.videoData.pageTitle
         };
         
+        // Determine container based on command mode (container-first logic)
+        const container = this.determineDownloadContainer(mode, baseData);
+        
         const command = {
-            command: 'download',
+            command: 'download',  // Always use 'download' command - mode is conveyed via flags
+            container: container,  // Single container sent to native host
+            audioOnly: mode === 'extract-audio',
+            subsOnly: mode === 'extract-subs',
+            choosePath: mode === 'download-as',  // Add choosePath flag for download-as mode
             selectedOptionOrigText,
-            videoData: minimalVideoData, // Use minimal video data instead of full object
+            videoData: minimalVideoData,
             ...baseData
         };
         
-        // Add container extension to filename for regular downloads (other modes handle their own extensions)
-        if (mode === 'download' && command.container) {
+        // Add container extension to filename
+        if (container) {
             const baseFilename = command.filename || 'video';
-            command.filename = `${baseFilename}.${command.container}`;
+            command.filename = `${baseFilename}.${container}`;
         }
         
         // Apply mode-specific modifications
@@ -431,8 +438,7 @@ export class VideoItemComponent {
             case 'download-as':
                 return { 
                     ...command, 
-                    choosePath: true,
-                    defaultFilename: `${command.filename || 'video'}.${command.container || 'mp4'}`,
+                    defaultFilename: command.filename,
                     ...options 
                 };
             case 'extract-audio':
@@ -443,6 +449,34 @@ export class VideoItemComponent {
                 return { ...command, isRedownload: true, ...options };
             default:
                 return { ...command, ...options };
+        }
+    }
+
+    /**
+     * Determine download container based on command mode and available containers
+     * @param {string} mode - Download mode (download, extract-audio, extract-subs)
+     * @param {Object} baseData - Base download data containing container info
+     * @returns {string} Selected container for download
+     */
+    determineDownloadContainer(mode, baseData) {
+        const videoTrack = this.selectedTracks.videoTrack || this.videoData.videoTracks?.[0];
+        
+        switch (mode) {
+            case 'download':
+            case 'download-as':
+                // Container-first logic: video container for mixed content, audio container for audio-only
+                return videoTrack?.videoContainer || videoTrack?.audioContainer || baseData.container;
+            
+            case 'extract-audio':
+                // Use audio container for audio extraction
+                return videoTrack?.audioContainer;
+            
+            case 'extract-subs':
+                // Use subtitle container for subtitle extraction  
+                return videoTrack?.subtitleContainer;
+            
+            default:
+                return videoTrack?.videoContainer || videoTrack?.audioContainer || baseData.container;
         }
     }
 
@@ -610,12 +644,12 @@ export class VideoItemComponent {
                 segmentCount: this.videoData.segmentCount || null
             };
         } else {
-            // Simple HLS mode
+            // Simple HLS mode - use container-first logic
             const videoTrack = this.selectedTracks.videoTrack || this.videoData.videoTracks?.[0];
             return {
                 ...baseData,
                 downloadUrl: videoTrack?.url,
-                container: videoTrack?.videoContainer || 'mp4',
+                container: videoTrack?.videoContainer || videoTrack?.audioContainer || 'mp4',
                 fileSizeBytes: videoTrack?.metaJS?.estimatedFileSizeBytes || null,
                 segmentCount: this.videoData.segmentCount || null
             };
@@ -710,12 +744,14 @@ export class VideoItemComponent {
      * @returns {string} Optimal container format
      */
     getOptimalContainer() {
-        const videoContainer = this.selectedTracks.videoTrack?.videoContainer || 'mp4';
+        // Use container-first logic for optimal container selection
+        const videoTrack = this.selectedTracks.videoTrack;
+        const primaryContainer = videoTrack?.videoContainer || videoTrack?.audioContainer || 'mp4';
         
-        // Check if any selected tracks are incompatible with video container
-        const hasIncompatibleTracks = this.hasIncompatibleTracks(videoContainer);
+        // Check if any selected tracks are incompatible with primary container
+        const hasIncompatibleTracks = this.hasIncompatibleTracks(primaryContainer);
         
-        return hasIncompatibleTracks ? 'mkv' : videoContainer;
+        return hasIncompatibleTracks ? 'mkv' : primaryContainer;
     }
     
     /**

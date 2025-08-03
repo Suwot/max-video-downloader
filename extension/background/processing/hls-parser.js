@@ -258,7 +258,7 @@ export async function parseHlsManifest(url) {
             version = extractHlsVersion(content);
             logger.debug(`Standalone variant version: ${version}`);
             
-            // Create a single-item video tracks array with this video track including container info
+            // Create a single-item video tracks array with HLS defaults
             videoTracks = [{
                 url: url,
                 normalizedUrl: normalizedUrl,
@@ -266,10 +266,9 @@ export async function parseHlsManifest(url) {
                 hasKnownMaster: false,
                 type: 'hls',
                 isVariant: true,
-                // Include container information for download
+                // HLS defaults - container-first logic will handle audio-only cases
                 videoContainer: 'mp4',
-                audioContainer: 'mp3',
-                containerDetectionReason: 'manual fallback, no info is available',
+                audioContainer: 'm4a',
                 metaJS: {
                     duration: duration,
                     isLive: isLive,
@@ -362,25 +361,6 @@ function parseHlsMaster(content, baseUrl, masterUrl) {
 
     // Build video track objects
     const videoTracks = variantEntries.map(entry => {
-        // Detect containers for this variant based on codecs
-        const containerDetection = detectAllContainers({
-            codecs: entry.streamInf.codecs,
-            url: entry.url,
-            separateContainers: true
-        });
-        
-        // Conditionally assign audioContainer based on codec analysis
-        let audioContainer = null;
-        if (entry.streamInf.codecs) {
-            // Codecs present - only assign audioContainer if audio codec detected
-            if (entry.streamInf.hasAudioCodec) {
-                audioContainer = containerDetection.audioContainer;
-            }
-            // If no audio codec detected, leave audioContainer as null
-        } else {
-            // No codecs info - assign default fallback (can't be sure it doesn't have audio)
-            audioContainer = containerDetection.audioContainer;
-        }
         
         return {
             id: `video-${entry.streamInf.bandwidth || 'unknown'}-${entry.streamInf.height || 'p'}`,
@@ -392,9 +372,8 @@ function parseHlsMaster(content, baseUrl, masterUrl) {
             isVariant: true,
             isUsedForEmbeddedAudio: false,  // Flag for tracking embedded audio usage
             // Container information for download
-            videoContainer: containerDetection.videoContainer,
-            audioContainer: audioContainer,
-            containerDetectionReason: containerDetection.reason,
+            videoContainer: entry.streamInf.videoContainer || null,
+            audioContainer: entry.streamInf.audioContainer || null,
             metaJS: {
                 bandwidth: entry.streamInf.bandwidth,
                 averageBandwidth: entry.streamInf.averageBandwidth,
@@ -404,8 +383,7 @@ function parseHlsMaster(content, baseUrl, masterUrl) {
                 height: entry.streamInf.height,
                 standardizedResolution: entry.streamInf.height ? standardizeResolution(entry.streamInf.height) : null,
                 fps: entry.streamInf.fps,
-                hasVideoCodec: entry.streamInf.hasVideoCodec,
-                hasAudioCodec: entry.streamInf.hasAudioCodec,
+
                 audioGroup: entry.streamInf.audioGroup,
                 videoGroup: entry.streamInf.videoGroup,
                 subtitleGroup: entry.streamInf.subtitleGroup,
@@ -461,12 +439,6 @@ function parseHlsMaster(content, baseUrl, masterUrl) {
                 
                 // Only add if we have a valid URL
                 if (audioUrl) {
-                    const audioContainer = detectAllContainers({
-                        url: audioUrl,
-                        mediaType: 'audio',
-                        videoType: 'hls'
-                    });
-                    
                     audioTracks.push({
                         id: `audio-${attrs['GROUP-ID'] || 'default'}-${attrs['NAME'] || audioTracks.length}`,
                         groupId: attrs['GROUP-ID'] || null,
@@ -480,20 +452,14 @@ function parseHlsMaster(content, baseUrl, masterUrl) {
                         channels: attrs['CHANNELS'] || null,
                         assocLanguage: attrs['ASSOC-LANGUAGE'] || null,
                         isEmbedded: isEmbedded,  // Flag for embedded audio
-                        // Container information for download
-                        audioContainer: audioContainer.container,
-                        containerDetectionReason: audioContainer.reason
+                        // Container information for download - HLS audio is always M4A
+                        audioContainer: 'm4a'
                     });
                 }
             } else if (/TYPE=SUBTITLES/.test(line)) {
                 // Only add subtitle tracks that have URIs
                 if (attrs['URI']) {
                     const subtitleUrl = resolveUrl(baseUrl, attrs['URI']);
-                    const subtitleContainerDetection = detectAllContainers({
-                        url: subtitleUrl,
-                        mediaType: 'subtitle',
-                        videoType: 'hls'
-                    });
                     
                     subtitleTracks.push({
                         id: `subtitle-${attrs['GROUP-ID'] || 'default'}-${attrs['NAME'] || subtitleTracks.length}`,
@@ -507,9 +473,8 @@ function parseHlsMaster(content, baseUrl, masterUrl) {
                         forced: attrs['FORCED'] === 'YES',
                         characteristics: attrs['CHARACTERISTICS'] || null,
                         instreamId: attrs['INSTREAM-ID'] || null,
-                        // Container information for download
-                        subtitleContainer: subtitleContainerDetection.container,
-                        containerDetectionReason: subtitleContainerDetection.reason
+                        // Container information for download - HLS subtitles are always VTT
+                        subtitleContainer: 'vtt'
                     });
                 }
             } else if (/TYPE=CLOSED-CAPTIONS/.test(line)) {
@@ -573,10 +538,9 @@ async function parseHlsVariant(variantUrl, headers = null, _tabId) {
                 isEncrypted: false,
                 encryptionType: null,
                 retryCount: fetchResult.retryCount || 0,
-                // Default container information
+                // HLS default containers
                 videoContainer: 'mp4',
-                audioContainer: 'mp3',
-                containerDetectionReason: 'fetch failed - using defaults'
+                audioContainer: 'm4a'
             };
         }
         
@@ -591,10 +555,9 @@ async function parseHlsVariant(variantUrl, headers = null, _tabId) {
                 segmentCount: null,
                 isEncrypted: false,
                 encryptionType: null,
-                // Default container information
+                // HLS default containers
                 videoContainer: 'mp4',
-                audioContainer: 'mp3',
-                containerDetectionReason: 'empty response - using defaults'
+                audioContainer: 'm4a'
             };
         }
         
@@ -609,14 +572,7 @@ async function parseHlsVariant(variantUrl, headers = null, _tabId) {
         const version = extractHlsVersion(content);
         logger.debug(`Variant version: ${version}`);
         
-        // Detect containers for standalone video tracks (no codec info available)
-        const containerDetection = detectAllContainers({
-            url: variantUrl,
-            mediaType: 'video', // HLS video tracks are typically video+audio
-            videoType: 'hls'
-        });
-        
-        // Build a complete result object
+        // Build a complete result object with HLS defaults
         const result = {
             duration: durationInfo.duration,
             isLive: durationInfo.isLive,
@@ -624,10 +580,9 @@ async function parseHlsVariant(variantUrl, headers = null, _tabId) {
             isEncrypted: encryptionInfo.isEncrypted,
             encryptionType: encryptionInfo.isEncrypted ? encryptionInfo.encryptionType : null,
             version: version,
-            // Container information for download (defaults for HLS)
-            videoContainer: containerDetection.container,
-            audioContainer: 'm4a', // Default audio container for HLS (AAC in MP4)
-            containerDetectionReason: containerDetection.reason
+            // Container information for download (HLS defaults)
+            videoContainer: 'mp4',
+            audioContainer: 'm4a'
         };
 
         logger.debug(`Complete variant info: ${JSON.stringify(result)}`);
@@ -641,10 +596,9 @@ async function parseHlsVariant(variantUrl, headers = null, _tabId) {
             segmentCount: null,
             isEncrypted: false,
             encryptionType: null,
-            // Default container information
+            // HLS default containers
             videoContainer: 'mp4',
-            audioContainer: 'mp3',
-            containerDetectionReason: 'parsing error - using defaults'
+            audioContainer: 'm4a'
         };
     }
 }
@@ -734,8 +688,6 @@ function parseStreamInf(line) {
         width: null,
         height: null,
         fps: null,
-        hasAudioCodec: null,
-        hasVideoCodec: null,
         audioGroup: null,
         videoGroup: null,
         subtitleGroup: null,
@@ -759,16 +711,31 @@ function parseStreamInf(line) {
                 break;
             case 'CODECS':
                 result.codecs = value;
-                // Check if this is an audio-only stream based on codecs
+                // Container detection based on codecs (direct regex matching)
                 if (value) {
-                    // Audio-only streams typically only have audio codec (mp4a, ac-3, etc.) 
-                    // and no video codec (avc1, hvc1, vp9, etc.)
-                    const hasVideoCodec = /avc1|hvc1|hev1|vp\d|av01/.test(value);
-                    const hasAudioCodec = /mp4a|ac-3|ec-3|mp3/.test(value);
-
-                    // Explicitly set both flags
-                    result.hasAudioCodec = hasAudioCodec;
-                    result.hasVideoCodec = hasVideoCodec;
+                    const codecString = value.toLowerCase();
+                    
+                    // Video container detection (direct matching)
+                    if (/vp8|vp08|vp9|vp09/.test(codecString)) {
+                        result.videoContainer = 'webm';
+                    } else if (/avc1|hvc1|hev1|av01/.test(codecString)) {
+                        result.videoContainer = 'mp4';
+                    }
+                    // If no video codec match → videoContainer remains undefined
+                    
+                    // Audio container detection (direct matching)
+                    if (/mp3|mpa/.test(codecString)) {
+                        result.audioContainer = 'mp3';
+                    } else if (/opus|vorbis/.test(codecString)) {
+                        result.audioContainer = 'webm';
+                    } else if (/mp4a|aac|ac-3|ec-3/.test(codecString)) {
+                        result.audioContainer = 'm4a';
+                    }
+                    // If no audio codec match → audioContainer remains undefined
+                } else {
+                    // No codecs - HLS fallback defaults
+                    result.videoContainer = 'mp4';
+                    result.audioContainer = 'm4a';
                 }
                 break;
             case 'RESOLUTION':

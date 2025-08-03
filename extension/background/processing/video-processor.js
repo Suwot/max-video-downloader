@@ -284,8 +284,8 @@ async function processHlsVideo(tabId, normalizedUrl) {
                     // Only remove if ALL conditions are true:
                     const shouldRemove = (
                         videoTrack.isUsedForEmbeddedAudio &&           // Used for embedded audio
-                        videoTrack.metaJS.hasVideoCodec === false &&   // Explicitly no video codec
-                        videoTrack.metaJS.codecs !== null               // Codecs info available
+                        !videoTrack.videoContainer &&                  // No video container (audio-only)
+                        videoTrack.audioContainer                       // Has audio container
                     );
                     return !shouldRemove;
                 });
