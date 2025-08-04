@@ -142,6 +142,7 @@ export class VideoDropdownComponent {
      * Create simple options for single-track selection
      */
     createSimpleOptions() {
+        // For direct videos during processing, videoTracks might not exist yet
         const videoTracks = this.videoData.videoTracks?.length > 0 ? 
             this.videoData.videoTracks : [this.videoData];
         
@@ -349,12 +350,32 @@ export class VideoDropdownComponent {
         const label = document.createElement('span');
         label.className = 'label';
         
-        if (this.isAdvancedMode) {
-            label.textContent = this.buildAdvancedSummary();
+        // Show processing text based on video type
+        if (this.videoData.processing) {
+            if (this.videoData.type === 'hls' || this.videoData.type === 'dash') {
+                label.textContent = 'Parsing...';
+            } else if (this.videoData.type === 'direct') {
+                label.textContent = 'Probing...';
+            } else {
+                label.textContent = 'Processing...';
+            }
+            this.selectedDisplay.classList.add('processing');
         } else {
-            const track = this.selectedTracks.videoTrack || this.videoData.videoTracks?.[0] || this.videoData;
-            const parts = this.formatVariantLabel(track).split(' • ');
-            label.textContent = parts.slice(0, 2).join(' • ');
+            this.selectedDisplay.classList.remove('processing');
+            
+            if (this.isAdvancedMode) {
+                label.textContent = this.buildAdvancedSummary();
+            } else {
+                const track = this.selectedTracks.videoTrack || this.videoData.videoTracks?.[0] || this.videoData;
+                
+                // Check if we have quality info available
+                if (!track || (!track.standardizedResolution && !track.height && !track.bitrate && !track.metaFFprobe)) {
+                    label.textContent = 'Unknown quality';
+                } else {
+                    const parts = this.formatVariantLabel(track).split(' • ');
+                    label.textContent = parts.slice(0, 2).join(' • ');
+                }
+            }
         }
         
         this.selectedDisplay.prepend(label);
@@ -570,7 +591,7 @@ export class VideoDropdownComponent {
                 .filter(Boolean)
                 .join(' • ') || 'Unknown Quality';
         } else {
-            // Direct video formatting
+            // Direct video formatting - handle both processed tracks and raw video data
             const res = videoTrack.standardizedResolution || null;
             const fps = videoTrack.metaFFprobe?.fps || null;
             const formattedResolution = res ? 
@@ -628,7 +649,8 @@ export class VideoDropdownComponent {
      */
     updateVideoData(newVideoData) {
         this.videoData = { ...this.videoData, ...newVideoData };
-        // Could re-render if needed, but typically not necessary
+        // Update display to reflect new processing state or quality info
+        this.updateSelectedDisplay();
     }
     
     /**

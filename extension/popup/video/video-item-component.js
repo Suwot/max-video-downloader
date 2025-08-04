@@ -199,19 +199,22 @@ export class VideoItemComponent {
         const loader = document.createElement('div');
         loader.className = 'loader';
         
-        // Create retry preview button
-        const retryPreviewBtn = document.createElement('button');
-        retryPreviewBtn.className = 'retry-preview-btn';
-        retryPreviewBtn.title = 'Generate preview';
-        retryPreviewBtn.innerHTML = `
-            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-rotate-cw w-3 h-3" aria-hidden="true">
-                <path d="M21 12a9 9 0 1 1-9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"></path>
-                <path d="M21 3v5h-5"></path>
-            </svg>
-        `;
-        retryPreviewBtn.addEventListener('click', this.handlePreviewRetry);
+        // Only add retry preview button if not processing and has video tracks
+        if (!this.videoData.processing && this.videoData.videoTracks?.length > 0) {
+            const retryPreviewBtn = document.createElement('button');
+            retryPreviewBtn.className = 'retry-preview-btn';
+            retryPreviewBtn.title = 'Generate preview';
+            retryPreviewBtn.innerHTML = `
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-rotate-cw w-3 h-3" aria-hidden="true">
+                    <path d="M21 12a9 9 0 1 1-9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"></path>
+                    <path d="M21 3v5h-5"></path>
+                </svg>
+            `;
+            retryPreviewBtn.addEventListener('click', this.handlePreviewRetry);
+            previewContainer.appendChild(retryPreviewBtn);
+        }
         
-        previewContainer.append(previewImage, loader, retryPreviewBtn);
+        previewContainer.append(previewImage, loader);
         
         // Handle preview loading and hover
         this.setupPreviewHandling(previewContainer, previewImage);
@@ -358,10 +361,29 @@ export class VideoItemComponent {
         const elementsDiv = document.createElement('div');
         elementsDiv.className = 'download-group';
         
-        // Create dropdown component
-        this.dropdown = new VideoDropdownComponent(this.videoData, this.selectedTracks, this.handleTrackSelectionChange);
-        const dropdownElement = this.dropdown.render();
-        elementsDiv.appendChild(dropdownElement);
+        // Check if we have tracks to show dropdown, otherwise show placeholder
+        const hasTracks = this.videoData.videoTracks?.length > 0 || 
+                         this.videoData.audioTracks?.length > 0 || 
+                         this.videoData.subtitleTracks?.length > 0;
+        
+        if (hasTracks) {
+            // Create dropdown component
+            this.dropdown = new VideoDropdownComponent(this.videoData, this.selectedTracks, this.handleTrackSelectionChange);
+            const dropdownElement = this.dropdown.render();
+            elementsDiv.appendChild(dropdownElement);
+        } else {
+			logger.debug('creating simple DD with no tracks available');
+			
+            // Create simple placeholder (no dropdown functionality)
+            const placeholderDropdown = document.createElement('div');
+            placeholderDropdown.className = 'custom-dropdown';
+            placeholderDropdown.innerHTML = `
+                <div class="selected-option ${this.videoData.processing ? 'processing' : ''}">
+                    <span class="label">${this.videoData.type === 'direct' ? 'Probing...' : 'Parsing...'}</span>
+                </div>
+            `;
+            elementsDiv.appendChild(placeholderDropdown);
+        }
         
         // Create download button component
         this.downloadButton = new VideoDownloadButtonComponent(this, elementsDiv);

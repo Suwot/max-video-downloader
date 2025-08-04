@@ -6,7 +6,7 @@
 
 import { createLogger } from '../shared/utils/logger.js';
 import { updateDownloadProgress } from './video/download-progress-handler.js';
-import { renderVideos, addVideoToUI, updateVideoInUI, removeVideoFromUI, renderHistoryItems, updateHistoryItemDeleted } from './video/video-renderer.js';
+import { renderVideos, addVideoToUI, updateVideoInUI, removeVideoFromUI, renderHistoryItems, updateHistoryItemDeleted, updateVideoFlags } from './video/video-renderer.js';
 import { updateUICounters, showToast, showSuccess, showError } from './ui-utils.js';
 import { updateSettingsUI, updateNativeHostStatus } from './settings-tab.js';
 
@@ -144,40 +144,55 @@ async function handleIncomingMessage(message) {
  * Handle action-based video state updates
  */
 async function handleVideoStateUpdate(message) {
-    logger.debug(`Delegated '${message.action}' action for video: ${message.videoUrl}`);
+    logger.debug(`Video update: ${message.type} ${message.action}`, message);
 
     try {
-        switch (message.action) {
-            case 'add':
-                if (message.video) {
-                    // Add to UI directly - no need for local state
-                    await addVideoToUI(message.video);
+        if (message.type === 'full-refresh') {
+            // Full refresh with all videos and counts
+            if (message.videos) {
+                await renderVideos(message.videos);
+            }
+            if (message.counts) {
+                updateUICounters({ videos: message.counts });
+            }
+            return;
+        }
+
+        if (message.type === 'structural') {
+            // Structural updates with complete video data
+            switch (message.action) {
+                case 'add':
+                    if (message.videoData) {
+                        await addVideoToUI(message.videoData);
+                    }
+                    break;
+                    
+                case 'update':
+                    if (message.videoData && message.normalizedUrl) {
+                        await updateVideoInUI(message.normalizedUrl, message.videoData, 'structural');
+                    }
+                    break;
+            }
+        } 
+        else if (message.type === 'flag') {
+            // Flag updates with minimal data
+            if (message.action === 'remove') {
+                // Handle batch removal
+                if (Array.isArray(message.normalizedUrl)) {
+                    // Batch removal for variant deduplication
+                    for (const url of message.normalizedUrl) {
+                        await removeVideoFromUI(url);
+                    }
+                } else {
+                    // Single removal
+                    await removeVideoFromUI(message.normalizedUrl);
                 }
-                break;
-                
-            case 'update':
-                if (message.video) {
-                    // Update in UI directly - no need for local state
-                    await updateVideoInUI(message.videoUrl, message.video, message.updateType);
+            } else if (message.action === 'update') {
+                // Flag updates (like generatingPreview)
+                if (message.normalizedUrl && message.flags) {
+                    await updateVideoInUI(message.normalizedUrl, message.flags, 'flag');
                 }
-                break;
-                
-            case 'remove':
-                if (message.videoUrl) {
-                    // Remove from UI first
-                    await removeVideoFromUI(message.videoUrl);
-                    // Note: We don't remove from state as it might be needed for restoration
-                }
-                break;
-                
-            case 'full-refresh':
-                if (message.videos) {
-                    await renderVideos(message.videos || []);
-                }
-                break;
-                
-            default:
-                logger.warn('Unknown video state action:', message.action);
+            }
         }
     } catch (error) {
         logger.error('Error handling video state update:', error);

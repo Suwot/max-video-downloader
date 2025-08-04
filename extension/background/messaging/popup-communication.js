@@ -8,20 +8,17 @@ import { processDownloadCommand, cancelDownload, getActiveDownloadCount, getActi
 import { createLogger } from '../../shared/utils/logger.js';
 import { clearPreviewCache, getCacheStats } from '../../shared/utils/preview-cache.js';
 import { clearAllHeaders } from '../../shared/utils/headers-utils.js';
-import { getVideosForDisplay, getVideo, dismissVideoFromTab, cleanupAllVideos, getVideoTypeCounts } from '../processing/video-store.js';
+import { getVideo, dismissVideoFromTab, cleanupAllVideos, sendFullRefresh } from '../processing/video-store.js';
 import nativeHostService from './native-host-service.js';
 import { updateTabIcon } from '../state/tab-manager.js';
 import { settingsManager } from '../index.js';
-import { generateVideoPreview } from '../processing/video-processor.js';
+import { generateVideoPreview, clearAllProcessing } from '../processing/video-processor.js';
 
 // Track all popup connections - simplified single map
 const popupPorts = new Map(); // key = portId, value = {port, tabId, url}
 
 // Create a logger instance for the UI Communication module
 const logger = createLogger('UI Communication');
-
-// Debounce map for rapid updates to same video
-const updateDebounceMap = new Map(); // key: `${tabId}-${videoUrl}`, value: timeoutId
 
 // Handle messages coming through port connection
 async function handlePortMessage(message, port, portId) {
@@ -40,8 +37,6 @@ async function handlePortMessage(message, port, portId) {
         return;
     }
     
-
-    
     // Commands that require tab ID validation (tab-specific operations)
     const tabSpecificCommands = ['getVideos', 'generatePreview', 'download'];
     
@@ -58,7 +53,7 @@ async function handlePortMessage(message, port, portId) {
     switch (message.command) {
         case 'getVideos':
             // Send full refresh when popup requests videos
-            sendVideoUpdateToUI(message.tabId, 'full-refresh');
+            sendFullRefresh(message.tabId);
             
             // Send current download counts
             const downloadCounts = getActiveDownloadCount();
@@ -85,7 +80,7 @@ async function handlePortMessage(message, port, portId) {
                     const video = getVideo(message.tabId, message.url);
                     if (video) {
                         // Call generateVideoPreview directly - it will handle the full flow
-                        await generateVideoPreview(message.tabId, message.url, video.headers || {});
+                        await generateVideoPreview(video);
                         logger.debug(`Manual preview generation triggered for: ${message.url}`);
                     }
                 } catch (error) {
@@ -95,18 +90,8 @@ async function handlePortMessage(message, port, portId) {
             break;
 
         case 'dismissVideo':
-            // Dismiss the video for this tab
+            // Dismiss the video for this tab (counters and icon updated automatically)
             dismissVideoFromTab(message.tabId, message.url);
-            updateTabIcon(message.tabId);
-            // Send updated counters after dismissal
-            {
-                const videoCounts = getVideoTypeCounts(message.tabId);
-                port.postMessage({
-                    command: 'update-ui-counters',
-                    tabId: message.tabId,
-                    counts: videoCounts
-                });
-            }
             break;
             
         case 'download':
@@ -124,6 +109,7 @@ async function handlePortMessage(message, port, portId) {
             updateTabIcon();
             clearAllHeaders(); 
             cleanupAllVideos(); // Includes icon reset for all tabs
+			clearAllProcessing(); // Clear all processing state
             await clearPreviewCache(); // Clear preview cache
             logger.debug('Cleared all caches (video + headers + preview + icons)');
             
@@ -427,113 +413,6 @@ function getActivePopupPortForTab(tabId) {
 }
 
 /**
- * Enhanced function to send video updates to UI with action-based updates
- * @param {number} tabId - Tab ID
- * @param {string} action - Update action: 'add', 'update', 'remove', or 'full-refresh'
- * @param {string} [videoUrl] - Video URL for targeted updates
- * @param {Object} [videoData] - Video data for add/update actions
- * @param {Object} [options] - Additional options including updateType
- */
-function sendVideoUpdateToUI(tabId, action = 'full-refresh', videoUrl = null, videoData = null, options = {}) {
-    // Get the port first to see if popup is open
-    const port = getActivePopupPortForTab(tabId);
-
-    // If no popup is open, skip sending updates
-    if (!port) {
-        logger.debug(`No active popup for tab ${tabId}, skipping update`);
-        return false;
-    }
-
-    try {
-        // Always send updated counters with every update
-        const videoCounts = getVideoTypeCounts(tabId);
-        port.postMessage({
-            command: 'update-ui-counters',
-            tabId,
-            counts: videoCounts
-        });
-
-        // Handle different action types
-        switch (action) {
-            case 'add':
-            case 'update':
-                if (videoUrl && videoData) {
-                    port.postMessage({
-                        command: 'videos-state-update',
-                        action: action,
-                        updateType: options.updateType || 'structural',
-                        tabId: tabId,
-                        videoUrl: videoUrl,
-                        video: JSON.parse(JSON.stringify(videoData))
-                    });
-                    return true;
-                }
-                break;
-            case 'remove':
-                if (videoUrl) {
-                    port.postMessage({
-                        command: 'videos-state-update',
-                        action: 'remove',
-                        tabId: tabId,
-                        videoUrl: videoUrl
-                    });
-                    return true;
-                }
-                break;
-            case 'full-refresh':
-                const processedVideos = getVideosForDisplay(tabId);
-                logger.debug(`Sending full refresh with ${processedVideos.length} videos for tab ${tabId}`);
-                port.postMessage({
-                    command: 'videos-state-update',
-                    action: 'full-refresh',
-                    tabId: tabId,
-                    videos: processedVideos
-                });
-                return true;
-        }
-        logger.warn(`Invalid action or missing parameters for sendVideoUpdateToUI: ${action}`);
-        return false;
-    } catch (error) {
-        logger.error(`Error sending video update: ${error.message}`);
-        return false;
-    }
-}
-
-/**
- * Helper function to send video state changes with automatic action detection
- * @param {number} tabId - Tab ID
- * @param {string} videoUrl - Video URL
- * @param {Object} updateResult - Result from updateVideo function
- * @param {Object} [options] - Additional options
- */
-function sendVideoStateChange(tabId, videoUrl, updateResult, options = {}) {
-    if (!updateResult?.updatedVideo) {
-        logger.warn(`No valid update result for video: ${videoUrl}`);
-        return false;
-    }
-
-    const { updatedVideo, action, updateType } = updateResult;
-    const debounceKey = `${tabId}-${videoUrl}`;
-
-    // Clear existing debounce timer
-    if (updateDebounceMap.has(debounceKey)) {
-        clearTimeout(updateDebounceMap.get(debounceKey));
-    }
-
-    // Use shorter debounce for flag updates, longer for structural updates
-    const debounceMs = updateType === 'flags' ? 25 : (options.debounceMs || 50);
-
-    // Set debounce timer for rapid updates
-    const timeoutId = setTimeout(() => {
-        updateDebounceMap.delete(debounceKey);
-        sendVideoUpdateToUI(tabId, action, videoUrl, updatedVideo, { ...options, updateType });
-    }, debounceMs);
-
-    updateDebounceMap.set(debounceKey, timeoutId);
-    return true;
-}
-
-/**
  * Initialize the UI communication service
  */
 
@@ -557,8 +436,5 @@ export {
     setupPopupPort,
     handlePortMessage,
     broadcastToPopups,
-    getActivePopupPortForTab,
-    sendVideoUpdateToUI,
-    sendVideoStateChange,
-    dismissVideoFromTab
+    getActivePopupPortForTab
 };

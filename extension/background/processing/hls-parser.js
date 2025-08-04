@@ -11,9 +11,7 @@ import {
 } from './parser-utils.js';
 import { fetchManifest } from './manifest-fetcher.js';
 import { createLogger } from '../../shared/utils/logger.js';
-import { getVideoByUrl } from './video-store.js';
 import { standardizeResolution, normalizeUrl, getBaseDirectory } from '../../shared/utils/processing-utils.js';
-import { detectAllContainers } from './container-detector.js';
 
 // Create a logger for the HLS parser
 const logger = createLogger('HLS Parser');
@@ -26,26 +24,9 @@ logger.setLevel('ERROR');
  * @param {string} url - URL of the HLS manifest
  * @returns {Promise<Object>} Validated and parsed HLS content with videoTracks
  */
-export async function parseHlsManifest(url) {
-    // Retrieve the video object containing all detection data
-    const videoObject = await getVideoByUrl(url);
-    if (!videoObject) {
-        return {
-            status: 'video-not-found',
-            isValid: false,
-            isMaster: false,
-            isVariant: false,
-            videoTracks: [],
-            audioTracks: [],
-            subtitleTracks: [],
-            closedCaptions: [],
-            hasMediaGroups: false
-        };
-    }
-    
-    const { headers, metadata, tabId } = videoObject;
-    const normalizedUrl = normalizeUrl(url);
-    
+export async function parseHlsManifest(videoObject) {
+    const { url, headers, metadata, tabId, normalizedUrl } = videoObject;
+
     // Skip if already being processed
     if (processingRequests.full && processingRequests.full.has(normalizedUrl)) {
         return { 

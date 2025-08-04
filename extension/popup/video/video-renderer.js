@@ -176,9 +176,9 @@ function createHistoryItemElement(progressData) {
 
     // Extract host from pageUrl for display
     let pageHost = 'Unknown';
-	let pageUrl = progressData.originalCommand?.videoData?.pageUrl;
+    let pageUrl = progressData.originalCommand?.videoData?.pageUrl;
     let pageTitle = progressData.originalCommand?.videoData?.pageTitle || pageUrl || '';
-	let pageFavicon = progressData.originalCommand?.videoData?.pageFavicon;
+    let pageFavicon = progressData.originalCommand?.videoData?.pageFavicon;
     if (pageUrl) {
         try {
             const url = new URL(pageUrl);
@@ -633,6 +633,7 @@ export async function addVideoToUI(video) {
  * @param {Object} video - Updated video object with flags
  */
 export function updateVideoFlags(videoUrl, video) {
+    logger.debug(`[FLAG] Updating flags for video/-s`, videoUrl, video);
     try {
         const container = document.getElementById('videos-list');
         const existingElement = container.querySelector(`.video-item[data-url="${videoUrl}"]`);
@@ -691,16 +692,17 @@ export function updateVideoFlags(videoUrl, video) {
  * @param {string} [updateType='structural'] - Type of update: 'flags' or 'structural'
  */
 export async function updateVideoInUI(videoUrl, video, updateType = 'structural') {
+	logger.debug(`[UPD] received updateType: ${updateType} for url: ${videoUrl}, video:`, video);
     try {
         // For flag-only updates, use selective update
-        if (updateType === 'flags') {
+        if (updateType === 'flag') {
             const success = updateVideoFlags(videoUrl, video);
             if (success) {
-                logger.debug(`[FLAG-UPD] Updated flags for video: ${videoUrl}`);
+                logger.debug(`[UPD] Updated flags for video: ${videoUrl}`);
                 return;
             }
             // Fall back to full update if flag update failed
-            logger.debug(`[FLAG-UPD] Flag update failed, falling back to full update: ${videoUrl}`);
+            logger.debug(`[UPD] Flag update failed, falling back to full update: ${videoUrl}`);
         }
         
         // Full structural update
@@ -708,8 +710,7 @@ export async function updateVideoInUI(videoUrl, video, updateType = 'structural'
         const existingElement = container.querySelector(`.video-item[data-url="${videoUrl}"]`);
         
         if (!existingElement) {
-            logger.debug(`[UPD] Video element not found for update: ${videoUrl}, adding instead`);
-            await addVideoToUI(video);
+            logger.debug(`[UPD] Video element not found for update: ${videoUrl}, skipping update.`);
             return;
         }
         

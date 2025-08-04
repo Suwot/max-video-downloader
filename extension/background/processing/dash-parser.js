@@ -11,8 +11,7 @@ import {
 } from './parser-utils.js';
 import { fetchManifest } from './manifest-fetcher.js';
 import { createLogger } from '../../shared/utils/logger.js';
-import { getVideoByUrl } from './video-store.js';
-import { standardizeResolution, normalizeUrl, getBaseDirectory } from '../../shared/utils/processing-utils.js';
+import { standardizeResolution, normalizeUrl } from '../../shared/utils/processing-utils.js';
 import { detectAllContainers } from './container-detector.js';
 
 // Create a logger for the DASH parser
@@ -205,21 +204,8 @@ function extractAccessibilityInfo(adaptationSetContent) {
  * @param {string} url - URL of the DASH manifest
  * @returns {Promise<Object>} Validated and parsed DASH content structured by media type
  */
-export async function parseDashManifest(url) {
-    // Retrieve the video object containing all detection data
-    const videoObject = await getVideoByUrl(url);
-    if (!videoObject) {
-        return {
-            status: 'video-not-found',
-            isValid: false,
-            videoTracks: [],
-            audioTracks: [],
-            subtitleTracks: []
-        };
-    }
-    
-    const { headers } = videoObject;
-    const normalizedUrl = normalizeUrl(url);
+export async function parseDashManifest(videoObject) {
+	const { url, headers, normalizedUrl } = videoObject;
     
     // Skip if already being processed
     if (processingRequests.full && processingRequests.full.has(normalizedUrl)) {

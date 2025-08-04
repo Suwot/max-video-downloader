@@ -1930,6 +1930,20 @@ header .heading-row {
 .theme-light .preview-container {
   background-color: #f0f0f0;
 }
+.preview-container.loading::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: -webkit-gradient(linear, left top, right top, from(transparent), color-stop(25%, rgba(255, 255, 255, 0.15)), color-stop(50%, rgba(255, 255, 255, 0.3)), color-stop(75%, rgba(255, 255, 255, 0.15)), to(transparent));
+  background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.15) 25%, rgba(255, 255, 255, 0.3) 50%, rgba(255, 255, 255, 0.15) 75%, transparent 100%);
+  -webkit-animation: processing-wave 2s ease-in-out infinite;
+          animation: processing-wave 2s ease-in-out infinite;
+  pointer-events: none;
+  z-index: 2;
+}
 
 .preview-image {
   width: 100%;
@@ -1945,11 +1959,6 @@ header .heading-row {
 }
 .preview-image.placeholder {
   opacity: 0.5;
-}
-.preview-image.generating {
-  opacity: 0.3;
-  -webkit-filter: blur(1px);
-          filter: blur(1px);
 }
 
 .video-duration {
@@ -2920,4 +2929,46 @@ header .heading-row {
   100% {
     opacity: 0.6;
   }
+}
+@-webkit-keyframes processing-wave {
+  0% {
+    -webkit-transform: translateX(-100%);
+            transform: translateX(-100%);
+  }
+  100% {
+    -webkit-transform: translateX(100%);
+            transform: translateX(100%);
+  }
+}
+@keyframes processing-wave {
+  0% {
+    -webkit-transform: translateX(-100%);
+            transform: translateX(-100%);
+  }
+  100% {
+    -webkit-transform: translateX(100%);
+            transform: translateX(100%);
+  }
+}
+.selected-option.processing {
+  position: relative;
+  overflow: hidden;
+}
+.selected-option.processing::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: -webkit-gradient(linear, left top, right top, from(transparent), color-stop(25%, rgba(255, 255, 255, 0.1)), color-stop(50%, rgba(255, 255, 255, 0.2)), color-stop(75%, rgba(255, 255, 255, 0.1)), to(transparent));
+  background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.1) 25%, rgba(255, 255, 255, 0.2) 50%, rgba(255, 255, 255, 0.1) 75%, transparent 100%);
+  -webkit-animation: processing-wave 2s ease-in-out infinite;
+          animation: processing-wave 2s ease-in-out infinite;
+  pointer-events: none;
+  z-index: 1;
+}
+.selected-option.processing .label {
+  position: relative;
+  z-index: 2;
 }/*# sourceMappingURL=popup.css.map */

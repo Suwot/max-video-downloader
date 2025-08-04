@@ -89,22 +89,6 @@ export function formatBitrate(kbps) {
 }
 
 /**
- * Calculate if a video is valid for display in the UI
- * @param {Object} video - Video object
- * @returns {boolean}
- */
-export function calculateValidForDisplay(video) {
-    if (!video || !video.isValid) return false;
-    if (video.type === 'hls') {
-        // Only standalone video tracks without known masters, or master playlists
-        if ((video.isVariant || video.isAudioTrack || video.isSubtitleTrack) && video.hasKnownMaster) return false;
-        return true;
-    }
-    // For dash and direct, only if isValid
-    return true;
-}
-
-/**
  * Extract filename (without extension) from URL
  * @param {string} url - URL to extract filename from
  * @returns {string} Extracted filename without extension

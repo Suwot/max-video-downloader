@@ -118,7 +118,7 @@ function addVideoWithCommonProcessing(tabId, url, videoInfo, metadata, source, t
         }
     }
     
-    addDetectedVideo(tabId, videoData);
+    addDetectedVideo(videoData);
 }
 
 /**
@@ -158,6 +158,11 @@ export async function processWebRequest(details, metadata = null) {
 
             // Handle direct video/audio files with additional filtering
             if (mimeTypeInfo.type === 'direct') {
+                // Skip audio-only direct types
+                if (mimeTypeInfo.mediaType === 'audio') {
+                    logger.debug(`Skipping audio-only direct type: ${url}`);
+                    return;
+                }
                 // Skip small files based on user setting
                 const minFileSize = settingsManager.get('minFileSizeFilter');
                 if (metadata.contentLength && metadata.contentLength < minFileSize) {
@@ -200,7 +205,7 @@ export function processContentScriptVideo(tabId, videoData) {
     logger.debug(`Processing content script video for tab ${tabId}:`, videoData);
     
     // Add the video through the video manager
-    addDetectedVideo(tabId, videoData);
+    addDetectedVideo(videoData);
 }
 
 

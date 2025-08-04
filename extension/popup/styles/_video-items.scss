@@ -85,6 +85,29 @@
     .theme-light & {
         background-color: #f0f0f0;
     }
+    
+    // Wave animation during preview generation
+    &.loading {
+        &::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(
+                90deg,
+                transparent 0%,
+                rgba(255, 255, 255, 0.15) 25%,
+                rgba(255, 255, 255, 0.3) 50%,
+                rgba(255, 255, 255, 0.15) 75%,
+                transparent 100%
+            );
+            animation: processing-wave 2s ease-in-out infinite;
+            pointer-events: none;
+            z-index: 2; // Above image but below loader
+        }
+    }
 }
 
 .preview-image {
@@ -100,11 +123,6 @@
 
     &.placeholder {
         opacity: 0.5;
-    }
-
-    &.generating {
-        opacity: 0.3;
-        filter: blur(1px);
     }
 }
 
