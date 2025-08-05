@@ -157,20 +157,31 @@ export async function parseHlsManifest(videoObject) {
                     
                     variantInfo = await parseHlsVariant(currentTrack.url, headers, tabId);
                     
-                    if (variantInfo && variantInfo.duration !== null) {
-                        logger.debug(`Successfully extracted metadata from ${trackType} track ${i + 1}`);
+                    if (variantInfo) {
+                        logger.debug(`Successfully fetched metadata from ${trackType} track ${i + 1}`);
                         successfulTrackIndex = i;
-                        break;
+                        
+                        // If it's live, stop iteration immediately regardless of duration
+                        if (variantInfo.isLive) {
+                            logger.debug('Detected live stream - stopping variant iteration');
+                            break;
+                        }
+                        
+                        // If it's VOD with duration, we're done
+                        if (variantInfo.duration !== null) {
+                            logger.debug('Got duration from VOD stream - stopping iteration');
+                            break;
+                        }
                     }
                 } catch (error) {
                     logger.warn(`Failed to fetch track ${i + 1}: ${error.message}`);
                 }
             }
             
-            if (variantInfo && variantInfo.duration !== null) {
+            if (variantInfo) {
                 // Extract metadata from successful track
-                duration = variantInfo.duration;
-                segmentCount = variantInfo.segmentCount;
+                duration = variantInfo.isLive ? null : variantInfo.duration; // No duration for live streams
+                segmentCount = variantInfo.isLive ? null : variantInfo.segmentCount; // No segment count for live streams
                 isEncrypted = variantInfo.isEncrypted || false;
                 encryptionType = variantInfo.encryptionType;
                 isLive = variantInfo.isLive || false;
@@ -615,9 +626,9 @@ function calculateHlsVariantDuration(content) {
     const isLive = !content.includes('#EXT-X-ENDLIST');
     
     return {
-        duration: Math.round(totalDuration), // Round to full seconds
+        duration: isLive ? null : Math.round(totalDuration), // Don't calculate duration for live streams
         isLive: isLive,
-        segmentCount: segmentCount
+        segmentCount: isLive ? null : segmentCount // Segment count is also meaningless for live streams
     };
 }
 

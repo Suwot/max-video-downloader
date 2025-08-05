@@ -396,6 +396,7 @@ async function handleDownloadEvent(event) {
                 audioOnly: event.audioOnly,
                 subsOnly: event.subsOnly,
                 isRedownload: event.isRedownload,
+                isLive: event.isLive || false, // Preserve isLive flag for UI rendering
                 
                 // Error and diagnostic info
                 errorMessage: event.errorMessage,

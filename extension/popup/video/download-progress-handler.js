@@ -370,33 +370,74 @@ function updateSingleDropdown(downloadGroup, progressData = {}) {
         case 'download-progress':
             // Update selected-option with progress bar AND text
             if (selectedOption) {
-                selectedOption.style.setProperty('--progress', `${progress}%`);
                 selectedOption.classList.remove('queued'); // Clear any queue state
                 selectedOption.classList.add('downloading');
                 
-                // Build progress display text
-                let displayText = `${progress}%`;
-                if (progress === 0 && progressData.currentSegment) {
-                    displayText += ` (${progressData.currentSegment}/${progressData.totalSegments})`;
-                }
-                if (progressData.speed) {
-                    displayText += ` • ${formatSize(progressData.speed)}/s`;
-                }
-                if (progressData.eta && progressData.eta > 0 && progress < 100) {
-                    displayText += ` • ${formatTime(progressData.eta)}`;
-                }
+                // Handle livestream vs regular download progress
+                if (progressData.isLive) {
+                    // Livestream: show continuous activity animation and stats
+                    selectedOption.classList.add('livestream');
+                    selectedOption.style.setProperty('--progress', '100%'); // Full bar with animation
+                    
+                    // Build livestream display text with recording indicator
+                    let displayText = '';
+                    if (progressData.elapsedTime) {
+                        displayText += `${formatTime(progressData.elapsedTime)}`;
+                    }
+                    if (progressData.downloadedBytes) {
+                        displayText += displayText ? ` • ${formatSize(progressData.downloadedBytes)}` : formatSize(progressData.downloadedBytes);
+                    }
+                    if (progressData.speed) {
+                        displayText += displayText ? ` • ${formatSize(progressData.speed)}/s` : `${formatSize(progressData.speed)}/s`;
+                    }
+                    
+                    const textSpan = selectedOption.querySelector('span:first-child') || selectedOption;
+                    // Just update text content - CSS ::before will handle the indicator
+                    textSpan.textContent = displayText;
+                    selectedOption.classList.add('has-recording-indicator');
+                } else {
+                    // Regular download: show percentage progress
+                    selectedOption.classList.remove('livestream');
+                    selectedOption.style.setProperty('--progress', `${progress}%`);
+                    
+                    // Build VOD progress display text: progress • size downloaded • eta
+                    let displayText = `${progress}%`;
+                    
+                    // Add segment info for 0% progress
+                    if (progress === 0 && progressData.currentSegment && progressData.totalSegments) {
+                        displayText += ` (${progressData.currentSegment}/${progressData.totalSegments})`;
+                    }
+                    
+                    // Add downloaded size
+                    if (progressData.downloadedBytes) {
+                        displayText += ` • ${formatSize(progressData.downloadedBytes)}`;
+                    }
+                    
+                    // Add ETA
+                    if (progressData.eta && progressData.eta > 0 && progress < 100) {
+                        displayText += ` • ${formatTime(progressData.eta)}`;
+                    }
 
-                const textSpan = selectedOption.querySelector('span:first-child') || selectedOption;
-                textSpan.textContent = displayText;
+                    const textSpan = selectedOption.querySelector('span:first-child') || selectedOption;
+                    textSpan.textContent = displayText;
+                }
                 
-                // Update tooltip data attributes for hover display
-                updateProgressTooltip(selectedOption, progressData);
+                // Update tooltip data attributes for hover display (skip for livestreams)
+                if (!progressData.isLive) {
+                    updateProgressTooltip(selectedOption, progressData);
+                }
             }
 
             // Remove queued from dropdown-option when download starts
             if (dropdownOption) {
                 dropdownOption.classList.remove('queued');
-                dropdownOption.style.setProperty('--progress', `${progress}%`);
+                if (progressData.isLive) {
+                    dropdownOption.classList.add('livestream');
+                    dropdownOption.style.setProperty('--progress', '100%');
+                } else {
+                    dropdownOption.classList.remove('livestream');
+                    dropdownOption.style.setProperty('--progress', `${progress}%`);
+                }
                 dropdownOption.classList.add('downloading');
             }
 
@@ -408,7 +449,7 @@ function updateSingleDropdown(downloadGroup, progressData = {}) {
         case 'download-canceled':
             // Clean restore - NO final state coloring as requested
             if (selectedOption) {
-                selectedOption.classList.remove('downloading', 'queued');
+                selectedOption.classList.remove('downloading', 'queued', 'livestream', 'has-recording-indicator');
                 selectedOption.style.removeProperty('--progress');
                 
                 // Clear tooltip data
@@ -635,16 +676,23 @@ function resetVideosTabButtonStates(lookupUrl) {
  * @param {Object} progressData - Progress data from native host
  */
 function updateProgressTooltip(selectedOption, progressData) {
-    // Build compact tooltip content: downloaded • segments • eta • elapsed
-    const parts = [];
+    // No tooltips for live downloads - only for VOD
+    if (progressData.isLive) {
+        return; // Skip tooltip for livestreams
+    }
     
-    // Downloaded size
-    if (progressData.downloadedBytes) {
-		const downloaded = `↓ ${formatSize(progressData.downloadedBytes)}`;
-		const segmentsProgress = `${progressData.currentSegment}/${progressData.totalSegments}`;
-		const showSegments = progressData.progress !== 0 && progressData.currentSegment && progressData.totalSegments;
-		
-        parts.push(showSegments ? `${downloaded} (${segmentsProgress})` : downloaded);
+    // Build compact tooltip content for VOD downloads only
+    const parts = [];
+    // VOD tooltip: segments • speed • elapsed time
+    
+    // Add segment info
+    if (progressData.progress !== 0 && progressData.currentSegment && progressData.totalSegments) {
+        parts.push(`${progressData.currentSegment}/${progressData.totalSegments} chunks`);
+    }
+    
+    // Add speed
+    if (progressData.speed) {
+        parts.push(`${formatSize(progressData.speed)}/s`);
     }
     
     // Elapsed time - use UI calculation if we have startTime, otherwise fallback to progressData
@@ -663,11 +711,6 @@ function updateProgressTooltip(selectedOption, progressData) {
     if (elapsedSeconds > 0) {
         parts.push(formatTime(elapsedSeconds));
     }
-	
-    // // ETA (if available and not complete)
-    // if (progressData.eta && progressData.eta > 0 && progressData.progress < 100) {
-    //     parts.push(formatTime(progressData.eta));
-    // }
     
     // Set single tooltip content attribute
     selectedOption.setAttribute('data-tooltip-content', parts.join(' • '));

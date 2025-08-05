@@ -48,6 +48,34 @@
                 position: relative;
                 z-index: 1;
             }
+
+            // Recording indicator using ::before pseudo-element
+            &.has-recording-indicator span:first-child::before {
+                content: '';
+                display: inline-block;
+                width: 8px;
+                height: 8px;
+                background-color: #ff4444;
+                border-radius: 50%;
+                margin-right: 4px;
+                animation: recording-pulse 1.5s ease-in-out infinite;
+            }
+
+            // Livestream animation - seamless beam effect
+            &.livestream::before {
+                width: 100%;
+                background: linear-gradient(
+                    90deg,
+                    transparent 0%,
+                    transparent 40%,
+                    rgba(0, 202, 85, 0.6) 50%,
+                    transparent 60%,
+                    transparent 100%
+                );
+                background-size: 200% 100%;
+                animation: livestream-beam 2s linear infinite;
+                transition: none; // Disable width transition for livestream
+            }
         }
         
         // Progress tooltip - same width as parent, single line
@@ -261,6 +289,22 @@
         span {
             position: relative;
             z-index: 1;
+        }
+
+        // Livestream animation for dropdown options - seamless beam effect
+        &.livestream::after {
+            width: 100%;
+            background: linear-gradient(
+                90deg,
+                transparent 0%,
+                transparent 40%,
+                rgba(0, 202, 85, 0.6) 50%,
+                transparent 60%,
+                transparent 100%
+            );
+            background-size: 200% 100%;
+            animation: livestream-beam 2s linear infinite;
+            transition: none; // Disable width transition for livestream
         }
     }
 

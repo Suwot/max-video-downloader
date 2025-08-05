@@ -106,7 +106,7 @@ function addDetectedVideo(videoInfo) {
         ...videoInfo,
         normalizedUrl,
         processing: true, // Single flag for all processing states
-        title: videoInfo.metadata?.filename || getFilenameFromUrl(videoInfo.url),
+        title: videoInfo.metadata?.filename || videoInfo.pageTitle || 'untitled',
         // Set isValid: true optimistically for all video types
         isValid: true,
         validForDisplay: true,

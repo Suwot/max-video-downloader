@@ -643,7 +643,8 @@ export class VideoItemComponent {
             masterUrl: this.videoData.isMaster ? this.videoData.url : null,
             pageUrl: this.videoData.pageUrl || null,
             pageFavicon: this.videoData.pageFavicon || null,
-            headers: this.videoData.headers || {}
+            headers: this.videoData.headers || {},
+            isLive: this.videoData.isLive || false
         };
         
         // Add type-specific data

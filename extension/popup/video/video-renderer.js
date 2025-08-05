@@ -288,6 +288,11 @@ function buildFlagsHtml(progressData) {
             </span>
         `);
     }
+    if (progressData.isLive) {
+        icons.push(`
+            <span class="history-flag-text live-flag">LIVE REC</span>
+        `);
+    }
     if (progressData.deleted) {
         icons.push(`
             <span class="history-flag-text deleted-flag">DELETED</span>

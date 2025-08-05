@@ -30,7 +30,7 @@ class DownloadCommand extends BaseCommand {
      * Initialize progress tracking state for a download
      * @private
      */
-    initProgressState(downloadId, { type, duration, fileSizeBytes, downloadUrl, segmentCount }) {
+    initProgressState(downloadId, { type, duration, fileSizeBytes, downloadUrl, segmentCount, isLive }) {
         const now = Date.now();
         return {
             // Basic info
@@ -43,23 +43,17 @@ class DownloadCommand extends BaseCommand {
             duration: duration || 0,
             fileSizeBytes: fileSizeBytes || 0,
             totalSegments: segmentCount || 0, // For HLS progress tracking
+            isLive: isLive || false, // Track if this is a livestream
             
             // Current progress
             currentTime: 0,
             downloadedBytes: 0,
-            currentSegment: 0,
-            
-            // For termination messages
-            finalProcessedTime: null, // Final processed time from FFmpeg
-            
+            currentSegment: 0,            
             // For progress throttling
             lastProgressUpdate: 0,
             lastProgressPercent: 0,
-            
-            // Error collection (only used on exitCode !== 0)
             errorLines: [],
-            
-            // Final stats (parsed on close)
+			finalProcessedTime: null, // Final processed time from FFmpeg
             finalStats: null
         };
     }
@@ -148,22 +142,36 @@ class DownloadCommand extends BaseCommand {
     sendProgressUpdate(progressState) {
         const now = Date.now();
         
+        // Check if download was already canceled - prevent late progress updates
+        if (!DownloadCommand.activeDownloads.has(progressState.downloadId)) {
+            logDebug('Skipping progress update for canceled download:', progressState.downloadId);
+            return;
+        }
+        
         // Calculate progress based on media type and available data
         let progress = 0;
         let strategy = 'unknown';
         
-        // Prefer duration-based progress for all types (more reliable, especially for audio/subs extraction)
-        if (progressState.duration > 0 && progressState.currentTime > 0) {
-            progress = (progressState.currentTime / progressState.duration) * 100;
-            strategy = 'time';
-        } else if (progressState.fileSizeBytes > 0 && progressState.downloadedBytes > 0) {
-            progress = (progressState.downloadedBytes / progressState.fileSizeBytes) * 100;
-            strategy = 'size';
+        if (progressState.isLive) {
+            // For livestreams, we can't calculate percentage progress
+            // Instead, we show continuous activity with elapsed time and bytes
+            progress = -1; // Special value indicating livestream (no percentage)
+            strategy = 'livestream';
+        } else {
+            // Regular downloads - prefer duration-based progress for all types
+            if (progressState.duration > 0 && progressState.currentTime > 0) {
+                progress = (progressState.currentTime / progressState.duration) * 100;
+                strategy = 'time';
+            } else if (progressState.fileSizeBytes > 0 && progressState.downloadedBytes > 0) {
+                progress = (progressState.downloadedBytes / progressState.fileSizeBytes) * 100;
+                strategy = 'size';
+            }
+            
+            // Cap at 99.9% until we get final completion
+            progress = Math.min(99.9, Math.max(0, progress));
         }
         
-        // Cap at 99.9% until we get final completion
-        progress = Math.min(99.9, Math.max(0, progress));
-        const progressPercent = Math.round(progress * 10) / 10; // 1 decimal place
+        const progressPercent = progress === -1 ? -1 : Math.round(progress * 10) / 10; // 1 decimal place
         
         // Throttle updates: only send if significant change or time elapsed
         const significantChange = Math.abs(progressPercent - progressState.lastProgressPercent) >= 0.5;
@@ -185,6 +193,7 @@ class DownloadCommand extends BaseCommand {
                 elapsedTime: Math.round(elapsedSeconds),
                 type: progressState.type,
                 strategy,
+                isLive: progressState.isLive,
                 
                 // Byte data
                 downloadedBytes: progressState.downloadedBytes,
@@ -192,10 +201,10 @@ class DownloadCommand extends BaseCommand {
                 
                 // Time data
                 currentTime: Math.round(progressState.currentTime),
-                totalDuration: Math.round(progressState.duration),
+                totalDuration: progressState.isLive ? null : Math.round(progressState.duration),
                 
-                // ETA calculation
-                eta: progress > 0 && speed > 0 ? Math.round(((100 - progress) / 100) * (progressState.fileSizeBytes || (progressState.downloadedBytes / (progress / 100))) / speed) : null
+                // ETA calculation (not applicable for livestreams)
+                eta: progressState.isLive ? null : (progress > 0 && speed > 0 ? Math.round(((100 - progress) / 100) * (progressState.fileSizeBytes || (progressState.downloadedBytes / (progress / 100))) / speed) : null)
             };
 
             // Add segment data for HLS (include totalSegments)
@@ -347,26 +356,30 @@ class DownloadCommand extends BaseCommand {
                 logDebug('Progress state cleanup completed');
             }
             
-            // Remove partial file if it exists and type is not 'direct'
-            if (type !== 'direct' && outputPath && fs.existsSync(outputPath)) {
+            // Remove partial file if it exists and type is not 'direct' and not a livestream
+            // For livestreams, preserve the downloaded content even on cancellation
+            const shouldPreserveFile = type === 'direct' || (downloadEntry.progressState?.isLive);
+            if (!shouldPreserveFile && outputPath && fs.existsSync(outputPath)) {
                 try {
                     fs.unlinkSync(outputPath);
                     logDebug('Removed partial download file:', outputPath);
                 } catch (err) {
                     logDebug('Failed to remove partial file:', err.message);
                 }
+            } else if (shouldPreserveFile && outputPath && fs.existsSync(outputPath)) {
+                logDebug('Preserving file for livestream/direct type:', outputPath);
             }
             
             logDebug('Download cancellation completed for downloadId:', processDownloadId);
             
-            // For direct types, defer cancellation message to close handler
-            // The close handler will determine final outcome based on file existence
-            if (type === 'direct') {
-                logDebug('Direct type cancellation - deferring message to close handler');
-                return; // Let close handler send the final message
+            // For direct types and livestreams, defer cancellation message to close handler
+            // The close handler will determine final outcome based on file existence and get rich FFmpeg stats
+            if (type === 'direct' || downloadEntry.progressState?.isLive) {
+                logDebug(`${type === 'direct' ? 'Direct' : 'Livestream'} type cancellation - deferring message to close handler`);
+                return; // Let close handler send the final message with rich stats
             }
             
-            // For HLS/DASH types, send immediate cancellation message
+            // For regular HLS/DASH types, send immediate cancellation message
             this.sendMessage({
                 command: 'download-canceled',
                 downloadId: processDownloadId,
@@ -402,6 +415,7 @@ class DownloadCommand extends BaseCommand {
      * @param {Object} params.duration Video duration (optional)
      * @param {Object} params.headers HTTP headers to use (optional)
      * @param {boolean} params.isRedownload Whether this is a re-download request (optional)
+     * @param {boolean} params.isLive Whether this is a livestream (optional)
      */
     async execute(params) {
         const { command } = params;
@@ -437,7 +451,8 @@ class DownloadCommand extends BaseCommand {
             segmentCount = null,
             selectedOptionOrigText = null,
             isRedownload = false,
-            downloadId = null
+            downloadId = null,
+            isLive = false
         } = params;
 
         // Use downloadId directly from extension (no need to generate sessionId)
@@ -501,7 +516,8 @@ class DownloadCommand extends BaseCommand {
                 audioOnly,
                 subsOnly,
                 downloadId, // Use downloadId instead of sessionId
-                selectedOptionOrigText
+                selectedOptionOrigText, 
+				isLive
             });
             
         } catch (err) {
@@ -518,6 +534,9 @@ class DownloadCommand extends BaseCommand {
     generateOutputFilename(filename, container) {
         // Clean up filename: remove query params
         let outputFilename = (filename ? filename.replace(/[?#].*$/, '') : 'video');
+        
+        // Sanitize unsafe filesystem characters
+        outputFilename = outputFilename.replace(/[<>:"/\\|?*]/g, '_').replace(/\s+/g, ' ').trim();
         
         // For audio-only downloads, default to 'audio' if no filename
         if ((container === 'm4a' || container === 'mp3') && (!filename || filename.trim() === '')) {
@@ -544,6 +563,15 @@ class DownloadCommand extends BaseCommand {
 
         // Join directory and filename
         let outputPath = path.join(targetDir, filename);
+        
+        // Simple length check: if path > 260 chars, truncate filename to 250 chars max
+        if (outputPath.length > 260) {
+            const ext = path.extname(filename);
+            const baseName = path.basename(filename, ext);
+            const truncatedBase = baseName.length > 250 ? baseName.substring(0, 247) + '...' : baseName;
+            outputPath = path.join(targetDir, truncatedBase + ext);
+            logDebug(`Truncated long path: ${filename} -> ${truncatedBase + ext}`);
+        }
 
         // Helper to check if output path is in use by any active download
         const isPathInUse = (candidatePath) => {
@@ -563,6 +591,12 @@ class DownloadCommand extends BaseCommand {
             const base = outputPath.slice(0, -ext.length);
             uniqueOutput = `${base} (${counter})${ext}`;
             counter++;
+            
+            // Re-check path length after adding counter
+            if (uniqueOutput.length > 255) {
+                const baseForCounter = base.substring(0, base.length - 10); // Make more room
+                uniqueOutput = `${baseForCounter}... (${counter})${ext}`;
+            }
         }
 
         logDebug('Output file will be:', uniqueOutput);
@@ -913,14 +947,16 @@ class DownloadCommand extends BaseCommand {
         audioOnly,
         subsOnly,
         downloadId, // Use downloadId instead of sessionId
-        selectedOptionOrigText
+        selectedOptionOrigText,
+		isLive
     }) {
         return new Promise((resolve, _reject) => {
             // Use an IIFE to handle async operations properly
             (async () => {
                 // Probe duration upfront if not provided to avoid race conditions
+                // Skip probing for livestreams as duration is meaningless
                 let finalDuration = duration;
-                if (!duration || typeof duration !== 'number' || duration <= 0) {
+                if (!isLive && (!duration || typeof duration !== 'number' || duration <= 0)) {
                     logDebug('No valid duration provided, probing media...');
                     finalDuration = await this.probeMediaDuration(ffmpegService, downloadUrl, headers);
                     if (finalDuration) {
@@ -928,6 +964,9 @@ class DownloadCommand extends BaseCommand {
                     } else {
                         logDebug('Could not probe duration, will rely on FFmpeg output parsing');
                     }
+                } else if (isLive) {
+                    logDebug('Skipping duration probe for livestream');
+                    finalDuration = null; // Ensure duration is null for livestreams
                 }
             
                 // Initialize progress state
@@ -936,7 +975,8 @@ class DownloadCommand extends BaseCommand {
                     duration: finalDuration,
                     fileSizeBytes,
                     downloadUrl,
-                    segmentCount
+                    segmentCount,
+                    isLive
                 });
                 
                 logDebug('Initialized progress state for downloadId:', downloadId);
@@ -957,6 +997,7 @@ class DownloadCommand extends BaseCommand {
                     startTime: downloadStartTime,
                     outputPath: uniqueOutput,
                     type,
+                    masterUrl,
                     headers: headers || null,
                     progressState,
                     selectedOptionOrigText,
@@ -987,7 +1028,16 @@ class DownloadCommand extends BaseCommand {
                 
                 // Get data from progress state
                 const finalDuration = progressState.finalProcessedTime || progressState.duration;
-                const downloadStats = progressState.finalStats;
+                
+                // Enhance downloadStats with final progress data
+                const downloadStats = {
+                    ...(progressState.finalStats || {}),
+                    // Add final progress data for UI display
+                    finalFileSize: progressState.downloadedBytes || null,
+                    finalDuration: finalDuration || null,
+                    isLive: progressState.isLive || false,
+                    downloadDurationSeconds: downloadEntry?.startTime ? Math.round((Date.now() - downloadEntry.startTime) / 1000) : null
+                };
                 
                 const downloadDuration = downloadEntry?.startTime ? Math.round((Date.now() - downloadEntry.startTime) / 1000) : null;
                 
@@ -997,22 +1047,26 @@ class DownloadCommand extends BaseCommand {
                 }
 
                 // Determine termination reason using signal, exit code, and output file verification
-                // Pass wasCanceled state directly instead of relying on Map lookup
-                const terminationInfo = this.analyzeProcessTermination(code, signal, wasCanceled, uniqueOutput, type, subsOnly);
+                // Get livestream info from progressState (available even if downloadEntry was removed)
+                const isLivestream = progressState.isLive || false;
+                const terminationInfo = this.analyzeProcessTermination(code, signal, wasCanceled, uniqueOutput, type, subsOnly, isLivestream);
                 logDebug(`FFmpeg process (PID: ${downloadEntry?.process?.pid}) terminated after ${downloadDuration}s:`, terminationInfo);
                 
                 if (terminationInfo.wasCanceled && !terminationInfo.isPartialSuccess) {
                     logDebug('Download was canceled by user.');
                     
-                    // For direct types, send cancellation message here (deferred from cancelDownload)
-                    if (type === 'direct') {
+                    // For direct types and livestreams, send cancellation message here (deferred from cancelDownload)
+                    // Use progressState.isLive since downloadEntry might be null
+                    const isLivestream = progressState.isLive || false;
+                    if (type === 'direct' || isLivestream) {
                         this.sendMessage({
                             command: 'download-canceled',
                             downloadId, // Use downloadId for both session and progress mapping
                             downloadUrl,
+                            masterUrl: downloadEntry?.masterUrl,
                             duration: finalDuration,
                             downloadStats: downloadStats || null,
-                            message: 'Download was canceled',
+                            message: isLivestream ? 'Livestream recording canceled' : 'Download was canceled',
                             completedAt: Date.now(),
                             isRedownload: downloadEntry?.isRedownload || false,
                             audioOnly,
@@ -1021,7 +1075,7 @@ class DownloadCommand extends BaseCommand {
                         }, { useMessageId: false }); // Event message, no response ID
                     }
                     
-                    // Don't send additional response for HLS/DASH - already sent by cancelDownload()
+                    // Don't send additional response for regular HLS/DASH - already sent by cancelDownload()
                     return resolve({ 
                         success: false, 
                         downloadStats
@@ -1030,7 +1084,7 @@ class DownloadCommand extends BaseCommand {
                 
                 if (terminationInfo.isSuccess || terminationInfo.isPartialSuccess) {
                     const isPartial = terminationInfo.isPartialSuccess || false;
-                    logDebug(isPartial ? 'Download completed partially (direct type).' : 'Download completed successfully.');
+                    logDebug(isPartial ? 'Download completed partially.' : 'Download completed successfully.');
                     
                     this.sendMessage({ 
                         command: 'download-success',
@@ -1048,11 +1102,13 @@ class DownloadCommand extends BaseCommand {
                             pid: downloadEntry?.process?.pid,
                             downloadDuration
                         },
+                        message: isPartial && downloadEntry?.progressState?.isLive ? 'Livestream recording stopped' : null,
                         completedAt: Date.now(),
                         isRedownload,
                         audioOnly,
                         subsOnly,
-                        isPartial, // Add partial flag for UI
+                        isPartial: progressState.isLive ? null : isPartial, // Add partial flag for UI
+                        isLive: progressState.isLive || false, // Add isLive flag for UI
                         headers: downloadEntry?.headers || null
                     }, { useMessageId: false }); // Event message, no response ID
                     resolve({ 
@@ -1093,6 +1149,7 @@ class DownloadCommand extends BaseCommand {
                         isRedownload,
                         audioOnly,
                         subsOnly,
+                        isLive: progressState.isLive || false, // Add isLive flag for UI
                         headers: downloadEntry?.headers || null
                     }, { useMessageId: false }); // Event message, no response ID
                     resolve({ 
@@ -1115,12 +1172,27 @@ class DownloadCommand extends BaseCommand {
                 
                 // Get data from progress state
                 const finalDuration = progressState.finalProcessedTime || progressState.duration;
-                const downloadStats = progressState.finalStats;
+                
+                // Enhance downloadStats with final progress data
+                const downloadStats = {
+                    ...(progressState.finalStats || {}),
+                    // Add final progress data for UI display
+                    finalFileSize: progressState.downloadedBytes || null,
+                    finalDuration: finalDuration || null,
+                    isLive: progressState.isLive || false,
+                    downloadDurationSeconds: null // Will be calculated below
+                };
+                
                 const collectedErrors = this.getErrorMessage(progressState);
                 
                 // Get download info and calculate durations (same logic as close handler)
                 const downloadEntry = DownloadCommand.activeDownloads.get(downloadId);
                 const downloadDuration = downloadEntry?.startTime ? Math.round((Date.now() - downloadEntry.startTime) / 1000) : null;
+                
+                // Update downloadStats with calculated duration
+                if (downloadDuration) {
+                    downloadStats.downloadDurationSeconds = downloadDuration;
+                }
 
                 logDebug(`FFmpeg spawn error (PID: ${downloadEntry?.process?.pid}) after ${downloadDuration}s:`, err);
                 if (collectedErrors) {
@@ -1146,6 +1218,7 @@ class DownloadCommand extends BaseCommand {
                     completedAt: Date.now(),
                     isRedownload,
                     audioOnly,
+                    isLive: progressState.isLive || false, // Add isLive flag for UI
                     headers: downloadEntry?.headers || null
                 }, { useMessageId: false }); // Event message, no response ID
 
@@ -1167,13 +1240,14 @@ class DownloadCommand extends BaseCommand {
      * @param {string} outputPath - Expected output file path
      * @param {string} type - Media type ('hls', 'dash', 'direct')
      * @param {boolean} subsOnly - Whether this was a subtitle-only download
+     * @param {boolean} isLivestream - Whether this is a livestream (passed directly)
      * @returns {Object} Termination analysis with reason, type, and flags
      * @private
      */
-    analyzeProcessTermination(exitCode, signal, wasCanceled, outputPath = null, type = null, subsOnly = false) {
+    analyzeProcessTermination(exitCode, signal, wasCanceled, outputPath = null, type = null, subsOnly = false, isLivestream = false) {
         const hasValidFile = outputPath && this.verifyDownloadCompletion(outputPath, type, subsOnly);
         
-        logDebug('Termination analysis:', { exitCode, signal, wasCanceled, hasValidFile, type, outputPath, subsOnly });
+        logDebug('Termination analysis:', { exitCode, signal, wasCanceled, hasValidFile, type, outputPath, subsOnly, isLivestream });
         
         // Signal-based detection (most reliable for cancellation)
         if (signal) {
@@ -1190,19 +1264,20 @@ class DownloadCommand extends BaseCommand {
         
         // Cancellation-based logic with file verification
         if (wasCanceled) {
-            if (hasValidFile && type === 'direct') {
-                // Direct type with valid file after cancellation = partial success
+            if (hasValidFile && (type === 'direct' || isLivestream)) {
+                // Direct type or livestream with valid file after cancellation = partial success
+                const reasonType = type === 'direct' ? 'direct type' : 'livestream';
                 return {
                     wasCanceled: true,
                     isSuccess: false,
                     isPartialSuccess: true,
-                    reason: 'canceled but partial file is playable (direct type)',
+                    reason: `canceled but partial file is playable (${reasonType})`,
                     signal: null,
                     exitCode,
                     method: 'partial-success-detection'
                 };
             } else {
-                // Direct type with no valid file OR non-direct types = cancellation
+                // No valid file OR regular HLS/DASH types = cancellation
                 return {
                     wasCanceled: true,
                     isSuccess: false,

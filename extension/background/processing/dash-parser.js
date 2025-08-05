@@ -261,12 +261,14 @@ export async function parseDashManifest(videoObject) {
         
         logger.debug(`Confirmed valid DASH manifest: ${url}`);
         
-        // Extract basic MPD properties
-        const durationMatch = content.match(/mediaPresentationDuration="([^"]+)"/);
-        const duration = durationMatch ? parseDashDuration(durationMatch[1]) : null;
-        
-        // Check if this is a live stream
+        // Check if this is a live stream first
         const isLive = content.match(/type="dynamic"/i) !== null;
+        
+        // Extract basic MPD properties - skip duration parsing for live streams
+        const duration = isLive ? null : (() => {
+            const durationMatch = content.match(/mediaPresentationDuration="([^"]+)"/);
+            return durationMatch ? parseDashDuration(durationMatch[1]) : null;
+        })();
         
         // Check for encryption/DRM
         const isEncrypted = content.includes('<ContentProtection') || 

@@ -98,3 +98,29 @@
         transform: translateX(100%);
     }
 }
+
+// Livestream animation - seamless beam effect (left to right)
+@keyframes livestream-beam {
+    0% {
+        background-position: 115% 0;
+    }
+    100% {
+        background-position: -15% 0;
+    }
+}
+
+// Simple recording pulse animation
+@keyframes recording-pulse {
+    0% {
+        opacity: 1;
+        transform: scale(1);
+    }
+    50% {
+        opacity: 0.4;
+        transform: scale(0.8);
+    }
+    100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
