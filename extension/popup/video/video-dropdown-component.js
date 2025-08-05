@@ -367,14 +367,8 @@ export class VideoDropdownComponent {
                 label.textContent = this.buildAdvancedSummary();
             } else {
                 const track = this.selectedTracks.videoTrack || this.videoData.videoTracks?.[0] || this.videoData;
-                
-                // Check if we have quality info available
-                if (!track || (!track.standardizedResolution && !track.height && !track.bitrate && !track.metaFFprobe)) {
-                    label.textContent = 'Unknown quality';
-                } else {
-                    const parts = this.formatVariantLabel(track).split(' • ');
-                    label.textContent = parts.slice(0, 2).join(' • ');
-                }
+				const parts = this.formatVariantLabel(track).split(' • ');
+				label.textContent = parts.slice(0, 2).join(' • ');
             }
         }
         
