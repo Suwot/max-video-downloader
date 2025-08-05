@@ -9,6 +9,7 @@ import { connect, disconnect, sendPortMessage } from './communication.js';
 import { restoreActiveDownloads, cleanupAllElapsedTimeTimers } from './video/download-progress-handler.js';
 import { renderHistoryItems } from './video/video-renderer.js';
 import { initializeSettingsTab } from './settings-tab.js';
+import { setTabId } from './state.js';
 
 const logger = createLogger('Popup');
 
@@ -34,6 +35,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         // Get active tab and set tab ID first
         const activeTab = await getActiveTab();
         currentTabId = activeTab.id;
+        setTabId(activeTab.id); // Set in state management for filtering
         logger.debug('Active tab ID set:', activeTab.id);
 
         // Initialize UI (theme will be handled there)
