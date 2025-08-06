@@ -25,11 +25,13 @@ export class VideoItemComponent {
             this.videoData = downloadRequestOrVideoData.videoData;
             this.downloadId = downloadRequestOrVideoData.downloadId;
             this.filename = downloadRequestOrVideoData.filename;
+            this.resolvedFilename = downloadRequestOrVideoData.resolvedFilename;
         } else {
             // This is plain videoData (legacy)
             this.videoData = downloadRequestOrVideoData;
             this.downloadId = downloadId;
             this.filename = null;
+            this.resolvedFilename = null;
         }
         
         this.initialDownloadState = initialDownloadState; // 'default', 'starting', 'downloading', 'queued'
@@ -110,8 +112,8 @@ export class VideoItemComponent {
         // Create hardcoded HTML structure for simple mode
         const previewUrl = this.videoData.previewUrl || this.videoData.poster || chrome.runtime.getURL('icons/video-placeholder.png');
         const duration = this.videoData.duration ? formatDuration(this.videoData.duration) : '';
-        // Use filename from download request (includes container extension) or fallback to video title
-        const title = this.filename || this.videoData.title || 'Untitled Video';
+        // Use resolved filename if available, fallback to original filename, then video title
+        const title = this.resolvedFilename || this.filename || this.videoData.title || 'Untitled Video';
         
         // Create status badge HTML if needed
         const statusBadgeHtml = this.createStatusBadgeHtml();
@@ -330,7 +332,7 @@ export class VideoItemComponent {
         
         const title = document.createElement('h3');
         title.className = 'video-title item-title';
-        title.textContent = this.filename || this.videoData.title || 'Untitled Video';
+        title.textContent = this.resolvedFilename || this.filename || this.videoData.title || 'Untitled Video';
         
         // Dismiss (X) button
         const dismissButton = document.createElement('button');
@@ -480,11 +482,8 @@ export class VideoItemComponent {
             ...baseData
         };
         
-        // Add container extension to filename
-        if (container) {
-            const baseFilename = command.filename || 'video';
-            command.filename = `${baseFilename}.${container}`;
-        }
+        // Don't add container extension here - let native host handle final filename generation
+        // This prevents double extensions and allows native host to optimize for path length
         
         // Apply mode-specific modifications
         switch (mode) {
@@ -555,7 +554,7 @@ export class VideoItemComponent {
                 return { 
                     ...baseCommand,
                     container: container,
-                    filename: `${baseFilename}_audio.${container}`,
+                    filename: baseFilename, // Let native host add _audio suffix and extension
                     audioOnly: true,
                     ...options 
                 };
@@ -565,7 +564,7 @@ export class VideoItemComponent {
             const autoTrack = this.getDefaultOrBestAudioTrack();
             const container = autoTrack.audioContainer || 'm4a';
             const baseFilename = baseCommand.filename || 'video';
-            const audioLabel = autoTrack.label || autoTrack.name || autoTrack.language || autoTrack.lang || 'nolabel';
+            const audioLabel = autoTrack.label || autoTrack.name || autoTrack.language || autoTrack.lang || null;
             
             // Show appropriate toast message
             if (autoTrack.isDefault) {
@@ -582,7 +581,7 @@ export class VideoItemComponent {
             const audioTrack = selectedAudioTracks[0];
             const container = audioTrack.audioContainer || 'm4a';
             const baseFilename = baseCommand.filename || 'video';
-            const audioLabel = audioTrack.label || audioTrack.name || audioTrack.language || audioTrack.lang || 'nolabel';
+            const audioLabel = audioTrack.label || audioTrack.name || audioTrack.language || audioTrack.lang || null;
             
             return this.createSingleAudioCommand(baseCommand, audioTrack, baseFilename, audioLabel, container, options);
         }
@@ -611,7 +610,8 @@ export class VideoItemComponent {
         const command = { 
             ...baseCommand,
             container: container,
-            filename: `${baseFilename}_audio_${audioLabel}.${container}`,
+            filename: baseFilename, // Let native host add _audio_{label} suffix and extension
+            audioLabel: audioLabel, // Pass label to native host for filename generation
             audioOnly: true,
             ...options 
         };
@@ -874,7 +874,7 @@ export class VideoItemComponent {
             const autoTrack = this.getDefaultOrBestSubtitleTrack();
             const container = autoTrack.subtitleContainer || 'srt';
             const baseFilename = baseCommand.filename || 'noname';
-            const subsLabel = autoTrack.label || autoTrack.name || autoTrack.language || autoTrack.lang || 'nolabel';
+            const subsLabel = autoTrack.label || autoTrack.name || autoTrack.language || autoTrack.lang || null;
             
             // Show appropriate toast message based on track selection reason
             if (autoTrack.isDefault) {
@@ -896,7 +896,7 @@ export class VideoItemComponent {
             const subTrack = selectedSubtitleTracks[0];
             const container = subTrack.subtitleContainer || 'srt';
             const baseFilename = baseCommand.filename || 'video';
-            const subsLabel = subTrack.label || subTrack.name || subTrack.language || subTrack.lang || 'nolabel';
+            const subsLabel = subTrack.label || subTrack.name || subTrack.language || subTrack.lang || null;
             
             return this.createSingleSubtitleCommand(baseCommand, subTrack, baseFilename, subsLabel, container, options);
         }
@@ -941,7 +941,7 @@ export class VideoItemComponent {
             if (defaultTrack) {
                 return {
                     ...defaultTrack,
-                    label: defaultTrack.name || defaultTrack.label || defaultTrack.language || defaultTrack.lang || 'nolabel',
+                    label: defaultTrack.name || defaultTrack.label || defaultTrack.language || defaultTrack.lang || null,
                     audioContainer: defaultTrack.audioContainer || 'm4a',
                     isDefault: true
                 };
@@ -951,7 +951,7 @@ export class VideoItemComponent {
             const bestTrack = availableAudioTracks[0];
             return {
                 ...bestTrack,
-                label: bestTrack.name || bestTrack.label || bestTrack.language || bestTrack.lang || 'nolabel',
+                label: bestTrack.name || bestTrack.label || bestTrack.language || bestTrack.lang || null,
                 audioContainer: bestTrack.audioContainer || 'm4a',
                 isDefault: false
             };
@@ -978,7 +978,7 @@ export class VideoItemComponent {
         if (defaultTrack) {
             return {
                 ...defaultTrack,
-                label: defaultTrack.name || defaultTrack.label || defaultTrack.language || defaultTrack.lang || 'nolabel',
+                label: defaultTrack.name || defaultTrack.label || defaultTrack.language || defaultTrack.lang || null,
                 subtitleContainer: defaultTrack.subtitleContainer || 'srt',
                 isDefault: true
             };
@@ -988,7 +988,7 @@ export class VideoItemComponent {
         const bestTrack = availableSubtitleTracks[0];
         return {
             ...bestTrack,
-            label: bestTrack.name || bestTrack.label || bestTrack.language || bestTrack.lang || 'nolabel',
+            label: bestTrack.name || bestTrack.label || bestTrack.language || bestTrack.lang || null,
             subtitleContainer: bestTrack.subtitleContainer || 'srt',
             isDefault: false
         };
@@ -1008,7 +1008,8 @@ export class VideoItemComponent {
         const command = { 
             ...baseCommand,
             container: container,
-            filename: `${baseFilename}_subtitles_${subsLabel}.${container}`,
+            filename: baseFilename, // Let native host add _subtitles_{label} suffix and extension
+            subsLabel: subsLabel, // Pass label to native host for filename generation
             subsOnly: true,
             ...options 
         };
@@ -1073,6 +1074,20 @@ export class VideoItemComponent {
         }
         if (this.downloadButton) {
             this.downloadButton.updateVideoData(newVideoData);
+        }
+    }
+    
+    /**
+     * Update resolved filename and refresh UI
+     * @param {string} resolvedFilename - The resolved filename from native host
+     */
+    updateResolvedFilename(resolvedFilename) {
+        this.resolvedFilename = resolvedFilename;
+        
+        // Update title in UI
+        const titleElement = this.element?.querySelector('.video-title');
+        if (titleElement) {
+            titleElement.textContent = resolvedFilename;
         }
     }
     

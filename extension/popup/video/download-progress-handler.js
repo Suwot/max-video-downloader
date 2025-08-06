@@ -33,6 +33,18 @@ export async function updateDownloadProgress(progressData = {}) {
         } else {
             logger.debug('Download item already exists, skipping creation:', downloadId);
         }
+    } else if (progressData.command === 'filename-resolved') {
+        // Handle filename resolution update
+        const downloadId = progressData.downloadId;
+        const activeDownloadsContainer = document.querySelector('.active-downloads');
+        
+        if (downloadId) {
+            const existingItem = activeDownloadsContainer?.querySelector(`.video-item[data-download-id="${downloadId}"]`);
+            if (existingItem && existingItem._component) {
+                existingItem._component.updateResolvedFilename(progressData.resolvedFilename);
+                logger.debug('Updated resolved filename for download:', downloadId, progressData.resolvedFilename);
+            }
+        }
     } else if (progressData.command === 'download-started' && progressData.videoData) {
         // Smart UI updates: update existing items instead of creating duplicates
         const downloadId = progressData.downloadId;

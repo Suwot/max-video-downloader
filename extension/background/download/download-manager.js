@@ -78,6 +78,7 @@ export function getActiveDownloads() {
                 downloadUrl: entry.downloadRequest.downloadUrl,
                 masterUrl: entry.downloadRequest.masterUrl,
                 filename: entry.downloadRequest.filename,
+                resolvedFilename: entry.resolvedFilename, // Include resolved filename
                 selectedOptionOrigText: entry.downloadRequest.selectedOptionOrigText,
                 streamSelection: entry.downloadRequest.streamSelection,
                 isRedownload: entry.downloadRequest.isRedownload || false,
@@ -123,6 +124,7 @@ export async function initDownloadManager() {
         nativeHostService.addEventListener('download-success', handleDownloadEvent);
         nativeHostService.addEventListener('download-error', handleDownloadEvent);
         nativeHostService.addEventListener('download-canceled', handleDownloadEvent);
+        nativeHostService.addEventListener('filename-resolved', handleDownloadEvent);
         
         // One-time cleanup: Remove legacy active downloads storage
         try {
@@ -249,7 +251,7 @@ async function queueDownload(downloadCommand) {
         command: 'download-queued',
         downloadUrl: downloadCommand.downloadUrl,
         masterUrl: downloadCommand.masterUrl || null,
-        filename: downloadCommand.filename, // Already includes container extension
+        filename: downloadCommand.filename,
         selectedOptionOrigText: downloadCommand.selectedOptionOrigText || null,
         videoData: downloadCommand.videoData, // Include video data for UI creation
         downloadId: downloadId // For precise progress mapping
@@ -350,6 +352,26 @@ async function handleDownloadEvent(event) {
     // Get download entry from map
     if (!downloadEntry) {
         downloadEntry = allDownloads.get(downloadId);
+    }
+    
+    // Handle filename resolution
+    if (command === 'filename-resolved') {
+        if (downloadEntry) {
+            downloadEntry.resolvedFilename = event.resolvedFilename;
+            downloadEntry.progressData = { ...downloadEntry.progressData, resolvedFilename: event.resolvedFilename };
+            
+            // Broadcast filename update to UI
+            broadcastToPopups({
+                command: 'filename-resolved',
+                downloadId: downloadId,
+                resolvedFilename: event.resolvedFilename,
+                downloadUrl: downloadEntry.downloadRequest.downloadUrl,
+                masterUrl: downloadEntry.downloadRequest.masterUrl || null
+            });
+            
+            logger.debug('Filename resolved for download:', downloadId, event.resolvedFilename);
+        }
+        return; // Don't process further for filename-resolved events
     }
     
     // Update progress data in the entry
@@ -776,9 +798,10 @@ async function handleDownloadAsFlow(downloadCommand) {
     try {
         logger.debug(`Handling filesystem dialog for:`, downloadId);
 
-        // Generate default filename with container extension
-        const defaultFilename = downloadCommand.defaultFilename || 
-            `${downloadCommand.filename || 'video'}.${downloadCommand.defaultContainer || 'mp4'}`;
+        // Generate default filename with container extension (native host will handle final naming)
+        const baseFilename = downloadCommand.filename || 'video';
+        const containerExt = downloadCommand.container;
+        const defaultFilename = downloadCommand.defaultFilename || `${baseFilename}.${containerExt}`;
 
         // Send filesystem request to native host
         const filesystemResponse = await nativeHostService.sendMessage({

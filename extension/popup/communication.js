@@ -96,6 +96,7 @@ async function handleIncomingMessage(message) {
         case 'download-queued':
         case 'download-started':
         case 'download-stopping':
+        case 'filename-resolved':
             await updateDownloadProgress(message);
             break;
 

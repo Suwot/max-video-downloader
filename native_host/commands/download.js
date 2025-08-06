@@ -416,6 +416,8 @@ class DownloadCommand extends BaseCommand {
      * @param {Object} params.headers HTTP headers to use (optional)
      * @param {boolean} params.isRedownload Whether this is a re-download request (optional)
      * @param {boolean} params.isLive Whether this is a livestream (optional)
+     * @param {string} params.audioLabel Audio track label for filename generation (optional)
+     * @param {string} params.subsLabel Subtitle track label for filename generation (optional)
      */
     async execute(params) {
         const { command } = params;
@@ -452,7 +454,9 @@ class DownloadCommand extends BaseCommand {
             selectedOptionOrigText = null,
             isRedownload = false,
             downloadId = null,
-            isLive = false
+            isLive = false,
+            audioLabel = null,
+            subsLabel = null
         } = params;
 
         // Use downloadId directly from extension (no need to generate sessionId)
@@ -477,11 +481,25 @@ class DownloadCommand extends BaseCommand {
             // Use container from extension (trusted completely)
             logDebug('📦 Using container from extension:', container);
             
-            // Generate clean output filename
-            const outputFilename = this.generateOutputFilename(filename, container);
+            // Generate clean output filename with mode-specific suffixes
+            const outputFilename = this.generateOutputFilename(
+                filename, 
+                container, 
+                audioOnly, 
+                subsOnly, 
+                audioLabel, 
+                subsLabel
+            );
             
             // Resolve final output path with uniqueness check
             const uniqueOutput = this.resolveOutputPath(outputFilename, savePath);
+            
+            // Send resolved filename to extension immediately
+            this.sendMessage({
+                command: 'filename-resolved',
+                downloadId: downloadId,
+                resolvedFilename: path.basename(uniqueOutput)
+            }, { useMessageId: false });
             
             // Build FFmpeg command arguments
             const ffmpegArgs = this.buildFFmpegArgs({
@@ -528,25 +546,43 @@ class DownloadCommand extends BaseCommand {
     }
 
     /**
-     * Generate clean output filename
+     * Generate clean output filename with mode-specific suffixes
      * @private
      */
-    generateOutputFilename(filename, container) {
+    generateOutputFilename(filename, container, audioOnly = false, subsOnly = false, audioLabel = null, subsLabel = null) {
         // Clean up filename: remove query params
         let outputFilename = (filename ? filename.replace(/[?#].*$/, '') : 'video');
         
         // Sanitize unsafe filesystem characters
         outputFilename = outputFilename.replace(/[<>:"/\\|?*]/g, '_').replace(/\s+/g, ' ').trim();
         
-        // For audio-only downloads, default to 'audio' if no filename
-        if ((container === 'm4a' || container === 'mp3') && (!filename || filename.trim() === '')) {
-            outputFilename = 'audio';
+        // Remove any existing extension to prevent double extensions
+        const extensionMatch = outputFilename.match(/\.[a-zA-Z0-9]{1,5}$/);
+        if (extensionMatch) {
+            outputFilename = outputFilename.slice(0, -extensionMatch[0].length);
         }
         
-        // Remove container extension if already present to prevent double extensions
-        const expectedExt = `.${container}`;
-        if (outputFilename.toLowerCase().endsWith(expectedExt.toLowerCase())) {
-            outputFilename = outputFilename.slice(0, -expectedExt.length);
+        // Add mode-specific suffixes
+        if (audioOnly) {
+            if (audioLabel && audioLabel !== 'audio') {
+                outputFilename += `_audio_${audioLabel}`;
+            } else {
+                outputFilename += '_audio';
+            }
+            // Default to 'audio' if no base filename for audio-only downloads
+            if (!filename || filename.trim() === '') {
+                outputFilename = audioLabel ? `audio_${audioLabel}` : 'audio';
+            }
+        } else if (subsOnly) {
+            if (subsLabel) {
+                outputFilename += `_subtitles_${subsLabel}`;
+            } else {
+                outputFilename += '_subtitles';
+            }
+            // Default to 'subtitles' if no base filename for subtitle-only downloads
+            if (!filename || filename.trim() === '') {
+                outputFilename = subsLabel ? `subtitles_${subsLabel}` : 'subtitles';
+            }
         }
         
         return `${outputFilename}.${container}`;
