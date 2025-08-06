@@ -418,6 +418,7 @@ class DownloadCommand extends BaseCommand {
      * @param {boolean} params.isLive Whether this is a livestream (optional)
      * @param {string} params.audioLabel Audio track label for filename generation (optional)
      * @param {string} params.subsLabel Subtitle track label for filename generation (optional)
+     * @param {boolean} params.allowOverwrite Whether to allow overwriting existing files (optional)
      */
     async execute(params) {
         const { command } = params;
@@ -456,7 +457,8 @@ class DownloadCommand extends BaseCommand {
             downloadId = null,
             isLive = false,
             audioLabel = null,
-            subsLabel = null
+            subsLabel = null,
+            allowOverwrite = false
         } = params;
 
         // Use downloadId directly from extension (no need to generate sessionId)
@@ -485,7 +487,7 @@ class DownloadCommand extends BaseCommand {
             const outputFilename = this.generateOutputFilename(filename, container, audioOnly, subsOnly, audioLabel, subsLabel);
             
             // Resolve final output path with uniqueness check
-            const uniqueOutput = this.resolveOutputPath(outputFilename, savePath);
+            const uniqueOutput = this.resolveOutputPath(outputFilename, savePath, allowOverwrite);
             
             // Send resolved filename to extension immediately
             this.sendMessage({
@@ -506,7 +508,8 @@ class DownloadCommand extends BaseCommand {
                 inputs: params.inputs,
                 headers,
                 sourceAudioCodec,
-                sourceAudioBitrate
+                sourceAudioBitrate,
+                allowOverwrite
             });
             
             logDebug('FFmpeg command:', ffmpegService.getFFmpegPath(), ffmpegArgs.join(' '));
@@ -583,9 +586,12 @@ class DownloadCommand extends BaseCommand {
     
     /**
      * Resolves output path and ensures uniqueness across both disk and active downloads
+     * @param {string} filename - The desired filename
+     * @param {string} savePath - The directory to save to
+     * @param {boolean} allowOverwrite - Whether to allow overwriting existing files
      * @private
      */
-    resolveOutputPath(filename, savePath) {
+    resolveOutputPath(filename, savePath, allowOverwrite = false) {
         // Default to Desktop if no savePath or if it's "Desktop"
         const defaultDir = path.join(process.env.HOME || os.homedir(), 'Desktop');
         const targetDir = (!savePath || savePath === 'Desktop') ? defaultDir : savePath;
@@ -612,7 +618,30 @@ class DownloadCommand extends BaseCommand {
             return false;
         };
 
-        // Ensure uniqueness across both disk and active downloads
+        // If overwrite is allowed, only check for active downloads (not disk files)
+        if (allowOverwrite) {
+            let counter = 1;
+            let uniqueOutput = outputPath;
+            
+            // Only avoid conflicts with active downloads, allow disk file overwrite
+            while (isPathInUse(uniqueOutput)) {
+                const ext = path.extname(outputPath);
+                const base = outputPath.slice(0, -ext.length);
+                uniqueOutput = `${base} (${counter})${ext}`;
+                counter++;
+                
+                // Re-check path length after adding counter
+                if (uniqueOutput.length > 255) {
+                    const baseForCounter = base.substring(0, base.length - 10); // Make more room
+                    uniqueOutput = `${baseForCounter}... (${counter})${ext}`;
+                }
+            }
+            
+            logDebug('Output file (overwrite allowed):', uniqueOutput);
+            return uniqueOutput;
+        }
+
+        // Default behavior: ensure uniqueness across both disk and active downloads
         let counter = 1;
         let uniqueOutput = outputPath;
         while (fs.existsSync(uniqueOutput) || isPathInUse(uniqueOutput)) {
@@ -676,13 +705,20 @@ class DownloadCommand extends BaseCommand {
         inputs = null,
         headers = {},
         sourceAudioCodec = null,
-        sourceAudioBitrate = null
+        sourceAudioBitrate = null,
+        allowOverwrite = false
     }) {
         const args = [];
         
         // Determine download type using container-first logic
         const downloadType = this.determineDownloadType(container, audioOnly, subsOnly);
         logDebug('📦 Container-first detection:', { container, downloadType, audioOnly, subsOnly });
+        
+        // Add overwrite flag if allowed
+        if (allowOverwrite) {
+            args.push('-y');
+            logDebug('🔄 Added overwrite flag to FFmpeg command');
+        }
         
         // Progress tracking arguments
         args.push('-stats', '-progress', 'pipe:2');

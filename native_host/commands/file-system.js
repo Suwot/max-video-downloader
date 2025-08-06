@@ -147,6 +147,9 @@ class FileSystemCommand extends BaseCommand {
             throw new Error('No save location selected');
         }
 
+        // Check if user chose to overwrite an existing file
+        const willOverwrite = fs.existsSync(selectedPath);
+
         // Always return path, directory, and filename for clarity
         const directory = path.dirname(selectedPath);
         const filename = path.basename(selectedPath);
@@ -156,7 +159,8 @@ class FileSystemCommand extends BaseCommand {
             path: selectedPath,
             directory,
             filename,
-            defaultName
+            defaultName,
+            willOverwrite // Flag indicating if user chose to overwrite existing file
         };
         this.sendMessage(result);
         return result;

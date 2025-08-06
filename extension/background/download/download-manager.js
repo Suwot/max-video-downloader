@@ -865,7 +865,8 @@ async function handleDownloadAsFlow(downloadCommand) {
         const resolvedCommand = {
             ...downloadCommand,
             savePath: filesystemResponse.directory,
-            filename: processedFilename
+            filename: processedFilename,
+            allowOverwrite: filesystemResponse.willOverwrite || false // Pass through overwrite flag from OS dialog
         };
         
         // Clean up temporary flags
