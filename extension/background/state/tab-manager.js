@@ -3,15 +3,10 @@
  * Tracks tab events for cleanup and management
  */
 
-// Add static imports at the top
-import { createLogger } from "../../shared/utils/logger.js";
-
 import { cleanupMPDContextForTab } from "../detection/video-detector.js";
-import {
-  cleanupVideosForTab,
-  getVideosForDisplay,
-} from "../processing/video-store.js";
+import { cleanupVideosForTab, getVideosForDisplay } from "../processing/video-store.js";
 import { cleanupProcessingForTab } from "../processing/video-processor.js";
+import { createLogger } from "../../shared/utils/logger.js";
 
 // Create a logger instance for the Tab Tracker module
 const logger = createLogger("Tab Tracker");

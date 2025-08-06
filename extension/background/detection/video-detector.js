@@ -9,10 +9,8 @@ import { settingsManager } from '../index.js';
 const logger = createLogger('VideoDetector');
 logger.setLevel('ERROR');
 
-// Detection constants
-const DETECTION_CONSTANTS = {
-    MPD_CONTEXT_TIMEOUT: 60000 // 1 minute timeout for MPD context
-};
+// Detection context tracking (tabId -> timestamp when MPD was detected)
+const tabsWithMpd = new Map();
 
 /**
  * Get containers from MIME type for direct assignment during detection
@@ -46,21 +44,65 @@ function getContainersFromMimeType(mimeType, mediaType) {
     };
 }
 
-// Detection context tracking (tabId -> timestamp when MPD was detected)
-const tabsWithMpd = new Map();
-
-
-
 /**
  * Get the URL of a tab for page context tracking
  * @param {number} tabId - Tab ID
+ * @param {string} initiatorUrl - Optional initiator URL for fallback when tabId is negative
  * @returns {Promise<Object|null>} Tab info object or null if not found
  */
-async function getTabUrl(tabId) {
+async function getTabUrl(tabId, initiatorUrl = null) {
+    // Handle negative tabId with initiator fallback
+    if (tabId < 0 && initiatorUrl?.startsWith('http')) {
+        try {
+            const tabs = await chrome.tabs.query({});
+            const matchingTabs = tabs.filter(tab => tab.url && tab.url.startsWith(initiatorUrl));
+            
+            if (matchingTabs.length === 1) {
+                // Single match - use this tab
+                const tab = matchingTabs[0];
+                logger.debug(`Resolved tabId ${tabId} to ${tab.id} using initiator: ${initiatorUrl}`);
+                return {
+                    tabId: tab.id, // Return the resolved tabId
+                    pageUrl: tab.url || null,
+                    pageTitle: tab.title || null,
+                    pageFavicon: tab.favIconUrl || null,
+                    incognito: tab.incognito || false,
+                    windowId: tab.windowId || null
+                };
+            } else if (matchingTabs.length > 1) {
+                // Multiple matches - use the most recently active one
+                const mostRecentTab = matchingTabs.reduce((latest, current) => 
+                    (current.lastAccessed || 0) > (latest.lastAccessed || 0) ? current : latest
+                );
+                logger.debug(`Resolved tabId ${tabId} to ${mostRecentTab.id} (most recent of ${matchingTabs.length}) using initiator: ${initiatorUrl}`);
+                return {
+                    tabId: mostRecentTab.id, // Return the resolved tabId
+                    pageUrl: mostRecentTab.url || null,
+                    pageTitle: mostRecentTab.title || null,
+                    pageFavicon: mostRecentTab.favIconUrl || null,
+                    incognito: mostRecentTab.incognito || false,
+                    windowId: mostRecentTab.windowId || null
+                };
+            } else {
+                logger.debug(`No matching tabs found for initiator: ${initiatorUrl}`);
+                return null;
+            }
+        } catch (error) {
+            logger.debug(`Error querying tabs for initiator ${initiatorUrl}:`, error.message);
+            return null;
+        }
+    }
+    
+    // Original logic for positive tabId
+    if (tabId < 0) {
+        return null;
+    }
+    
     try {
         const tab = await chrome.tabs.get(tabId);
         // logger.debug(`Retrieved tab info for ${tabId}:`, tab);
         return {
+            tabId, // Keep original tabId
             pageUrl: tab.url || null,
             pageTitle: tab.title || null,
             pageFavicon: tab.favIconUrl || null,
@@ -129,20 +171,24 @@ function addVideoWithCommonProcessing(tabId, url, videoInfo, metadata, source, t
  * @param {string} requestId - Request ID for header cleanup (handled by caller)
  */
 export async function processWebRequest(details, metadata = null) {
-    const { tabId, url, requestId } = details;
-
-    if (tabId < 0 || !url) {
-        return;
-    }
+    const { tabId, url, requestId, initiator } = details;
+	// logger.info(`Received URL ${url} after processing in onHeadersReceived:`, metadata)
 
     // First check if we should ignore this URL
-    if (shouldIgnoreForMediaDetection(url, metadata)) {
-        return;
-    }
+    if (shouldIgnoreForMediaDetection(url, metadata)) return;
     logger.debug(`Processing video URL after ShouldIgnoreForMediaDetection: ${url} with metadata:`, metadata);
 
-    // Get tab URL for page context tracking
-    const tabInfo = await getTabUrl(tabId);
+    // Get tab URL for page context tracking (with fallback for negative tabId)
+    const tabInfo = await getTabUrl(tabId, initiator);
+    
+    // If we couldn't resolve the tab, skip processing
+    if (!tabInfo) {
+        logger.debug(`Could not resolve tab for tabId ${tabId}, initiator: ${initiator}`);
+        return;
+    }
+    
+    // Use resolved tabId if available
+    const resolvedTabId = tabInfo.tabId || tabId;
 
     // Try MIME type detection first (most reliable)
     if (metadata?.contentType) {
@@ -151,8 +197,8 @@ export async function processWebRequest(details, metadata = null) {
         if (mimeTypeInfo) {
             // Handle DASH manifest detection
             if (mimeTypeInfo.type === 'dash') {
-                tabsWithMpd.set(tabId, Date.now());
-                addVideoWithCommonProcessing(tabId, url, mimeTypeInfo, metadata, `BG_webRequest_mime_${mimeTypeInfo.type}`, tabInfo, requestId);
+                tabsWithMpd.set(resolvedTabId, Date.now());
+                addVideoWithCommonProcessing(resolvedTabId, url, mimeTypeInfo, metadata, `BG_webRequest_mime_${mimeTypeInfo.type}`, tabInfo, requestId);
                 return;
             }
 
@@ -171,7 +217,7 @@ export async function processWebRequest(details, metadata = null) {
                 }
 
                 // Skip media segments
-                const hasMpdContext = tabsWithMpd.has(tabId);
+                const hasMpdContext = tabsWithMpd.has(resolvedTabId);
 
                 if (isMediaSegment(url, metadata.contentType, hasMpdContext)) {
                     logger.debug(`Skipping media segment: ${url}`);
@@ -179,7 +225,7 @@ export async function processWebRequest(details, metadata = null) {
                 }
             }
 
-            addVideoWithCommonProcessing(tabId, url, mimeTypeInfo, metadata, `BG_webRequest_mime_${mimeTypeInfo.type}`, tabInfo, requestId);
+            addVideoWithCommonProcessing(resolvedTabId, url, mimeTypeInfo, metadata, `BG_webRequest_mime_${mimeTypeInfo.type}`, tabInfo, requestId);
             return;
         }
     }
@@ -187,7 +233,7 @@ export async function processWebRequest(details, metadata = null) {
     // Fallback to URL-based detection
     const videoInfo = identifyVideoType(url);
     if (videoInfo) {
-        addVideoWithCommonProcessing(tabId, url, videoInfo, metadata, `BG_webRequest_${videoInfo.type}`, tabInfo, requestId);
+        addVideoWithCommonProcessing(resolvedTabId, url, videoInfo, metadata, `BG_webRequest_${videoInfo.type}`, tabInfo, requestId);
     }
 }
 
@@ -242,6 +288,7 @@ export function initVideoDetector() {
 function setupWebRequestListener() {
     chrome.webRequest.onHeadersReceived.addListener(
         function (details) {
+			logger.info(`NEW onHeadersReceived request for url: ${details.url}, requestId: ${details.requestId}`, details);
             // Centralized cleanup - ensure headers are always cleaned up
             const cleanupHeaders = () => {
                 if (details.requestId) {
@@ -343,7 +390,7 @@ function setupWebRequestListener() {
         function(details) {
             if (details && details.requestId) {
                 removeHeadersByRequestId(details.requestId);
-                logger.debug(`Cleaned up headers for failed requestId: ${details.requestId}`);
+                logger.debug(`Cleaned up headers for failed requestId: ${details.requestId}`, details);
             }
         },
         { urls: ["<all_urls>"], types: ["xmlhttprequest", "other", "media"] }

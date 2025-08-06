@@ -14,8 +14,6 @@ logger.setLevel('ERROR');
 // Map<requestId, headers>
 const requestHeadersStore = new Map();
 
-
-
 // Essential headers for media access
 const ESSENTIAL_HEADERS = [
     'origin',
@@ -64,7 +62,8 @@ function captureRequestHeaders(details) {
     try {
         // Extract headers
         const headers = extractHeaders(details.requestHeaders);
-        logger.debug(`Captured headers for requestId ${details.requestId}`, headers);
+        logger.info(`Captured headers for url: ${details.url}, requestId ${details.requestId}`, headers);
+		
         if (!headers) return;
         // Store by requestId only
         requestHeadersStore.set(details.requestId, headers);
@@ -147,9 +146,6 @@ async function initHeaderTracking() {
     }
 }
 
-
-
-
 /**
  * Clear all stored headers
  */
@@ -167,8 +163,6 @@ function getHeadersStats() {
         requestsTracked: requestHeadersStore.size
     };
 }
-
-
 
 /**
  * Remove headers for a specific requestId

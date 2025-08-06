@@ -6,10 +6,8 @@ import { cleanupOrphanedRules } from './processing/parsing-dnr.js';
 import { initTabTracking } from './state/tab-manager.js';
 import { initUICommunication } from './messaging/popup-communication.js';
 import { initDownloadManager } from './download/download-manager.js';
-import { createLogger } from '../shared/utils/logger.js';
-
-// Import video detection
 import { initVideoDetector } from './detection/video-detector.js';
+import { createLogger } from '../shared/utils/logger.js';
 
 // Create a logger instance for the background script
 const logger = createLogger('Background');
@@ -79,8 +77,8 @@ async function initializeServices() {
         
 
         await initDownloadManager();     // Initialize download manager early since it uses state manager
-        await initVideoDetector();       // Initialize video detector
-        await initTabTracking();         // Initialize tab tracking
+        initVideoDetector();       // Initialize video detector
+        initTabTracking();         // Initialize tab tracking
         await initUICommunication();     // Initialize UI communication
         await initHeaderTracking();      // Initialize header tracking
         await cleanupOrphanedRules();    // Clean up orphaned parsing rules
@@ -91,13 +89,8 @@ async function initializeServices() {
     }
 }
 
-// Start the debug logger
 startDebugLogger();
-
-// Initialize all services
-initializeServices();
-
-logger.debug('Background script initialized');
+initializeServices(); // Initialize all services
 
 // Handle service worker wake events
 chrome.runtime.onStartup.addListener(() => {

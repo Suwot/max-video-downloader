@@ -7,8 +7,6 @@ import { createLogger } from '../../shared/utils/logger.js';
 
 // Create a logger instance for URL filters
 const logger = createLogger('URL Filters');
-
-// Set this module to only show ERROR level logs
 logger.setLevel('ERROR');
 
 // Non-media file extensions that should be ignored
