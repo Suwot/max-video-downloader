@@ -140,7 +140,13 @@ export function normalizeUrl(url) {
         // Remove hash fragments - 100% safe, never affects server response
         urlObj.hash = '';
         
-        // Remove only 100% guaranteed safe tracking parameters
+        // Special handling for Yandex streaming URLs - strip all query params
+        if (urlObj.hostname === 'streaming.disk.yandex.net' && urlObj.pathname.startsWith('/hls/')) {
+            urlObj.search = '';
+            return urlObj.toString();
+        }
+        
+        // Remove only 100% guaranteed safe tracking parameters for other URLs
         const safeToRemoveParams = [
             // UTM tracking parameters - universally safe to remove
             'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content',
