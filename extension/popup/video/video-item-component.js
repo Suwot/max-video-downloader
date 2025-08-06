@@ -488,11 +488,7 @@ export class VideoItemComponent {
         // Apply mode-specific modifications
         switch (mode) {
             case 'download-as':
-                return { 
-                    ...command, 
-                    defaultFilename: command.filename,
-                    ...options 
-                };
+                return { ...command, ...options };
             case 'extract-audio':
                 return this.createAudioExtractionCommands(command, options);
             case 'extract-subs':

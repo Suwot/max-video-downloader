@@ -215,21 +215,6 @@ export class VideoDownloadButtonComponent {
                 this.downloadBtn.onclick = this.originalHandler;
                 break;
         }
-
-        // Auto-restore if requested
-        if (options.autoRestore) {
-            this.restoreTimer = setTimeout(() => {
-                this.updateState(BUTTON_STATES.DEFAULT);
-            }, options.autoRestoreDelay || 2000);
-        }
-    }
-    
-    /**
-     * Set intermediary text without changing state
-     * @param {string} text - Text to display
-     */
-    setIntermediaryText(text) {
-        this.downloadBtn.innerHTML = text;
     }
     
     /**
@@ -412,10 +397,10 @@ export class VideoDownloadButtonComponent {
                 logger.debug('URL copied to clipboard:', urlToCopy);
                 
                 // Show temporary feedback
-                this.setIntermediaryText('Copied!');
+                this.downloadBtn.innerHTML= 'Copied!';
                 setTimeout(() => {
                     this.updateState(BUTTON_STATES.DEFAULT);
-                }, 1500);
+                }, 1000);
             } catch (error) {
                 logger.error('Failed to copy URL:', error);
                 this.updateState(BUTTON_STATES.DEFAULT);
@@ -427,7 +412,7 @@ export class VideoDownloadButtonComponent {
      * Handle Download As functionality
      */
     async handleDownloadAs() {
-        this.setIntermediaryText('Choosing...');
+        this.downloadBtn.innerHTML = 'Choosing...';
         const cancelHandler = () => this.sendCancelMessage();
         this.updateState(BUTTON_STATES.STARTING, {
             text: 'Starting...',

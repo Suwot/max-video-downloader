@@ -799,16 +799,14 @@ async function handleDownloadAsFlow(downloadCommand) {
         logger.debug(`Handling filesystem dialog for:`, downloadId);
 
         // Generate default filename with container extension (native host will handle final naming)
-        const baseFilename = downloadCommand.filename || 'video';
-        const containerExt = downloadCommand.container;
-        const defaultFilename = downloadCommand.defaultFilename || `${baseFilename}.${containerExt}`;
+        const defaultName = `${downloadCommand.filename}.${downloadCommand.container}`;
 
         // Send filesystem request to native host
         const filesystemResponse = await nativeHostService.sendMessage({
             command: 'fileSystem',
             operation: 'chooseSaveLocation',
             params: {
-                defaultName: defaultFilename,
+                defaultName,
                 title: 'Save Video As'
             }
         });
@@ -872,7 +870,6 @@ async function handleDownloadAsFlow(downloadCommand) {
         
         // Clean up temporary flags
         delete resolvedCommand.choosePath;
-        delete resolvedCommand.defaultFilename;
         delete resolvedCommand.isFirstTimeSetup;
         
         return resolvedCommand;

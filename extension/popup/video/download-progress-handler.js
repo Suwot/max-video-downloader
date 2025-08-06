@@ -302,31 +302,25 @@ function updateComponentButtonState(downloadButtonComponent, progressData = {}) 
             break;
             
         case 'download-success':
-            // Show success state briefly with auto-restore (like old system)
+            // Show success state briefly (reset handled by centralized timer)
             downloadButtonComponent.updateState('success', {
-                text: 'Completed!',
-                autoRestore: true,
-                autoRestoreDelay: 2000
+                text: 'Completed!'
             });
             logger.debug('Component download button set to success state');
             break;
             
         case 'download-error':
-            // Show error state briefly with auto-restore (like old system)
+            // Show error state briefly (reset handled by centralized timer)
             downloadButtonComponent.updateState('error', {
-                text: 'Error',
-                autoRestore: true,
-                autoRestoreDelay: 2000
+                text: 'Error'
             });
             logger.debug('Component download button set to error state');
             break;
             
         case 'download-canceled':
-            // Show canceled state briefly with auto-restore (like old system)
+            // Show canceled state briefly (reset handled by centralized timer)
             downloadButtonComponent.updateState('canceled', {
-                text: 'Canceled',
-                autoRestore: true,
-                autoRestoreDelay: 2000
+                text: 'Canceled'
             });
             logger.debug('Component download button set to canceled state');
             break;
@@ -643,7 +637,7 @@ async function handleDownloadCompletion(progressData, addToHistory = false) {
         if (['download-success', 'download-error', 'download-canceled'].includes(progressData.command)) {
             setTimeout(() => {
                 resetVideosTabButtonStates(lookupUrl);
-            }, 2000);
+            }, 1000);
         }
 
         // Re-render history items incrementally if this was added to history

@@ -135,7 +135,7 @@ class FileSystemCommand extends BaseCommand {
      * @param {Object} params - { defaultName?: string, title?: string }
      */
     async chooseSaveLocation(params) {
-        const { defaultName = 'file', title = 'Save As' } = params;
+        const { defaultName = 'untitled', title = 'Save As' } = params;
 
         const command = this.getChooseSaveLocationCommand(defaultName, title);
         const output = await this.executeCommand(command.cmd, command.args, true);
