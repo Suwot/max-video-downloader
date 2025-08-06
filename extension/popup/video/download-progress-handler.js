@@ -7,7 +7,7 @@ import { createLogger } from '../../shared/utils/logger.js';
 import { sendPortMessage } from '../communication.js';
 import { formatSize, formatTime } from '../../shared/utils/processing-utils.js';
 import { renderHistoryItems } from './video-renderer.js';
-import { VideoItemComponent } from './video-item-component.js';
+import { VideoItemComponent } from './video-item.js';
 
 const logger = createLogger('DownloadProgress');
 

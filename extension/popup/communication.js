@@ -6,7 +6,7 @@
 
 import { createLogger } from '../shared/utils/logger.js';
 import { updateDownloadProgress } from './video/download-progress-handler.js';
-import { renderVideos, addVideoToUI, updateVideoInUI, removeVideoFromUI, renderHistoryItems, updateHistoryItemDeleted, updateVideoFlags } from './video/video-renderer.js';
+import { renderVideos, addVideoToUI, updateVideoInUI, removeVideoFromUI, renderHistoryItems, updateHistoryItemDeleted } from './video/video-renderer.js';
 import { updateUICounters, showToast, showSuccess, showError } from './ui-utils.js';
 import { updateSettingsUI, updateNativeHostStatus } from './settings-tab.js';
 import { getTabId } from './state.js';

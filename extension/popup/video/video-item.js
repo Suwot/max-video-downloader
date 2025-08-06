@@ -7,8 +7,8 @@ import { formatDuration } from '../../shared/utils/processing-utils.js';
 import { showHoverPreview, hideHoverPreview } from './preview-hover.js';
 import { sendPortMessage } from '../communication.js';
 import { createLogger } from '../../shared/utils/logger.js';
-import { VideoDropdownComponent } from './video-dropdown-component.js';
-import { VideoDownloadButtonComponent } from './video-download-button-component.js';
+import { VideoDropdownComponent } from './dropdown.js';
+import { VideoDownloadButtonComponent } from './download-button.js';
 import { isTrackCompatibleWithVideo } from '../../background/processing/container-detector.js';
 import { showInfo, showError } from '../ui-utils.js';
 

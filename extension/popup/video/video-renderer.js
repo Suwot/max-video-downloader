@@ -1,7 +1,7 @@
 import { sendPortMessage } from '../communication.js';
 import { createLogger } from '../../shared/utils/logger.js';
 import { formatSize, formatDuration, formatBitrate } from '../../shared/utils/processing-utils.js';
-import { VideoItemComponent } from './video-item-component.js';
+import { VideoItemComponent } from './video-item.js';
 
 const logger = createLogger('Video Renderer');
 
