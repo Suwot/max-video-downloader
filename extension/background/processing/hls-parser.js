@@ -441,7 +441,7 @@ function parseHlsMaster(content, baseUrl, masterUrl) {
                         default: attrs['DEFAULT'] === 'YES',
                         autoselect: attrs['AUTOSELECT'] === 'YES',
                         characteristics: attrs['CHARACTERISTICS'] || null,
-                        channels: attrs['CHANNELS'] + 'ch' || null,
+                        channels: attrs['CHANNELS'] ? `${attrs['CHANNELS']} ch` : null,
                         assocLanguage: attrs['ASSOC-LANGUAGE'] || null,
                         isEmbedded: isEmbedded,  // Flag for embedded audio
                         // Container information for download - HLS audio is always M4A
