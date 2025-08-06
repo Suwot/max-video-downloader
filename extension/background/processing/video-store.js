@@ -300,6 +300,8 @@ function cleanupVideosForTab(tabId) {
         variantMasterMap.delete(tabId);
     }
     
+    // Reset tab icon immediately after cleanup
+    updateTabIcon(tabId);
 }
 
 /**
@@ -310,6 +312,9 @@ function cleanupAllVideos() {
     
     allDetectedVideos.clear();
     variantMasterMap.clear();
+    
+    // Reset all tab icons after global cleanup
+    updateTabIcon(); // Global reset (no tabId parameter)
 
     logger.info('All detected videos cleared');
 }

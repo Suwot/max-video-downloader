@@ -73,20 +73,27 @@ function updateTabIcon(tabId) {
     return;
   }
 
-  // Use getVideosForDisplay to check for valid videos
-  const hasValidVideos = getVideosForDisplay(tabId).length > 0;
-  const iconPath = hasValidVideos ? "../icons/128.png" : "../icons/128-bw.png";
+  // Defensive check: verify tab exists before updating icon
+  chrome.tabs.get(tabId)
+    .then(() => {
+      // Use getVideosForDisplay to check for valid videos
+      const hasValidVideos = getVideosForDisplay(tabId).length > 0;
+      const iconPath = hasValidVideos ? "../icons/128.png" : "../icons/128-bw.png";
 
-  // Set icon and silently ignore all errors
-  // Tabs can close at any time during async operations - this is normal
-  chrome.action
-    .setIcon({
-      tabId,
-      path: iconPath,
+      // Set icon and silently ignore all errors
+      chrome.action
+        .setIcon({
+          tabId,
+          path: iconPath,
+        })
+        .catch(() => {
+          // Silently ignore all errors
+          // Tab closure during icon update is a normal race condition
+        });
     })
     .catch(() => {
-      // Silently ignore all errors
-      // Tab closure during icon update is a normal race condition
+      // Tab doesn't exist - this is normal during tab closure
+      logger.debug(`Tab ${tabId} no longer exists, skipping icon update`);
     });
 }
 
@@ -137,7 +144,7 @@ function initTabTracking() {
             `Domain change detected, cleaning up tab ${details.tabId}`
           );
           cleanupVideosForTab(details.tabId);
-          // Icon will be updated by onUpdated when page completes loading
+          // Icon is now reset immediately by cleanupVideosForTab
         } else {
           logger.debug(
             `Same domain navigation for tab ${details.tabId}, preserving videos`
