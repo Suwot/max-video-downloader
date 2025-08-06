@@ -5,7 +5,6 @@
  */
 
 import { 
-    processingRequests,
     calculateEstimatedFileSizeBytes,
     resolveUrl
 } from './parser-utils.js';
@@ -16,6 +15,9 @@ import { standardizeResolution, normalizeUrl, getBaseDirectory } from '../../sha
 // Create a logger for the HLS parser
 const logger = createLogger('HLS Parser');
 logger.setLevel('ERROR');
+
+// Track URLs currently being processed to prevent duplicates
+const processingUrls = new Set();
 
 /**
  * Parse an HLS playlist and organize content by type
@@ -28,7 +30,7 @@ export async function parseHlsManifest(videoObject) {
     const { url, headers, metadata, tabId, normalizedUrl } = videoObject;
 
     // Skip if already being processed
-    if (processingRequests.full && processingRequests.full.has(normalizedUrl)) {
+    if (processingUrls.has(normalizedUrl)) {
         return { 
             status: 'processing',
             isValid: false,
@@ -43,9 +45,7 @@ export async function parseHlsManifest(videoObject) {
     }
     
     // Mark as being processed
-    if (processingRequests.full) {
-        processingRequests.full.add(normalizedUrl);
-    }
+    processingUrls.add(normalizedUrl);
     
     try {
         logger.debug(`Fetching manifest: ${url} with headers:`, headers);
@@ -329,10 +329,8 @@ export async function parseHlsManifest(videoObject) {
             hasMediaGroups: false
         };
     } finally {
-        // Clean up
-        if (processingRequests.full) {
-            processingRequests.full.delete(normalizedUrl);
-        }
+        // Clean up processing tracking
+        processingUrls.delete(normalizedUrl);
     }
 }
 

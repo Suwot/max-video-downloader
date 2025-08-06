@@ -4,7 +4,6 @@
  */
 
 import {
-    processingRequests,
     calculateEstimatedFileSizeBytes,
     parseFrameRate,
     extractAttribute
@@ -17,6 +16,9 @@ import { detectAllContainers } from './container-detector.js';
 // Create a logger for the DASH parser
 const logger = createLogger('DASH Parser');
 logger.setLevel('ERROR');
+
+// Track URLs currently being processed to prevent duplicates
+const processingUrls = new Set();
 
 /**
  * Parse DASH duration string (ISO 8601 format)
@@ -208,7 +210,7 @@ export async function parseDashManifest(videoObject) {
 	const { url, headers, normalizedUrl } = videoObject;
     
     // Skip if already being processed
-    if (processingRequests.full && processingRequests.full.has(normalizedUrl)) {
+    if (processingUrls.has(normalizedUrl)) {
         return { 
             status: 'processing',
             isValid: false,
@@ -219,9 +221,7 @@ export async function parseDashManifest(videoObject) {
     }
     
     // Mark as being processed
-    if (processingRequests.full) {
-        processingRequests.full.add(normalizedUrl);
-    }
+    processingUrls.add(normalizedUrl);
     
     try {
         logger.debug(`Fetching manifest: ${url} with headers:`, headers);
@@ -492,9 +492,7 @@ export async function parseDashManifest(videoObject) {
             subtitleTracks: []
         };
     } finally {
-        // Clean up
-        if (processingRequests.full) {
-            processingRequests.full.delete(normalizedUrl);
-        }
+        // Clean up processing tracking
+        processingUrls.delete(normalizedUrl);
     }
 }

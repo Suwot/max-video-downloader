@@ -482,14 +482,7 @@ class DownloadCommand extends BaseCommand {
             logDebug('📦 Using container from extension:', container);
             
             // Generate clean output filename with mode-specific suffixes
-            const outputFilename = this.generateOutputFilename(
-                filename, 
-                container, 
-                audioOnly, 
-                subsOnly, 
-                audioLabel, 
-                subsLabel
-            );
+            const outputFilename = this.generateOutputFilename(filename, container, audioOnly, subsOnly, audioLabel, subsLabel);
             
             // Resolve final output path with uniqueness check
             const uniqueOutput = this.resolveOutputPath(outputFilename, savePath);
