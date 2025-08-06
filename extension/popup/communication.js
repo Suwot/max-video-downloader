@@ -140,8 +140,8 @@ async function handleIncomingMessage(message) {
                 }
                 // Always update UI regardless of success/error - file is considered "deleted" either way
                 updateHistoryItemDeleted(message.completedAt);
-            } else if (message.operation === 'showInFolder' && !message.success && message.error === 'File not found') {
-                // File not found when trying to show in folder - reuse same logic as deleteFile
+            } else if ((message.operation === 'showInFolder' || message.operation === 'openFile') && !message.success && message.error === 'File not found') {
+                // File not found when trying to show in folder or open file - reuse same logic as deleteFile
                 showError('File not found');
                 updateHistoryItemDeleted(message.completedAt);
             }

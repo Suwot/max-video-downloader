@@ -234,8 +234,8 @@ async function handlePortMessage(message, port, portId) {
             } catch (error) {
                 logger.warn(`File system operation failed: ${message.operation}`, error);
                 
-                // Handle showInFolder errors - treat "File not found" as deleted file (reuse existing logic)
-                if (message.operation === 'showInFolder' && error.message === 'File not found' && message.completedAt) {
+                // Handle showInFolder and openFile errors - treat "File not found" as deleted file (reuse existing logic)
+                if ((message.operation === 'showInFolder' || message.operation === 'openFile') && error.message === 'File not found' && message.completedAt) {
                     // Reuse the same logic as deleteFile - update storage and send response
                     try {
                         const historyResult = await chrome.storage.local.get(['downloads_history']);
@@ -249,18 +249,26 @@ async function handlePortMessage(message, port, portId) {
                         });
                         
                         await chrome.storage.local.set({ downloads_history: updatedHistory });
-                        logger.debug('Updated history with deleted flag after showInFolder error:', message.completedAt);
+                        logger.debug(`Updated history with deleted flag after ${message.operation} error:`, message.completedAt);
+                        
+                        // Send response back to popup for UI update
+                        port.postMessage({
+                            command: 'fileSystemResponse',
+                            operation: message.operation,
+                            success: false,
+                            error: 'File not found',
+                            completedAt: message.completedAt
+                        });
                     } catch (storageError) {
-                        logger.error('Failed to update history after showInFolder error:', storageError);
+                        logger.error(`Failed to update history after ${message.operation} error:`, storageError);
+                        port.postMessage({
+                            command: 'fileSystemResponse',
+                            operation: message.operation,
+                            success: false,
+                            error: 'Failed to update history',
+                            completedAt: message.completedAt
+                        });
                     }
-                    
-                    port.postMessage({
-                        command: 'fileSystemResponse',
-                        operation: 'showInFolder',
-                        success: false,
-                        error: 'File not found',
-                        completedAt: message.completedAt
-                    });
                     return;
                 }
                 

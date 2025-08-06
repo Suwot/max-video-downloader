@@ -324,12 +324,14 @@ function buildFlagsHtml(progressData) {
             playBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 const filePath = playBtn.getAttribute('data-file-path');
+                const completedAt = parseInt(historyItem.getAttribute('data-completion'), 10);
                 logger.debug('Opening file:', filePath);
                 
                 sendPortMessage({
                     command: 'fileSystem',
                     operation: 'openFile',
-                    params: { filePath }
+                    params: { filePath },
+                    completedAt: completedAt
                 });
             });
         }
