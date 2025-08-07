@@ -154,6 +154,7 @@ class GetQualitiesCommand extends BaseCommand {
                                     name: videoStream.codec_name || 'unknown',
                                     longName: videoStream.codec_long_name || 'unknown',
                                     profile: videoStream.profile || null,
+                                    level: videoStream.level || null, // H.264 level for quality assessment
                                     pixFmt: videoStream.pix_fmt || null,
                                     colorSpace: videoStream.color_space || null,
                                     bitDepth: videoStream.bits_per_raw_sample || null
@@ -209,6 +210,12 @@ class GetQualitiesCommand extends BaseCommand {
                                     bitDepth: firstAudioStream.bits_per_raw_sample || null
                                 };
 
+                                // Check for default audio stream (useful for multi-audio selection)
+                                const defaultAudioStream = audioStreams.find(stream => stream.disposition?.default === 1);
+                                if (defaultAudioStream && defaultAudioStream.index !== firstAudioStream.index) {
+                                    streamInfo.defaultAudioIndex = defaultAudioStream.index;
+                                }
+
                                 if (firstAudioStream.bit_rate) {
                                     streamInfo.audioBitrate = parseInt(firstAudioStream.bit_rate);
                                 }
@@ -242,6 +249,10 @@ class GetQualitiesCommand extends BaseCommand {
                                     codec: sub.codec_name || 'unknown',
                                     language: (sub.tags && (sub.tags.language || sub.tags.LANGUAGE)) || null,
                                     title: (sub.tags && (sub.tags.title || sub.tags.TITLE)) || null,
+                                    // Enhanced disposition info for better track selection
+                                    default: sub.disposition?.default === 1,
+                                    forced: sub.disposition?.forced === 1,
+                                    hearingImpaired: sub.disposition?.hearing_impaired === 1,
                                     disposition: sub.disposition || {},
                                 }));
 
