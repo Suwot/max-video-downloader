@@ -520,15 +520,14 @@ function detectSeparateVideoAudio(options) {
         const unified = detectSingleContainer(options);
         videoContainer = unified.container;
         
-        // Context-aware audio fallback
-        const { videoType } = options;
-        audioContainer = videoType === 'hls' ? 'm4a' : 'mp3';
+        // Use optimal audio container based on video container
+        audioContainer = getOptimalAudioContainer(videoContainer);
         reason = `unified fallback: ${unified.reason}`;
     }
     
     return {
         videoContainer: videoContainer || 'mp4',
-        audioContainer: audioContainer || (options.videoType === 'hls' ? 'm4a' : 'mp3'),
+        audioContainer: audioContainer || getOptimalAudioContainer(videoContainer || 'mp4'),
         containerDetectionReason: reason
     };
 }
@@ -603,7 +602,25 @@ const CONTAINER_COMPATIBILITY = {
     }
 };
 
-
+// Returns optimal audio container for a given video container
+export function getOptimalAudioContainer(videoContainer) {
+    switch (videoContainer) {
+        case 'webm':
+            return 'webm'; // Opus/Vorbis audio stays in WebM
+        case 'mkv':
+            return 'mp3';  // MKV can contain various audio, MP3 is universal
+        case 'mp4':
+        case 'mov':
+        case 'm4v':
+            return 'm4a';  // MP4 family typically contains AAC, extract as M4A
+        case 'ogg':
+            return 'ogg';  // OGG audio stays in OGG
+        case 'flac':
+            return 'flac'; // FLAC stays as FLAC
+        default:
+            return 'mp3';  // Universal fallback
+    }
+}
 
 /**
  * Check if a specific track type is compatible with a video container

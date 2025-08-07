@@ -6,7 +6,7 @@
 import { normalizeUrl } from '../../shared/utils/processing-utils.js';
 import { createLogger } from '../../shared/utils/logger.js';
 import { standardizeResolution, getFilenameFromUrl } from '../../shared/utils/processing-utils.js';
-import { detectAllContainers } from './container-detector.js';
+import { detectAllContainers, getOptimalAudioContainer } from './container-detector.js';
 import { getPreview, storePreview } from '../../shared/utils/preview-cache.js';
 import { parseHlsManifest, extractHlsMediaUrls } from './hls-parser.js';
 import { parseDashManifest } from './dash-parser.js';
@@ -534,7 +534,7 @@ async function getFFprobeMetadata(videoData) {
                 fileSize: streamInfo.sizeBytes || null,
                 metaFFprobe: streamInfo,
                 videoContainer: containerDetection.container,
-                audioContainer: containerDetection.container === 'webm' ? 'webm' : 'mp3',
+                audioContainer: getOptimalAudioContainer(containerDetection.container),
                 containerDetectionReason: `ffprobe-${containerDetection.reason}`
             }];
 
@@ -554,7 +554,7 @@ async function getFFprobeMetadata(videoData) {
                 containerDetectionReason: `ffprobe-${containerDetection.reason}`,
                 // Add separate containers for audio-only downloads
                 videoContainer: containerDetection.container,
-                audioContainer: containerDetection.container === 'webm' ? 'webm' : 'mp3',
+                audioContainer: getOptimalAudioContainer(containerDetection.container),
                 // Create videoTracks array only after successful validation
                 videoTracks: videoTracks,
                 audioTracks: [], // Direct videos don't have separate audio tracks
