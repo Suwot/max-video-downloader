@@ -23,6 +23,10 @@
 **Cache expensive operations only**: Don't cache cheap operations
 **Fail fast**: Use warn/error logs with enough context to trace source
 
+## Code Quality
+
+**Use `npm run lint` for all syntax and style checks**: Run from project root for comprehensive linting across extension and native_host code - covers syntax, style, and Chrome extension best practices
+
 ## Code Organization
 
 **Single responsibility per file**: One clear purpose per module
