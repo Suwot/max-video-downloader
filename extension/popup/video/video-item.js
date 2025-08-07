@@ -7,9 +7,8 @@ import { formatDuration } from '../../shared/utils/processing-utils.js';
 import { showHoverPreview, hideHoverPreview } from './preview-hover.js';
 import { sendPortMessage } from '../communication.js';
 import { createLogger } from '../../shared/utils/logger.js';
-import { VideoDropdownComponent } from './dropdown.js';
+import { VideoDropdownComponent, isTrackCompatibleWithVideo } from './dropdown.js';
 import { VideoDownloadButtonComponent } from './download-button.js';
-import { isTrackCompatibleWithVideo } from '../../background/processing/container-detector.js';
 import { showInfo, showError } from '../ui-utils.js';
 
 const logger = createLogger('VideoItemComponent');
@@ -481,10 +480,7 @@ export class VideoItemComponent {
             videoData: minimalVideoData,
             ...baseData
         };
-        
-        // Don't add container extension here - let native host handle final filename generation
-        // This prevents double extensions and allows native host to optimize for path length
-        
+
         // Apply mode-specific modifications
         switch (mode) {
             case 'download-as':
@@ -549,7 +545,7 @@ export class VideoItemComponent {
                 
                 return { 
                     ...baseCommand,
-                    container: container,
+                    container,
                     filename: baseFilename, // Let native host add _audio suffix and extension
                     audioOnly: true,
                     ...options 
@@ -563,7 +559,7 @@ export class VideoItemComponent {
             const audioLabel = autoTrack.label || autoTrack.name || autoTrack.language || autoTrack.lang || null;
             
             // Show appropriate toast message
-            if (autoTrack.isDefault) {
+            if (autoTrack.default) {
                 showInfo('Extracting default audio track, as nothing was selected');
             } else {
                 showInfo('Extracting best-quality audio track, as nothing was selected');
@@ -586,7 +582,7 @@ export class VideoItemComponent {
         return selectedAudioTracks.map((audioTrack, index) => {
             const container = audioTrack.audioContainer || 'm4a';
             const baseFilename = baseCommand.filename || 'video';
-            const audioLabel = audioTrack.label || audioTrack.name || audioTrack.language || audioTrack.lang || `audio_${index + 1}`;
+            const audioLabel = audioTrack.label || audioTrack.name || audioTrack.language || audioTrack.lang || `${index + 1}`;
             
             return this.createSingleAudioCommand(baseCommand, audioTrack, baseFilename, audioLabel, container, options);
         });
@@ -605,9 +601,9 @@ export class VideoItemComponent {
     createSingleAudioCommand(baseCommand, audioTrack, baseFilename, audioLabel, container, options) {
         const command = { 
             ...baseCommand,
-            container: container,
+            container,
             filename: baseFilename, // Let native host add _audio_{label} suffix and extension
-            audioLabel: audioLabel, // Pass label to native host for filename generation
+            audioLabel, // Pass label to native host for filename generation
             audioOnly: true,
             ...options 
         };
@@ -873,7 +869,7 @@ export class VideoItemComponent {
             const subsLabel = autoTrack.label || autoTrack.name || autoTrack.language || autoTrack.lang || null;
             
             // Show appropriate toast message based on track selection reason
-            if (autoTrack.isDefault) {
+            if (autoTrack.default) {
                 showInfo('Extracting default subtitle track, as nothing was selected');
             } else {
                 showInfo('Extracting first subtitle track, as nothing was selected');
@@ -901,7 +897,7 @@ export class VideoItemComponent {
         return selectedSubtitleTracks.map((subTrack, index) => {
             const container = subTrack.subtitleContainer || 'srt';
             const baseFilename = baseCommand.filename || 'video';
-            const subsLabel = subTrack.label || subTrack.name || subTrack.language || subTrack.lang || `subtitles_${index + 1}`;
+            const subsLabel = subTrack.label || subTrack.name || subTrack.language || subTrack.lang || `${index + 1}`;
             
             return this.createSingleSubtitleCommand(baseCommand, subTrack, baseFilename, subsLabel, container, options);
         });
@@ -919,14 +915,14 @@ export class VideoItemComponent {
         
         return this.selectedTracks.audioTracks.map((track, index) => ({
             ...track,
-            label: track.name || track.label || track.lang || `audio_${index + 1}`,
+            label: track.name || track.label || track.lang || `${index + 1}`,
             audioContainer: track.audioContainer || 'm4a'
         }));
     }
 
     /**
      * Get default or best quality audio track for auto-selection
-     * @returns {Object} Audio track with isDefault flag
+     * @returns {Object} Audio track with default flag
      */
     getDefaultOrBestAudioTrack() {
         const availableAudioTracks = this.videoData.audioTracks || [];
@@ -938,8 +934,7 @@ export class VideoItemComponent {
                 return {
                     ...defaultTrack,
                     label: defaultTrack.name || defaultTrack.label || defaultTrack.language || defaultTrack.lang || null,
-                    audioContainer: defaultTrack.audioContainer || 'm4a',
-                    isDefault: true
+                    audioContainer: defaultTrack.audioContainer || 'mp3'
                 };
             }
             
@@ -948,23 +943,21 @@ export class VideoItemComponent {
             return {
                 ...bestTrack,
                 label: bestTrack.name || bestTrack.label || bestTrack.language || bestTrack.lang || null,
-                audioContainer: bestTrack.audioContainer || 'm4a',
-                isDefault: false
+                audioContainer: bestTrack.audioContainer || 'mp3'
             };
         }
         
         // For simple dropdown or direct videos, use the selected video track's audio
         const videoTrack = this.selectedTracks.videoTrack || this.videoData.videoTracks?.[0] || this.videoData;
         return {
-            audioContainer: videoTrack.audioContainer || 'm4a',
-            label: 'audio',
-            isDefault: false
+            audioContainer: videoTrack.audioContainer || 'mp3',
+            default: false
         };
     }
 
     /**
      * Get default or best quality subtitle track for auto-selection
-     * @returns {Object} Subtitle track with isDefault flag
+     * @returns {Object} Subtitle track with default flag
      */
     getDefaultOrBestSubtitleTrack() {
         const availableSubtitleTracks = this.videoData.subtitleTracks || [];
@@ -976,7 +969,7 @@ export class VideoItemComponent {
                 ...defaultTrack,
                 label: defaultTrack.name || defaultTrack.label || defaultTrack.language || defaultTrack.lang || null,
                 subtitleContainer: defaultTrack.subtitleContainer || 'srt',
-                isDefault: true
+                default: true
             };
         }
         
@@ -986,7 +979,7 @@ export class VideoItemComponent {
             ...bestTrack,
             label: bestTrack.name || bestTrack.label || bestTrack.language || bestTrack.lang || null,
             subtitleContainer: bestTrack.subtitleContainer || 'srt',
-            isDefault: false
+            default: false
         };
     }
 
@@ -1118,7 +1111,7 @@ export class VideoItemComponent {
                 this.downloadButton.updateState('downloading', {
                     text: 'Stop',
                     handler: () => {
-                        this.downloadButton.setIntermediaryText('Stopping...');
+                        this.downloadButton.innerHTML = 'Stopping...';
                         cancelHandler();
                     }
                 });

@@ -8,7 +8,55 @@ import { createLogger } from '../../shared/utils/logger.js';
 const logger = createLogger('Parser Utils');
 logger.setLevel('ERROR');
 
+/**
+ * Simple codec to container mapping for DASH tracks
+ * Only includes cases that need specific containers, everything else falls back to universal containers
+ */
+const DASH_CODEC_CONTAINERS = {
+    // Video codecs that need WebM
+    'vp8': 'webm',
+    'vp9': 'webm', 
+    'vp09': 'webm',
+    'vp80': 'webm',
+    'av01': 'webm',
+    'av1': 'webm',
+    
+    // Audio codecs with specific containers
+    'mp4a': 'm4a',
+    'aac': 'm4a',
+    'opus': 'webm',
+    'vorbis': 'ogg',
+    'flac': 'flac'
+    // Everything else falls back to mp4 (video) or mp3 (audio)
+};
 
+/**
+ * MIME type to container mapping for DASH tracks
+ */
+const DASH_MIME_CONTAINERS = {
+    // Video
+    'video/webm': 'webm',
+    'video/x-matroska': 'mkv',
+    'video/mkv': 'mkv',
+    
+    // Audio
+    'audio/mp4': 'm4a',
+    'audio/aac': 'm4a',
+    'audio/x-aac': 'm4a',
+    'audio/webm': 'webm',
+    'audio/opus': 'webm',
+    'audio/ogg': 'ogg',
+    'audio/vorbis': 'ogg',
+    'audio/flac': 'flac',
+    
+    // Subtitles
+    'text/vtt': 'vtt',
+    'text/webvtt': 'vtt',
+    'application/x-subrip': 'srt',
+    'text/srt': 'srt',
+    'application/ttml+xml': 'ttml',
+    'application/ttaf+xml': 'ttml'
+};
 
 /**
  * Helper function to extract attributes from XML tags
@@ -96,4 +144,75 @@ export function resolveUrl(baseUrl, relativeUrl) {
     
     // Join the base URL and the relative URL
     return baseUrl + relativeUrl;
+}
+
+/**
+ * Detect container format for DASH tracks based on codecs and mimeType
+ * Streamlined replacement for container-detector.js for DASH-specific needs
+ * 
+ * @param {Object} options - Detection options
+ * @param {string} [options.mimeType] - MIME type from DASH manifest
+ * @param {string} [options.codecs] - Codec string from DASH manifest
+ * @param {string} [options.mediaType] - Media type ('video', 'audio', 'subtitle')
+ * @param {string} [options.videoContainer] - Video container for subtitle context
+ * @returns {Object} Container detection result with container and reason
+ */
+export function detectContainerFromDashTrack(options = {}) {
+    const { mimeType, codecs, mediaType, videoContainer } = options;
+    
+    // 1. Try codec detection first (most specific)
+    if (codecs) {
+        const codecList = codecs.split(',').map(c => c.trim().split('.')[0].toLowerCase());
+        for (const codec of codecList) {
+            if (DASH_CODEC_CONTAINERS[codec]) {
+                return {
+                    container: DASH_CODEC_CONTAINERS[codec],
+                    reason: `codec: ${codec}`
+                };
+            }
+        }
+    }
+    
+    // 2. Try MIME type detection
+    if (mimeType) {
+        const normalizedMime = mimeType.toLowerCase().split(';')[0];
+        if (DASH_MIME_CONTAINERS[normalizedMime]) {
+            return {
+                container: DASH_MIME_CONTAINERS[normalizedMime],
+                reason: `mime type: ${normalizedMime}`
+            };
+        }
+    }
+    
+    // 3. Apply media type fallbacks
+    if (mediaType === 'video') {
+        return {
+            container: 'mp4',
+            reason: 'video fallback'
+        };
+    } else if (mediaType === 'audio') {
+        return {
+            container: 'mp3',
+            reason: 'audio fallback'
+        };
+    } else if (mediaType === 'subtitle') {
+        // Context-aware subtitle fallbacks
+        if (videoContainer === 'webm') {
+            return {
+                container: 'vtt',
+                reason: 'webm subtitle fallback'
+            };
+        } else {
+            return {
+                container: 'ttml',
+                reason: 'dash subtitle fallback'
+            };
+        }
+    }
+    
+    // Final fallback
+    return {
+        container: 'mp4',
+        reason: 'unknown fallback'
+    };
 }

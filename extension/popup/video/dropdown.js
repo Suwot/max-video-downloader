@@ -4,10 +4,40 @@
  */
 
 import { formatSize } from '../../shared/utils/processing-utils.js';
-import { isTrackCompatibleWithVideo } from '../../background/processing/container-detector.js';
 import { createLogger } from '../../shared/utils/logger.js';
 
 const logger = createLogger('VideoDropdownComponent');
+
+// Container compatibility matrix for track muxing
+const CONTAINER_COMPATIBILITY = {
+    // MP4 container compatibility
+    mp4: {
+        video: ['mp4'],           // MP4 video tracks
+        audio: ['mp4', 'm4a'],    // MP4 video + AAC/MP4 audio (m4a is MP4 with audio)
+        subtitle: ['srt', 'ttml'] // MP4 supports SRT and TTML, but NOT VTT natively
+    },
+    
+    // WebM container compatibility  
+    webm: {
+        video: ['webm'],          // WebM video tracks
+        audio: ['webm'],          // WebM video + Opus/Vorbis audio
+        subtitle: ['vtt']         // WebM primarily supports VTT subtitles
+    },
+    
+    // MKV container compatibility (most flexible)
+    mkv: {
+        video: ['mp4', 'webm', 'mkv', 'ogg'], // MKV can contain almost any video
+        audio: ['mp3', 'm4a', 'webm', 'ogg', 'flac', 'wav', 'mkv'], // MKV can contain any audio
+        subtitle: ['srt', 'ass', 'vtt', 'ttml'] // MKV supports all subtitle formats
+    },
+    
+    // OGG container compatibility
+    ogg: {
+        video: ['ogg'],           // OGG video tracks (Theora)
+        audio: ['ogg'],           // OGG audio tracks (Vorbis)
+        subtitle: ['srt']         // OGG has limited subtitle support
+    }
+};
 
 /**
  * VideoDropdownComponent - Manages dropdown state and track selection
@@ -655,4 +685,19 @@ export class VideoDropdownComponent {
             this.element._component = null;
         }
     }
+}
+
+/**
+ * Check if a specific track type is compatible with a video container
+ * @param {string} trackContainer - Container of the track to check
+ * @param {string} trackType - Type of track ('audio' or 'subtitle')
+ * @param {string} videoContainer - Container of the video track
+ * @returns {boolean} True if compatible
+ */
+export function isTrackCompatibleWithVideo(trackContainer, trackType, videoContainer) {
+    const videoRules = CONTAINER_COMPATIBILITY[videoContainer];
+    if (!videoRules || !trackContainer) return false;
+    
+    const compatibleContainers = videoRules[trackType];
+    return compatibleContainers ? compatibleContainers.includes(trackContainer) : false;
 }
