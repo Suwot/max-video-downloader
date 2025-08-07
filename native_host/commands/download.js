@@ -19,17 +19,12 @@ const BaseCommand = require('./base-command');
 const { logDebug } = require('../utils/logger');
 const { getFullEnv } = require('../utils/resources');
 
-/**
- * Command for downloading videos
- */
+// Command for downloading videos
 class DownloadCommand extends BaseCommand {
     // Static Map for download tracking keyed by downloadId
     static activeDownloads = new Map();
 
-    /**
-     * Initialize progress tracking state for a download
-     * @private
-     */
+    // Initialize progress tracking state for a download
     initProgressState(downloadId, { type, duration, fileSizeBytes, downloadUrl, segmentCount, isLive }) {
         const now = Date.now();
         return {
@@ -58,10 +53,7 @@ class DownloadCommand extends BaseCommand {
         };
     }
 
-    /**
-     * Process FFmpeg stderr output for progress and error collection
-     * @private
-     */
+    // Process FFmpeg stderr output for progress and error collection
     processFFmpegOutput(output, progressState) {
         // Always collect potential error lines
         this.collectErrorLines(output, progressState);
@@ -75,10 +67,7 @@ class DownloadCommand extends BaseCommand {
         }
     }
 
-    /**
-     * Collect error lines for later use (only attached to message on exitCode !== 0)
-     * @private
-     */
+    // Collect error lines for later use (only attached to message on exitCode !== 0)
     collectErrorLines(output, progressState) {
         const errorKeywords = ['error', 'failed', 'not found', 'permission denied', 'connection refused', 'no such file'];
         
@@ -95,10 +84,7 @@ class DownloadCommand extends BaseCommand {
         }
     }
 
-    /**
-     * Parse progress data and send throttled updates to UI
-     * @private
-     */
+    // Parse progress data and send throttled updates to UI
     parseAndSendProgress(output, progressState) {
         let hasUpdate = false;
         
@@ -135,10 +121,7 @@ class DownloadCommand extends BaseCommand {
         }
     }
 
-    /**
-     * Calculate and send progress update (throttled)
-     * @private
-     */
+    // Calculate and send progress update (throttled)
     sendProgressUpdate(progressState) {
         const now = Date.now();
         
@@ -233,10 +216,7 @@ class DownloadCommand extends BaseCommand {
         }
     }
 
-    /**
-     * Parse final download statistics from FFmpeg output
-     * @private
-     */
+    // Parse final download statistics from FFmpeg output
     parseFinalStats(output, progressState) {
         const stats = {};
         
@@ -541,10 +521,7 @@ class DownloadCommand extends BaseCommand {
         }
     }
 
-    /**
-     * Generate clean output filename with mode-specific suffixes
-     * @private
-     */
+    // Generate clean output filename with mode-specific suffixes
     generateOutputFilename(filename, container, audioOnly = false, subsOnly = false, audioLabel = null, subsLabel = null) {
         // Clean up filename: remove query params
         let outputFilename = (filename ? filename.replace(/[?#].*$/, '') : 'video');
@@ -690,10 +667,7 @@ class DownloadCommand extends BaseCommand {
         }
     }
 
-    /**
-     * Builds FFmpeg command arguments based on input parameters
-     * @private
-     */
+    // Builds FFmpeg command arguments based on input parameters
     buildFFmpegArgs({
         downloadUrl,
         type,
@@ -717,135 +691,79 @@ class DownloadCommand extends BaseCommand {
         // Add overwrite flag if allowed
         if (allowOverwrite) {
             args.push('-y');
-            logDebug('🔄 Added overwrite flag to FFmpeg command');
         }
         
         // Progress tracking arguments
         args.push('-stats', '-progress', 'pipe:2');
         
-        // Add headers if provided
+        // Prepare headers for per-input application
+        let headerArgs = [];
         if (headers && Object.keys(headers).length > 0) {
             const headerLines = Object.entries(headers)
                 .map(([key, value]) => `${key}: ${value}`)
                 .join('\r\n');
-            
             if (headerLines) {
-                args.push('-headers', headerLines + '\r\n');
-                logDebug('🔑 Added headers to FFmpeg command');
+                headerArgs = ['-headers', headerLines + '\r\n'];
             }
         }
         
-        // Input arguments based on media type and inputs array
-        if (inputs && inputs.length > 0) {
-            // Advanced mode: multiple inputs (HLS with separate tracks)
-            // Global headers already applied above, no need to repeat per input
+        // Add inputs with headers and protocols per input
+        if (inputs?.length > 0) {
+            // HLS advanced mode: multiple inputs with separate tracks
             inputs.forEach(input => {
+                if (headerArgs.length > 0) {
+                    args.push(...headerArgs);
+                }
                 if (type === 'hls') {
                     args.push('-protocol_whitelist', 'file,http,https,tcp,tls,crypto');
                 }
                 args.push('-i', input.url);
             });
+            logDebug('🎯 Added multiple inputs for HLS advanced mode:', inputs.length);
         } else {
-            // Simple mode: single input
-            if (type === 'hls' || type === 'dash') {
-                args.push(
-                    '-protocol_whitelist', 'file,http,https,tcp,tls,crypto',
-                    '-i', downloadUrl
-                );
-            } else {
-                args.push('-i', downloadUrl);
+            // Single input mode (all other cases)
+            if (headerArgs.length > 0) {
+                args.push(...headerArgs);
             }
+            if (type === 'hls' || type === 'dash') {
+                args.push('-protocol_whitelist', 'file,http,https,tcp,tls,crypto');
+            }
+            args.push('-i', downloadUrl);
+            logDebug('🎯 Added single input:', type);
         }
         
-        // Stream selection and codec configuration based on download type
-        if (downloadType === 'audio') {
-            if (streamSelection && type === 'dash') {
-                // For DASH audio extraction, use the specific audio track from streamSelection
-                streamSelection.split(',').forEach(streamSpec => {
-                    args.push('-map', streamSpec);
-                });
-                logDebug('🎵 DASH audio-only mode with specific track:', streamSelection);
-            } else if (inputs && inputs.length > 0) {
-                // For HLS advanced audio extraction, map audio inputs only
-                inputs.forEach(input => {
-                    if (input.streamMap.includes(':a:')) {
-                        args.push('-map', input.streamMap);
-                    }
-                });
-                logDebug('🎵 HLS advanced audio-only mode with specific tracks');
-            } else {
-                // For HLS/direct audio extraction, use specific first audio stream instead of generic mapping
-                args.push('-map', '0:a:0');  // Map specifically the first audio stream
-                logDebug('🎵 Audio-only mode enabled (HLS/direct) - mapping first audio stream');
-            }
-            
-            // Explicitly disable video and subtitle streams for audio-only output
-            args.push('-vn', '-sn');
-            
-            // Smart codec selection for audio-only
-            this.addAudioCodecArgs(args, container, sourceAudioCodec, sourceAudioBitrate);
-        } 
-        else if (downloadType === 'subs') {
-            if (streamSelection && type === 'dash') {
-                // For DASH subtitle extraction, use the specific subtitle track from streamSelection
-                streamSelection.split(',').forEach(streamSpec => {
-                    args.push('-map', streamSpec);
-                });
-                logDebug('📝 DASH subtitle-only mode with specific track:', streamSelection);
-            } else if (inputs && inputs.length > 0) {
-                // For HLS advanced subtitle extraction, map subtitle inputs only
-                inputs.forEach(input => {
-                    if (input.streamMap.includes(':s:')) {
-                        args.push('-map', input.streamMap);
-                    }
-                });
-                logDebug('📝 HLS advanced subtitle-only mode with specific tracks');
-            } else {
-                // For HLS/direct subtitle extraction, use first subtitle stream
-                args.push('-map', '0:s:0');
-                logDebug('📝 Subtitle-only mode enabled (HLS/direct) - mapping first subtitle stream');
-            }
-            
-            // Explicitly disable video and audio streams for subtitle-only output
-            args.push('-vn', '-an');
-            
-            // Copy subtitle streams without re-encoding
-            args.push('-c:s', 'copy');
-        } 
-        else if (inputs && inputs.length > 0) {
-            // Advanced HLS mode: map streams from multiple inputs
+        // Stream mapping - only complex cases need special handling
+        if (inputs?.length > 0) {
+            // HLS advanced video: multiple inputs with stream mapping
             inputs.forEach(input => {
                 args.push('-map', input.streamMap);
             });
-            logDebug('🎯 Using HLS advanced inputs:', inputs.map(i => i.streamMap).join(','));
-            
-            // Default to copying all streams without re-encoding
             args.push('-c', 'copy');
-        }
-        else if (streamSelection && type === 'dash') {
-            // Parse stream selection string (e.g., "0:v:0,0:a:3,0:s:1") 
+        } else if (type === 'dash' && streamSelection) {
+            // DASH: map selected streams from single URL
             streamSelection.split(',').forEach(streamSpec => {
                 args.push('-map', streamSpec);
             });
-            logDebug('🎯 Using DASH stream selection:', streamSelection);
-            
-            // Default to copying all streams without re-encoding for regular downloads
             args.push('-c', 'copy');
         } else {
-            // Default to copying all streams without re-encoding for regular downloads
-            args.push('-c', 'copy');
+            // All other cases: simple download based on container type
+            if (downloadType === 'audio') {
+                args.push('-map', '0:a:0', '-vn', '-sn');
+                this.addAudioCodecArgs(args, container, sourceAudioCodec, sourceAudioBitrate);
+            } else if (downloadType === 'subs') {
+                args.push('-map', '0:s:0', '-vn', '-an', '-c:s', 'copy');
+            } else {
+                // Video: copy all streams (default FFmpeg behavior)
+                args.push('-c', 'copy');
+            }
         }
         
         // Format-specific optimizations
-        if (type === 'hls' && downloadType === 'video') {
-            // Fix for certain audio streams commonly found in HLS (only for regular video downloads)
-            args.push('-bsf:a', 'aac_adtstoasc');
-        } else if (downloadType === 'audio' && container === 'm4a') {
-            // For audio-only AAC → M4A, apply the bitstream filter
+        if ((type === 'hls' && downloadType === 'video') || (downloadType === 'audio' && container === 'm4a')) {
             args.push('-bsf:a', 'aac_adtstoasc');
         }
         
-        // MP4/MOV optimizations (only for video/audio, not subtitles)
+        // MP4/MOV faststart optimization (not for subtitles)
         if (downloadType !== 'subs' && ['mp4', 'mov', 'm4v'].includes(container.toLowerCase())) {
             args.push('-movflags', '+faststart');
         }
@@ -867,11 +785,7 @@ class DownloadCommand extends BaseCommand {
     addAudioCodecArgs(args, container, sourceAudioCodec, sourceAudioBitrate) {
         logDebug('🎵 Audio codec selection for container:', container);
         
-        if (container === 'm4a') {
-            // M4A container: Copy audio stream (assumes AAC-compatible source)
-            args.push('-c:a', 'copy');
-            logDebug('🎵 M4A container: copying audio stream');
-        } else if (container === 'mp3') {
+		if (container === 'mp3') {
             // MP3 container: Always re-encode with libmp3lame for universal compatibility
             args.push('-c:a', 'libmp3lame');
             
@@ -887,7 +801,7 @@ class DownloadCommand extends BaseCommand {
                 logDebug('🎵 MP3 container: re-encoding with VBR quality 2');
             }
         } else {
-            // Other containers (flac, ogg, etc.): Copy by default
+            // Other containers (m4a, flac, ogg, etc.): Copy by default
             args.push('-c:a', 'copy');
             logDebug(`🎵 ${container} container: copying audio stream`);
         }
@@ -993,10 +907,7 @@ class DownloadCommand extends BaseCommand {
         }
     }
     
-    /**
-     * Executes FFmpeg with progress tracking
-     * @private
-     */
+    // Executes FFmpeg with progress tracking
     executeFFmpegWithProgress({
         ffmpegService,
         ffmpegArgs,
