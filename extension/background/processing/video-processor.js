@@ -590,10 +590,7 @@ async function getFFprobeMetadata(videoData) {
     }
 }
 
-/**
- * Clean up processing state for a specific tab
- * @param {number} tabId - Tab ID
- */
+// Clean up processing state for a specific tab
 function cleanupProcessingForTab(tabId) {
     // Clean up any active processing for this tab
     const activeProcessing = [];
@@ -610,9 +607,7 @@ function cleanupProcessingForTab(tabId) {
     }
 }
 
-/**
- * Clear all processing state
- */
+// Clear all processing state
 function clearAllProcessing() {
     processingMap.clear();
 }

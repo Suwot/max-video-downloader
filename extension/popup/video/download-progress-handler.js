@@ -410,13 +410,13 @@ function updateSingleDropdown(downloadGroup, progressData = {}) {
                     let displayText = `${progress}%`;
                     
                     // Add segment info for 0% progress
-                    if (progress === 0 && progressData.currentSegment && progressData.totalSegments) {
-                        displayText += ` (${progressData.currentSegment}/${progressData.totalSegments})`;
+                    if (progress === 0 && progressData.currentSegment) {
+                        displayText += ` (${progressData.currentSegment} segments)`;
                     }
                     
                     // Add downloaded size
                     if (progressData.downloadedBytes) {
-                        displayText += ` • ${formatSize(progressData.downloadedBytes)}`;
+                        displayText += ` • ↓ ${formatSize(progressData.downloadedBytes)}`;
                     }
                     
                     // Add ETA
@@ -692,8 +692,8 @@ function updateProgressTooltip(selectedOption, progressData) {
     // VOD tooltip: segments • speed • elapsed time
     
     // Add segment info
-    if (progressData.progress !== 0 && progressData.currentSegment && progressData.totalSegments) {
-        parts.push(`${progressData.currentSegment}/${progressData.totalSegments} chunks`);
+    if (progressData.progress !== 0 && progressData.currentSegment) {
+        parts.push(`${progressData.currentSegment} segments`);
     }
     
     // Add speed

@@ -107,7 +107,8 @@ class DownloadCommand extends BaseCommand {
         // Only track segments for HLS type
         if (progressState.type === 'hls') {
             if (output.includes('Opening ') && output.includes(' for reading')) {
-                const segmentMatch = output.match(/Opening\s+['"]([^'"]*\.(ts|mp4|m4s))['"] for reading/);
+                // Match any file being opened for reading, regardless of extension
+                const segmentMatch = output.match(/Opening\s+['"]([^'"]+)['"] for reading/);
                 if (segmentMatch) {
                     progressState.currentSegment++;
                     hasUpdate = true;
@@ -696,6 +697,17 @@ class DownloadCommand extends BaseCommand {
         // Progress tracking arguments
         args.push('-stats', '-progress', 'pipe:2');
         
+        // Network resilience and stream optimization
+        args.push('-timeout', '30000000', '-icy', '0'); // 30s timeout, disable ICY metadata
+        if (type === 'hls' || type === 'dash') {
+            args.push(
+                '-reconnect', '1',
+                '-reconnect_streamed', '1', 
+                '-reconnect_on_network_error', '1',
+                '-reconnect_delay_max', '10'
+            );
+        }
+        
         // Prepare headers for per-input application
         let headerArgs = [];
         if (headers && Object.keys(headers).length > 0) {
@@ -715,7 +727,7 @@ class DownloadCommand extends BaseCommand {
                     args.push(...headerArgs);
                 }
                 if (type === 'hls') {
-                    args.push('-protocol_whitelist', 'file,http,https,tcp,tls,crypto');
+                    args.push('-protocol_whitelist', 'file,http,https,tcp,tls,crypto', '-f', 'hls');
                 }
                 args.push('-i', input.url);
             });
@@ -787,7 +799,7 @@ class DownloadCommand extends BaseCommand {
         
 		if (container === 'mp3') {
             // MP3 container: Always re-encode with libmp3lame for universal compatibility
-            args.push('-c:a', 'libmp3lame');
+            args.push('-c:a', 'libmp3lame', '-preset', 'superfast');
             
             // Use source bitrate if available, otherwise high-quality VBR
             if (sourceAudioBitrate && sourceAudioBitrate > 0) {
