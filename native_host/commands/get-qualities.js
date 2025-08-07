@@ -101,12 +101,42 @@ class GetQualitiesCommand extends BaseCommand {
                         try {
                             const info = JSON.parse(output);
                             const videoStream = info.streams.find(s => s.codec_type === 'video');
-                            const audioStream = info.streams.find(s => s.codec_type === 'audio');
+                            const audioStreams = info.streams.filter(s => s.codec_type === 'audio');
                             const subtitleStreams = info.streams.filter(s => s.codec_type === 'subtitle');
 
+                            // Helper functions for stream-based container mapping
+                            const getVideoContainer = (codecName) => {
+                                if (!codecName) return 'mp4';
+                                const codec = codecName.toLowerCase();
+                                if (codec.includes('vp8') || codec.includes('vp9') || codec.includes('av01')) return 'webm';
+                                if (codec.includes('h264') || codec.includes('h265') || codec.includes('hevc')) return 'mp4';
+                                return 'mp4';
+                            };
+
+                            const getAudioContainer = (codecName) => {
+                                if (!codecName) return 'm4a';
+                                const codec = codecName.toLowerCase();
+                                if (codec.includes('opus') || codec.includes('vorbis')) return 'webm';
+                                if (codec.includes('aac')) return 'm4a';
+                                if (codec.includes('mp3')) return 'mp3';
+                                if (codec.includes('flac')) return 'flac';
+                                return 'm4a';
+                            };
+
+                            const getSubtitleContainer = (codecName) => {
+                                if (!codecName) return 'srt';
+                                const codec = codecName.toLowerCase();
+                                if (codec.includes('webvtt')) return 'vtt';
+                                if (codec.includes('ass') || codec.includes('ssa')) return 'ass';
+                                if (codec.includes('srt') || codec.includes('subrip')) return 'srt';
+                                return 'srt';
+                            };
+
+                            // ORIGINAL STRUCTURE - Keep all existing fields for compatibility
                             const streamInfo = {
                                 format: info.format?.format_name || 'unknown',
                                 container: info.format?.format_long_name || 'unknown',
+								sizeBytes: info.format?.size,
                                 type: type,
                                 inputUrl: url,
                                 analyzeUrl: analyzeUrl
@@ -115,7 +145,7 @@ class GetQualitiesCommand extends BaseCommand {
                             logDebug('📊 Media analysis results:');
                             logDebug(`Container: ${streamInfo.container}`);
 
-                            // Video stream info
+                            // Video stream info - ORIGINAL STRUCTURE
                             if (videoStream) {
                                 streamInfo.width = parseInt(videoStream.width) || null;
                                 streamInfo.height = parseInt(videoStream.height) || null;
@@ -129,7 +159,7 @@ class GetQualitiesCommand extends BaseCommand {
                                     bitDepth: videoStream.bits_per_raw_sample || null
                                 };
 
-                                // Calculate framerate
+                                // Calculate framerate - ORIGINAL LOGIC
                                 let fps = null;
                                 try {
                                     if (videoStream.r_frame_rate) {
@@ -144,52 +174,68 @@ class GetQualitiesCommand extends BaseCommand {
                                 }
                                 streamInfo.fps = fps;
 
-                                // Get video bitrate
+                                // Get video bitrate - ORIGINAL LOGIC
                                 if (videoStream.bit_rate) {
                                     streamInfo.videoBitrate = parseInt(videoStream.bit_rate);
                                 }
+
+                                // NEW: Add stream-based video container
+                                streamInfo.videoContainer = getVideoContainer(videoStream.codec_name);
 
                                 logDebug('🎬 Video stream:', {
                                     codec: streamInfo.videoCodec.name,
                                     resolution: `${streamInfo.width}x${streamInfo.height}`,
                                     fps: `${streamInfo.fps}fps`,
-                                    bitrate: streamInfo.videoBitrate ? `${(streamInfo.videoBitrate / 1000000).toFixed(2)}Mbps` : 'unknown'
+                                    bitrate: streamInfo.videoBitrate ? `${(streamInfo.videoBitrate / 1000000).toFixed(2)}Mbps` : 'unknown',
+                                    container: streamInfo.videoContainer
                                 });
                             } else {
                                 streamInfo.hasVideo = false;
                                 logDebug('ℹ️ No video stream found');
                             }
 
-                            // Audio stream info
-                            if (audioStream) {
+                            // Audio stream info - STREAMLINED WITH MULTI-STREAM SUPPORT
+                            if (audioStreams.length > 0) {
+                                const firstAudioStream = audioStreams[0]; // Use first stream for codec info
+                                
                                 streamInfo.hasAudio = true;
                                 streamInfo.audioCodec = {
-                                    name: audioStream.codec_name || 'unknown',
-                                    longName: audioStream.codec_long_name || 'unknown',
-                                    profile: audioStream.profile || null,
-                                    sampleRate: parseInt(audioStream.sample_rate) || null,
-                                    channels: parseInt(audioStream.channels) || null,
-                                    channelLayout: audioStream.channel_layout || null,
-                                    bitDepth: audioStream.bits_per_raw_sample || null
+                                    name: firstAudioStream.codec_name || 'unknown',
+                                    longName: firstAudioStream.codec_long_name || 'unknown',
+                                    profile: firstAudioStream.profile || null,
+                                    sampleRate: parseInt(firstAudioStream.sample_rate) || null,
+                                    channels: parseInt(firstAudioStream.channels) || null,
+                                    channelLayout: firstAudioStream.channel_layout || null,
+                                    bitDepth: firstAudioStream.bits_per_raw_sample || null
                                 };
 
-                                if (audioStream.bit_rate) {
-                                    streamInfo.audioBitrate = parseInt(audioStream.bit_rate);
+                                if (firstAudioStream.bit_rate) {
+                                    streamInfo.audioBitrate = parseInt(firstAudioStream.bit_rate);
+                                }
+
+                                // Stream-based audio container (same codec for all streams in container)
+                                streamInfo.audioContainer = getAudioContainer(firstAudioStream.codec_name);
+                                
+                                // Add stream indexes only for multiple streams
+                                if (audioStreams.length > 1) {
+                                    streamInfo.audioStreamIndexes = audioStreams.map(s => s.index).join(',');
                                 }
 
                                 logDebug('🔊 Audio stream:', {
                                     codec: streamInfo.audioCodec.name,
                                     channels: streamInfo.audioCodec.channels,
                                     sampleRate: streamInfo.audioCodec.sampleRate ? `${streamInfo.audioCodec.sampleRate}Hz` : 'unknown',
-                                    bitrate: streamInfo.audioBitrate ? `${(streamInfo.audioBitrate / 1000).toFixed(0)}kbps` : 'unknown'
+                                    bitrate: streamInfo.audioBitrate ? `${(streamInfo.audioBitrate / 1000).toFixed(0)}kbps` : 'unknown',
+                                    container: streamInfo.audioContainer,
+                                    ...(streamInfo.audioStreamIndexes && { multiStream: `indexes: ${streamInfo.audioStreamIndexes}` })
                                 });
                             } else {
                                 streamInfo.hasAudio = false;
                                 logDebug('ℹ️ No audio stream found');
                             }
 
-                            // Subtitle stream info
-                            if (subtitleStreams && subtitleStreams.length > 0) {
+                            // Subtitle stream info - ORIGINAL STRUCTURE + NEW MULTI-STREAM SUPPORT
+                            if (subtitleStreams?.length > 0) {
                                 streamInfo.hasSubs = true;
                                 streamInfo.subtitles = subtitleStreams.map(sub => ({
                                     index: sub.index,
@@ -198,7 +244,20 @@ class GetQualitiesCommand extends BaseCommand {
                                     title: (sub.tags && (sub.tags.title || sub.tags.TITLE)) || null,
                                     disposition: sub.disposition || {},
                                 }));
-                                logDebug(`📝 Found ${subtitleStreams.length} subtitle stream(s):`, streamInfo.subtitles);
+
+                                // NEW: Stream-based subtitle container and multi-stream support
+                                if (subtitleStreams.length === 1) {
+                                    streamInfo.subtitleContainer = getSubtitleContainer(subtitleStreams[0].codec_name);
+                                } else if (subtitleStreams.length > 1) {
+                                    streamInfo.subtitleContainer = getSubtitleContainer(subtitleStreams[0].codec_name);
+                                    streamInfo.subsStreamIndexes = subtitleStreams.map(s => s.index).join(',');
+                                }
+
+                                logDebug(`📝 Found ${subtitleStreams.length} subtitle stream(s):`, {
+                                    subtitles: streamInfo.subtitles,
+                                    container: streamInfo.subtitleContainer,
+                                    ...(streamInfo.subsStreamIndexes && { multiStream: `indexes: ${streamInfo.subsStreamIndexes}` })
+                                });
                             } else {
                                 streamInfo.hasSubs = false;
                                 streamInfo.subtitles = [];
@@ -223,23 +282,8 @@ class GetQualitiesCommand extends BaseCommand {
                                 }
                             }
 
-                            // File size if available
-                            if (info.format.size) {
-                                streamInfo.sizeBytes = parseInt(info.format.size);
-                                const sizeMB = (streamInfo.sizeBytes / (1024 * 1024)).toFixed(1);
-                                logDebug(`📦 Size: ${sizeMB}MB`);
-                            }
-
-                            // Calculate estimated size based on bitrate and duration if exact size not available
-                            if (streamInfo.totalBitrate && streamInfo.duration) {
-                                // Formula: (bitrate in bps * duration in seconds) / 8 = bytes
-                                streamInfo.estimatedFileSizeBytes = Math.round((streamInfo.totalBitrate * streamInfo.duration) / 8);
-                                const sizeMB = (streamInfo.estimatedFileSizeBytes / (1024 * 1024)).toFixed(1);
-                                logDebug(`📊 Estimated size: ${sizeMB}MB (based on bitrate × duration)`);
-                            }
-
                             this.sendMessage({ streamInfo, success: true });
-                            logDebug('✅ Media analysis complete');
+                            logDebug('✅ Media analysis complete with enhanced stream-based containers');
                             resolve({ success: true, streamInfo });
                             
                         } catch (error) {

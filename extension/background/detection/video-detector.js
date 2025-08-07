@@ -140,13 +140,17 @@ function addVideoWithCommonProcessing(tabId, url, videoInfo, metadata, source, t
         ...(expiryInfo && { expiryInfo })
     };
     
-    // For direct videos, assign containers immediately using available data
+    // For direct videos, create videoTracks immediately with container info for instant download capability
     if (videoInfo.type === 'direct' && metadata?.contentType) {
         const containers = getContainersFromMimeType(metadata.contentType, videoInfo.mediaType);
         if (containers) {
-            videoData.videoContainer = containers.videoContainer;
-            videoData.audioContainer = containers.audioContainer;
-            videoData.containerDetectionReason = containers.reason;
+            videoData.videoTracks = [{
+                url,
+                type: 'direct',
+                videoContainer: containers.videoContainer,
+                audioContainer: containers.audioContainer,
+                containerDetectionReason: containers.reason
+            }];
         }
     }
     
