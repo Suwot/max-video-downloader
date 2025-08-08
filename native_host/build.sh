@@ -30,13 +30,15 @@ get_pkg_target() {
         mac-x64) echo "node16-macos-x64" ;;
         win-x64) echo "node16-win-x64" ;;
         win-arm64) echo "node16-win-arm64" ;;
+        linux-x64) echo "node16-linux-x64" ;;
+        linux-arm64) echo "node16-linux-arm64" ;;
         *) echo "" ;;
     esac
 }
 
 get_binary_name() {
     case "$1" in
-        mac-arm64|mac-x64) echo "mvdcoapp" ;;
+        mac-arm64|mac-x64|linux-x64|linux-arm64) echo "mvdcoapp" ;;
         win-x64|win-arm64) echo "mvdcoapp.exe" ;;
         *) echo "mvdcoapp" ;;
     esac
@@ -100,6 +102,13 @@ detect_platform() {
                 *) log_error "Unsupported Windows architecture: $arch"; exit 1 ;;
             esac
             ;;
+        Linux)
+            case "$arch" in
+                x86_64) echo "linux-x64" ;;
+                aarch64) echo "linux-arm64" ;;
+                *) log_error "Unsupported Linux architecture: $arch"; exit 1 ;;
+            esac
+            ;;
         *)
             log_error "Unsupported OS: $os"
             exit 1
@@ -134,7 +143,10 @@ build_platform() {
             ffmpeg_source="bin/mac/bin"
             ;;
         win-x64|win-arm64)
-            ffmpeg_source="bin/win/bin"  # You'll need to add Windows binaries
+            ffmpeg_source="bin/win/bin"
+            ;;
+        linux-x64|linux-arm64)
+            ffmpeg_source="bin/linux/bin"
             ;;
     esac
     
@@ -228,6 +240,277 @@ EOF
     log_info "✓ macOS app bundle created at $app_dir"
     log_info "App can be launched with: open '$app_dir' --args -version"
     log_info "Binary location: $macos_dir/mvdcoapp"
+}
+
+package_linux_tarball() {
+    local platform=${1:-$(detect_platform)}
+    
+    if [[ ! "$platform" =~ ^linux- ]]; then
+        log_error "Linux packaging only supported for Linux platforms"
+        exit 1
+    fi
+    
+    local build_dir="build/$platform"
+    local package_dir="build/mvdcoapp-linux-$platform"
+    local tarball_name="mvdcoapp-linux-$platform.tar.gz"
+    
+    if [[ ! -d "$build_dir" ]]; then
+        log_error "Build directory not found. Run './build.sh -build $platform' first"
+        exit 1
+    fi
+    
+    log_info "Creating Linux package for $platform..."
+    
+    # Clean and create package structure
+    rm -rf "$package_dir"
+    mkdir -p "$package_dir/bin"
+    
+    # Copy binaries
+    cp "$build_dir/mvdcoapp" "$package_dir/bin/"
+    cp "$build_dir/ffmpeg" "$package_dir/bin/"
+    cp "$build_dir/ffprobe" "$package_dir/bin/"
+    
+    # Make binaries executable
+    chmod +x "$package_dir/bin"/*
+    
+    # Create install script
+    cat > "$package_dir/install.sh" << 'EOF'
+#!/bin/bash
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+INSTALL_DIR="$HOME/.local/bin/mvdcoapp"
+
+echo "Installing MAX Video Downloader Native Host..."
+
+# Create install directory
+mkdir -p "$INSTALL_DIR"
+
+# Copy binaries
+cp "$SCRIPT_DIR/bin/"* "$INSTALL_DIR/"
+
+# Make binaries executable
+chmod +x "$INSTALL_DIR"/*
+
+# Install native host manifests for detected browsers
+cd "$INSTALL_DIR"
+./mvdcoapp -install
+
+echo "✓ Installation complete!"
+echo "Native host installed at: $INSTALL_DIR"
+echo "Run './mvdcoapp -detect-browsers' to see supported browsers"
+EOF
+    
+    # Create uninstall script
+    cat > "$package_dir/uninstall.sh" << 'EOF'
+#!/bin/bash
+set -e
+
+INSTALL_DIR="$HOME/.local/bin/mvdcoapp"
+
+echo "Uninstalling MAX Video Downloader Native Host..."
+
+if [[ -d "$INSTALL_DIR" ]]; then
+    # Remove native host manifests
+    cd "$INSTALL_DIR"
+    ./mvdcoapp -uninstall
+    
+    # Remove installation directory
+    rm -rf "$INSTALL_DIR"
+    
+    echo "✓ Uninstallation complete!"
+else
+    echo "Native host not found at $INSTALL_DIR"
+fi
+EOF
+    
+    # Create README
+    cat > "$package_dir/README.md" << EOF
+# MAX Video Downloader Native Host - Linux
+
+## Installation
+Run the install script:
+\`\`\`bash
+chmod +x install.sh
+./install.sh
+\`\`\`
+
+## Uninstallation
+Run the uninstall script:
+\`\`\`bash
+chmod +x uninstall.sh
+./uninstall.sh
+\`\`\`
+
+## Manual Usage
+\`\`\`bash
+# Show version
+./bin/mvdcoapp -version
+
+# Detect browsers
+./bin/mvdcoapp -detect-browsers
+
+# Install for all browsers
+./bin/mvdcoapp -install
+
+# Uninstall from all browsers
+./bin/mvdcoapp -uninstall
+\`\`\`
+
+## Requirements
+- Linux x64 or ARM64
+- Supported browsers: Chrome, Firefox, Edge, Brave, Opera, Vivaldi, etc.
+EOF
+    
+    # Make scripts executable
+    chmod +x "$package_dir/install.sh"
+    chmod +x "$package_dir/uninstall.sh"
+    
+    # Create tarball
+    cd build
+    tar -czf "$tarball_name" "$(basename "$package_dir")"
+    
+    log_info "✓ Linux package created: build/$tarball_name"
+    log_info "Package contents: bin/, install.sh, uninstall.sh, README.md"
+}
+
+package_windows_zip() {
+    local platform=${1:-$(detect_platform)}
+    
+    if [[ ! "$platform" =~ ^win- ]]; then
+        log_error "Windows packaging only supported for Windows platforms"
+        exit 1
+    fi
+    
+    local build_dir="build/$platform"
+    local package_dir="build/mvdcoapp-windows-$platform"
+    local zip_name="mvdcoapp-windows-$platform.zip"
+    
+    if [[ ! -d "$build_dir" ]]; then
+        log_error "Build directory not found. Run './build.sh -build $platform' first"
+        exit 1
+    fi
+    
+    log_info "Creating Windows package for $platform..."
+    
+    # Clean and create package structure
+    rm -rf "$package_dir"
+    mkdir -p "$package_dir/bin"
+    
+    # Copy binaries
+    cp "$build_dir/mvdcoapp.exe" "$package_dir/bin/"
+    cp "$build_dir/ffmpeg.exe" "$package_dir/bin/"
+    cp "$build_dir/ffprobe.exe" "$package_dir/bin/"
+    
+    # Create install batch script
+    cat > "$package_dir/install.bat" << 'EOF'
+@echo off
+setlocal
+
+echo Installing MAX Video Downloader Native Host...
+
+set "SCRIPT_DIR=%~dp0"
+set "INSTALL_DIR=%LOCALAPPDATA%\mvdcoapp"
+
+:: Create install directory
+if not exist "%INSTALL_DIR%" mkdir "%INSTALL_DIR%"
+
+:: Copy binaries
+copy "%SCRIPT_DIR%bin\*" "%INSTALL_DIR%\" >nul
+
+:: Install native host manifests for detected browsers
+cd /d "%INSTALL_DIR%"
+mvdcoapp.exe -install
+
+echo.
+echo Installation complete!
+echo Native host installed at: %INSTALL_DIR%
+echo Run 'mvdcoapp.exe -detect-browsers' to see supported browsers
+pause
+EOF
+    
+    # Create uninstall batch script
+    cat > "$package_dir/uninstall.bat" << 'EOF'
+@echo off
+setlocal
+
+echo Uninstalling MAX Video Downloader Native Host...
+
+set "INSTALL_DIR=%LOCALAPPDATA%\mvdcoapp"
+
+if exist "%INSTALL_DIR%" (
+    :: Remove native host manifests
+    cd /d "%INSTALL_DIR%"
+    mvdcoapp.exe -uninstall
+    
+    :: Remove installation directory
+    cd /d "%LOCALAPPDATA%"
+    rmdir /s /q "mvdcoapp"
+    
+    echo.
+    echo Uninstallation complete!
+) else (
+    echo Native host not found at %INSTALL_DIR%
+)
+pause
+EOF
+    
+    # Create README
+    cat > "$package_dir/README.md" << 'EOF'
+# MAX Video Downloader Native Host - Windows
+
+## Installation
+Run the install script as Administrator (recommended):
+```
+Right-click install.bat -> "Run as administrator"
+```
+
+Or double-click `install.bat` for current user only.
+
+## Uninstallation
+Run the uninstall script:
+```
+Double-click uninstall.bat
+```
+
+## Manual Usage
+Open Command Prompt in the bin/ folder:
+```cmd
+# Show version
+mvdcoapp.exe -version
+
+# Detect browsers
+mvdcoapp.exe -detect-browsers
+
+# Install for all browsers
+mvdcoapp.exe -install
+
+# Uninstall from all browsers
+mvdcoapp.exe -uninstall
+```
+
+## Requirements
+- Windows 10/11 (x64 or ARM64)
+- Supported browsers: Chrome, Edge, Firefox, Brave, Opera, Vivaldi, etc.
+- Administrator rights recommended for system-wide installation
+EOF
+    
+    # Create zip file (using PowerShell on Windows, or zip command on Unix)
+    cd build
+    if command -v powershell.exe >/dev/null 2>&1; then
+        # Windows with PowerShell
+        powershell.exe -Command "Compress-Archive -Path '$(basename "$package_dir")' -DestinationPath '$zip_name' -Force"
+    elif command -v zip >/dev/null 2>&1; then
+        # Unix with zip command
+        zip -r "$zip_name" "$(basename "$package_dir")"
+    else
+        log_warn "No zip utility found. Package directory created but not compressed."
+        log_info "✓ Windows package directory created: build/$(basename "$package_dir")"
+        return
+    fi
+    
+    log_info "✓ Windows package created: build/$zip_name"
+    log_info "Package contents: bin/, install.bat, uninstall.bat, README.md"
 }
 
 detect_browsers() {
@@ -742,6 +1025,8 @@ show_help() {
     echo "  -version              Show version information"
     echo "  -build [platform]     Build for specific platform (default: current)"
     echo "  -package-app          Create macOS .app bundle (macOS only)"
+    echo "  -package-linux        Create Linux tarball package"
+    echo "  -package-windows      Create Windows zip package"
     echo "  -install [platform]   Install native host for all detected browsers"
     echo "  -uninstall            Remove native host from all browsers"
     echo "  -detect-browsers      Show detected browsers"
@@ -755,6 +1040,8 @@ show_help() {
     echo "  mac-x64              macOS Intel"
     echo "  win-x64              Windows x64"
     echo "  win-arm64            Windows ARM64"
+    echo "  linux-x64            Linux x64"
+    echo "  linux-arm64          Linux ARM64"
     echo ""
     echo "Supported Browsers:"
     echo "  Chromium-based: Chrome (+ Canary), Arc, Edge (+ Beta/Dev/Canary), Brave,"
@@ -788,6 +1075,14 @@ case "${1:-}" in
     -package-app)
         platform=${2:-$(detect_platform)}
         package_mac_app "$platform"
+        ;;
+    -package-linux)
+        platform=${2:-$(detect_platform)}
+        package_linux_tarball "$platform"
+        ;;
+    -package-windows)
+        platform=${2:-$(detect_platform)}
+        package_windows_zip "$platform"
         ;;
     -install)
         platform=${2:-$(detect_platform)}
