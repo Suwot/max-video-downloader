@@ -202,13 +202,11 @@ class DownloadCommand extends BaseCommand {
                 command: 'download-progress',
                 downloadId: progressState.downloadId,
                 downloadUrl: progressState.downloadUrl,
-                masterUrl: null, // masterUrl will be added by extension download manager
+                masterUrl: downloadEntry?.masterUrl || null,
                 filename: path.basename(downloadEntry?.outputPath || ''),
                 selectedOptionOrigText: downloadEntry?.selectedOptionOrigText,
                 downloadStartTime: progressState.startTime,
                 isRedownload: downloadEntry?.isRedownload || false,
-                
-                // Spread all progress data
                 ...progressData
             }, { useMessageId: false });
             
@@ -1086,10 +1084,7 @@ class DownloadCommand extends BaseCommand {
                         downloadStats: downloadStats || null,
                         errorMessage: this.getErrorMessage(progressState) || null,
                         terminationInfo,
-                        processInfo: {
-                            pid: downloadEntry?.process?.pid,
-                            downloadDuration
-                        },
+                        downloadDuration,
                         message: isPartial && downloadEntry?.progressState?.isLive ? 'Livestream recording stopped' : null,
                         completedAt: Date.now(),
                         isRedownload,
@@ -1129,10 +1124,7 @@ class DownloadCommand extends BaseCommand {
                         duration: finalDuration,
                         downloadStats: downloadStats || null,
                         terminationInfo,
-                        processInfo: {
-                            pid: downloadEntry?.process?.pid,
-                            downloadDuration
-                        },
+						downloadDuration,
                         completedAt: Date.now(),
                         isRedownload,
                         audioOnly,
@@ -1141,7 +1133,7 @@ class DownloadCommand extends BaseCommand {
                         headers: downloadEntry?.headers || null
                     }, { useMessageId: false }); // Event message, no response ID
                     resolve({ 
-                        success: false, 
+                        success: false,
                         downloadStats,
                         error: errorMessage
                     });
@@ -1199,10 +1191,7 @@ class DownloadCommand extends BaseCommand {
                     type,
                     duration: finalDuration,
                     downloadStats: downloadStats || null,
-                    processInfo: {
-                        pid: downloadEntry?.process?.pid,
-                        downloadDuration
-                    },
+                    downloadDuration,
                     completedAt: Date.now(),
                     isRedownload,
                     audioOnly,

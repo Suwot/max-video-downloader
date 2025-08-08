@@ -229,7 +229,7 @@ async function queueDownload(downloadCommand) {
     
     // Add to unified downloads map (keep previewUrl for UI recreation during download)
     allDownloads.set(downloadId, {
-        downloadId: downloadId,
+        downloadId,
         status: 'queued',
         downloadRequest: downloadCommand, // This serves as originalCommand for retry functionality
         progressData: {
@@ -238,7 +238,7 @@ async function queueDownload(downloadCommand) {
             masterUrl: downloadCommand.masterUrl || null,
             filename: downloadCommand.filename,
             selectedOptionOrigText: downloadCommand.selectedOptionOrigText || null,
-            downloadId: downloadId
+            downloadId
         },
         timestamp: Date.now()
     });
@@ -254,7 +254,7 @@ async function queueDownload(downloadCommand) {
         filename: downloadCommand.filename,
         selectedOptionOrigText: downloadCommand.selectedOptionOrigText || null,
         videoData: downloadCommand.videoData, // Include video data for UI creation
-        downloadId: downloadId // For precise progress mapping
+        downloadId // For precise progress mapping
     });
     
     logger.debug('Download queued:', downloadId);
@@ -270,7 +270,7 @@ async function startDownloadImmediately(downloadRequest) {
     
     // Add to unified downloads map
     allDownloads.set(downloadId, {
-        downloadId: downloadId,
+        downloadId,
         status: 'downloading',
         downloadRequest: downloadRequest,
         progressData: {
@@ -283,7 +283,7 @@ async function startDownloadImmediately(downloadRequest) {
             isRedownload: downloadRequest.isRedownload || false,
             audioOnly: downloadRequest.audioOnly || false,
             subsOnly: downloadRequest.subsOnly || false,
-            downloadId: downloadId
+            downloadId
         },
         timestamp: Date.now()
     });
@@ -307,7 +307,7 @@ async function startDownloadImmediately(downloadRequest) {
         selectedOptionOrigText: downloadRequest.selectedOptionOrigText || null,
         videoData: downloadRequest.videoData,
         isRedownload: downloadRequest.isRedownload || false,
-        downloadId: downloadId // For precise progress mapping
+        downloadId // For precise progress mapping
     });
     
     // Send download command (fire-and-forget)
@@ -363,7 +363,7 @@ async function handleDownloadEvent(event) {
             // Broadcast filename update to UI
             broadcastToPopups({
                 command: 'filename-resolved',
-                downloadId: downloadId,
+                downloadId,
                 resolvedFilename: event.resolvedFilename,
                 downloadUrl: downloadEntry.downloadRequest.downloadUrl,
                 masterUrl: downloadEntry.downloadRequest.masterUrl || null
@@ -435,19 +435,7 @@ async function handleDownloadEvent(event) {
         notifyDownloadCountChange();
 
         // Handle specific completion types
-        if (command === 'download-error') {
-            // Error details will be broadcast via the general broadcastData below
-        } else if (command === 'download-canceled') {
-            logger.debug('Download canceled:', downloadId);
-            broadcastToPopups({
-                command: 'download-canceled',
-                downloadUrl: downloadEntry?.downloadRequest?.downloadUrl || downloadUrl,
-                masterUrl: downloadEntry?.downloadRequest?.masterUrl || null,
-                filename: downloadEntry?.downloadRequest?.filename || 'Unknown',
-                selectedOptionOrigText: downloadEntry?.downloadRequest?.selectedOptionOrigText || null,
-                downloadId: downloadId // Include downloadId for precise mapping
-            });
-        } else if (command === 'download-success') {
+        if (command === 'download-success') {
             // Create completion notification
             createCompletionNotification(event.filename || 'Unknown');
         }
@@ -460,24 +448,12 @@ async function handleDownloadEvent(event) {
     const broadcastData = (['download-canceled', 'download-success', 'download-error'].includes(command))
         ? { 
             ...event, 
-            success: event.success, 
-            error: event.error,
             selectedOptionOrigText: downloadEntry?.downloadRequest?.selectedOptionOrigText || null,
-            downloadId: downloadId,
             addedToHistory: settingsManager.get('saveDownloadsInHistory') && (command === 'download-success' || command === 'download-error'),
-            // downloadRequest serves as originalCommand (includes complete videoData and context)
             originalCommand: downloadEntry?.downloadRequest,
-            // // Add missing context data that was previously sent by native host
-            // masterUrl: downloadEntry?.downloadRequest?.masterUrl || null,
-            // pageUrl: downloadEntry?.downloadRequest?.pageUrl || null,
-            // pageFavicon: downloadEntry?.downloadRequest?.pageFavicon || null
-        }
-        : { 
-            ...event, 
-            downloadId: downloadId,
-            // Add masterUrl for progress mapping (moved from native host)
             masterUrl: downloadEntry?.downloadRequest?.masterUrl || null
-        };
+        }
+        : event;
 
     // Always notify UI with progress data via direct broadcast
     broadcastToPopups(broadcastData);
@@ -584,7 +560,7 @@ export async function cancelDownload(cancelRequest) {
             masterUrl: entry.downloadRequest.masterUrl || null,
             filename: entry.downloadRequest.filename,
             selectedOptionOrigText: entry.downloadRequest.selectedOptionOrigText || null,
-            downloadId: downloadId
+            downloadId
         });
         
         logger.debug('Queued download removed immediately:', downloadId);
@@ -596,7 +572,7 @@ export async function cancelDownload(cancelRequest) {
         // Broadcast stopping state to UI
         broadcastToPopups({
             command: 'download-stopping',
-            downloadId: downloadId,
+            downloadId,
             downloadUrl: entry.downloadRequest.downloadUrl,
             masterUrl: entry.downloadRequest.masterUrl || null,
             filename: entry.downloadRequest.filename,
@@ -609,7 +585,7 @@ export async function cancelDownload(cancelRequest) {
             command: 'cancel-download',
             downloadUrl: entry.downloadRequest.downloadUrl,
             type: entry.downloadRequest.type,
-            downloadId: downloadId // Pass downloadId for consistent tracking
+            downloadId // Pass downloadId for consistent tracking
         }, { expectResponse: false });
         
         logger.debug('Cancellation command sent, status set to stopping:', downloadId);
