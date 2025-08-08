@@ -398,11 +398,7 @@ export class VideoItemComponent {
         return elementsDiv;
     }
     
-    /**
-     * Execute download with specified mode
-     * @param {string} mode - Download mode ('download', 'download-as', 'extract-audio', 'extract-subs')
-     * @param {Object} options - Additional options for the download
-     */
+    // Execute download with specified mode. Download mode ('download', 'download-as', 'extract-audio', 'extract-subs')
     executeDownload(mode = 'download') {
         const commands = this.createDownloadCommand(mode);
         
@@ -437,12 +433,7 @@ export class VideoItemComponent {
         });
     }
 
-    /**
-     * Create complete download command based on mode and current component state
-     * @param {string} mode - Download mode
-     * @param {Object} options - Additional options
-     * @returns {Object|Array} Complete download command(s)
-     */
+    // Create complete download command based on mode and current component state
     createDownloadCommand(mode = 'download') {
         const baseData = this.getDownloadData();
         
@@ -524,12 +515,7 @@ export class VideoItemComponent {
         }
     }
 
-    /**
-     * Create audio extraction commands - handles single and multi-track scenarios
-     * @param {Object} baseCommand - Base download command
-     * @param {Object} options - Additional options
-     * @returns {Object|Array} Single command or array of commands for multi-track
-     */
+    // Create audio extraction commands - handles single and multi-track scenarios
     createAudioExtractionCommands(baseCommand) {
         const selectedAudioTracks = this.getSelectedAudioTracks();
         const availableAudioTracks = this.videoData.audioTracks || [];
@@ -582,8 +568,6 @@ export class VideoItemComponent {
      * @param {Object} baseCommand - Base download command
      * @param {Object} audioTrack - Audio track data
      * @param {string} audioLabel - Audio track label
-     * @param {string} container - Audio container
-     * @param {Object} options - Additional options
      * @returns {Object} Single audio command
      */
     createSingleAudioCommand(baseCommand, audioTrack, audioLabel) {
@@ -836,12 +820,7 @@ export class VideoItemComponent {
         return hasSize ? totalSize : null;
     }
     
-    /**
-     * Create subtitle extraction commands - handles single and multi-track scenarios
-     * @param {Object} baseCommand - Base download command
-     * @param {Object} options - Additional options
-     * @returns {Object|Array} Single command or array of commands for multi-track
-     */
+    // Create subtitle extraction commands - handles single and multi-track scenarios
     createSubtitleExtractionCommands(baseCommand) {
         const selectedSubtitleTracks = this.selectedTracks.subtitleTracks || [];
         const availableSubtitleTracks = this.videoData.subtitleTracks || [];
@@ -967,8 +946,6 @@ export class VideoItemComponent {
      * @param {Object} baseCommand - Base download command
      * @param {Object} subTrack - Subtitle track data
      * @param {string} subsLabel - Subtitle track label
-     * @param {string} container - Subtitle container
-     * @param {Object} options - Additional options
      * @returns {Object} Single subtitle command
      */
     createSingleSubtitleCommand(baseCommand, subTrack, subsLabel) {
