@@ -472,7 +472,7 @@ export async function parseDashManifest(videoObject) {
             status: 'success'
         };
         
-        logger.info(`Successfully parsed MPD: found ${videoTracks.length} video, ${audioTracks.length} audio, and ${subtitleTracks.length} subtitle tracks`);
+        logger.info(`Successfully parsed MPD: found ${videoTracks?.length} video, ${audioTracks?.length} audio, and ${subtitleTracks?.length} subtitle tracks`);
         return result;
     } catch (error) {
         logger.error(`Error parsing MPD: ${error.message}`);

@@ -403,8 +403,8 @@ export class VideoItemComponent {
      * @param {string} mode - Download mode ('download', 'download-as', 'extract-audio', 'extract-subs')
      * @param {Object} options - Additional options for the download
      */
-    executeDownload(mode = 'download', options = {}) {
-        const commands = this.createDownloadCommand(mode, options);
+    executeDownload(mode = 'download') {
+        const commands = this.createDownloadCommand(mode);
         
         // Handle single command or array of commands (for multi-track extraction)
         const commandArray = Array.isArray(commands) ? commands : [commands];
@@ -443,7 +443,7 @@ export class VideoItemComponent {
      * @param {Object} options - Additional options
      * @returns {Object|Array} Complete download command(s)
      */
-    createDownloadCommand(mode = 'download', options = {}) {
+    createDownloadCommand(mode = 'download') {
         const baseData = this.getDownloadData();
         
         // Get selected option text for UI restoration
@@ -484,15 +484,15 @@ export class VideoItemComponent {
         // Apply mode-specific modifications
         switch (mode) {
             case 'download-as':
-                return { ...command, ...options };
+                return command;
             case 'extract-audio':
-                return this.createAudioExtractionCommands(command, options);
+                return this.createAudioExtractionCommands(command);
             case 'extract-subs':
-                return this.createSubtitleExtractionCommands(command, options);
+                return this.createSubtitleExtractionCommands(command);
             case 're-download':
-                return { ...command, isRedownload: true, ...options };
+                return { ...command, isRedownload: true };
             default:
-                return { ...command, ...options };
+                return command;
         }
     }
 
@@ -530,7 +530,7 @@ export class VideoItemComponent {
      * @param {Object} options - Additional options
      * @returns {Object|Array} Single command or array of commands for multi-track
      */
-    createAudioExtractionCommands(baseCommand, options = {}) {
+    createAudioExtractionCommands(baseCommand) {
         const selectedAudioTracks = this.getSelectedAudioTracks();
         const availableAudioTracks = this.videoData.audioTracks || [];
         
@@ -539,23 +539,16 @@ export class VideoItemComponent {
             // For simple dropdowns, create a basic audio extraction command
             if (availableAudioTracks.length === 0) {
                 // Simple dropdown - extract audio from the main video
-                const baseFilename = baseCommand.filename || 'video';
                 const videoTrack = this.selectedTracks.videoTrack || this.videoData.videoTracks?.[0] || this.videoData;
-                const container = videoTrack.audioContainer || 'm4a';
                 
                 return { 
                     ...baseCommand,
-                    container,
-                    filename: baseFilename, // Let native host add _audio suffix and extension
-                    audioOnly: true,
-                    ...options 
+                    container: videoTrack.audioContainer || 'm4a'
                 };
             }
             
             // Advanced dropdown - use default or best track
             const autoTrack = this.getDefaultOrBestAudioTrack();
-            const container = autoTrack.audioContainer || 'm4a';
-            const baseFilename = baseCommand.filename || 'video';
             const audioLabel = autoTrack.label || autoTrack.name || autoTrack.language || autoTrack.lang || null;
             
             // Show appropriate toast message
@@ -565,26 +558,22 @@ export class VideoItemComponent {
                 showInfo('Extracting best-quality audio track, as nothing was selected');
             }
             
-            return this.createSingleAudioCommand(baseCommand, autoTrack, baseFilename, audioLabel, container, options);
+            return this.createSingleAudioCommand(baseCommand, autoTrack, audioLabel);
         }
         
         // Single audio extraction for selected tracks
         if (selectedAudioTracks.length === 1) {
             const audioTrack = selectedAudioTracks[0];
-            const container = audioTrack.audioContainer || 'm4a';
-            const baseFilename = baseCommand.filename || 'video';
             const audioLabel = audioTrack.label || audioTrack.name || audioTrack.language || audioTrack.lang || null;
             
-            return this.createSingleAudioCommand(baseCommand, audioTrack, baseFilename, audioLabel, container, options);
+            return this.createSingleAudioCommand(baseCommand, audioTrack, audioLabel);
         }
         
         // Multi-track audio extraction - send individual commands
         return selectedAudioTracks.map((audioTrack, index) => {
-            const container = audioTrack.audioContainer || 'm4a';
-            const baseFilename = baseCommand.filename || 'video';
             const audioLabel = audioTrack.label || audioTrack.name || audioTrack.language || audioTrack.lang || `${index + 1}`;
             
-            return this.createSingleAudioCommand(baseCommand, audioTrack, baseFilename, audioLabel, container, options);
+            return this.createSingleAudioCommand(baseCommand, audioTrack, audioLabel);
         });
     }
 
@@ -592,20 +581,16 @@ export class VideoItemComponent {
      * Create a single audio extraction command
      * @param {Object} baseCommand - Base download command
      * @param {Object} audioTrack - Audio track data
-     * @param {string} baseFilename - Base filename
      * @param {string} audioLabel - Audio track label
      * @param {string} container - Audio container
      * @param {Object} options - Additional options
      * @returns {Object} Single audio command
      */
-    createSingleAudioCommand(baseCommand, audioTrack, baseFilename, audioLabel, container, options) {
+    createSingleAudioCommand(baseCommand, audioTrack, audioLabel) {
         const command = { 
             ...baseCommand,
-            container,
-            filename: baseFilename, // Let native host add _audio_{label} suffix and extension
-            audioLabel, // Pass label to native host for filename generation
-            audioOnly: true,
-            ...options 
+            container: audioTrack.audioContainer || 'm4a',
+            audioLabel // Pass label to native host for filename generation
         };
         
         // Add track-specific data for DASH/HLS advanced dropdowns
@@ -857,15 +842,13 @@ export class VideoItemComponent {
      * @param {Object} options - Additional options
      * @returns {Object|Array} Single command or array of commands for multi-track
      */
-    createSubtitleExtractionCommands(baseCommand, options = {}) {
+    createSubtitleExtractionCommands(baseCommand) {
         const selectedSubtitleTracks = this.selectedTracks.subtitleTracks || [];
         const availableSubtitleTracks = this.videoData.subtitleTracks || [];
         
         // If no tracks selected but tracks are available, use default or best track
         if (selectedSubtitleTracks.length === 0 && availableSubtitleTracks.length > 0) {
             const autoTrack = this.getDefaultOrBestSubtitleTrack();
-            const container = autoTrack.subtitleContainer || 'srt';
-            const baseFilename = baseCommand.filename || 'noname';
             const subsLabel = autoTrack.label || autoTrack.name || autoTrack.language || autoTrack.lang || null;
             
             // Show appropriate toast message based on track selection reason
@@ -875,7 +858,7 @@ export class VideoItemComponent {
                 showInfo('Extracting first subtitle track, as nothing was selected');
             }
             
-            return this.createSingleSubtitleCommand(baseCommand, autoTrack, baseFilename, subsLabel, container, options);
+            return this.createSingleSubtitleCommand(baseCommand, autoTrack, subsLabel);
         }
         
         if (selectedSubtitleTracks.length === 0) {
@@ -886,20 +869,16 @@ export class VideoItemComponent {
         // Single subtitle extraction
         if (selectedSubtitleTracks.length === 1) {
             const subTrack = selectedSubtitleTracks[0];
-            const container = subTrack.subtitleContainer || 'srt';
-            const baseFilename = baseCommand.filename || 'video';
             const subsLabel = subTrack.label || subTrack.name || subTrack.language || subTrack.lang || null;
             
-            return this.createSingleSubtitleCommand(baseCommand, subTrack, baseFilename, subsLabel, container, options);
+            return this.createSingleSubtitleCommand(baseCommand, subTrack, subsLabel);
         }
         
         // Multi-track subtitle extraction - send individual commands
         return selectedSubtitleTracks.map((subTrack, index) => {
-            const container = subTrack.subtitleContainer || 'srt';
-            const baseFilename = baseCommand.filename || 'video';
             const subsLabel = subTrack.label || subTrack.name || subTrack.language || subTrack.lang || `${index + 1}`;
             
-            return this.createSingleSubtitleCommand(baseCommand, subTrack, baseFilename, subsLabel, container, options);
+            return this.createSingleSubtitleCommand(baseCommand, subTrack, subsLabel);
         });
     }
 
@@ -987,20 +966,16 @@ export class VideoItemComponent {
      * Create a single subtitle extraction command
      * @param {Object} baseCommand - Base download command
      * @param {Object} subTrack - Subtitle track data
-     * @param {string} baseFilename - Base filename
      * @param {string} subsLabel - Subtitle track label
      * @param {string} container - Subtitle container
      * @param {Object} options - Additional options
      * @returns {Object} Single subtitle command
      */
-    createSingleSubtitleCommand(baseCommand, subTrack, baseFilename, subsLabel, container, options) {
+    createSingleSubtitleCommand(baseCommand, subTrack, subsLabel) {
         const command = { 
             ...baseCommand,
-            container: container,
-            filename: baseFilename, // Let native host add _subtitles_{label} suffix and extension
-            subsLabel: subsLabel, // Pass label to native host for filename generation
-            subsOnly: true,
-            ...options 
+            container: subTrack.subtitleContainer || 'srt',
+            subsLabel // Pass label to native host for filename generation
         };
         
         // Add track-specific data for DASH/HLS

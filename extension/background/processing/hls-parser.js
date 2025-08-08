@@ -141,7 +141,7 @@ export async function parseHlsManifest(videoObject) {
                 ...subtitleTracks
             ];
             
-            logger.debug(`Found ${allTracksWithUrls.length} tracks for metadata extraction (${videoTracks.length} video, ${audioTracks.length} audio, ${subtitleTracks.length} subtitle)`);
+            logger.debug(`Found ${allTracksWithUrls.length} tracks for metadata extraction (${videoTracks?.length} video, ${audioTracks?.length} audio, ${subtitleTracks?.length} subtitle)`);
             
             // Try up to 3 tracks for metadata extraction
             let variantInfo = null;
@@ -311,7 +311,7 @@ export async function parseHlsManifest(videoObject) {
             logger.debug('Added noDuration flag - no valid tracks found for duration extraction');
         }
 
-        logger.info(`Successfully parsed HLS: found ${videoTracks.length} video tracks, ${audioTracks.length} audio tracks, ${subtitleTracks.length} subtitle tracks, ${closedCaptions.length} closed caption tracks`);
+        logger.info(`Successfully parsed HLS: found ${videoTracks.length} video tracks, ${audioTracks?.length} audio tracks, ${subtitleTracks?.length} subtitle tracks, ${closedCaptions?.length} closed caption tracks`);
         return result;
     } catch (error) {
         logger.error(`Error parsing HLS: ${error.message}`);

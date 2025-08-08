@@ -222,19 +222,19 @@ export class VideoDropdownComponent {
         const { videoTracks = [], audioTracks = [], subtitleTracks = [] } = this.videoData;
         
         // Create video column
-        if (videoTracks.length > 0) {
+        if (videoTracks?.length > 0) {
             const videoColumn = this.createTrackColumn('VIDEO', videoTracks, 'video', true);
             columnsContainer.appendChild(videoColumn);
         }
         
         // Create audio column
-        if (audioTracks.length > 0) {
+        if (audioTracks?.length > 0) {
             const audioColumn = this.createTrackColumn('AUDIO', audioTracks, 'audio', false);
             columnsContainer.appendChild(audioColumn);
         }
         
         // Create subtitle column
-        if (subtitleTracks.length > 0) {
+        if (subtitleTracks?.length > 0) {
             const subsColumn = this.createTrackColumn('SUBS', subtitleTracks, 'subtitle', false);
             columnsContainer.appendChild(subsColumn);
         }
