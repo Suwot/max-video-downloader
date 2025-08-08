@@ -142,7 +142,7 @@ export class VideoItemComponent {
         // Create element and set up basic structure
         this.element = document.createElement('div');
         this.element.className = 'video-item';
-        this.element.dataset.url = this.videoData.normalizedUrl;
+        this.element.dataset.url = this.videoData.url;
         
         // Set download ID for precise progress mapping
         if (this.downloadId) {
@@ -998,7 +998,7 @@ export class VideoItemComponent {
         sendPortMessage({
             command: 'generatePreview',
             tabId: this.videoData.tabId,
-            url: this.videoData.normalizedUrl
+            url: this.videoData.url
         });
     }
     
