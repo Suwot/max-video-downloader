@@ -157,6 +157,7 @@ export class VideoDropdownComponent {
         videoTracks.forEach((track, index) => {
             const option = document.createElement('div');
             option.className = 'dropdown-option';
+            option.dataset.url = track.url;
             
             // First option is selected by default
             if (index === 0) {

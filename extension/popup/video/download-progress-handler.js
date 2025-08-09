@@ -18,15 +18,15 @@ const logger = createLogger('DownloadProgress');
  */
 export async function updateDownloadProgress(progressData = {}) {
     logger.debug('Progress update received:', progressData.command, progressData.progress ? progressData.progress + '%' : 'No progress');
-    
+
     // Handle downloads tab creation for new downloads (efficient one-time events)
     if (progressData.command === 'download-queued' && progressData.videoData) {
         // Check if item already exists (from restoration)
         const downloadId = progressData.downloadId;
         const activeDownloadsContainer = document.querySelector('.active-downloads');
-        const existingItem = downloadId ? 
+        const existingItem = downloadId ?
             activeDownloadsContainer?.querySelector(`.video-item[data-download-id="${downloadId}"]`) : null;
-            
+
         if (!existingItem) {
             await createVideoItemInDownloads(progressData, 'queued');
             logger.debug('Created new queued download item:', downloadId);
@@ -37,7 +37,7 @@ export async function updateDownloadProgress(progressData = {}) {
         // Handle filename resolution update
         const downloadId = progressData.downloadId;
         const activeDownloadsContainer = document.querySelector('.active-downloads');
-        
+
         if (downloadId) {
             const existingItem = activeDownloadsContainer?.querySelector(`.video-item[data-download-id="${downloadId}"]`);
             if (existingItem && existingItem._component) {
@@ -49,13 +49,13 @@ export async function updateDownloadProgress(progressData = {}) {
         // Smart UI updates: update existing items instead of creating duplicates
         const downloadId = progressData.downloadId;
         const activeDownloadsContainer = document.querySelector('.active-downloads');
-        
+
         // Check for existing item by downloadId first
         let existingItem = null;
         if (downloadId) {
             existingItem = activeDownloadsContainer?.querySelector(`.video-item[data-download-id="${downloadId}"]`);
         }
-        
+
         if (existingItem) {
             // Update existing item to starting state with cancel handler
             const component = existingItem._component;
@@ -72,7 +72,7 @@ export async function updateDownloadProgress(progressData = {}) {
                     };
                     sendPortMessage(cancelMessage);
                 };
-                
+
                 component.downloadButton.updateState('starting', {
                     text: 'Starting...',
                     handler: cancelHandler
@@ -85,26 +85,26 @@ export async function updateDownloadProgress(progressData = {}) {
             await createVideoItemInDownloads(progressData, 'starting');
         }
     }
-    
+
     // Update ALL matching items in both tabs (videos and downloads)
     // The functions will naturally find and update only existing items
     updateDownloadButton(progressData);
     updateDropdown(progressData);
-    
+
     // Handle completion states for all downloads (original and re-downloads)
     if (progressData.command === 'download-success' || progressData.command === 'download-error' || progressData.command === 'download-canceled') {
         // Use the addedToHistory flag from background instead of making UI decision
         const addedToHistory = progressData.addedToHistory || false;
-        
+
         // Stop elapsed time timer for this download
         if (progressData.downloadId) {
             stopElapsedTimeTimer(progressData.downloadId);
         }
-        
+
         // Call immediately to remove from downloads-tab and prevent deduplication issues
         handleDownloadCompletion(progressData, addedToHistory);
     }
-    
+
     logger.debug('All UI elements updated for command:', progressData.command);
 }
 
@@ -114,20 +114,26 @@ export async function updateDownloadProgress(progressData = {}) {
  */
 export function restoreDownloadStates(activeDownloads = []) {
     if (activeDownloads.length === 0) return;
-    
+
     logger.debug('Restoring download states for', activeDownloads.length, 'active downloads');
-    
+
     activeDownloads.forEach(downloadEntry => {
         const lookupUrl = downloadEntry.masterUrl || downloadEntry.downloadUrl;
-        
+
         // Find matching video items in videos tab
         const videosElements = document.querySelectorAll(
             `.videos-container .video-item[data-url="${lookupUrl}"]`
         );
-        
+
         videosElements.forEach(videoElement => {
             const component = videoElement._component;
             if (component && component.downloadButton) {
+                // Restore dropdown option state using the same method as progress updates
+                const dropdownOption = videoElement.querySelector(`.dropdown-option[data-url="${downloadEntry.downloadUrl}"]`);
+                if (dropdownOption && downloadEntry.status === 'queued') {
+                    dropdownOption.classList.add('queued');
+                }
+
                 // Set to downloading state for ongoing downloads
                 const cancelHandler = () => {
                     const cancelMessage = {
@@ -140,7 +146,7 @@ export function restoreDownloadStates(activeDownloads = []) {
                     };
                     sendPortMessage(cancelMessage);
                 };
-                
+
                 if (downloadEntry.status === 'downloading') {
                     component.downloadButton.updateState('downloading', {
                         text: 'Stop',
@@ -171,7 +177,7 @@ export function restoreDownloadStates(activeDownloads = []) {
                         }
                     });
                 }
-                
+
                 logger.debug('Restored button state for:', lookupUrl, 'to', downloadEntry.status);
             }
         });
@@ -187,14 +193,14 @@ export function restoreDownloadStates(activeDownloads = []) {
 function findMatchingVideoElements(progressData = {}) {
     const downloadId = progressData.downloadId;
     const lookupUrl = progressData.masterUrl || progressData.downloadUrl;
-    
+
     const allElements = [];
     const videoItems = document.querySelectorAll('.active-downloads .video-item, .videos-container .video-item');
-    
+
     videoItems.forEach(item => {
         const itemDownloadId = item.dataset.downloadId;
         const itemUrl = item.dataset.url;
-        
+
         // If item has downloadId, match only by downloadId (downloads-tab)
         if (itemDownloadId) {
             if (itemDownloadId === downloadId) {
@@ -207,7 +213,7 @@ function findMatchingVideoElements(progressData = {}) {
             }
         }
     });
-    
+
     return allElements;
 }
 
@@ -218,12 +224,12 @@ function findMatchingVideoElements(progressData = {}) {
  */
 function updateDownloadButton(progressData = {}) {
     const allElements = findMatchingVideoElements(progressData);
-    
+
     if (allElements.length === 0) {
         logger.debug('No video elements found for download:', progressData.downloadUrl);
         return;
     }
-    
+
     // Update all matching elements using component-aware state manager
     allElements.forEach(videoElement => {
         updateSingleDownloadButtonState(videoElement, progressData);
@@ -272,7 +278,7 @@ function updateComponentButtonState(downloadButtonComponent, progressData = {}) 
             });
             logger.debug('Component download button set to queued state');
             break;
-            
+
         case 'download-started':
             // Set to starting state with cancel functionality
             downloadButtonComponent.updateState('starting', {
@@ -281,7 +287,7 @@ function updateComponentButtonState(downloadButtonComponent, progressData = {}) 
             });
             logger.debug('Component download button set to starting state with cancel handler');
             break;
-            
+
         case 'download-progress':
             // Set to downloading state with stop functionality
             downloadButtonComponent.updateState('downloading', {
@@ -294,13 +300,13 @@ function updateComponentButtonState(downloadButtonComponent, progressData = {}) 
             });
             logger.debug('Component download button switched to Stop mode');
             break;
-            
+
         case 'download-stopping':
             // Handle stopping state from background
             downloadButtonComponent.updateState('stopping');
             logger.debug('Component download button set to stopping state');
             break;
-            
+
         case 'download-success':
             // Show success state briefly (reset handled by centralized timer)
             downloadButtonComponent.updateState('success', {
@@ -308,7 +314,7 @@ function updateComponentButtonState(downloadButtonComponent, progressData = {}) 
             });
             logger.debug('Component download button set to success state');
             break;
-            
+
         case 'download-error':
             // Show error state briefly (reset handled by centralized timer)
             downloadButtonComponent.updateState('error', {
@@ -316,7 +322,7 @@ function updateComponentButtonState(downloadButtonComponent, progressData = {}) 
             });
             logger.debug('Component download button set to error state');
             break;
-            
+
         case 'download-canceled':
             // Show canceled state briefly (reset handled by centralized timer)
             downloadButtonComponent.updateState('canceled', {
@@ -336,17 +342,17 @@ function updateComponentButtonState(downloadButtonComponent, progressData = {}) 
  */
 function updateDropdown(progressData = {}) {
     const allElements = findMatchingVideoElements(progressData);
-    
+
     // Get download groups from matching video elements
-    const downloadGroups = allElements.map(videoElement => 
+    const downloadGroups = allElements.map(videoElement =>
         videoElement.querySelector('.download-group')
     ).filter(Boolean);
-    
+
     if (downloadGroups.length === 0) {
         logger.debug('No download group elements found for download:', progressData.downloadUrl);
         return;
     }
-    
+
     // Update all matching elements
     downloadGroups.forEach(downloadGroup => {
         updateSingleDropdown(downloadGroup, progressData);
@@ -360,7 +366,7 @@ function updateDropdown(progressData = {}) {
  * @param {number} progress - Progress percentage
  */
 function updateSingleDropdown(downloadGroup, progressData = {}) {
-	const progress = progressData.progress;
+    const progress = progressData.progress;
     const selectedOption = downloadGroup.querySelector('.selected-option');
     const dropdownOption = downloadGroup.querySelector(`.dropdown-option[data-url="${progressData.downloadUrl}"]`);
 
@@ -372,19 +378,19 @@ function updateSingleDropdown(downloadGroup, progressData = {}) {
             }
             logger.debug('Dropdown option set to queued state');
             break;
-            
+
         case 'download-progress':
             // Update selected-option with progress bar AND text
             if (selectedOption) {
                 selectedOption.classList.remove('queued'); // Clear any queue state
                 selectedOption.classList.add('downloading');
-                
+
                 // Handle livestream vs regular download progress
                 if (progressData.isLive) {
                     // Livestream: show continuous activity animation and stats
                     selectedOption.classList.add('livestream');
                     selectedOption.style.setProperty('--progress', '100%'); // Full bar with animation
-                    
+
                     // Build livestream display text with recording indicator
                     let displayText = '';
                     if (progressData.elapsedTime) {
@@ -396,7 +402,7 @@ function updateSingleDropdown(downloadGroup, progressData = {}) {
                     if (progressData.speed) {
                         displayText += displayText ? ` • ${formatSize(progressData.speed)}/s` : `${formatSize(progressData.speed)}/s`;
                     }
-                    
+
                     const textSpan = selectedOption.querySelector('span:first-child') || selectedOption;
                     // Just update text content - CSS ::before will handle the indicator
                     textSpan.textContent = displayText;
@@ -405,20 +411,20 @@ function updateSingleDropdown(downloadGroup, progressData = {}) {
                     // Regular download: show percentage progress
                     selectedOption.classList.remove('livestream');
                     selectedOption.style.setProperty('--progress', `${progress}%`);
-                    
+
                     // Build VOD progress display text: progress • size downloaded • eta
                     let displayText = `${progress}%`;
-                    
+
                     // Add segment info for 0% progress
                     if (progress === 0 && progressData.currentSegment) {
                         displayText += ` (${progressData.currentSegment} segments)`;
                     }
-                    
+
                     // Add downloaded size
                     if (progressData.downloadedBytes) {
                         displayText += ` • ↓ ${formatSize(progressData.downloadedBytes)}`;
                     }
-                    
+
                     // Add ETA
                     if (progressData.eta && progressData.eta > 0 && progress < 100) {
                         displayText += ` • ${formatTime(progressData.eta)}`;
@@ -427,7 +433,7 @@ function updateSingleDropdown(downloadGroup, progressData = {}) {
                     const textSpan = selectedOption.querySelector('span:first-child') || selectedOption;
                     textSpan.textContent = displayText;
                 }
-                
+
                 // Update tooltip data attributes for hover display (skip for livestreams)
                 if (!progressData.isLive) {
                     updateProgressTooltip(selectedOption, progressData);
@@ -449,7 +455,7 @@ function updateSingleDropdown(downloadGroup, progressData = {}) {
 
             logger.debug('Dropdown progress updated:', progress + '%');
             break;
-            
+
         case 'download-success':
         case 'download-error':
         case 'download-canceled':
@@ -457,10 +463,10 @@ function updateSingleDropdown(downloadGroup, progressData = {}) {
             if (selectedOption) {
                 selectedOption.classList.remove('downloading', 'queued', 'livestream', 'has-recording-indicator');
                 selectedOption.style.removeProperty('--progress');
-                
+
                 // Clear tooltip data
                 clearProgressTooltip(selectedOption);
-                
+
                 // Restore original text
                 const textSpan = selectedOption.querySelector('span:first-child') || selectedOption;
                 textSpan.textContent = progressData.selectedOptionOrigText?.split('•').slice(0, 2).join('•') || textSpan.textContent;
@@ -470,7 +476,7 @@ function updateSingleDropdown(downloadGroup, progressData = {}) {
                 dropdownOption.classList.remove('downloading', 'queued');
                 dropdownOption.style.removeProperty('--progress');
             }
-            
+
             logger.debug('Dropdown restored to original state');
             break;
     }
@@ -493,16 +499,16 @@ async function createVideoItemInDownloads(downloadRequestOrVideoData, initialSta
         // Create new video item component in simple mode for downloads tab
         const videoComponent = new VideoItemComponent(downloadRequestOrVideoData, initialState, null, 'simple');
         const videoElement = videoComponent.render();
-        
+
         // Hide initial message and append the element (queue order: oldest first)
         const initialMessage = activeDownloadsContainer.querySelector('.initial-message');
         if (initialMessage) {
             initialMessage.style.display = 'none';
         }
-        
+
         // Append to end for proper queue order (oldest downloads at top)
         activeDownloadsContainer.appendChild(videoElement);
-        
+
         logger.debug('Created video item in downloads tab with state:', initialState);
 
     } catch (error) {
@@ -528,10 +534,10 @@ export async function restoreActiveDownloads() {
         // Request active downloads from background service worker
         // This will trigger both activeDownloadsData and any pending progress updates
         await sendPortMessage({ command: 'getActiveDownloads' });
-        
+
         // The actual restoration will happen in handleActiveDownloadsData
         // when the background responds with activeDownloadsData message
-        
+
     } catch (error) {
         logger.error('Error requesting active downloads:', error);
     }
@@ -561,7 +567,7 @@ export function handleActiveDownloadsData(activeDownloads) {
         if (initialMessage) {
             initialMessage.style.display = 'none';
         }
-        
+
         // Recreate video items from unified data (includes both download info and progress)
         activeDownloads.forEach(downloadEntry => {
             if (downloadEntry.videoData) {
@@ -569,14 +575,14 @@ export function handleActiveDownloadsData(activeDownloads) {
                 const videoComponent = new VideoItemComponent(downloadEntry, initialState, null, 'simple');
                 const videoElement = videoComponent.render();
                 activeDownloadsContainer.appendChild(videoElement);
-                
+
                 // Apply any existing progress data immediately
                 if (downloadEntry.progressData && downloadEntry.progressData.progress !== undefined) {
                     // Update progress immediately if available
                     updateDownloadButton(downloadEntry.progressData);
                     updateDropdown(downloadEntry.progressData);
                 }
-                
+
                 // Clear any stale timers for this downloadId (in case of popup reopen)
                 if (downloadEntry.downloadId) {
                     stopElapsedTimeTimer(downloadEntry.downloadId);
@@ -587,7 +593,7 @@ export function handleActiveDownloadsData(activeDownloads) {
         });
 
         logger.debug(`Restored ${activeDownloads.length} active downloads from in-memory Map`);
-        
+
         // Restore button states for ongoing downloads in videos tab
         restoreDownloadStates(activeDownloads);
 
@@ -610,7 +616,7 @@ async function handleDownloadCompletion(progressData, addToHistory = false) {
         const activeDownloadsContainer = document.querySelector('.active-downloads');
         if (activeDownloadsContainer) {
             let videoItemToRemove = null;
-            
+
             // Try to find by downloadId first, then fallback to URL
             if (downloadId) {
                 videoItemToRemove = activeDownloadsContainer.querySelector(`[data-download-id="${downloadId}"]`);
@@ -618,12 +624,12 @@ async function handleDownloadCompletion(progressData, addToHistory = false) {
             if (!videoItemToRemove) {
                 videoItemToRemove = activeDownloadsContainer.querySelector(`[data-url="${lookupUrl}"]`);
             }
-            
+
             if (videoItemToRemove) {
                 videoItemToRemove.remove();
                 logger.debug(`Immediately removed from downloads-tab:`, downloadId || lookupUrl);
             }
-            
+
             // Show initial message if no more active downloads remain
             const remainingVideoItems = activeDownloadsContainer.querySelectorAll('.video-item');
             const initialMessage = activeDownloadsContainer.querySelector('.initial-message');
@@ -662,7 +668,7 @@ function resetVideosTabButtonStates(lookupUrl) {
         const videosElements = document.querySelectorAll(
             `.videos-container .video-item[data-url="${lookupUrl}"]`
         );
-        
+
         videosElements.forEach(videoElement => {
             const component = videoElement._component;
             if (component && component.downloadButton) {
@@ -686,21 +692,21 @@ function updateProgressTooltip(selectedOption, progressData) {
     if (progressData.isLive) {
         return; // Skip tooltip for livestreams
     }
-    
+
     // Build compact tooltip content for VOD downloads only
     const parts = [];
     // VOD tooltip: segments • speed • elapsed time
-    
+
     // Add segment info
     if (progressData.progress !== 0 && progressData.currentSegment) {
         parts.push(`${progressData.currentSegment} segments`);
     }
-    
+
     // Add speed
     if (progressData.speed) {
         parts.push(`${formatSize(progressData.speed)}/s`);
     }
-    
+
     // Elapsed time - use UI calculation if we have startTime, otherwise fallback to progressData
     let elapsedSeconds;
     if (progressData.downloadStartTime) {
@@ -713,18 +719,18 @@ function updateProgressTooltip(selectedOption, progressData) {
     } else {
         elapsedSeconds = progressData.elapsedTime || 0;
     }
-    
+
     if (elapsedSeconds > 0) {
         parts.push(formatTime(elapsedSeconds));
     }
-    
+
     // Set single tooltip content attribute
     selectedOption.setAttribute('data-tooltip-content', parts.join(' • '));
-    
+
     // Keep quality for potential future use (but don't display)
-    selectedOption.setAttribute('data-tooltip-quality', 
+    selectedOption.setAttribute('data-tooltip-quality',
         progressData.selectedOptionOrigText || 'Unknown');
-    
+
     // Add tooltip class for CSS styling
     selectedOption.classList.add('has-progress-tooltip');
 }
@@ -751,12 +757,12 @@ const elapsedTimeTimers = new Map();
 function startElapsedTimeTimer(downloadId, downloadStartTime, lookupUrl) {
     // Clear existing timer if any
     stopElapsedTimeTimer(downloadId);
-    
+
     // Start new timer that updates every second
     const timer = setInterval(() => {
         updateElapsedTimeForDownload(downloadId, downloadStartTime, lookupUrl);
     }, 1000);
-    
+
     elapsedTimeTimers.set(downloadId, { timer, downloadStartTime, lookupUrl });
 }
 
@@ -780,13 +786,13 @@ function stopElapsedTimeTimer(downloadId) {
  */
 function updateElapsedTimeForDownload(downloadId, downloadStartTime, lookupUrl) {
     const elapsedSeconds = Math.round((Date.now() - downloadStartTime) / 1000);
-    
+
     // Find elements in downloads-tab (which has data-download-id)
     const downloadsTabElements = document.querySelectorAll(`[data-download-id="${downloadId}"] .selected-option.has-progress-tooltip`);
     downloadsTabElements.forEach(selectedOption => {
         updateTooltipElapsedTime(selectedOption, elapsedSeconds);
     });
-    
+
     // Find elements in videos-tab (which uses data-url for lookup)
     if (lookupUrl) {
         const videosTabElements = document.querySelectorAll(`[data-url="${lookupUrl}"] .selected-option.has-progress-tooltip`);
@@ -804,7 +810,7 @@ function updateElapsedTimeForDownload(downloadId, downloadStartTime, lookupUrl) 
 function updateTooltipElapsedTime(selectedOption, elapsedSeconds) {
     const currentContent = selectedOption.getAttribute('data-tooltip-content') || '';
     const parts = currentContent.split(' • ');
-    
+
     // Replace or add elapsed time (always last part)
     const elapsedTimeText = formatTime(elapsedSeconds);
     if (parts.length > 0 && (parts[parts.length - 1].includes(' s') || parts[parts.length - 1].includes(' m') || parts[parts.length - 1].includes(' h') || parts[parts.length - 1].includes(' d'))) {
@@ -814,7 +820,7 @@ function updateTooltipElapsedTime(selectedOption, elapsedSeconds) {
         // Add elapsed time
         parts.push(elapsedTimeText);
     }
-    
+
     selectedOption.setAttribute('data-tooltip-content', parts.join(' • '));
 }
 

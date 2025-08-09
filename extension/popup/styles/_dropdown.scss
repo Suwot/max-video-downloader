@@ -23,7 +23,7 @@
         text-overflow: ellipsis;
         white-space: nowrap;
         @extend %theme-bg-primary;
-        
+
         // Progress states
         &.downloading {
             position: relative;
@@ -64,20 +64,18 @@
             // Livestream animation - seamless beam effect
             &.livestream::before {
                 width: 100%;
-                background: linear-gradient(
-                    90deg,
-                    transparent 0%,
-                    transparent 40%,
-                    rgba(0, 202, 85, 0.6) 50%,
-                    transparent 60%,
-                    transparent 100%
-                );
+                background: linear-gradient(90deg,
+                        transparent 0%,
+                        transparent 40%,
+                        rgba(0, 202, 85, 0.6) 50%,
+                        transparent 60%,
+                        transparent 100%);
                 background-size: 200% 100%;
                 animation: livestream-beam 2s linear infinite;
                 transition: none; // Disable width transition for livestream
             }
         }
-        
+
         // Progress tooltip - same width as parent, single line
         &.downloading.has-progress-tooltip:hover::after {
             content: attr(data-tooltip-content);
@@ -93,48 +91,46 @@
             z-index: 200;
             pointer-events: none;
             @extend %theme-backdrop;
-            
+
             .theme-dark & {
                 color: var(--text-primary-dark);
             }
-            
+
             .theme-light & {
                 color: var(--text-primary-light);
             }
         }
-		
-		// Processing state for selected-option
-		&.processing {
-			position: relative;
-			overflow: hidden;
-			
-			&::before {
-				content: '';
-				position: absolute;
-				top: 0;
-				left: 0;
-				width: 100%;
-				height: 100%;
-				background: linear-gradient(
-					90deg,
-					transparent 0%,
-					rgba(255, 255, 255, 0.1) 25%,
-					rgba(255, 255, 255, 0.2) 50%,
-					rgba(255, 255, 255, 0.1) 75%,
-					transparent 100%
-				);
-				animation: processing-wave 2s ease-in-out infinite;
-				pointer-events: none;
-				z-index: 1;
-			}
-			
-			.label {
-				position: relative;
-				z-index: 2;
-			}
-		}
+
+        // Processing state for selected-option
+        &.processing {
+            position: relative;
+            overflow: hidden;
+
+            &::before {
+                content: '';
+                position: absolute;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: linear-gradient(90deg,
+                        transparent 0%,
+                        rgba(255, 255, 255, 0.1) 25%,
+                        rgba(255, 255, 255, 0.2) 50%,
+                        rgba(255, 255, 255, 0.1) 75%,
+                        transparent 100%);
+                animation: processing-wave 2s ease-in-out infinite;
+                pointer-events: none;
+                z-index: 1;
+            }
+
+            .label {
+                position: relative;
+                z-index: 2;
+            }
+        }
     }
-	
+
     // Open state
     &.open {
         .dropdown-icon svg {
@@ -151,13 +147,14 @@
             .theme-dark & {
                 background-color: var(--bg-selected-dark);
 
-                &:hover, &:focus {
+                &:hover,
+                &:focus {
                     background-color: var(--bg-selected-dark-hover);
                 }
             }
         }
     }
-    
+
     // Advanced dropdown variant
     &.advanced .options-container {
         width: calc(420px - 16px);
@@ -172,7 +169,7 @@
 
     svg {
         transition: transform var(--transition-normal);
-        
+
         .theme-light & path {
             stroke: var(--text-primary-light);
         }
@@ -208,11 +205,11 @@
     // Webkit scrollbar styling
     &::-webkit-scrollbar {
         width: 6px;
-        
+
         &-track {
             background: var(--bg-primary-dark);
         }
-        
+
         &-thumb {
             background: #555;
             border-radius: 3px;
@@ -232,27 +229,27 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     @extend %theme-text-secondary;
-    
+
     // Base hover and selected states
     &:not(.selected):hover,
     &.selected {
         position: relative;
         @extend %theme-text-primary;
-        
+
         .theme-dark & {
             background: var(--bg-selected-dark);
         }
-        
+
         .theme-light & {
             background: var(--bg-element-hover-light);
         }
     }
-    
+
     &.selected:hover {
         .theme-dark & {
             background: var(--bg-selected-dark-hover);
         }
-        
+
         .theme-light & {
             background: var(--bg-element-active-light);
         }
@@ -261,15 +258,15 @@
     // Status states
     &.downloading {
         @extend %theme-text-primary;
-        
+
         .theme-dark & {
             background: var(--bg-selected-dark);
         }
-        
+
         .theme-light & {
             background: var(--bg-element-active-light);
         }
-        
+
         // Progress bar
         position: relative;
         overflow: hidden;
@@ -294,30 +291,42 @@
         // Livestream animation for dropdown options - seamless beam effect
         &.livestream::after {
             width: 100%;
-            background: linear-gradient(
-                90deg,
-                transparent 0%,
-                transparent 40%,
-                rgba(0, 202, 85, 0.6) 50%,
-                transparent 60%,
-                transparent 100%
-            );
+            background: linear-gradient(90deg,
+                    transparent 0%,
+                    transparent 40%,
+                    rgba(0, 202, 85, 0.6) 50%,
+                    transparent 60%,
+                    transparent 100%);
             background-size: 200% 100%;
             animation: livestream-beam 2s linear infinite;
             transition: none; // Disable width transition for livestream
         }
     }
 
-    &.queued,
-    &.unqueued {
+    // QUEUED STATES - TRUMP CARD - Must come last to override all other states
+    &.queued {
         background-color: var(--color-yellow);
         color: var(--text-primary-light);
 
+        // Override selected state when queued
+        &.selected {
+            background-color: var(--color-yellow);
+            color: var(--text-primary-light);
+        }
+
+        // Queued hover - comes after base state to properly override
         &:hover {
+            background-color: var(--color-yellow-hover) !important;
+            color: var(--text-primary-light) !important;
+        }
+
+        // Queued selected hover
+        &.selected:hover {
             background-color: var(--color-yellow-hover);
+            color: var(--text-primary-light);
         }
     }
-    
+
     // Progress completion states
     &.complete::after {
         width: 100%;
@@ -366,8 +375,10 @@
     cursor: pointer;
     transition: background-color var(--transition-fast);
     border-radius: 2px;
-	
-	&:not(:last-child) { margin-bottom: 1px;}
+
+    &:not(:last-child) {
+        margin-bottom: 1px;
+    }
 
     &:hover {
         position: relative;
@@ -375,7 +386,7 @@
         width: fit-content;
         background: var(--bg-selected-dark);
         box-shadow: 0 0 0 1px var(--color-blue);
-        
+
         .theme-dark & {
             color: var(--text-secondary-dark-hover);
         }
