@@ -4,6 +4,7 @@ import { addDetectedVideo } from '../processing/video-processor.js';
 import { getRequestHeaders, removeHeadersByRequestId } from '../../shared/utils/headers-utils.js';
 import { identifyVideoType, identifyVideoTypeFromMime, extractExpiryInfo, isMediaSegment } from './video-type-identifier.js';
 import { settingsManager } from '../index.js';
+import { generateId } from '../../shared/utils/processing-utils.js';
 
 // Create a logger instance for video detection
 const logger = createLogger('VideoDetector');
@@ -20,23 +21,23 @@ const tabsWithMpd = new Map();
  */
 function getContainersFromMimeType(mimeType, mediaType) {
     if (!mimeType) return null;
-    
+
     const normalizedMime = mimeType.toLowerCase().split(';')[0]; // Remove parameters
     const subtype = normalizedMime.split('/')[1] || '';
-    
+
     let videoContainer = 'mp4'; // Default
-    
+
     // Special cases for webm and mkv
     if (subtype.includes('webm')) {
         videoContainer = 'webm';
     } else if (subtype.includes('matroska') || subtype.includes('mkv')) {
         videoContainer = 'mkv';
     }
-    
+
     // Audio container based on video container
-    const audioContainer = videoContainer === 'webm' ? 'webm' : 
-                          videoContainer === 'mkv' ? 'mp3' : 'm4a';
-    
+    const audioContainer = videoContainer === 'webm' ? 'webm' :
+        videoContainer === 'mkv' ? 'mp3' : 'm4a';
+
     return {
         videoContainer,
         audioContainer,
@@ -56,7 +57,7 @@ async function getTabUrl(tabId, initiatorUrl = null) {
         try {
             const tabs = await chrome.tabs.query({});
             const matchingTabs = tabs.filter(tab => tab.url && tab.url.startsWith(initiatorUrl));
-            
+
             if (matchingTabs.length === 1) {
                 // Single match - use this tab
                 const tab = matchingTabs[0];
@@ -71,7 +72,7 @@ async function getTabUrl(tabId, initiatorUrl = null) {
                 };
             } else if (matchingTabs.length > 1) {
                 // Multiple matches - use the most recently active one
-                const mostRecentTab = matchingTabs.reduce((latest, current) => 
+                const mostRecentTab = matchingTabs.reduce((latest, current) =>
                     (current.lastAccessed || 0) > (latest.lastAccessed || 0) ? current : latest
                 );
                 logger.debug(`Resolved tabId ${tabId} to ${mostRecentTab.id} (most recent of ${matchingTabs.length}) using initiator: ${initiatorUrl}`);
@@ -92,12 +93,12 @@ async function getTabUrl(tabId, initiatorUrl = null) {
             return null;
         }
     }
-    
+
     // Original logic for positive tabId
     if (tabId < 0) {
         return null;
     }
-    
+
     try {
         const tab = await chrome.tabs.get(tabId);
         // logger.debug(`Retrieved tab info for ${tabId}:`, tab);
@@ -139,13 +140,14 @@ function addVideoWithCommonProcessing(tabId, url, videoInfo, metadata, source, t
         ...(videoInfo.originalContainer && { originalContainer: videoInfo.originalContainer }),
         ...(expiryInfo && { expiryInfo })
     };
-    
+
     // For direct videos, create videoTracks immediately with container info for instant download capability
     if (videoInfo.type === 'direct' && metadata?.contentType) {
         const containers = getContainersFromMimeType(metadata.contentType, videoInfo.mediaType);
         if (containers) {
             videoData.videoTracks = [{
                 url,
+                trackId: generateId(url), // Generate trackId for UI matching
                 type: 'direct',
                 videoContainer: containers.videoContainer,
                 audioContainer: containers.audioContainer,
@@ -153,7 +155,7 @@ function addVideoWithCommonProcessing(tabId, url, videoInfo, metadata, source, t
             }];
         }
     }
-    
+
     // Attach headers if requestId is provided
     if (requestId) {
         const headers = getRequestHeaders(requestId);
@@ -163,7 +165,7 @@ function addVideoWithCommonProcessing(tabId, url, videoInfo, metadata, source, t
             logger.debug(`No headers found for requestId: ${requestId}`);
         }
     }
-    
+
     addDetectedVideo(videoData);
 }
 
@@ -176,7 +178,7 @@ function addVideoWithCommonProcessing(tabId, url, videoInfo, metadata, source, t
  */
 export async function processWebRequest(details, metadata = null) {
     const { tabId, url, requestId, initiator } = details;
-	// logger.info(`Received URL ${url} after processing in onHeadersReceived:`, metadata)
+    // logger.info(`Received URL ${url} after processing in onHeadersReceived:`, metadata)
 
     // First check if we should ignore this URL
     if (shouldIgnoreForMediaDetection(url, metadata)) return;
@@ -184,13 +186,13 @@ export async function processWebRequest(details, metadata = null) {
 
     // Get tab URL for page context tracking (with fallback for negative tabId)
     const tabInfo = await getTabUrl(tabId, initiator);
-    
+
     // If we couldn't resolve the tab, skip processing
     if (!tabInfo) {
         logger.debug(`Could not resolve tab for tabId ${tabId}, initiator: ${initiator}`);
         return;
     }
-    
+
     // Use resolved tabId if available
     const resolvedTabId = tabInfo.tabId || tabId;
 
@@ -253,7 +255,7 @@ export function processContentScriptVideo(tabId, videoData) {
     }
 
     logger.debug(`Processing content script video for tab ${tabId}:`, videoData);
-    
+
     // Add the video through the video manager
     addDetectedVideo(videoData);
 }
@@ -269,7 +271,7 @@ export function cleanupMPDContextForTab(tabId) {
         tabsWithMpd.delete(tabId);
         logger.debug(`Cleaned up MPD context for tab ${tabId}`);
     }
-    
+
 
 }
 
@@ -278,10 +280,10 @@ export function cleanupMPDContextForTab(tabId) {
  */
 export function initVideoDetector() {
     logger.info('Initializing video detector');
-    
+
     // Clear any stale detection context on initialization
     tabsWithMpd.clear();
-    
+
     setupWebRequestListener();     // Set up web request listener for video detection    
     setupMessageListener();        // Set up message listener for content script and other communications
 }
@@ -292,7 +294,7 @@ export function initVideoDetector() {
 function setupWebRequestListener() {
     chrome.webRequest.onHeadersReceived.addListener(
         function (details) {
-			logger.info(`NEW onHeadersReceived request for url: ${details.url}, requestId: ${details.requestId}`, details);
+            logger.info(`NEW onHeadersReceived request for url: ${details.url}, requestId: ${details.requestId}`, details);
             // Centralized cleanup - ensure headers are always cleaned up
             const cleanupHeaders = () => {
                 if (details.requestId) {
@@ -312,7 +314,7 @@ function setupWebRequestListener() {
                 supportsRanges: false,
                 timestampDetected: Math.round(details.timeStamp)
             };
-            
+
             // Process important headers
             let shouldSkipRequest = false;
             for (const header of details.responseHeaders) {
@@ -368,13 +370,13 @@ function setupWebRequestListener() {
                         break;
                 }
             }
-            
+
             // Early cleanup if we should skip this request
             if (shouldSkipRequest) {
                 cleanupHeaders();
                 return;
             }
-            
+
             // Call the video detector with the metadata (async, but don't await to avoid blocking)
             processWebRequest(details, metadata)
                 .catch(error => {
@@ -417,11 +419,11 @@ function setupMessageListener() {
             }
             return false;
         }
-        
+
         // Let other handlers deal with non-detection messages
         return false;
     });
-    
+
     logger.debug('Message listener set up for video detection');
 }
 
@@ -434,23 +436,23 @@ function setupMessageListener() {
 function shouldSkipBasedOnContentRange(contentRange, url) {
     // Parse Content-Range header: "bytes start-end/total"
     const rangeMatch = /bytes (\d+)-(\d+)\/(\d+)/.exec(contentRange);
-    
+
     if (!rangeMatch) {
         logger.debug(`Invalid Content-Range format: ${contentRange} for URL: ${url}`);
         return false; // If we can't parse it, don't skip
     }
-    
+
     const start = parseInt(rangeMatch[1], 10);
     const end = parseInt(rangeMatch[2], 10);
     const total = parseInt(rangeMatch[3], 10);
-    
+
     // Calculate what percentage of the file this range covers
     const rangeSize = end - start + 1;
     const coverage = rangeSize / total;
-    
+
     // Keep if: starts at 0 OR covers ≥95% of the file
     const shouldKeep = start === 0 || coverage >= 0.95;
-    
+
     if (shouldKeep) {
         logger.debug(`Keeping Content-Range request: ${contentRange} (${(coverage * 100).toFixed(1)}% coverage, starts at ${start}) for URL: ${url}`);
         return false; // Don't skip

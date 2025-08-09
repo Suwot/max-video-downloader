@@ -1,10 +1,6 @@
 // Shared utility functions for video processing
 
-/**
- * Format file size bytes to human readable format
- * @param {number} bytes - Size in bytes
- * @returns {string} Formatted size string
- */
+// Format file size bytes to human readable format
 export function formatSize(bytes) {
     if (!bytes || bytes === 0) return '0 KB';
     const k = 1024;
@@ -27,11 +23,7 @@ export function formatSize(bytes) {
     return `${(bytes / Math.pow(k, i)).toFixed(decimals)} ${sizes[i]}`;
 }
 
-/**
- * Standardize video resolution to common formats
- * @param {number} height - Actual pixel height of the video
- * @returns {string} Standardized resolution string (e.g. "1080p")
- */
+// Standardize video resolution to common formats
 export function standardizeResolution(height) { 
     if (height >= 4320) return '4320p';
     if (height >= 2160) return '2160p';
@@ -45,11 +37,7 @@ export function standardizeResolution(height) {
     return `${height}p`; // Fallback
 }
 
-/**
- * Format duration in seconds to HH:MM:SS or MM:SS format
- * @param {number} seconds - Duration in seconds
- * @returns {string} Formatted duration
- */
+// Format duration in seconds to HH:MM:SS or MM:SS format
 export function formatDuration(seconds) {
     if (!seconds) return '';
     const hrs = Math.floor(seconds / 3600);
@@ -88,11 +76,7 @@ export function formatBitrate(kbps) {
     return kbps >= 1000 ? `${(kbps / 1000).toFixed(2)} Mbps` : `${kbps} kbps`;
 }
 
-/**
- * Extract filename (without extension) from URL
- * @param {string} url - URL to extract filename from
- * @returns {string} Extracted filename without extension
- */
+// Extract filename (without extension) from URL
 export function getFilenameFromUrl(url) {
     try {
         const urlObj = new URL(url);
@@ -125,11 +109,7 @@ export function getFilenameFromUrl(url) {
     }
 }
 
-/**
- * Normalize URL to prevent duplicates
- * @param {string} url - URL to normalize
- * @returns {string} Normalized URL
- */
+// Normalize URL to prevent duplicates
 export function normalizeUrl(url) {
     // Quick return for empty URLs
     if (!url) return url;
@@ -166,11 +146,7 @@ export function normalizeUrl(url) {
     }
 }
 
-/**
- * Get base directory for a URL
- * @param {string} url - URL to process
- * @returns {string} Base directory of the URL
- */
+// Get base directory for a URL
 export function getBaseDirectory(url) {
     try {
         const urlObj = new URL(url);
@@ -180,11 +156,7 @@ export function getBaseDirectory(url) {
     }
 }
 
-/**
- * Parse codec string to extract base codec identifiers
- * @param {string} codecString - Codec string (e.g., "avc1.640028,mp4a.40.2")
- * @returns {Array<string>} Array of base codec identifiers
- */
+// Parse codec string to extract base codec identifiers. Codec string (e.g., "avc1.640028,mp4a.40.2")
 export function parseCodecs(codecString) {
     if (!codecString) return [];
     
@@ -193,15 +165,24 @@ export function parseCodecs(codecString) {
         .filter(codec => codec.length > 0);
 }
 
-/**
- * Format resolution with optional FPS
- * @param {string|number} resolution - Resolution (e.g., "1080p" or 1080)
- * @param {number} fps - Frame rate
- * @returns {string} Formatted resolution with FPS if not 30
- */
+// Format resolution with optional FPS
 export function formatResolutionWithFps(resolution, fps) {
     const resString = typeof resolution === 'number' ? `${resolution}p` : resolution;
     return (fps && fps !== 30) ? `${resString}${fps}` : resString;
+}
+
+// Generate a short hash-based ID from a URL for UI matching
+export function generateId(url) {
+    // Simple hash function for consistent short IDs
+    let hash = 0;
+    for (let i = 0; i < url.length; i++) {
+        const char = url.charCodeAt(i);
+        hash = ((hash << 5) - hash) + char;
+        hash = hash & hash; // Convert to 32-bit integer
+    }
+    
+    // Convert to positive hex string and truncate to 8 characters
+    return Math.abs(hash).toString(16).substring(0, 8);
 }
 
 /**

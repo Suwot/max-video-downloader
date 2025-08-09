@@ -3,7 +3,7 @@
  * Manages the flow of videos from detection through processing to UI display
  */
 
-import { normalizeUrl } from '../../shared/utils/processing-utils.js';
+import { normalizeUrl, generateId } from '../../shared/utils/processing-utils.js';
 import { createLogger } from '../../shared/utils/logger.js';
 import { standardizeResolution, getFilenameFromUrl } from '../../shared/utils/processing-utils.js';
 import { getPreview, storePreview } from '../../shared/utils/preview-cache.js';
@@ -104,6 +104,7 @@ function addDetectedVideo(videoInfo) {
     const newVideo = {
         ...videoInfo,
         normalizedUrl,
+        mediaId: generateId(videoInfo.url), // Generate mediaId for UI matching
         processing: true, // Single flag for all processing states
         title: videoInfo.pageTitle || videoInfo.metadata?.filename || 'untitled',
         isValid: true, // optimistic for all types
@@ -507,10 +508,14 @@ async function getFFprobeMetadata(videoData) {
             // Only set isValid: false if ffprobe confirms not a video
             const isValid = streamInfo.hasVideo === false ? false : true;
 
+            // Preserve existing trackId if it exists, otherwise generate new one
+            const existingTrackId = videoData.videoTracks?.[0]?.trackId || generateId(url);
+            
             // Create videoTracks array only after successful FFprobe validation
             const videoTracks = [{
                 url,
                 normalizedUrl,
+                trackId: existingTrackId, // Preserve or generate trackId for UI matching
                 type,
                 standardizedResolution: standardizedRes,
                 estimatedFileSizeBytes: streamInfo.sizeBytes,

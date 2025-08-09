@@ -10,7 +10,7 @@ import {
 } from './parser-utils.js';
 import { fetchManifest } from './manifest-fetcher.js';
 import { createLogger } from '../../shared/utils/logger.js';
-import { standardizeResolution, normalizeUrl, getBaseDirectory } from '../../shared/utils/processing-utils.js';
+import { standardizeResolution, normalizeUrl, getBaseDirectory, generateId } from '../../shared/utils/processing-utils.js';
 
 // Create a logger for the HLS parser
 const logger = createLogger('HLS Parser');
@@ -255,6 +255,7 @@ export async function parseHlsManifest(videoObject) {
             videoTracks = [{
                 url: url,
                 normalizedUrl: normalizedUrl,
+                trackId: generateId(url), // Generate trackId for UI matching
                 masterUrl: null,
                 hasKnownMaster: false,
                 type: 'hls',
@@ -353,11 +354,11 @@ function parseHlsMaster(content, baseUrl, masterUrl) {
 
     // Build video track objects
     const videoTracks = variantEntries.map(entry => {
-        
         return {
             id: `video-${entry.streamInf.bandwidth || 'unknown'}-${entry.streamInf.height || 'p'}`,
             url: entry.url,
             normalizedUrl: entry.normalizedUrl,
+            trackId: generateId(entry.url), // Generate trackId for UI matching
             masterUrl: masterUrl,
             hasKnownMaster: true,
             type: 'hls',
