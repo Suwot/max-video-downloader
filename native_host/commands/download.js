@@ -271,13 +271,10 @@ class DownloadCommand extends BaseCommand {
         logDebug('Active downloads Map has', DownloadCommand.activeDownloads.size, 'entries');
         logDebug('Active download IDs:', Array.from(DownloadCommand.activeDownloads.keys()));
         
-        // Find download by downloadId first, then fallback to URL lookup
+        // Find download by downloadId only
         let downloadEntry = null;
-        let lookupKey = null;
-        
         if (downloadId && DownloadCommand.activeDownloads.has(downloadId)) {
             downloadEntry = DownloadCommand.activeDownloads.get(downloadId);
-            lookupKey = downloadId;
             logDebug('Found download by downloadId:', downloadId);
         }
         
@@ -299,11 +296,9 @@ class DownloadCommand extends BaseCommand {
         }
         
         const { process, outputPath } = downloadEntry;
-        const processDownloadId = lookupKey; // Use the found downloadId
-        
         try {
             // IMMEDIATELY remove from activeDownloads to prevent repeated cancels
-            DownloadCommand.activeDownloads.delete(lookupKey);
+            DownloadCommand.activeDownloads.delete(downloadId);
             logDebug('Removed download from activeDownloads Map immediately. Remaining downloads:', DownloadCommand.activeDownloads.size);
             
             // Terminate FFmpeg process: q command -> 5s timeout -> SIGKILL
@@ -349,7 +344,7 @@ class DownloadCommand extends BaseCommand {
                 logDebug('Preserving file for livestream/direct type:', outputPath);
             }
             
-            logDebug('Download cancellation completed for downloadId:', processDownloadId);
+            logDebug('Download cancellation completed for downloadId:', downloadId);
             
             // For direct types and livestreams, defer cancellation message to close handler
             // The close handler will determine final outcome based on file existence and get rich FFmpeg stats
@@ -361,7 +356,7 @@ class DownloadCommand extends BaseCommand {
             // For regular HLS/DASH types, send immediate cancellation message
             this.sendMessage({
                 command: 'download-canceled',
-                downloadId: processDownloadId,
+                downloadId: downloadId,
                 downloadUrl: downloadUrl,
                 duration: downloadEntry.progressState?.duration || null,
                 downloadStats: downloadEntry.progressState?.finalStats || null,
