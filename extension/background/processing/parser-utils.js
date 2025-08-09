@@ -148,7 +148,6 @@ export function resolveUrl(baseUrl, relativeUrl) {
 
 /**
  * Detect container format for DASH tracks based on codecs and mimeType
- * Streamlined replacement for container-detector.js for DASH-specific needs
  * 
  * @param {Object} options - Detection options
  * @param {string} [options.mimeType] - MIME type from DASH manifest

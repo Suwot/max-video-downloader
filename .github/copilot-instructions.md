@@ -67,7 +67,7 @@ MAX Video Downloader - Chrome extension (Manifest V3) that downloads videos from
 extension/
 ├── background/
 │   ├── detection/          # webRequest detection, video-detector, url-filters
-│   ├── processing/         # container-detector, hls/dash parsers, video-store
+│   ├── processing/         # hls/dash parsers, video-store
 │   ├── messaging/          # popup-communication, native-host-service (connection management)
 │   ├── download/           # download-manager
 │   └── state/              # tab-manager, settings-manager
@@ -142,7 +142,6 @@ npm run lint          # Check for errors
 npm run lint:fix      # Auto-fix simple issues
 
 # Testing
-npm run test:container-detector
 cd native_host && node test-host.js
 ./test_streaming.sh
 
