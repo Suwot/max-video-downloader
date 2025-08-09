@@ -3,7 +3,7 @@
  * Eliminates DOM dataset dependencies and provides clean track selection
  */
 
-import { formatSize } from '../../shared/utils/processing-utils.js';
+import { formatSize, buildTrackLabel } from '../../shared/utils/processing-utils.js';
 import { createLogger } from '../../shared/utils/logger.js';
 
 const logger = createLogger('VideoDropdownComponent');
@@ -39,9 +39,7 @@ const CONTAINER_COMPATIBILITY = {
     }
 };
 
-/**
- * VideoDropdownComponent - Manages dropdown state and track selection
- */
+// VideoDropdownComponent - Manages dropdown state and track selection
 export class VideoDropdownComponent {
     constructor(videoData, selectedTracks, onSelectionChange) {
         this.videoData = videoData;
@@ -57,10 +55,7 @@ export class VideoDropdownComponent {
         this.handleClickOutside = this.handleClickOutside.bind(this);
     }
     
-    /**
-     * Determine if this should use advanced (multi-track) mode
-     * @returns {boolean} True if advanced mode should be used
-     */
+    // Determine if this should use advanced (multi-track) mode. True = advanced
     determineMode() {
         const hasAudioTracks = (this.videoData.audioTracks?.length || 0) > 0;
         const hasSubtitleTracks = (this.videoData.subtitleTracks?.length || 0) > 0;
@@ -69,10 +64,7 @@ export class VideoDropdownComponent {
         return hasAudioTracks || hasSubtitleTracks;
     }
     
-    /**
-     * Render the dropdown component
-     * @returns {HTMLElement} The rendered dropdown element
-     */
+    // Render the dropdown component
     render() {
         this.element = document.createElement('div');
         this.element.className = 'custom-dropdown';
@@ -102,7 +94,7 @@ export class VideoDropdownComponent {
         this.element.appendChild(this.optionsContainer);
         
         // Setup event handlers
-        this.setupEventHandlers();
+        this.selectedDisplay.addEventListener('click', this.handleClick);
         
         // Create options based on mode
         if (this.isAdvancedMode) {
@@ -116,17 +108,8 @@ export class VideoDropdownComponent {
         
         return this.element;
     }
-    
-    /**
-     * Setup event handlers for dropdown interactions
-     */
-    setupEventHandlers() {
-        this.selectedDisplay.addEventListener('click', this.handleClick);
-    }
-    
-    /**
-     * Handle dropdown click to toggle open/close
-     */
+	
+    // Handle dropdown click to toggle open/close
     handleClick() {
         this.element.classList.toggle('open');
         
@@ -149,10 +132,7 @@ export class VideoDropdownComponent {
         }
     }
     
-    /**
-     * Handle clicks outside dropdown to close it
-     * @param {Event} e - Click event
-     */
+    // Handle clicks outside dropdown to close it. e - click event
     handleClickOutside(e) {
         if (!this.element.contains(e.target)) {
             this.element.classList.remove('open');
@@ -168,9 +148,7 @@ export class VideoDropdownComponent {
         }
     }
     
-    /**
-     * Create simple options for single-track selection
-     */
+    // Create simple options for single-track selection
     createSimpleOptions() {
         // For direct videos during processing, videoTracks might not exist yet
         const videoTracks = this.videoData.videoTracks?.length > 0 ? 
@@ -187,7 +165,7 @@ export class VideoDropdownComponent {
             
             const labelSpan = document.createElement('span');
             labelSpan.className = 'label';
-            labelSpan.textContent = this.formatVariantLabel(track);
+            labelSpan.textContent = buildTrackLabel(track, 'video', this.videoData.type);
             option.appendChild(labelSpan);
             
             option.addEventListener('click', () => {
@@ -212,9 +190,7 @@ export class VideoDropdownComponent {
         });
     }
     
-    /**
-     * Create advanced options for multi-track selection
-     */
+    // Create advanced options for multi-track selection
     createAdvancedOptions() {
         const columnsContainer = document.createElement('div');
         columnsContainer.className = 'tracks-columns-container';
@@ -279,7 +255,7 @@ export class VideoDropdownComponent {
             
             const label = document.createElement('span');
             label.className = 'track-label';
-            label.textContent = this.formatTrackLabel(track, type);
+            label.textContent = buildTrackLabel(track, type, this.videoData.type);
             
             option.appendChild(input);
             option.appendChild(label);
@@ -370,9 +346,7 @@ export class VideoDropdownComponent {
         this.onSelectionChange(this.selectedTracks);
     }
     
-    /**
-     * Update the selected display based on current selection
-     */
+    // Update the selected display based on current selection
     updateSelectedDisplay() {
         // Remove existing label
         this.selectedDisplay.querySelector('.label')?.remove();
@@ -397,25 +371,23 @@ export class VideoDropdownComponent {
                 label.textContent = this.buildAdvancedSummary();
             } else {
                 const track = this.selectedTracks.videoTrack || this.videoData.videoTracks?.[0] || this.videoData;
-				const parts = this.formatVariantLabel(track).split(' • ');
-				label.textContent = parts.slice(0, 2).join(' • ');
+                const fullLabel = buildTrackLabel(track, 'video', this.videoData.type);
+                const parts = fullLabel.split(' • ');
+                label.textContent = parts.slice(0, 2).join(' • ');
             }
         }
         
         this.selectedDisplay.prepend(label);
     }
     
-    /**
-     * Build summary text for advanced mode
-     * @returns {string} Summary text
-     */
+    // Build summary text for advanced mode
     buildAdvancedSummary() {
         let summary = '';
         let totalSize = 0;
         
-        // Get resolution from video track
+        // Get resolution from video track using shared utility
         if (this.selectedTracks.videoTrack) {
-            const trackLabel = this.formatTrackLabel(this.selectedTracks.videoTrack, 'video');
+            const trackLabel = buildTrackLabel(this.selectedTracks.videoTrack, 'video', this.videoData.type);
             const resMatch = trackLabel.match(/(\d+p\d*)/);
             summary = resMatch?.[0] || 'Custom';
             
@@ -460,9 +432,7 @@ export class VideoDropdownComponent {
         return summary;
     }
     
-    /**
-     * Update track compatibility when video track changes
-     */
+    // Update track compatibility when video track changes
     updateCompatibility() {
         if (!this.isAdvancedMode || !this.selectedTracks.videoTrack?.videoContainer) {
             return;
@@ -508,178 +478,19 @@ export class VideoDropdownComponent {
         
         // Find track by matching label (simple approach)
         return tracks?.find(track => {
-            const formattedLabel = this.formatTrackLabel(track, type);
+            const formattedLabel = buildTrackLabel(track, type, this.videoData.type);
             return formattedLabel === trackLabel;
         });
     }
     
-    /**
-     * Format the label for a track option
-     * @param {Object} track - Track data
-     * @param {string} type - Track type
-     * @returns {string} Formatted label
-     */
-    formatTrackLabel(track, type) {
-        if (type === 'video') {
-            // Handle both DASH and HLS video tracks
-            let res, fps, fileSizeBytes, codecs;
-            
-            if (track.metaJS) {
-                // HLS video track structure
-                res = track.metaJS.standardizedResolution || null;
-                fps = track.metaJS.fps || null;
-                fileSizeBytes = track.metaJS.estimatedFileSizeBytes ? 
-                    formatSize(track.metaJS.estimatedFileSizeBytes) : null;
-                codecs = track.metaJS.codecs ? track.metaJS.codecs.split('.')[0] : null;
-            } else {
-                // DASH video track structure
-                res = track.standardizedResolution || null;
-                fps = track.frameRate || null;
-                fileSizeBytes = track.estimatedFileSizeBytes ? 
-                    formatSize(track.estimatedFileSizeBytes) : null;
-                codecs = track.codecs ? track.codecs.split('.')[0] : null;
-            }
-            
-            const formattedResolution = res ? 
-                ((fps && fps !== 30) ? `${res}${fps}` : res) : null;
-
-            return [formattedResolution, fileSizeBytes, codecs]
-                .filter(Boolean)
-                .join(' • '); 
-
-        } else if (type === 'audio') {
-            // Handle both DASH and HLS audio tracks
-            let language, channels, fileSizeBytes, codecs;
-            
-            if (track.name !== undefined) {
-                // HLS audio track structure
-                language = track.default ? `${track.name || track.language}*` : 
-                          (track.name || track.language);
-                channels = track.channels || null;
-                fileSizeBytes = null; // HLS audio tracks don't have individual file sizes
-                codecs = null; // HLS audio codecs not specified in master
-            } else {
-                // DASH audio track structure
-                language = track.default ? `${track.label || track.lang}*` : 
-                          (track.label || track.lang);
-                channels = track.channels ? `${track.channels}ch` : null;
-                fileSizeBytes = track.estimatedFileSizeBytes ? 
-                    formatSize(track.estimatedFileSizeBytes) : null;
-                codecs = track.codecs ? track.codecs.split('.')[0] : null;
-            }
-
-            return [language, channels, fileSizeBytes, codecs]
-                .filter(Boolean)
-                .join(' • ');
-
-        } else {
-            // Subtitle tracks - handle both DASH and HLS
-            let language;
-            
-            if (track.name !== undefined) {
-                // HLS subtitle track structure
-                language = track.default ? `${track.name || track.language || 'Subtitle'}*` : 
-                          (track.name || track.language || 'Subtitle');
-            } else {
-                // DASH subtitle track structure
-                language = track.default ? `${track.label || track.lang || 'Subtitle'}*` : 
-                          (track.label || track.lang || 'Subtitle');
-            }
-
-            return language;
-        }
-    }
-    
-    /**
-     * Format the displayed label for a video track (simple mode)
-     * @param {Object} videoTrack - Video track data
-     * @returns {string} Formatted label
-     */
-    formatVariantLabel(videoTrack) {
-        if (!videoTrack) return "Unknown Quality";
-
-        if (this.videoData.type === 'hls') {
-            const meta = videoTrack.metaJS || {};
-            const res = meta.standardizedResolution || null;
-            const fps = meta.fps || null;
-            const formattedResolution = res ? 
-                ((fps && fps !== 30) ? `${res}${fps}` : res) : null;
-                
-            const fileSizeBytes = meta.estimatedFileSizeBytes ? 
-                formatSize(meta.estimatedFileSizeBytes) : null;
-                
-            const fullResolution = meta.resolution || null;
-            const formattedCodecs = this.getFormattedCodecs(videoTrack, 'hls');
-            
-            return [formattedResolution, fileSizeBytes, fullResolution, formattedCodecs]
-                .filter(Boolean)
-                .join(' • ') || 'Unknown Quality';
-        } else {
-            // Direct video formatting - handle both processed tracks and raw video data
-            const res = videoTrack.standardizedResolution || null;
-            const fps = videoTrack.metaFFprobe?.fps || null;
-            const formattedResolution = res ? 
-                ((fps && fps !== 30) ? `${res}${fps}` : res) : null;
-
-            const fileSize = videoTrack.fileSize ? formatSize(videoTrack.fileSize) : 
-                (videoTrack.estimatedFileSizeBytes ? formatSize(videoTrack.estimatedFileSizeBytes) : null);
-            
-            const formattedCodecs = this.getFormattedCodecs(videoTrack, 'direct');
-            
-            return [formattedResolution, fileSize, formattedCodecs]
-                .filter(Boolean)
-                .join(' • ') || 'Unknown Quality';
-        }
-    }
-    
-    /**
-     * Get formatted codecs based on media type
-     * @param {Object} media - Media object (video track)
-     * @param {string} type - Media type
-     * @returns {string|null} Formatted codecs string
-     */
-    getFormattedCodecs(media, type) {
-        if (type === 'hls') {
-            return media.metaJS?.codecs ? 
-                media.metaJS.codecs
-                    .split(',')
-                    .map(codec => codec.split('.')[0])
-                    .join(' & ') 
-                : null;
-        }
-        
-        if (media.codecs) {
-            return media.codecs.split('.')[0];
-        }
-        
-        // For direct videos
-        const videoCodec = media.metaFFprobe?.videoCodec?.name || null;
-        const audioCodec = media.metaFFprobe?.audioCodec?.name || null;
-        const audioChannels = media.metaFFprobe?.audioCodec?.channels ? 
-            `${media.metaFFprobe.audioCodec.channels}ch` : null;
-        
-        if (videoCodec && audioCodec && audioChannels) {
-            return `${videoCodec} & ${audioCodec} (${audioChannels})`;
-        } else if (videoCodec && audioCodec) {
-            return `${videoCodec} & ${audioCodec}`;
-        } else {
-            return videoCodec || audioCodec || null;
-        }
-    }
-    
-    /**
-     * Update video data (for dynamic updates)
-     * @param {Object} newVideoData - Updated video data
-     */
+    // Update video data (for dynamic updates)
     updateVideoData(newVideoData) {
         this.videoData = { ...this.videoData, ...newVideoData };
         // Update display to reflect new processing state or quality info
         this.updateSelectedDisplay();
     }
     
-    /**
-     * Cleanup component resources
-     */
+    // Cleanup component resources
     cleanup() {
         if (this.element) {
             this.element._component = null;

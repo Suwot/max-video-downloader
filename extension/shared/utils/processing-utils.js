@@ -179,3 +179,124 @@ export function getBaseDirectory(url) {
         return '';
     }
 }
+
+/**
+ * Parse codec string to extract base codec identifiers
+ * @param {string} codecString - Codec string (e.g., "avc1.640028,mp4a.40.2")
+ * @returns {Array<string>} Array of base codec identifiers
+ */
+export function parseCodecs(codecString) {
+    if (!codecString) return [];
+    
+    return codecString.split(',')
+        .map(codec => codec.trim().split('.')[0])
+        .filter(codec => codec.length > 0);
+}
+
+/**
+ * Format resolution with optional FPS
+ * @param {string|number} resolution - Resolution (e.g., "1080p" or 1080)
+ * @param {number} fps - Frame rate
+ * @returns {string} Formatted resolution with FPS if not 30
+ */
+export function formatResolutionWithFps(resolution, fps) {
+    const resString = typeof resolution === 'number' ? `${resolution}p` : resolution;
+    return (fps && fps !== 30) ? `${resString}${fps}` : resString;
+}
+
+/**
+ * Build track label for video tracks
+ * @param {Object} track - Track data
+ * @param {string} type - Track type ('video', 'audio', 'subtitle')
+ * @param {string} videoType - Video type ('hls', 'dash', 'direct')
+ * @returns {string} Formatted track label
+ */
+export function buildTrackLabel(track, type, videoType) {
+    if (type === 'video') {
+        let res, fps, fileSizeBytes, codecs;
+        
+        if (videoType === 'hls' && track.metaJS) {
+            // HLS video track structure
+            res = track.metaJS.standardizedResolution || null;
+            fps = track.metaJS.fps || null;
+            fileSizeBytes = track.metaJS.estimatedFileSizeBytes;
+            codecs = track.metaJS.codecs ? parseCodecs(track.metaJS.codecs).join(' & ') : null;
+        } else if (videoType === 'dash') {
+            // DASH video track structure
+            res = track.standardizedResolution || null;
+            fps = track.frameRate || null;
+            fileSizeBytes = track.estimatedFileSizeBytes;
+            codecs = track.codecs ? parseCodecs(track.codecs).join(' & ') : null;
+        } else {
+            // Direct video track structure
+            res = track.standardizedResolution || null;
+            fps = track.metaFFprobe?.fps || null;
+            fileSizeBytes = track.fileSize || track.estimatedFileSizeBytes;
+            codecs = track.codecs ? parseCodecs(track.codecs).join(' & ') : null;
+            
+            // For direct videos, try to get codec from FFprobe
+            if (!codecs && track.metaFFprobe) {
+                const videoCodec = track.metaFFprobe.videoCodec?.name;
+                const audioCodec = track.metaFFprobe.audioCodec?.name;
+                const audioChannels = track.metaFFprobe.audioCodec?.channels;
+                
+                if (videoCodec && audioCodec && audioChannels) {
+                    codecs = `${videoCodec} & ${audioCodec} (${audioChannels}ch)`;
+                } else if (videoCodec && audioCodec) {
+                    codecs = `${videoCodec} & ${audioCodec}`;
+                } else {
+                    codecs = videoCodec || audioCodec || null;
+                }
+            }
+        }
+        
+        const formattedResolution = formatResolutionWithFps(res, fps);
+        const formattedSize = fileSizeBytes ? formatSize(fileSizeBytes) : null;
+        
+        return [formattedResolution, formattedSize, codecs]
+            .filter(Boolean)
+            .join(' • ') || 'Unknown Quality';
+            
+    } else if (type === 'audio') {
+        let language, channels, fileSizeBytes, codecs;
+        
+        if (videoType === 'hls' && track.name !== undefined) {
+            // HLS audio track structure
+            language = track.default ? `${track.name || track.language}*` : 
+                      (track.name || track.language);
+            channels = track.channels || null;
+            fileSizeBytes = null; // HLS audio tracks don't have individual file sizes
+            codecs = null; // HLS audio codecs not specified in master
+        } else {
+            // DASH audio track structure
+            language = track.default ? `${track.label || track.lang}*` : 
+                      (track.label || track.lang);
+            channels = track.channels ? `${track.channels}ch` : null;
+            fileSizeBytes = track.estimatedFileSizeBytes;
+            codecs = track.codecs ? parseCodecs(track.codecs)[0] : null;
+        }
+        
+        const formattedSize = fileSizeBytes ? formatSize(fileSizeBytes) : null;
+        
+        return [language, channels, formattedSize, codecs]
+            .filter(Boolean)
+            .join(' • ');
+            
+    } else if (type === 'subtitle') {
+        let language;
+        
+        if (videoType === 'hls' && track.name !== undefined) {
+            // HLS subtitle track structure
+            language = track.default ? `${track.name || track.language || 'Subtitle'}*` : 
+                      (track.name || track.language || 'Subtitle');
+        } else {
+            // DASH subtitle track structure
+            language = track.default ? `${track.label || track.lang || 'Subtitle'}*` : 
+                      (track.label || track.lang || 'Subtitle');
+        }
+        
+        return language;
+    }
+    
+    return 'Unknown';
+}
