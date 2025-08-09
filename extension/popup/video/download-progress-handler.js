@@ -383,13 +383,17 @@ function updateSingleDropdown(downloadGroup, progressData = {}) {
             // Update selected-option with progress bar AND text
             if (selectedOption) {
                 selectedOption.classList.remove('queued'); // Clear any queue state
-                selectedOption.classList.add('downloading');
+                
+                const progressContainer = selectedOption.querySelector('.progress-container');
+                const labelElement = selectedOption.querySelector('.label');
 
                 // Handle livestream vs regular download progress
                 if (progressData.isLive) {
                     // Livestream: show continuous activity animation and stats
-                    selectedOption.classList.add('livestream');
-                    selectedOption.style.setProperty('--progress', '100%'); // Full bar with animation
+                    if (progressContainer) {
+                        progressContainer.classList.add('livestream');
+                        selectedOption.style.setProperty('--progress', '100%'); // Full bar with animation
+                    }
 
                     // Build livestream display text with recording indicator
                     let displayText = '';
@@ -403,14 +407,16 @@ function updateSingleDropdown(downloadGroup, progressData = {}) {
                         displayText += displayText ? ` • ${formatSize(progressData.speed)}/s` : `${formatSize(progressData.speed)}/s`;
                     }
 
-                    const textSpan = selectedOption.querySelector('span:first-child') || selectedOption;
-                    // Just update text content - CSS ::before will handle the indicator
-                    textSpan.textContent = displayText;
-                    selectedOption.classList.add('has-recording-indicator');
+                    if (labelElement) {
+                        labelElement.textContent = displayText;
+                        labelElement.classList.add('has-recording-indicator');
+                    }
                 } else {
                     // Regular download: show percentage progress
-                    selectedOption.classList.remove('livestream');
-                    selectedOption.style.setProperty('--progress', `${progress}%`);
+                    if (progressContainer) {
+                        progressContainer.classList.remove('livestream');
+                        selectedOption.style.setProperty('--progress', `${progress}%`);
+                    }
 
                     // Build VOD progress display text: progress • size downloaded • eta
                     let displayText = `${progress}%`;
@@ -430,8 +436,9 @@ function updateSingleDropdown(downloadGroup, progressData = {}) {
                         displayText += ` • ${formatTime(progressData.eta)}`;
                     }
 
-                    const textSpan = selectedOption.querySelector('span:first-child') || selectedOption;
-                    textSpan.textContent = displayText;
+                    if (labelElement) {
+                        labelElement.textContent = displayText;
+                    }
                 }
 
                 // Update tooltip data attributes for hover display (skip for livestreams)
@@ -461,15 +468,24 @@ function updateSingleDropdown(downloadGroup, progressData = {}) {
         case 'download-canceled':
             // Clean restore - NO final state coloring as requested
             if (selectedOption) {
-                selectedOption.classList.remove('downloading', 'queued', 'livestream', 'has-recording-indicator');
+                const progressContainer = selectedOption.querySelector('.progress-container');
+                const labelElement = selectedOption.querySelector('.label');
+                
+                // Clean up progress container
+                if (progressContainer) {
+                    progressContainer.classList.remove('livestream');
+                }
                 selectedOption.style.removeProperty('--progress');
 
                 // Clear tooltip data
                 clearProgressTooltip(selectedOption);
 
-                // Restore original text
-                const textSpan = selectedOption.querySelector('span:first-child') || selectedOption;
-                textSpan.textContent = progressData.selectedOptionOrigText?.split('•').slice(0, 2).join('•') || textSpan.textContent;
+                // Clean up label
+                if (labelElement) {
+                    labelElement.classList.remove('has-recording-indicator');
+                    // Restore original text
+                    labelElement.textContent = progressData.selectedOptionOrigText?.split('•').slice(0, 2).join('•') || labelElement.textContent;
+                }
             }
 
             if (dropdownOption) {

@@ -132,7 +132,10 @@ export class VideoItemComponent {
                 <div class="download-group">
                     <div class="custom-dropdown" data-type="${this.videoData.type || 'unknown'}">
                         <div class="selected-option downloading" data-tooltip-content="" data-tooltip-quality="">
-                            <span class="label">Preparing...</span>
+                            <div class="progress-container"></div>
+                            <div class="content-wrapper">
+                                <span class="label">Preparing...</span>
+                            </div>
                         </div>
                     </div>
                 </div>

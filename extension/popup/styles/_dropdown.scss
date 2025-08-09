@@ -19,17 +19,24 @@
         height: 100%;
         border-radius: 6px;
         font-size: var(--font-body);
-        overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
         @extend %theme-bg-primary;
+        position: relative;
 
-        // Progress states
-        &.downloading {
-            position: relative;
-            overflow: visible; // Allow tooltip to show outside
+        // Progress container - separate element for clean clipping
+        .progress-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            border-radius: 6px;
+            overflow: hidden;
+            pointer-events: none;
+            z-index: 1;
 
-            // Progress bar - use ::before to avoid conflict with tooltip arrow
+            // Progress bar - clean straight line, clipped by container
             &::before {
                 content: '';
                 position: absolute;
@@ -40,25 +47,7 @@
                 background-color: var(--color-green);
                 opacity: 0.9;
                 transition: width var(--transition-fast);
-                z-index: 0;
-                border-radius: 6px; // Match container border radius
-            }
-
-            span {
-                position: relative;
-                z-index: 1;
-            }
-
-            // Recording indicator using ::before pseudo-element
-            &.has-recording-indicator span:first-child::before {
-                content: '';
-                display: inline-block;
-                width: 8px;
-                height: 8px;
-                background-color: #ff4444;
-                border-radius: 50%;
-                margin-right: 4px;
-                animation: recording-pulse 1.5s ease-in-out infinite;
+                border-radius: 0; // No rounding - straight line
             }
 
             // Livestream animation - seamless beam effect
@@ -76,8 +65,38 @@
             }
         }
 
-        // Progress tooltip - same width as parent, single line
-        &.downloading.has-progress-tooltip:hover::after {
+        // Content wrapper - above progress bar
+        .content-wrapper {
+            position: relative;
+            z-index: 2;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            width: 100%;
+            height: 100%;
+
+            .label {
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+                flex: 1;
+
+                // Recording indicator using ::before pseudo-element
+                &.has-recording-indicator::before {
+                    content: '';
+                    display: inline-block;
+                    width: 8px;
+                    height: 8px;
+                    background-color: #ff4444;
+                    border-radius: 50%;
+                    margin-right: 4px;
+                    animation: recording-pulse 1.5s ease-in-out infinite;
+                }
+            }
+        }
+
+        // Progress tooltip - positioned outside container
+        &.has-progress-tooltip:hover::after {
             content: attr(data-tooltip-content);
             position: absolute;
             bottom: calc(100% + 8px);
@@ -102,10 +121,7 @@
         }
 
         // Processing state for selected-option
-        &.processing {
-            position: relative;
-            overflow: hidden;
-
+        &.processing .progress-container {
             &::before {
                 content: '';
                 position: absolute;
@@ -121,12 +137,6 @@
                         transparent 100%);
                 animation: processing-wave 2s ease-in-out infinite;
                 pointer-events: none;
-                z-index: 1;
-            }
-
-            .label {
-                position: relative;
-                z-index: 2;
             }
         }
     }
@@ -419,4 +429,37 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+// Animations
+@keyframes recording-pulse {
+
+    0%,
+    100% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: 0.3;
+    }
+}
+
+@keyframes livestream-beam {
+    0% {
+        background-position: -200% 0;
+    }
+
+    100% {
+        background-position: 200% 0;
+    }
+}
+
+@keyframes processing-wave {
+    0% {
+        transform: translateX(-100%);
+    }
+
+    100% {
+        transform: translateX(100%);
+    }
 }

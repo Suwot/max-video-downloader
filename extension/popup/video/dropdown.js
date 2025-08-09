@@ -80,6 +80,14 @@ export class VideoDropdownComponent {
         this.selectedDisplay = document.createElement('div');
         this.selectedDisplay.className = 'selected-option';
         
+        // Create progress container
+        const progressContainer = document.createElement('div');
+        progressContainer.className = 'progress-container';
+        
+        // Create content wrapper
+        const contentWrapper = document.createElement('div');
+        contentWrapper.className = 'content-wrapper';
+        
         const dropdownIcon = document.createElement('div');
         dropdownIcon.className = 'dropdown-icon';
         dropdownIcon.innerHTML = `<svg width="10" height="6" viewBox="0 0 10 6" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -89,7 +97,10 @@ export class VideoDropdownComponent {
         this.optionsContainer = document.createElement('div');
         this.optionsContainer.className = 'options-container';
         
-        this.selectedDisplay.appendChild(dropdownIcon);
+        // Assemble structure
+        contentWrapper.appendChild(dropdownIcon);
+        this.selectedDisplay.appendChild(progressContainer);
+        this.selectedDisplay.appendChild(contentWrapper);
         this.element.appendChild(this.selectedDisplay);
         this.element.appendChild(this.optionsContainer);
         
@@ -349,8 +360,11 @@ export class VideoDropdownComponent {
     
     // Update the selected display based on current selection
     updateSelectedDisplay() {
+        const contentWrapper = this.selectedDisplay.querySelector('.content-wrapper');
+        if (!contentWrapper) return;
+        
         // Remove existing label
-        this.selectedDisplay.querySelector('.label')?.remove();
+        contentWrapper.querySelector('.label')?.remove();
         
         const label = document.createElement('span');
         label.className = 'label';
@@ -378,7 +392,9 @@ export class VideoDropdownComponent {
             }
         }
         
-        this.selectedDisplay.prepend(label);
+        // Insert label before dropdown icon
+        const dropdownIcon = contentWrapper.querySelector('.dropdown-icon');
+        contentWrapper.insertBefore(label, dropdownIcon);
     }
     
     // Build summary text for advanced mode
