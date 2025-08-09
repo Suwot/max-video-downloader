@@ -5,7 +5,9 @@
   "main": "index.js",
   "bin": "index.js",
   "pkg": {
-    "targets": ["node16-macos-arm64"],
+    "targets": [
+      "node18-macos-arm64"
+    ],
     "outputPath": ".",
     "assets": [
       "lib/**/*",
@@ -26,8 +28,7 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "devDependencies": {
+  "dependencies": {
     "pkg": "^5.8.1"
-  },
-  "dependencies": {}
+  }
 }
