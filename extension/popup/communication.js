@@ -8,6 +8,7 @@ import { createLogger } from '../shared/utils/logger.js';
 import { updateDownloadProgress } from './video/download-progress-handler.js';
 import { renderVideos, addVideoToUI, updateVideoInUI, removeVideoFromUI, renderHistoryItems, updateHistoryItemDeleted } from './video/video-renderer.js';
 import { updateUICounters, showToast, showSuccess, showError } from './ui-utils.js';
+import { formatCacheStats } from '../shared/utils/processing-utils.js';
 import { updateSettingsUI, updateNativeHostStatus } from './settings-tab.js';
 import { currentTabId } from './index.js';
 
@@ -79,14 +80,10 @@ async function handleIncomingMessage(message) {
             updateUICounters({ videos: message.counts });
             break;
 
-        case 'cachesCleared':
-            await renderVideos([]); // Pass empty array directly
-            updateUICounters({ videos: { hls: 0, dash: 0, direct: 0, unknown: 0, total: 0 } });
-            break;
-
-        case 'previewCacheStats':
-            updateCacheStatsDisplay(message.stats);
-            break;
+		case 'previewCacheStats':
+			document.querySelector('.cache-stats').textContent = formatCacheStats(message.stats);
+			
+			break;
 
         case 'download-progress':
         case 'download-success':
@@ -215,13 +212,52 @@ async function handleVideoStateUpdate(message) {
 }
 
 /**
- * Send message to background script
- * This function is used by other modules directly
+ * Send request-response message to background script
+ * @param {Object} message - Message object with command and data
+ * @param {number} timeout - Timeout in milliseconds (default: 5000)
+ * @returns {Promise<Object>} Response from background script
+ */
+async function sendRuntimeMessage(message, timeout = 5000) {
+    return new Promise((resolve, reject) => {
+        const timeoutId = setTimeout(() => {
+            reject(new Error(`Message timeout after ${timeout}ms: ${message.command}`));
+        }, timeout);
+        
+        try {
+            chrome.runtime.sendMessage(message, (response) => {
+                clearTimeout(timeoutId);
+                
+                if (chrome.runtime.lastError) {
+                    logger.error('Runtime message failed:', chrome.runtime.lastError.message);
+                    reject(new Error(chrome.runtime.lastError.message));
+                    return;
+                }
+                
+                if (response && response.error) {
+                    logger.error('Background script error:', response.error);
+                    reject(new Error(response.error));
+                    return;
+                }
+                
+                resolve(response);
+            });
+        } catch (error) {
+            clearTimeout(timeoutId);
+            logger.error('Failed to send runtime message:', error);
+            reject(error);
+        }
+    });
+}
+
+/**
+ * Send fire-and-forget message via persistent port connection
+ * @param {Object} message - Message object with command and data
+ * @returns {boolean} Success status
  */
 function sendPortMessage(message) {
     const port = connect();
     if (!port || !isConnected) {
-        logger.warn('No connection available for message:', message.command);
+        logger.warn('No port connection available for message:', message.command);
         return false;
     }
     
@@ -229,7 +265,7 @@ function sendPortMessage(message) {
         port.postMessage(message);
         return true;
     } catch (error) {
-        logger.error('Error sending message:', error);
+        logger.error('Port message failed:', error);
         backgroundPort = null;
         isConnected = false;
         return false;
@@ -253,23 +289,6 @@ function disconnect() {
 }
 
 /**
- * Update cache stats display
- */
-function updateCacheStatsDisplay(stats) {
-    const element = document.querySelector('.cache-stats');
-    if (!element) return;
-    
-    if (!stats) {
-        element.textContent = 'No cache stats available';
-        return;
-    }
-    
-    const count = stats.count || 0;
-    const sizeInKB = Math.round((stats.size || 0) / 1024);
-    element.textContent = `${count} previews (${sizeInKB} KB)`;
-}
-
-/**
  * Handle native host state updates
  */
 function handleNativeHostStateUpdate(connectionState) {
@@ -283,6 +302,7 @@ function handleNativeHostStateUpdate(connectionState) {
 export {
     connect,
     disconnect,
+    sendRuntimeMessage,
     sendPortMessage,
     downloadCounts
 };

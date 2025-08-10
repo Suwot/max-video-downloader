@@ -105,39 +105,6 @@ async function handlePortMessage(message, port, portId) {
             cancelDownload(message);
             break;
             
-        case 'clearCaches':
-            updateTabIcon();
-            clearAllHeaders(); 
-            cleanupAllVideos(); // Includes icon reset for all tabs
-			clearAllProcessing(); // Clear all processing state
-            await clearPreviewCache(); // Clear preview cache
-            logger.debug('Cleared all caches (video + headers + preview + icons)');
-            
-            // Send confirmation back to popup
-            port.postMessage({
-                command: 'cachesCleared',
-                success: true
-            });
-            break;
-            
-        case 'getPreviewCacheStats':
-            try {
-                const stats = await getCacheStats();
-                port.postMessage({
-                    command: 'previewCacheStats',
-                    stats: stats
-                });
-                logger.debug('Sent preview cache stats to popup:', stats);
-            } catch (error) {
-                logger.error('Error getting preview cache stats:', error);
-                port.postMessage({
-                    command: 'previewCacheStats',
-                    stats: { count: 0, size: 0 },
-                    error: error.message
-                });
-            }
-            break;
-            
         case 'chooseSavePath':
             try {
                 const result = await settingsManager.chooseSavePath();
@@ -421,6 +388,61 @@ function getActivePopupPortForTab(tabId) {
 }
 
 /**
+ * Handle runtime messages (request-response pattern)
+ */
+async function handleRuntimeMessage(message, sender, sendResponse) {
+    logger.debug('Received runtime message:', message.command);
+    
+    switch (message.command) {
+        case 'get-preview-cache-stats':
+            try {
+                const stats = await getCacheStats();
+                sendResponse({ success: true, stats: stats });
+                logger.debug('Sent preview cache stats via runtime message:', stats);
+            } catch (error) {
+                logger.error('Error getting preview cache stats:', error);
+                sendResponse({ 
+                    success: false, 
+                    error: error.message,
+                    stats: { count: 0, size: 0 }
+                });
+            }
+            break;
+            
+        case 'clear-caches':
+            try {
+                updateTabIcon();
+                clearAllHeaders(); 
+                cleanupAllVideos(); // Includes icon reset for all tabs
+                clearAllProcessing(); // Clear all processing state
+                await clearPreviewCache(); // Clear preview cache
+                
+                logger.debug('Cleared all caches (video + headers + preview + icons)');
+                
+                // Get updated stats after clearing
+                const updatedStats = await getCacheStats();
+                sendResponse({ 
+                    success: true, 
+                    message: 'All caches cleared successfully',
+                    stats: updatedStats
+                });
+            } catch (error) {
+                logger.error('Error clearing caches:', error);
+                sendResponse({ 
+                    success: false, 
+                    error: error.message,
+                    message: 'Failed to clear caches'
+                });
+            }
+            break;
+            
+        default:
+            logger.warn('Unknown runtime message command:', message.command);
+            sendResponse({ success: false, error: 'Unknown command' });
+    }
+}
+
+/**
  * Initialize the UI communication service
  */
 
@@ -435,6 +457,12 @@ export async function initUICommunication() {
         } else {
             logger.warn('Unknown port connection:', port.name);
         }
+    });
+    
+    // Set up listener for runtime messages (request-response pattern)
+    chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+        handleRuntimeMessage(message, sender, sendResponse);
+        return true; // Keep channel open for async responses
     });
     
     return true;

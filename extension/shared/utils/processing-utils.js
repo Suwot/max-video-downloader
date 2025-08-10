@@ -76,6 +76,15 @@ export function formatBitrate(kbps) {
     return kbps >= 1000 ? `${(kbps / 1000).toFixed(2)} Mbps` : `${kbps} kbps`;
 }
 
+/**
+ * Format cache stats for display
+ */
+export function formatCacheStats(stats) {
+    const count = stats.count || 0;
+    const sizeInKB = Math.round((stats.size || 0) / 1024);
+    return `${count} previews (${sizeInKB} KB)`;
+}
+
 // Extract filename (without extension) from URL
 export function getFilenameFromUrl(url) {
     try {

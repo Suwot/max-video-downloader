@@ -3,12 +3,12 @@
  */
 
 import { createLogger } from '../shared/utils/logger.js';
-import { normalizeUrl } from '../shared/utils/processing-utils.js';
-import { connect, disconnect, sendPortMessage } from './communication.js';
+import { normalizeUrl, formatCacheStats } from '../shared/utils/processing-utils.js';
+import { connect, disconnect, sendPortMessage, sendRuntimeMessage } from './communication.js';
 import { restoreActiveDownloads, cleanupAllElapsedTimeTimers } from './video/download-progress-handler.js';
-import { renderHistoryItems } from './video/video-renderer.js';
+import { renderHistoryItems, renderVideos } from './video/video-renderer.js';
 import { initializeSettingsTab } from './settings-tab.js';
-import { switchTab } from './ui-utils.js';
+import { switchTab, updateUICounters } from './ui-utils.js';
 
 const logger = createLogger('Popup');
 
@@ -24,6 +24,50 @@ async function getActiveTab() {
         throw new Error('Could not determine active tab');
     }
     return tabs[0];
+}
+
+/**
+ * Load and display cache stats
+ */
+async function loadCacheStats(cacheStatsElement) {
+    try {
+        const response = await sendRuntimeMessage({ command: 'get-preview-cache-stats' });
+        if (response.success) {
+            cacheStatsElement.textContent = formatCacheStats(response.stats);
+        } else {
+            cacheStatsElement.textContent = 'Failed to load stats';
+            logger.error('Cache stats request failed:', response.error);
+        }
+    } catch (error) {
+        logger.error('Failed to load cache stats:', error);
+        cacheStatsElement.textContent = 'Failed to load stats';
+    }
+}
+
+/**
+ * Clear caches and update display
+ */
+async function clearCaches(cacheStatsElement) {
+    try {
+        const response = await sendRuntimeMessage({ command: 'clear-caches' });
+        if (response.success) {
+            cacheStatsElement.textContent = formatCacheStats(response.stats);
+            logger.debug('Caches cleared successfully:', response.message);
+ 
+            await renderVideos([]);
+            updateUICounters({ videos: { hls: 0, dash: 0, direct: 0, unknown: 0, total: 0 } });
+            
+            return true;
+        } else {
+            cacheStatsElement.textContent = 'Failed to clear cache';
+            logger.error('Cache clear request failed:', response.error);
+            return false;
+        }
+    } catch (error) {
+        logger.error('Failed to clear caches:', error);
+        cacheStatsElement.textContent = 'Failed to clear cache';
+        return false;
+    }
 }
 
 /**
@@ -46,25 +90,25 @@ function initializeUIEventHandlers() {
     // Clear cache button
     const clearCacheButton = document.getElementById('clear-cache-button');
     const cacheStats = clearCacheButton?.querySelector('.cache-stats');
-    
-    if (clearCacheButton && cacheStats) {
-        // Request initial stats
-        sendPortMessage({ command: 'getPreviewCacheStats' });
-        
-        // Handle click
-        clearCacheButton.addEventListener('click', () => {
-            clearCacheButton.disabled = true;
-            try {
-                sendPortMessage({ command: 'clearCaches' });
-                cacheStats.textContent = 'Cache cleared!';
-            } catch (error) {
-                logger.error('Error clearing cache:', error);
-                cacheStats.textContent = 'Failed to clear cache';
-            } finally {
-                clearCacheButton.disabled = false;
-            }
-        });
-    }
+	// Load initial stats using runtime messaging
+	loadCacheStats(cacheStats);
+	
+	// Handle click with real response feedback
+	clearCacheButton.addEventListener('click', async () => {
+		clearCacheButton.disabled = true;
+		cacheStats.textContent = 'Clearing...';
+		
+		const success = await clearCaches(cacheStats);
+		if (success) {
+			// Show temporary success message, then reload stats
+			cacheStats.textContent = 'Cache cleared!';
+			setTimeout(() => {
+				loadCacheStats(cacheStats);
+			}, 1500);
+		}
+		
+		clearCacheButton.disabled = false;
+	});
 }
 
 // Initialize when DOM is ready
