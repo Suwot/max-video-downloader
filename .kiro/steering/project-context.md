@@ -79,15 +79,20 @@ extension/
 └── shared/utils/           # logger, headers-utils, preview-cache, processing-utils
 
 native_host/
-├── bin/mac/bin/            # Bundled FFmpeg + FFprobe binaries
+├── bin/                    # Platform-specific FFmpeg + FFprobe binaries
+│   ├── mac-arm64/         # macOS Apple Silicon binaries
+│   ├── mac-x64/           # macOS Intel binaries  
+│   ├── win-x64/           # Windows x64 binaries
+│   ├── win-arm64/         # Windows ARM64 binaries
+│   ├── linux-x64/         # Linux x64 binaries
+│   └── linux-arm64/       # Linux ARM64 binaries
 ├── build/                  # Build outputs (gitignored)
 │   ├── mac-arm64/         # Built binaries: mvdcoapp, ffmpeg, ffprobe
 │   └── pro.maxvideodownloader.coapp.app/  # macOS app bundle
 ├── commands/               # [download,get-qualities,generate-preview,validate-connection,file-system].js
 ├── lib/                    # messaging, command-runner, error-handler, progress/
 ├── services/               # config, ffmpeg integration
-├── build.sh               # Cross-platform build & install script
-└── package.json           # Version 0.1.0, executable: mvdcoapp
+└── build.sh               # Cross-platform build & install script
 ```
 
 ## Technology Stack
@@ -122,27 +127,26 @@ native_host/
 ## Build Commands
 
 ```bash
-# Build native host (new system)
-cd native_host && npm run build:mac     # Quick rebuild for mac-arm64
-cd native_host && ./build.sh -build     # Build for current platform
-cd native_host && ./build.sh -install   # Install for all detected browsers
+# Build native host
+npm run build:mac                        # Build for mac-arm64
+npm run build                            # Build for current platform
+npm run install-host                     # Install for all detected browsers
 
-# Cross-platform builds
+# Cross-platform builds (from native_host/)
 ./build.sh -build mac-arm64              # macOS Apple Silicon
 ./build.sh -build win-x64                # Windows x64
 ./build.sh -package-app                  # Create macOS .app bundle
 
-# Browser management
+# Browser management (from native_host/)
 ./build.sh -detect-browsers              # Show detected browsers
 ./build.sh -uninstall                    # Remove from all browsers
 ./build.sh --dry-run -install            # Test without changes
 
 # Linting
-npm run lint          # Check for errors
-npm run lint:fix      # Auto-fix simple issues
+npm run lint                             # Check for errors
+npm run lint:fix                         # Auto-fix simple issues
 
 # Testing
-cd native_host && node test-host.js
 ./test_streaming.sh
 
 # Test page: test/videos.html (all video formats)

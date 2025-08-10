@@ -26,6 +26,7 @@
 ## Code Quality
 
 **Use `npm run lint` for all syntax and style checks**: Run from project root for comprehensive linting across extension and native_host code - covers syntax, style, and Chrome extension best practices
+**Avoid `node -c` for syntax checking**: Always use `npm run lint` instead for consistent error checking and style validation
 
 ## Code Organization
 

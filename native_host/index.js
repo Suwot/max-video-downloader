@@ -19,7 +19,7 @@ const { logDebug } = require('./utils/logger');
 const args = process.argv.slice(2);
 
 if (args.includes('-version')) {
-    const pkg = require('./package.json');
+    const pkg = require('../package.json');
     console.log(`Native Host v${pkg.version}`);
     process.exit(0);
 }

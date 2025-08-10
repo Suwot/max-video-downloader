@@ -22,7 +22,7 @@ class ValidateConnectionCommand extends BaseCommand {
         logDebug('Received connection validation request');
         
         // Get version from package.json
-        const pkg = require('../package.json');
+        const pkg = require('../../package.json');
         const version = pkg.version;
         
         // Get binary location

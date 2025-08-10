@@ -1,13 +1,32 @@
 {
-  "name": "video-downloader-mv3-devtools",
-  "version": "1.0.0",
-  "description": "Dev/test scripts for video-downloader-mv3 (does not affect extension or native host)",
+  "name": "video-downloader-mv3",
+  "version": "0.1.0",
+  "description": "MAX Video Downloader - Chrome extension with native host",
+  "main": "native_host/index.js",
   "type": "module",
   "scripts": {
     "lint": "eslint extension/ native_host/ *.js",
-    "lint:fix": "eslint extension/ native_host/ *.js --fix"
+    "lint:fix": "eslint extension/ native_host/ *.js --fix",
+    "build": "cd native_host && ./build.sh -build",
+    "build:mac": "cd native_host && ./build.sh -build mac-arm64",
+    "build:app": "cd native_host && ./build.sh -package-app",
+    "install-host": "cd native_host && ./build.sh -install",
+    "uninstall-host": "cd native_host && ./build.sh -uninstall",
+    "version-host": "cd native_host && ./build.sh -version"
   },
   "devDependencies": {
     "eslint": "^9.31.0"
+  },
+  "dependencies": {
+    "pkg": "^5.8.1"
+  },
+  "pkg": {
+    "scripts": "native_host/**/*.js",
+    "assets": [
+      "native_host/lib/**/*",
+      "native_host/commands/**/*",
+      "native_host/services/**/*",
+      "native_host/utils/**/*"
+    ]
   }
 }

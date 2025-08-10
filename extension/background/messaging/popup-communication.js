@@ -437,8 +437,7 @@ function getActivePopupPortForTab(tabId) {
 /**
  * Initialize the UI communication service
  */
-
-export async function initUICommunication() {
+async function initUICommunication() {
     logger.info('Initializing UI communication service');
     
     // Set up listener for port connections
@@ -464,5 +463,6 @@ export {
     setupPopupPort,
     handlePortMessage,
     broadcastToPopups,
-    getActivePopupPortForTab
+    getActivePopupPortForTab,
+	initUICommunication
 };

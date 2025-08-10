@@ -7,7 +7,7 @@
 
 set -e
 
-VERSION=$(node -p "require('./package.json').version")
+VERSION=$(node -p "require('../package.json').version")
 APP_NAME="pro.maxvideodownloader.coapp"
 
 # Global flags
@@ -26,10 +26,12 @@ done
 # Platform configuration functions
 get_pkg_target() {
     case "$1" in
-        mac-arm64) echo "node16-macos-arm64" ;;
-        mac-x64) echo "node16-macos-x64" ;;
-        win-x64) echo "node16-win-x64" ;;
-        win-arm64) echo "node16-win-arm64" ;;
+        mac-arm64) echo "node18-macos-arm64" ;;
+        mac-x64) echo "node18-macos-x64" ;;
+        win-x64) echo "node18-win-x64" ;;
+        win-arm64) echo "node18-win-arm64" ;;
+        linux-x64) echo "node18-linux-x64" ;;
+        linux-arm64) echo "node18-linux-arm64" ;;
         *) echo "" ;;
     esac
 }
@@ -125,18 +127,10 @@ build_platform() {
     
     # Build the native host binary
     log_info "Compiling native host binary..."
-    npx pkg . --target "$pkg_target" --output "$build_dir/$binary_name"
+    npx pkg index.js --target "$pkg_target" --output "$build_dir/$binary_name"
     
     # Copy FFmpeg binaries based on platform
-    local ffmpeg_source=""
-    case "$platform" in
-        mac-arm64|mac-x64)
-            ffmpeg_source="bin/mac/bin"
-            ;;
-        win-x64|win-arm64)
-            ffmpeg_source="bin/win/bin"  # You'll need to add Windows binaries
-            ;;
-    esac
+    local ffmpeg_source="bin/$platform"
     
     if [[ -d "$ffmpeg_source" ]]; then
         log_info "Copying FFmpeg binaries from $ffmpeg_source..."

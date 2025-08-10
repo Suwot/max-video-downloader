@@ -79,7 +79,13 @@ extension/
 └── shared/utils/           # logger, headers-utils, preview-cache, processing-utils
 
 native_host/
-├── bin/mac/bin/            # Bundled FFmpeg + FFprobe binaries
+├── bin/                    # Platform-specific FFmpeg + FFprobe binaries
+│   ├── mac-arm64/         # macOS Apple Silicon binaries
+│   ├── mac-x64/           # macOS Intel binaries  
+│   ├── win-x64/           # Windows x64 binaries
+│   ├── win-arm64/         # Windows ARM64 binaries
+│   ├── linux-x64/         # Linux x64 binaries
+│   └── linux-arm64/       # Linux ARM64 binaries
 ├── build/                  # Build outputs (gitignored)
 │   ├── mac-arm64/         # Built binaries: mvdcoapp, ffmpeg, ffprobe
 │   └── pro.maxvideodownloader.coapp.app/  # macOS app bundle

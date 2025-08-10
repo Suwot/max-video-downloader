@@ -104,6 +104,26 @@ class FFmpegService {
     }
 
     /**
+     * Detect platform with architecture for binary selection
+     */
+    detectPlatform() {
+        const platform = process.platform;
+        const arch = process.arch;
+        
+        switch (platform) {
+            case 'darwin':
+                return arch === 'arm64' ? 'mac-arm64' : 'mac-x64';
+            case 'win32':
+                return arch === 'arm64' ? 'win-arm64' : 'win-x64';
+            case 'linux':
+                return arch === 'arm64' ? 'linux-arm64' : 'linux-x64';
+            default:
+                // Fallback to x64 for unknown platforms
+                return `${platform}-x64`;
+        }
+    }
+
+    /**
      * Get binary paths based on execution context (dev vs built)
      */
     getBinaryPaths() {
@@ -120,11 +140,10 @@ class FFmpegService {
                 ffprobe: path.join(execDir, process.platform === 'win32' ? 'ffprobe.exe' : 'ffprobe')
             };
         } else {
-            // Development: use bin folder structure
+            // Development: use bin folder structure with platform-architecture detection
             logDebug('Running in development mode');
-            const platform = process.platform === 'darwin' ? 'mac' : 
-                           process.platform === 'win32' ? 'win' : 'linux';
-            const binDir = path.join(__dirname, '..', 'bin', platform, 'bin');
+            const platform = this.detectPlatform();
+            const binDir = path.join(__dirname, '..', 'bin', platform);
             
             return {
                 ffmpeg: path.join(binDir, process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg'),

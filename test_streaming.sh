@@ -1,7 +1,7 @@
 #!/bin/bash
 
-FFMPEG="./native_host/bin/mac/bin/ffmpeg"
-FFPROBE="./native_host/bin/mac/bin/ffprobe"
+FFMPEG="./native_host/bin/mac-arm64/ffmpeg"
+FFPROBE="./native_host/bin/mac-arm64/ffprobe"
 
 # Test URLs
 HLS_URL="https://bitdash-a.akamaihd.net/content/sintel/hls/playlist.m3u8"
