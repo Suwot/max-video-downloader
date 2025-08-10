@@ -215,13 +215,52 @@ async function handleVideoStateUpdate(message) {
 }
 
 /**
- * Send message to background script
- * This function is used by other modules directly
+ * Send request-response message to background script
+ * @param {Object} message - Message object with command and data
+ * @param {number} timeout - Timeout in milliseconds (default: 5000)
+ * @returns {Promise<Object>} Response from background script
+ */
+async function sendRuntimeMessage(message, timeout = 5000) {
+    return new Promise((resolve, reject) => {
+        const timeoutId = setTimeout(() => {
+            reject(new Error(`Message timeout after ${timeout}ms: ${message.command}`));
+        }, timeout);
+        
+        try {
+            chrome.runtime.sendMessage(message, (response) => {
+                clearTimeout(timeoutId);
+                
+                if (chrome.runtime.lastError) {
+                    logger.error('Runtime message failed:', chrome.runtime.lastError.message);
+                    reject(new Error(chrome.runtime.lastError.message));
+                    return;
+                }
+                
+                if (response && response.error) {
+                    logger.error('Background script error:', response.error);
+                    reject(new Error(response.error));
+                    return;
+                }
+                
+                resolve(response);
+            });
+        } catch (error) {
+            clearTimeout(timeoutId);
+            logger.error('Failed to send runtime message:', error);
+            reject(error);
+        }
+    });
+}
+
+/**
+ * Send fire-and-forget message via persistent port connection
+ * @param {Object} message - Message object with command and data
+ * @returns {boolean} Success status
  */
 function sendPortMessage(message) {
     const port = connect();
     if (!port || !isConnected) {
-        logger.warn('No connection available for message:', message.command);
+        logger.warn('No port connection available for message:', message.command);
         return false;
     }
     
@@ -229,7 +268,7 @@ function sendPortMessage(message) {
         port.postMessage(message);
         return true;
     } catch (error) {
-        logger.error('Error sending message:', error);
+        logger.error('Port message failed:', error);
         backgroundPort = null;
         isConnected = false;
         return false;
@@ -284,5 +323,6 @@ export {
     connect,
     disconnect,
     sendPortMessage,
+	sendRuntimeMessage,
     downloadCounts
 };

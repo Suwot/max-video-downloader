@@ -348,6 +348,20 @@ async function handlePortMessage(message, port, portId) {
 }
 
 /**
+ * Handle runtime messages (request-response pattern)
+ * Currently not used at all
+ */
+async function handleRuntimeMessage(message, sender, sendResponse) {
+    logger.debug('Received runtime message:', message.command);
+    
+    switch (message.command) {
+        default:
+            logger.warn('Unknown runtime message command:', message.command);
+            sendResponse({ success: false, error: 'Unknown command' });
+    }
+}
+
+/**
  * Sets up port connection for popup communication
  */
 function setupPopupPort(port, portId) {
@@ -435,6 +449,12 @@ export async function initUICommunication() {
         } else {
             logger.warn('Unknown port connection:', port.name);
         }
+    });
+	
+    // Set up listener for runtime messages (request-response pattern)
+    chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+        handleRuntimeMessage(message, sender, sendResponse);
+        return true; // Keep channel open for async responses
     });
     
     return true;
