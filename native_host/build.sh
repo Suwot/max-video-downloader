@@ -1,29 +1,47 @@
 #!/bin/bash
 
-# Build script for MAX Video Downloader Native Host
-# Usage: ./build.sh [command] [platform]
-# Commands: -version, -build, -package-app
-# Platforms: mac-arm64, mac-x64, win-x64, win-arm64
+# MAX Video Downloader Native Host Build System
+# Creates self-contained installers for all platforms
 
 set -e
 
 VERSION=$(node -p "require('../package.json').version")
 APP_NAME="pro.maxvideodownloader.coapp"
+CHROME_EXT_ID="bkblnddclhmmgjlmbofhakhhbklkcofd"
+FIREFOX_EXT_ID="max-video-downloader@rostislav.dev"
 
-# Global flags
-DRY_RUN=false
+# ============================================================================
+# UTILITIES
+# ============================================================================
 
-# Parse global flags
-for arg in "$@"; do
-    case $arg in
-        --dry-run)
-            DRY_RUN=true
-            shift
-            ;;
+log_info() { echo -e "\033[32m[INFO]\033[0m $1"; }
+log_warn() { echo -e "\033[33m[WARN]\033[0m $1"; }
+log_error() { echo -e "\033[31m[ERROR]\033[0m $1"; }
+
+detect_platform() {
+    case "$(uname -s)" in
+        Darwin)
+            case "$(uname -m)" in
+                arm64) echo "mac-arm64" ;;
+                x86_64) echo "mac-x64" ;;
+                *) log_error "Unsupported macOS architecture"; exit 1 ;;
+            esac ;;
+        MINGW*|CYGWIN*|MSYS*|Windows_NT)
+            case "$(uname -m)" in
+                x86_64) echo "win-x64" ;;
+                aarch64) echo "win-arm64" ;;
+                *) log_error "Unsupported Windows architecture"; exit 1 ;;
+            esac ;;
+        Linux)
+            case "$(uname -m)" in
+                x86_64) echo "linux-x64" ;;
+                aarch64) echo "linux-arm64" ;;
+                *) log_error "Unsupported Linux architecture"; exit 1 ;;
+            esac ;;
+        *) log_error "Unsupported OS"; exit 1 ;;
     esac
-done
+}
 
-# Platform configuration functions
 get_pkg_target() {
     case "$1" in
         mac-arm64) echo "node18-macos-arm64" ;;
@@ -38,152 +56,292 @@ get_pkg_target() {
 
 get_binary_name() {
     case "$1" in
-        mac-arm64|mac-x64) echo "mvdcoapp" ;;
-        win-x64|win-arm64) echo "mvdcoapp.exe" ;;
+        win-*) echo "mvdcoapp.exe" ;;
         *) echo "mvdcoapp" ;;
     esac
 }
 
-# Colors for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
+# ============================================================================
+# BUILD FUNCTIONS
+# ============================================================================
 
-log_info() {
-    local prefix="${GREEN}[INFO]${NC}"
-    if [[ "$DRY_RUN" == "true" ]]; then
-        prefix="${GREEN}[DRY-RUN]${NC}"
-    fi
-    echo -e "$prefix $1"
-}
-
-log_warn() {
-    echo -e "${YELLOW}[WARN]${NC} $1"
-}
-
-log_error() {
-    echo -e "${RED}[ERROR]${NC} $1"
-}
-
-dry_run_or_execute() {
-    local description="$1"
-    shift
-    
-    if [[ "$DRY_RUN" == "true" ]]; then
-        log_info "Would $description"
-        return 0
-    else
-        "$@"
-        return $?
-    fi
-}
-
-show_version() {
-    echo "Native Host v${VERSION}"
-}
-
-detect_platform() {
-    local os=$(uname -s)
-    local arch=$(uname -m)
-    
-    case "$os" in
-        Darwin)
-            case "$arch" in
-                arm64) echo "mac-arm64" ;;
-                x86_64) echo "mac-x64" ;;
-                *) log_error "Unsupported macOS architecture: $arch"; exit 1 ;;
-            esac
-            ;;
-        MINGW*|CYGWIN*|MSYS*|Windows_NT)
-            case "$arch" in
-                x86_64) echo "win-x64" ;;
-                aarch64) echo "win-arm64" ;;
-                *) log_error "Unsupported Windows architecture: $arch"; exit 1 ;;
-            esac
-            ;;
-        *)
-            log_error "Unsupported OS: $os"
-            exit 1
-            ;;
-    esac
-}
-
-build_platform() {
+build_binary() {
     local platform=$1
     local pkg_target=$(get_pkg_target "$platform")
     local binary_name=$(get_binary_name "$platform")
-    
-    if [[ -z "$pkg_target" ]]; then
-        log_error "Unsupported platform: $platform"
-        exit 1
-    fi
-    
-    log_info "Building for $platform..."
-    
-    # Create build directory
     local build_dir="build/$platform"
+    
+    [[ -z "$pkg_target" ]] && { log_error "Unsupported platform: $platform"; exit 1; }
+    
+    log_info "Building binary for $platform..."
     mkdir -p "$build_dir"
     
-    # Build the native host binary
-    log_info "Compiling native host binary..."
+    # Build native host binary
     npx pkg index.js --target "$pkg_target" --output "$build_dir/$binary_name"
     
-    # Copy FFmpeg binaries based on platform
+    # Copy FFmpeg binaries
     local ffmpeg_source="bin/$platform"
-    
     if [[ -d "$ffmpeg_source" ]]; then
-        log_info "Copying FFmpeg binaries from $ffmpeg_source..."
-        cp "$ffmpeg_source/ffmpeg"* "$build_dir/"
-        cp "$ffmpeg_source/ffprobe"* "$build_dir/"
+        cp "$ffmpeg_source"/* "$build_dir/"
+        log_info "Copied FFmpeg binaries from $ffmpeg_source"
     else
         log_warn "FFmpeg binaries not found at $ffmpeg_source"
     fi
     
-    log_info "✓ Build complete for $platform at $build_dir"
+    log_info "✓ Binary built: $build_dir/$binary_name"
 }
 
-package_mac_app() {
-    local platform=${1:-$(detect_platform)}
+# ============================================================================
+# INSTALLER TEMPLATES
+# ============================================================================
+
+generate_macos_installer() {
+    cat << 'EOF'
+#!/bin/bash
+# MAX Video Downloader Native Host Installer
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BINARY_PATH="$SCRIPT_DIR/mvdcoapp"
+CHROME_EXT_ID="bkblnddclhmmgjlmbofhakhhbklkcofd"
+FIREFOX_EXT_ID="max-video-downloader@rostislav.dev"
+
+create_chrome_manifest() {
+    local path="$1"
+    cat > "$path" << MANIFEST_EOF
+{
+  "name": "pro.maxvideodownloader.coapp",
+  "description": "MAX Video Downloader Native Host",
+  "path": "$BINARY_PATH",
+  "type": "stdio",
+  "allowed_origins": ["chrome-extension://$CHROME_EXT_ID/"]
+}
+MANIFEST_EOF
+}
+
+create_firefox_manifest() {
+    local path="$1"
+    cat > "$path" << MANIFEST_EOF
+{
+  "name": "pro.maxvideodownloader.coapp",
+  "description": "MAX Video Downloader Native Host",
+  "path": "$BINARY_PATH",
+  "type": "stdio",
+  "allowed_extensions": ["$FIREFOX_EXT_ID"]
+}
+MANIFEST_EOF
+}
+
+installed=0
+browsers=(
+    "/Applications/Google Chrome.app:$HOME/Library/Application Support/Google/Chrome/NativeMessagingHosts:chrome"
+    "/Applications/Google Chrome Canary.app:$HOME/Library/Application Support/Google/Chrome Canary/NativeMessagingHosts:chrome"
+    "/Applications/Arc.app:$HOME/Library/Application Support/Arc/User Data/NativeMessagingHosts:chrome"
+    "/Applications/Microsoft Edge.app:$HOME/Library/Application Support/Microsoft Edge/NativeMessagingHosts:chrome"
+    "/Applications/Microsoft Edge Beta.app:$HOME/Library/Application Support/Microsoft Edge Beta/NativeMessagingHosts:chrome"
+    "/Applications/Microsoft Edge Dev.app:$HOME/Library/Application Support/Microsoft Edge Dev/NativeMessagingHosts:chrome"
+    "/Applications/Microsoft Edge Canary.app:$HOME/Library/Application Support/Microsoft Edge Canary/NativeMessagingHosts:chrome"
+    "/Applications/Brave Browser.app:$HOME/Library/Application Support/BraveSoftware/Brave-Browser/NativeMessagingHosts:chrome"
+    "/Applications/Opera.app:$HOME/Library/Application Support/com.operasoftware.Opera/NativeMessagingHosts:chrome"
+    "/Applications/Vivaldi.app:$HOME/Library/Application Support/Vivaldi/NativeMessagingHosts:chrome"
+    "/Applications/Epic Privacy Browser.app:$HOME/Library/Application Support/Epic Privacy Browser/NativeMessagingHosts:chrome"
+    "/Applications/Yandex.app:$HOME/Library/Application Support/Yandex/YandexBrowser/NativeMessagingHosts:chrome"
+    "/Applications/Firefox.app:$HOME/Library/Application Support/Mozilla/NativeMessagingHosts:firefox"
+    "/Applications/Tor Browser.app:$HOME/Library/Application Support/TorBrowser-Data/Browser/NativeMessagingHosts:firefox"
+)
+
+for entry in "${browsers[@]}"; do
+    IFS=':' read -r app_path manifest_dir browser_type <<< "$entry"
     
-    if [[ ! "$platform" =~ ^mac- ]]; then
-        log_error "App packaging only supported for macOS platforms"
-        exit 1
+    if [[ -d "$app_path" ]]; then
+        mkdir -p "$manifest_dir"
+        if [[ "$browser_type" == "firefox" ]]; then
+            create_firefox_manifest "$manifest_dir/pro.maxvideodownloader.coapp.json"
+        else
+            create_chrome_manifest "$manifest_dir/pro.maxvideodownloader.coapp.json"
+        fi
+        ((installed++))
     fi
+done
+
+osascript -e "display dialog \"MAX Video Downloader installed for $installed browser(s)\" buttons {\"OK\"} default button \"OK\""
+EOF
+}
+
+generate_windows_installer() {
+    cat << 'EOF'
+@echo off
+setlocal enabledelayedexpansion
+
+echo MAX Video Downloader Native Host Installer
+echo ==========================================
+echo.
+
+set "INSTALL_DIR=%~dp0"
+set "TARGET_DIR=%LOCALAPPDATA%\MaxVideoDownloader"
+set "BINARY_PATH=%TARGET_DIR%\mvdcoapp.exe"
+set "TEMP_DIR=%LOCALAPPDATA%\.mvdcoapp"
+set "CHROME_EXT_ID=bkblnddclhmmgjlmbofhakhhbklkcofd"
+set "FIREFOX_EXT_ID=max-video-downloader@rostislav.dev"
+
+echo Installing to: %TARGET_DIR%
+if not exist "%TARGET_DIR%" mkdir "%TARGET_DIR%"
+copy "%INSTALL_DIR%\*.exe" "%TARGET_DIR%\" >nul
+if %errorlevel% neq 0 (
+    echo Error: Failed to copy files
+    pause & exit /b 1
+)
+
+if not exist "%TEMP_DIR%" mkdir "%TEMP_DIR%"
+
+set "CHROME_TEMPLATE=%TEMP_DIR%\chrome_template.json"
+(
+echo {
+echo   "name": "pro.maxvideodownloader.coapp",
+echo   "description": "MAX Video Downloader Native Host",
+echo   "path": "%BINARY_PATH:\=\\%",
+echo   "type": "stdio",
+echo   "allowed_origins": ["chrome-extension://%CHROME_EXT_ID%/"]
+echo }
+) > "%CHROME_TEMPLATE%"
+
+set "FIREFOX_TEMPLATE=%TEMP_DIR%\firefox_template.json"
+(
+echo {
+echo   "name": "pro.maxvideodownloader.coapp",
+echo   "description": "MAX Video Downloader Native Host",
+echo   "path": "%BINARY_PATH:\=\\%",
+echo   "type": "stdio",
+echo   "allowed_extensions": ["%FIREFOX_EXT_ID%"]
+echo }
+) > "%FIREFOX_TEMPLATE%"
+
+set installed=0
+for %%b in (Chrome:HKEY_CURRENT_USER\Software\Google\Chrome\NativeMessagingHosts\pro.maxvideodownloader.coapp:chrome Chrome-Canary:HKEY_CURRENT_USER\Software\Google\Chrome SxS\NativeMessagingHosts\pro.maxvideodownloader.coapp:chrome Edge:HKEY_CURRENT_USER\Software\Microsoft\Edge\NativeMessagingHosts\pro.maxvideodownloader.coapp:chrome Edge-Beta:HKEY_CURRENT_USER\Software\Microsoft\Edge Beta\NativeMessagingHosts\pro.maxvideodownloader.coapp:chrome Edge-Dev:HKEY_CURRENT_USER\Software\Microsoft\Edge Dev\NativeMessagingHosts\pro.maxvideodownloader.coapp:chrome Edge-Canary:HKEY_CURRENT_USER\Software\Microsoft\Edge SxS\NativeMessagingHosts\pro.maxvideodownloader.coapp:chrome Brave:HKEY_CURRENT_USER\Software\BraveSoftware\Brave-Browser\NativeMessagingHosts\pro.maxvideodownloader.coapp:chrome Opera:HKEY_CURRENT_USER\Software\Opera Software\Opera Stable\NativeMessagingHosts\pro.maxvideodownloader.coapp:chrome Vivaldi:HKEY_CURRENT_USER\Software\Vivaldi\NativeMessagingHosts\pro.maxvideodownloader.coapp:chrome Yandex:HKEY_CURRENT_USER\Software\Yandex\YandexBrowser\NativeMessagingHosts\pro.maxvideodownloader.coapp:chrome Firefox:HKEY_CURRENT_USER\Software\Mozilla\NativeMessagingHosts\pro.maxvideodownloader.coapp:firefox) do (
+    for /f "tokens=1,2,3 delims=:" %%x in ("%%b") do (
+        set "manifest=%TEMP_DIR%\%%x.json"
+        if "%%z"=="firefox" (
+            copy "%FIREFOX_TEMPLATE%" "!manifest!" >nul
+        ) else (
+            copy "%CHROME_TEMPLATE%" "!manifest!" >nul
+        )
+        reg add "%%y" /ve /t REG_SZ /d "!manifest!" /f >nul 2>&1
+        if !errorlevel! equ 0 (
+            echo   ✓ %%x installed
+            set /a installed+=1
+        )
+    )
+)
+
+echo.
+echo Installation complete! Installed for %installed% browser(s).
+echo The MAX Video Downloader extension should now work.
+echo.
+pause
+EOF
+}
+
+generate_linux_installer() {
+    cat << 'EOF'
+#!/bin/bash
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BINARY_PATH="$SCRIPT_DIR/mvdcoapp"
+CHROME_EXT_ID="bkblnddclhmmgjlmbofhakhhbklkcofd"
+FIREFOX_EXT_ID="max-video-downloader@rostislav.dev"
+
+create_chrome_manifest() {
+    local path="$1"
+    mkdir -p "$(dirname "$path")"
+    cat > "$path" << MANIFEST_EOF
+{
+  "name": "pro.maxvideodownloader.coapp",
+  "description": "MAX Video Downloader Native Host",
+  "path": "$BINARY_PATH",
+  "type": "stdio",
+  "allowed_origins": ["chrome-extension://$CHROME_EXT_ID/"]
+}
+MANIFEST_EOF
+}
+
+create_firefox_manifest() {
+    local path="$1"
+    mkdir -p "$(dirname "$path")"
+    cat > "$path" << MANIFEST_EOF
+{
+  "name": "pro.maxvideodownloader.coapp",
+  "description": "MAX Video Downloader Native Host",
+  "path": "$BINARY_PATH",
+  "type": "stdio",
+  "allowed_extensions": ["$FIREFOX_EXT_ID"]
+}
+MANIFEST_EOF
+}
+
+installed=0
+browsers=(
+    "google-chrome:$HOME/.config/google-chrome/NativeMessagingHosts:chrome"
+    "google-chrome-beta:$HOME/.config/google-chrome-beta/NativeMessagingHosts:chrome"
+    "google-chrome-unstable:$HOME/.config/google-chrome-unstable/NativeMessagingHosts:chrome"
+    "chromium-browser:$HOME/.config/chromium/NativeMessagingHosts:chrome"
+    "microsoft-edge:$HOME/.config/microsoft-edge/NativeMessagingHosts:chrome"
+    "microsoft-edge-beta:$HOME/.config/microsoft-edge-beta/NativeMessagingHosts:chrome"
+    "microsoft-edge-dev:$HOME/.config/microsoft-edge-dev/NativeMessagingHosts:chrome"
+    "brave-browser:$HOME/.config/BraveSoftware/Brave-Browser/NativeMessagingHosts:chrome"
+    "opera:$HOME/.config/opera/NativeMessagingHosts:chrome"
+    "vivaldi:$HOME/.config/vivaldi/NativeMessagingHosts:chrome"
+    "yandex-browser:$HOME/.config/yandex-browser/NativeMessagingHosts:chrome"
+    "firefox:$HOME/.mozilla/native-messaging-hosts:firefox"
+)
+
+for entry in "${browsers[@]}"; do
+    IFS=':' read -r cmd manifest_dir browser_type <<< "$entry"
     
+    if command -v "$cmd" >/dev/null 2>&1; then
+        if [[ "$browser_type" == "firefox" ]]; then
+            create_firefox_manifest "$manifest_dir/pro.maxvideodownloader.coapp.json"
+        else
+            create_chrome_manifest "$manifest_dir/pro.maxvideodownloader.coapp.json"
+        fi
+        ((installed++))
+    fi
+done
+
+if command -v zenity >/dev/null 2>&1; then
+    zenity --info --text="MAX Video Downloader installed for $installed browser(s)!"
+else
+    echo "Installation complete! Installed for $installed browser(s)."
+fi
+EOF
+}
+
+# ============================================================================
+# PACKAGING FUNCTIONS
+# ============================================================================
+
+create_macos_package() {
+    local platform=$1
     local build_dir="build/$platform"
     local app_dir="build/${APP_NAME}.app"
+    
+    [[ ! -d "$build_dir" ]] && { log_error "Build $platform first"; exit 1; }
+    [[ ! "$platform" =~ ^mac- ]] && { log_error "macOS packaging only"; exit 1; }
+    
+    log_info "Creating macOS package for $platform..."
+    
+    # Create app bundle structure
     local contents_dir="$app_dir/Contents"
     local macos_dir="$contents_dir/MacOS"
     local resources_dir="$contents_dir/Resources"
     
-    if [[ ! -d "$build_dir" ]]; then
-        log_error "Build directory not found. Run './build.sh -build $platform' first"
-        exit 1
-    fi
-    
-    log_info "Creating macOS app bundle for $platform..."
-    
-    # Clean and create app structure
     rm -rf "$app_dir"
     mkdir -p "$macos_dir" "$resources_dir"
     
-    # Copy binaries to MacOS folder
-    cp "$build_dir/mvdcoapp" "$macos_dir/"
-    cp "$build_dir/ffmpeg" "$macos_dir/"
-    cp "$build_dir/ffprobe" "$macos_dir/"
-    
-    # Make binaries executable
+    # Copy binaries
+    cp "$build_dir"/* "$macos_dir/"
     chmod +x "$macos_dir"/*
     
-    # Copy app icon from extension folder
+    # Copy icon
     local icon_source="../extension/icons/128.png"
-    if [[ -f "$icon_source" ]]; then
-        cp "$icon_source" "$resources_dir/AppIcon.png"
-        log_info "Added app icon from extension"
-    else
-        log_warn "App icon not found at $icon_source"
-    fi
+    [[ -f "$icon_source" ]] && cp "$icon_source" "$resources_dir/AppIcon.png"
     
     # Create Info.plist
     cat > "$contents_dir/Info.plist" << EOF
@@ -205,8 +363,6 @@ package_mac_app() {
     <string>${VERSION}</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
-    <key>CFBundleSignature</key>
-    <string>????</string>
     <key>CFBundleIconFile</key>
     <string>AppIcon.png</string>
     <key>LSMinimumSystemVersion</key>
@@ -219,594 +375,260 @@ package_mac_app() {
 </plist>
 EOF
     
-    log_info "✓ macOS app bundle created at $app_dir"
-    log_info "App can be launched with: open '$app_dir' --args -version"
-    log_info "Binary location: $macos_dir/mvdcoapp"
+    # Add installer script
+    generate_macos_installer > "$macos_dir/install_native_host.sh"
+    chmod +x "$macos_dir/install_native_host.sh"
+    
+    # Create DMG
+    local dmg_name="MaxVideoDownloader-${VERSION}-${platform}.dmg"
+    local temp_dmg="build/temp.dmg"
+    local final_dmg="build/$dmg_name"
+    
+    rm -f "$temp_dmg" "$final_dmg"
+    hdiutil create -size 200m -fs HFS+ -volname "MAX Video Downloader" "$temp_dmg"
+    
+    local mount_point=$(hdiutil attach "$temp_dmg" | grep "/Volumes" | sed 's/.*\(\/Volumes\/.*\)/\1/')
+    [[ -z "$mount_point" ]] && { log_error "Failed to mount DMG"; exit 1; }
+    
+    sleep 2
+    cp -R "$app_dir" "$mount_point/"
+    ln -s /Applications "$mount_point/Applications" 2>/dev/null || true
+    
+    sync
+    hdiutil detach "$mount_point"
+    hdiutil convert "$temp_dmg" -format UDZO -o "$final_dmg"
+    rm "$temp_dmg"
+    
+    log_info "✓ Created: $final_dmg"
 }
 
-detect_browsers() {
-    local browsers=()
+create_windows_package() {
+    local platform=$1
+    local build_dir="build/$platform"
+    local installer_dir="build/installer-$platform"
     
-    case "$(uname -s)" in
-        Darwin)
-            # Chromium-based browsers (same extension works for all)
-            [[ -d "/Applications/Google Chrome.app" ]] && browsers+=("chrome")
-            [[ -d "/Applications/Google Chrome Canary.app" ]] && browsers+=("chrome-canary")
-            [[ -d "/Applications/Arc.app" ]] && browsers+=("arc")
-            [[ -d "/Applications/Microsoft Edge.app" ]] && browsers+=("edge")
-            [[ -d "/Applications/Microsoft Edge Beta.app" ]] && browsers+=("edge-beta")
-            [[ -d "/Applications/Microsoft Edge Dev.app" ]] && browsers+=("edge-dev")
-            [[ -d "/Applications/Microsoft Edge Canary.app" ]] && browsers+=("edge-canary")
-            [[ -d "/Applications/Brave Browser.app" ]] && browsers+=("brave")
-            [[ -d "/Applications/Opera.app" ]] && browsers+=("opera")
-            [[ -d "/Applications/Vivaldi.app" ]] && browsers+=("vivaldi")
-            [[ -d "/Applications/Epic Privacy Browser.app" ]] && browsers+=("epic")
-            [[ -d "/Applications/Yandex.app" ]] && browsers+=("yandex")
-            
-            # Firefox-based browsers (require separate extension)
-            [[ -d "/Applications/Firefox.app" ]] && browsers+=("firefox")
-            [[ -d "/Applications/Tor Browser.app" ]] && browsers+=("tor")
-            ;;
-        Linux)
-            # Chromium-based browsers
-            command -v google-chrome >/dev/null 2>&1 && browsers+=("chrome")
-            command -v google-chrome-beta >/dev/null 2>&1 && browsers+=("chrome-beta")
-            command -v google-chrome-unstable >/dev/null 2>&1 && browsers+=("chrome-canary")
-            command -v chromium-browser >/dev/null 2>&1 && browsers+=("chromium")
-            command -v microsoft-edge >/dev/null 2>&1 && browsers+=("edge")
-            command -v microsoft-edge-beta >/dev/null 2>&1 && browsers+=("edge-beta")
-            command -v microsoft-edge-dev >/dev/null 2>&1 && browsers+=("edge-dev")
-            command -v brave-browser >/dev/null 2>&1 && browsers+=("brave")
-            command -v opera >/dev/null 2>&1 && browsers+=("opera")
-            command -v vivaldi >/dev/null 2>&1 && browsers+=("vivaldi")
-            command -v yandex-browser >/dev/null 2>&1 && browsers+=("yandex")
-            
-            # Firefox-based browsers
-            command -v firefox >/dev/null 2>&1 && browsers+=("firefox")
-            ;;
-        MINGW*|CYGWIN*|MSYS*|Windows_NT)
-            # Windows - check for browser installations
-            [[ -d "$PROGRAMFILES/Google/Chrome/Application" ]] && browsers+=("chrome")
-            [[ -d "$PROGRAMFILES (X86)/Google/Chrome/Application" ]] && browsers+=("chrome")
-            [[ -d "$LOCALAPPDATA/Google/Chrome SxS/Application" ]] && browsers+=("chrome-canary")
-            [[ -d "$PROGRAMFILES/Microsoft/Edge/Application" ]] && browsers+=("edge")
-            [[ -d "$PROGRAMFILES (X86)/Microsoft/Edge/Application" ]] && browsers+=("edge")
-            [[ -d "$LOCALAPPDATA/Microsoft/Edge Beta/Application" ]] && browsers+=("edge-beta")
-            [[ -d "$LOCALAPPDATA/Microsoft/Edge Dev/Application" ]] && browsers+=("edge-dev")
-            [[ -d "$LOCALAPPDATA/Microsoft/Edge SxS/Application" ]] && browsers+=("edge-canary")
-            [[ -d "$PROGRAMFILES/BraveSoftware/Brave-Browser/Application" ]] && browsers+=("brave")
-            [[ -d "$PROGRAMFILES (X86)/BraveSoftware/Brave-Browser/Application" ]] && browsers+=("brave")
-            [[ -d "$LOCALAPPDATA/Programs/Opera" ]] && browsers+=("opera")
-            [[ -d "$PROGRAMFILES/Vivaldi/Application" ]] && browsers+=("vivaldi")
-            [[ -d "$LOCALAPPDATA/Yandex/YandexBrowser/Application" ]] && browsers+=("yandex")
-            [[ -d "$PROGRAMFILES/Mozilla Firefox" ]] && browsers+=("firefox")
-            [[ -d "$PROGRAMFILES (X86)/Mozilla Firefox" ]] && browsers+=("firefox")
-            
-            # Remove duplicates
-            browsers=($(printf '%s\n' "${browsers[@]}" | sort -u))
-            ;;
-    esac
+    [[ ! -d "$build_dir" ]] && { log_error "Build $platform first"; exit 1; }
+    [[ ! "$platform" =~ ^win- ]] && { log_error "Windows packaging only"; exit 1; }
     
-    printf '%s\n' "${browsers[@]}"
+    log_info "Creating Windows package for $platform..."
+    
+    rm -rf "$installer_dir"
+    mkdir -p "$installer_dir"
+    
+    # Copy binaries
+    cp "$build_dir"/* "$installer_dir/"
+    
+    # Create installer
+    generate_windows_installer > "$installer_dir/install.bat"
+    
+    log_info "✓ Created: $installer_dir/"
+    log_info "Distribute the entire folder to users"
 }
 
-get_browser_paths() {
-    local browser=$1
-    local os=$(uname -s)
+create_linux_package() {
+    local platform=$1
+    local build_dir="build/$platform"
+    local appdir="build/MaxVideoDownloader-$platform.AppDir"
     
-    case "$os" in
-        Darwin)
-            case "$browser" in
-                chrome)
-                    echo "$HOME/Library/Application Support/Google/Chrome/NativeMessagingHosts"
-                    ;;
-                chrome-canary)
-                    echo "$HOME/Library/Application Support/Google/Chrome Canary/NativeMessagingHosts"
-                    ;;
-                arc)
-                    echo "$HOME/Library/Application Support/Arc/User Data/NativeMessagingHosts"
-                    ;;
-                edge)
-                    echo "$HOME/Library/Application Support/Microsoft Edge/NativeMessagingHosts"
-                    ;;
-                edge-beta)
-                    echo "$HOME/Library/Application Support/Microsoft Edge Beta/NativeMessagingHosts"
-                    ;;
-                edge-dev)
-                    echo "$HOME/Library/Application Support/Microsoft Edge Dev/NativeMessagingHosts"
-                    ;;
-                edge-canary)
-                    echo "$HOME/Library/Application Support/Microsoft Edge Canary/NativeMessagingHosts"
-                    ;;
-                brave)
-                    echo "$HOME/Library/Application Support/BraveSoftware/Brave-Browser/NativeMessagingHosts"
-                    ;;
-                opera)
-                    echo "$HOME/Library/Application Support/com.operasoftware.Opera/NativeMessagingHosts"
-                    ;;
-                vivaldi)
-                    echo "$HOME/Library/Application Support/Vivaldi/NativeMessagingHosts"
-                    ;;
-                epic)
-                    echo "$HOME/Library/Application Support/Epic Privacy Browser/NativeMessagingHosts"
-                    ;;
-                yandex)
-                    echo "$HOME/Library/Application Support/Yandex/YandexBrowser/NativeMessagingHosts"
-                    ;;
-                firefox)
-                    echo "$HOME/Library/Application Support/Mozilla/NativeMessagingHosts"
-                    ;;
-                tor)
-                    echo "$HOME/Library/Application Support/TorBrowser-Data/Browser/NativeMessagingHosts"
-                    ;;
-            esac
-            ;;
-        Linux)
-            case "$browser" in
-                chrome)
-                    echo "$HOME/.config/google-chrome/NativeMessagingHosts"
-                    ;;
-                chrome-beta)
-                    echo "$HOME/.config/google-chrome-beta/NativeMessagingHosts"
-                    ;;
-                chrome-canary)
-                    echo "$HOME/.config/google-chrome-unstable/NativeMessagingHosts"
-                    ;;
-                chromium)
-                    echo "$HOME/.config/chromium/NativeMessagingHosts"
-                    ;;
-                edge)
-                    echo "$HOME/.config/microsoft-edge/NativeMessagingHosts"
-                    ;;
-                edge-beta)
-                    echo "$HOME/.config/microsoft-edge-beta/NativeMessagingHosts"
-                    ;;
-                edge-dev)
-                    echo "$HOME/.config/microsoft-edge-dev/NativeMessagingHosts"
-                    ;;
-                brave)
-                    echo "$HOME/.config/BraveSoftware/Brave-Browser/NativeMessagingHosts"
-                    ;;
-                opera)
-                    echo "$HOME/.config/opera/NativeMessagingHosts"
-                    ;;
-                vivaldi)
-                    echo "$HOME/.config/vivaldi/NativeMessagingHosts"
-                    ;;
-                yandex)
-                    echo "$HOME/.config/yandex-browser/NativeMessagingHosts"
-                    ;;
-                firefox)
-                    echo "$HOME/.mozilla/native-messaging-hosts"
-                    ;;
-            esac
-            ;;
-        MINGW*|CYGWIN*|MSYS*|Windows_NT)
-            # Windows uses registry, return registry key paths
-            case "$browser" in
-                chrome)
-                    echo "HKEY_CURRENT_USER\\Software\\Google\\Chrome\\NativeMessagingHosts\\pro.maxvideodownloader.coapp"
-                    ;;
-                chrome-canary)
-                    echo "HKEY_CURRENT_USER\\Software\\Google\\Chrome SxS\\NativeMessagingHosts\\pro.maxvideodownloader.coapp"
-                    ;;
-                edge)
-                    echo "HKEY_CURRENT_USER\\Software\\Microsoft\\Edge\\NativeMessagingHosts\\pro.maxvideodownloader.coapp"
-                    ;;
-                edge-beta)
-                    echo "HKEY_CURRENT_USER\\Software\\Microsoft\\Edge Beta\\NativeMessagingHosts\\pro.maxvideodownloader.coapp"
-                    ;;
-                edge-dev)
-                    echo "HKEY_CURRENT_USER\\Software\\Microsoft\\Edge Dev\\NativeMessagingHosts\\pro.maxvideodownloader.coapp"
-                    ;;
-                edge-canary)
-                    echo "HKEY_CURRENT_USER\\Software\\Microsoft\\Edge SxS\\NativeMessagingHosts\\pro.maxvideodownloader.coapp"
-                    ;;
-                brave)
-                    echo "HKEY_CURRENT_USER\\Software\\BraveSoftware\\Brave-Browser\\NativeMessagingHosts\\pro.maxvideodownloader.coapp"
-                    ;;
-                opera)
-                    echo "HKEY_CURRENT_USER\\Software\\Opera Software\\Opera Stable\\NativeMessagingHosts\\pro.maxvideodownloader.coapp"
-                    ;;
-                vivaldi)
-                    echo "HKEY_CURRENT_USER\\Software\\Vivaldi\\NativeMessagingHosts\\pro.maxvideodownloader.coapp"
-                    ;;
-                yandex)
-                    echo "HKEY_CURRENT_USER\\Software\\Yandex\\YandexBrowser\\NativeMessagingHosts\\pro.maxvideodownloader.coapp"
-                    ;;
-                firefox)
-                    echo "HKEY_CURRENT_USER\\Software\\Mozilla\\NativeMessagingHosts\\pro.maxvideodownloader.coapp"
-                    ;;
-            esac
-            ;;
-    esac
-}
-
-create_chrome_manifest() {
-    local binary_path="$1"
-    local extension_id="$2"
+    [[ ! -d "$build_dir" ]] && { log_error "Build $platform first"; exit 1; }
+    [[ ! "$platform" =~ ^linux- ]] && { log_error "Linux packaging only"; exit 1; }
     
-    # Escape the binary path for JSON
-    local escaped_path="${binary_path//\\/\\\\}"
-    escaped_path="${escaped_path//\"/\\\"}"
+    log_info "Creating Linux package for $platform..."
     
-    cat << EOF
-{
-  "name": "pro.maxvideodownloader.coapp",
-  "description": "MAX Video Downloader Native Host",
-  "path": "$escaped_path",
-  "type": "stdio",
-  "allowed_origins": [
-    "chrome-extension://$extension_id/"
-  ]
-}
+    rm -rf "$appdir"
+    mkdir -p "$appdir/usr/bin"
+    
+    # Copy binaries
+    cp "$build_dir"/* "$appdir/usr/bin/"
+    
+    # Create desktop file
+    cat > "$appdir/MaxVideoDownloader.desktop" << EOF
+[Desktop Entry]
+Type=Application
+Name=MAX Video Downloader
+Exec=install_native_host.sh
+Icon=maxvideodownloader
+Categories=Network;
 EOF
-}
-
-create_firefox_manifest() {
-    local binary_path="$1"
-    local extension_id="$2"
     
-    # Escape the binary path for JSON
-    local escaped_path="${binary_path//\\/\\\\}"
-    escaped_path="${escaped_path//\"/\\\"}"
+    # Create installer
+    generate_linux_installer > "$appdir/usr/bin/install_native_host.sh"
+    chmod +x "$appdir/usr/bin/install_native_host.sh"
     
-    cat << EOF
-{
-  "name": "pro.maxvideodownloader.coapp",
-  "description": "MAX Video Downloader Native Host",
-  "path": "$escaped_path",
-  "type": "stdio",
-  "allowed_extensions": [
-    "$extension_id"
-  ]
-}
+    # Create AppRun
+    cat > "$appdir/AppRun" << 'EOF'
+#!/bin/bash
+cd "$(dirname "$0")/usr/bin"
+./install_native_host.sh
 EOF
+    chmod +x "$appdir/AppRun"
+    
+    log_info "✓ Created: $appdir/"
+    log_info "Use appimagetool to create final .AppImage"
 }
 
-install_windows_registry() {
-    local browser=$1
-    local manifest_path=$2
-    local registry_key=$3
-    
-    # Convert Unix path to Windows path for manifest
-    local windows_manifest_path=$(cygpath -w "$manifest_path" 2>/dev/null || echo "$manifest_path")
-    
-    log_info "Installing Windows registry entry for $browser..."
-    log_info "Registry key: $registry_key"
-    log_info "Manifest path: $windows_manifest_path"
-    
-    # Use reg.exe to add registry entry
-    if command -v reg.exe >/dev/null 2>&1; then
-        reg.exe add "$registry_key" /ve /t REG_SZ /d "$windows_manifest_path" /f >/dev/null 2>&1
-        if [[ $? -eq 0 ]]; then
-            log_info "✓ Registry entry added successfully"
-            return 0
-        else
-            log_error "✗ Failed to add registry entry"
-            return 1
-        fi
-    else
-        log_error "reg.exe not found - cannot install on Windows"
-        return 1
-    fi
-}
+# ============================================================================
+# DEV INSTALL/UNINSTALL (for testing on your machine)
+# ============================================================================
 
-uninstall_windows_registry() {
-    local registry_key=$1
-    
-    log_info "Removing Windows registry entry: $registry_key"
-    
-    if command -v reg.exe >/dev/null 2>&1; then
-        reg.exe delete "$registry_key" /f >/dev/null 2>&1
-        if [[ $? -eq 0 ]]; then
-            log_info "✓ Registry entry removed"
-            return 0
-        else
-            log_warn "Registry entry not found or already removed"
-            return 1
-        fi
-    else
-        log_error "reg.exe not found - cannot uninstall on Windows"
-        return 1
-    fi
-}
-
-install_native_host() {
+install_dev() {
     local platform=${1:-$(detect_platform)}
     local build_dir="build/$platform"
     local binary_name=$(get_binary_name "$platform")
     local binary_path="$PWD/$build_dir/$binary_name"
     
-    if [[ ! -f "$binary_path" ]]; then
-        log_error "Binary not found at $binary_path. Run './build.sh -build $platform' first"
-        exit 1
-    fi
+    [[ ! -f "$binary_path" ]] && { log_error "Binary not found. Run: ./build2.sh build $platform"; exit 1; }
     
-    # Extension IDs for different browser types
-    local chrome_extension_id="bkblnddclhmmgjlmbofhakhhbklkcofd"
-    local firefox_extension_id="max-video-downloader@rostislav.dev"  # You'll set this when you publish to Firefox
+    log_info "Installing native host for testing on your machine..."
     
-    log_info "Installing native host for detected browsers..."
-    log_info "Binary path: $binary_path"
-    log_info "Platform: $(uname -s)"
-    
-    local installed_count=0
-    local browsers=($(detect_browsers))
-    
-    if [[ ${#browsers[@]} -eq 0 ]]; then
-        log_warn "No supported browsers detected"
-        return 1
-    fi
-    
-    for browser in "${browsers[@]}"; do
-        local target_path=$(get_browser_paths "$browser")
-        
-        if [[ -z "$target_path" ]]; then
-            log_warn "Unknown browser path for: $browser"
-            continue
-        fi
-        
-        log_info "Installing for $browser..."
-        
-        case "$(uname -s)" in
-            MINGW*|CYGWIN*|MSYS*|Windows_NT)
-                # Windows: Create manifest file and register in registry
-                # Use LOCALAPPDATA on Windows, fallback to HOME
-                local temp_dir="${LOCALAPPDATA:-$HOME}/.mvdcoapp"
-                local manifest_file="$temp_dir/pro.maxvideodownloader.coapp-$browser.json"
-                
-                if [[ "$DRY_RUN" == "true" ]]; then
-                    log_info "Would create temp directory: $temp_dir"
-                    log_info "Would create manifest: $manifest_file"
-                    case "$browser" in
-                        firefox)
-                            log_info "Would use Firefox manifest format with extension ID: $firefox_extension_id"
-                            ;;
-                        *)
-                            log_info "Would use Chrome manifest format with extension ID: $chrome_extension_id"
-                            ;;
-                    esac
-                    log_info "Would add registry entry: $target_path"
-                    log_info "✓ Would install for $browser (registry + manifest)"
-                    ((installed_count++))
-                else
-                    mkdir -p "$temp_dir"
-                    
-                    # Create appropriate manifest
-                    case "$browser" in
-                        firefox)
-                            create_firefox_manifest "$binary_path" "$firefox_extension_id" > "$manifest_file"
-                            ;;
-                        *)
-                            create_chrome_manifest "$binary_path" "$chrome_extension_id" > "$manifest_file"
-                            ;;
-                    esac
-                    
-                    # Install registry entry
-                    if install_windows_registry "$browser" "$manifest_file" "$target_path"; then
-                        log_info "✓ Installed for $browser (registry + manifest)"
-                        ((installed_count++))
-                    else
-                        log_error "✗ Failed to install for $browser"
-                    fi
-                fi
-                ;;
-            *)
-                # macOS/Linux: Create manifest file in browser directory
-                local manifest_file="$target_path/pro.maxvideodownloader.coapp.json"
-                
-                if [[ "$DRY_RUN" == "true" ]]; then
-                    log_info "Would create directory: $target_path"
-                    log_info "Would create manifest: $manifest_file"
-                    case "$browser" in
-                        firefox|tor)
-                            log_info "Would use Firefox manifest format with extension ID: $firefox_extension_id"
-                            ;;
-                        *)
-                            log_info "Would use Chrome manifest format with extension ID: $chrome_extension_id"
-                            ;;
-                    esac
-                    log_info "✓ Would install for $browser: $manifest_file"
-                    ((installed_count++))
-                else
-                    # Create target directory
-                    mkdir -p "$target_path"
-                    
-                    # Create appropriate manifest based on browser type
-                    case "$browser" in
-                        firefox|tor)
-                            create_firefox_manifest "$binary_path" "$firefox_extension_id" > "$manifest_file"
-                            ;;
-                        *)
-                            create_chrome_manifest "$binary_path" "$chrome_extension_id" > "$manifest_file"
-                            ;;
-                    esac
-                    
-                    if [[ -f "$manifest_file" ]]; then
-                        log_info "✓ Installed for $browser: $manifest_file"
-                        ((installed_count++))
-                    else
-                        log_error "✗ Failed to install for $browser"
-                    fi
-                fi
-                ;;
-        esac
-    done
-    
-    if [[ $installed_count -gt 0 ]]; then
-        log_info "✓ Native host installed for $installed_count browser(s)"
-        log_info "Detected browsers: ${browsers[*]}"
-    else
-        log_error "Failed to install for any browsers"
-        return 1
-    fi
-}
-
-uninstall_native_host() {
-    log_info "Uninstalling native host from all browsers..."
-    log_info "Platform: $(uname -s)"
-    
-    local removed_count=0
-    
-    # Check all possible browsers based on platform
     case "$(uname -s)" in
         Darwin)
-            local all_possible_browsers=("chrome" "chrome-canary" "arc" "edge" "edge-beta" "edge-dev" "edge-canary" "brave" "opera" "vivaldi" "epic" "yandex" "firefox" "tor")
-            ;;
-        Linux)
-            local all_possible_browsers=("chrome" "chrome-beta" "chrome-canary" "chromium" "edge" "edge-beta" "edge-dev" "brave" "opera" "vivaldi" "yandex" "firefox")
-            ;;
-        MINGW*|CYGWIN*|MSYS*|Windows_NT)
-            local all_possible_browsers=("chrome" "chrome-canary" "edge" "edge-beta" "edge-dev" "edge-canary" "brave" "opera" "vivaldi" "yandex" "firefox")
-            ;;
-    esac
-    
-    for browser in "${all_possible_browsers[@]}"; do
-        local target_path=$(get_browser_paths "$browser")
-        
-        if [[ -z "$target_path" ]]; then
-            continue
-        fi
-        
-        case "$(uname -s)" in
-            MINGW*|CYGWIN*|MSYS*|Windows_NT)
-                # Windows: Remove registry entry and manifest file
-                if [[ "$DRY_RUN" == "true" ]]; then
-                    log_info "Would remove registry entry: $target_path"
-                    ((removed_count++))
-                    
-                    local temp_dir="${LOCALAPPDATA:-$HOME}/.mvdcoapp"
-                    local manifest_file="$temp_dir/pro.maxvideodownloader.coapp-$browser.json"
-                    log_info "✓ Would remove manifest file: $manifest_file"
-                else
-                    if uninstall_windows_registry "$target_path"; then
-                        ((removed_count++))
-                    fi
-                    
-                    # Also remove manifest file if it exists
-                    local temp_dir="${LOCALAPPDATA:-$HOME}/.mvdcoapp"
-                    local manifest_file="$temp_dir/pro.maxvideodownloader.coapp-$browser.json"
-                    if [[ -f "$manifest_file" ]]; then
-                        rm "$manifest_file"
-                        log_info "✓ Removed manifest file: $manifest_file"
-                    fi
-                fi
-                ;;
-            *)
-                # macOS/Linux: Remove manifest file
-                local manifest_file="$target_path/pro.maxvideodownloader.coapp.json"
-                if [[ -f "$manifest_file" ]] || [[ "$DRY_RUN" == "true" ]]; then
-                    if [[ "$DRY_RUN" == "true" ]]; then
-                        log_info "✓ Would remove from $browser: $manifest_file"
-                    else
-                        rm "$manifest_file"
-                        log_info "✓ Removed from $browser: $manifest_file"
-                    fi
-                    ((removed_count++))
-                fi
-                ;;
-        esac
-    done
-    
-    # Clean up temp directory on Windows
-    case "$(uname -s)" in
-        MINGW*|CYGWIN*|MSYS*|Windows_NT)
-            local temp_dir="${LOCALAPPDATA:-$HOME}/.mvdcoapp"
-            if [[ -d "$temp_dir" ]] && [[ -z "$(ls -A "$temp_dir")" ]]; then
-                rmdir "$temp_dir"
-                log_info "✓ Cleaned up temporary directory"
-            fi
-            ;;
-    esac
-    
-    if [[ $removed_count -gt 0 ]]; then
-        log_info "✓ Native host uninstalled from $removed_count location(s)"
-    else
-        log_warn "No native host installations found to remove"
-    fi
+            local installed=0
+            local browsers=(
+                "/Applications/Google Chrome.app:$HOME/Library/Application Support/Google/Chrome/NativeMessagingHosts:chrome"
+                "/Applications/Arc.app:$HOME/Library/Application Support/Arc/User Data/NativeMessagingHosts:chrome"
+                "/Applications/Microsoft Edge.app:$HOME/Library/Application Support/Microsoft Edge/NativeMessagingHosts:chrome"
+                "/Applications/Brave Browser.app:$HOME/Library/Application Support/BraveSoftware/Brave-Browser/NativeMessagingHosts:chrome"
+                "/Applications/Firefox.app:$HOME/Library/Application Support/Mozilla/NativeMessagingHosts:firefox"
+            )
+            
+            for entry in "${browsers[@]}"; do
+                IFS=':' read -r app_path manifest_dir browser_type <<< "$entry"
+                
+                if [[ -d "$app_path" ]]; then
+                    mkdir -p "$manifest_dir"
+                    if [[ "$browser_type" == "firefox" ]]; then
+                        cat > "$manifest_dir/pro.maxvideodownloader.coapp.json" << EOF
+{
+  "name": "pro.maxvideodownloader.coapp",
+  "description": "MAX Video Downloader Native Host",
+  "path": "$binary_path",
+  "type": "stdio",
+  "allowed_extensions": ["$FIREFOX_EXT_ID"]
 }
+EOF
+                    else
+                        cat > "$manifest_dir/pro.maxvideodownloader.coapp.json" << EOF
+{
+  "name": "pro.maxvideodownloader.coapp",
+  "description": "MAX Video Downloader Native Host",
+  "path": "$binary_path",
+  "type": "stdio",
+  "allowed_origins": ["chrome-extension://$CHROME_EXT_ID/"]
+}
+EOF
+                    fi
+                    log_info "✓ Installed for $(basename "$app_path" .app)"
+                    ((installed++))
+                fi
+            done
+            
+            log_info "✓ Installed for $installed browser(s)"
+            ;;
+        *)
+            log_error "Dev install only supports macOS currently"
+            exit 1
+            ;;
+    esac
+}
+
+uninstall_dev() {
+    log_info "Uninstalling native host from your machine..."
+    
+    case "$(uname -s)" in
+        Darwin)
+            local removed=0
+            local manifest_dirs=(
+                "$HOME/Library/Application Support/Google/Chrome/NativeMessagingHosts"
+                "$HOME/Library/Application Support/Arc/User Data/NativeMessagingHosts"
+                "$HOME/Library/Application Support/Microsoft Edge/NativeMessagingHosts"
+                "$HOME/Library/Application Support/BraveSoftware/Brave-Browser/NativeMessagingHosts"
+                "$HOME/Library/Application Support/Mozilla/NativeMessagingHosts"
+            )
+            
+            for dir in "${manifest_dirs[@]}"; do
+                local manifest_file="$dir/pro.maxvideodownloader.coapp.json"
+                if [[ -f "$manifest_file" ]]; then
+                    rm "$manifest_file"
+                    log_info "✓ Removed from $(basename "$(dirname "$dir")")"
+                    ((removed++))
+                fi
+            done
+            
+            log_info "✓ Removed from $removed location(s)"
+            ;;
+        *)
+            log_error "Dev uninstall only supports macOS currently"
+            exit 1
+            ;;
+    esac
+}
+
+# ============================================================================
+# MAIN COMMANDS
+# ============================================================================
 
 show_help() {
-    echo "MAX Video Downloader Native Host Build Script"
-    echo ""
-    echo "Usage: ./build.sh [command] [platform]"
-    echo ""
-    echo "Commands:"
-    echo "  -version              Show version information"
-    echo "  -build [platform]     Build for specific platform (default: current)"
-    echo "  -package-app          Create macOS .app bundle (macOS only)"
-    echo "  -install [platform]   Install native host for all detected browsers"
-    echo "  -uninstall            Remove native host from all browsers"
-    echo "  -detect-browsers      Show detected browsers"
-    echo "  -help                 Show this help"
-    echo ""
-    echo "Flags:"
-    echo "  --dry-run             Show what would be done without making changes"
-    echo ""
-    echo "Platforms:"
-    echo "  mac-arm64            macOS Apple Silicon"
-    echo "  mac-x64              macOS Intel"
-    echo "  win-x64              Windows x64"
-    echo "  win-arm64            Windows ARM64"
-    echo ""
-    echo "Supported Browsers:"
-    echo "  Chromium-based: Chrome (+ Canary), Arc, Edge (+ Beta/Dev/Canary), Brave,"
-    echo "                  Opera, Vivaldi, Epic, Yandex (all use same extension)"
-    echo "  Firefox-based:  Firefox, Tor Browser (require separate extension)"
-    echo ""
-    echo "  macOS:    All browsers supported"
-    echo "  Linux:    All browsers except Arc and Epic"
-    echo "  Windows:  All browsers except Arc, Epic, and Tor Browser"
-    echo ""
-    echo "Installation Methods:"
-    echo "  macOS/Linux:  Manifest files in browser directories"
-    echo "  Windows:      Registry entries + manifest files"
-    echo ""
-    echo "Examples:"
-    echo "  ./build.sh -build mac-arm64    # Build for macOS ARM64"
-    echo "  ./build.sh -install            # Install for all detected browsers"
-    echo "  ./build.sh -uninstall          # Remove from all browsers"
-    echo "  ./build.sh -package-app        # Create .app bundle (macOS)"
+    cat << EOF
+MAX Video Downloader Build System
+
+Usage: ./build.sh <command> [platform]
+
+Commands:
+  build <platform>     Build binary for platform
+  package <platform>   Create distributable package
+  dist <platform>      Build + package in one step
+  install [platform]   Install on your machine for testing
+  uninstall            Remove from your machine
+  version              Show version
+  help                 Show this help
+
+Platforms:
+  mac-arm64, mac-x64, win-x64, win-arm64, linux-x64, linux-arm64
+
+Examples:
+  ./build.sh dist mac-arm64     # Create complete macOS installer
+  ./build.sh build mac-arm64    # Just build binary
+  ./build.sh install           # Install for testing on your machine
+  ./build.sh uninstall         # Remove from your machine
+EOF
 }
 
-# Main script logic
-case "${1:-}" in
-    -version)
-        show_version
+case "${1:-help}" in
+    version)
+        echo "Native Host v${VERSION}"
         ;;
-    -build)
+    build)
         platform=${2:-$(detect_platform)}
-        build_platform "$platform"
+        build_binary "$platform"
         ;;
-    -package-app)
+    package)
         platform=${2:-$(detect_platform)}
-        package_mac_app "$platform"
+        case "$platform" in
+            mac-*) create_macos_package "$platform" ;;
+            win-*) create_windows_package "$platform" ;;
+            linux-*) create_linux_package "$platform" ;;
+            *) log_error "Unknown platform: $platform"; exit 1 ;;
+        esac
         ;;
-    -install)
+    dist)
         platform=${2:-$(detect_platform)}
-        install_native_host "$platform"
+        build_binary "$platform"
+        case "$platform" in
+            mac-*) create_macos_package "$platform" ;;
+            win-*) create_windows_package "$platform" ;;
+            linux-*) create_linux_package "$platform" ;;
+            *) log_error "Unknown platform: $platform"; exit 1 ;;
+        esac
         ;;
-    -uninstall)
-        uninstall_native_host
+    install)
+        platform=${2:-$(detect_platform)}
+        install_dev "$platform"
         ;;
-    -detect-browsers)
-        log_info "Detecting installed browsers..."
-        browsers=($(detect_browsers))
-        if [[ ${#browsers[@]} -gt 0 ]]; then
-            log_info "Found browsers: ${browsers[*]}"
-            for browser in "${browsers[@]}"; do
-                path=$(get_browser_paths "$browser")
-                echo "  $browser -> $path"
-            done
-        else
-            log_warn "No supported browsers detected"
-        fi
+    uninstall)
+        uninstall_dev
         ;;
-    -help|--help|help)
-        show_help
-        ;;
-    "")
+    help|--help|-h)
         show_help
         ;;
     *)

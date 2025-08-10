@@ -7,12 +7,17 @@
   "scripts": {
     "lint": "eslint extension/ native_host/ *.js",
     "lint:fix": "eslint extension/ native_host/ *.js --fix",
-    "build": "cd native_host && ./build.sh -build",
-    "build:mac": "cd native_host && ./build.sh -build mac-arm64",
-    "build:app": "cd native_host && ./build.sh -package-app",
-    "install-host": "cd native_host && ./build.sh -install",
-    "uninstall-host": "cd native_host && ./build.sh -uninstall",
-    "version-host": "cd native_host && ./build.sh -version"
+    "build": "cd native_host && ./build.sh build",
+    "build:mac": "cd native_host && ./build.sh build mac-arm64",
+    "dist:mac-arm64": "cd native_host && ./build.sh dist mac-arm64",
+    "dist:mac-x64": "cd native_host && ./build.sh dist mac-x64",
+    "dist:win-x64": "cd native_host && ./build.sh dist win-x64",
+    "dist:win-arm64": "cd native_host && ./build.sh dist win-arm64",
+    "dist:linux-x64": "cd native_host && ./build.sh dist linux-x64",
+    "dist:linux-arm64": "cd native_host && ./build.sh dist linux-arm64",
+    "install-host": "cd native_host && ./build.sh install",
+    "uninstall-host": "cd native_host && ./build.sh uninstall",
+    "version-host": "cd native_host && ./build.sh version"
   },
   "devDependencies": {
     "eslint": "^9.31.0"
