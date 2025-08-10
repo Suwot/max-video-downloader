@@ -9,7 +9,7 @@ import { updateDownloadProgress } from './video/download-progress-handler.js';
 import { renderVideos, addVideoToUI, updateVideoInUI, removeVideoFromUI, renderHistoryItems, updateHistoryItemDeleted } from './video/video-renderer.js';
 import { updateUICounters, showToast, showSuccess, showError } from './ui-utils.js';
 import { updateSettingsUI, updateNativeHostStatus } from './settings-tab.js';
-import { getTabId } from './state.js';
+import { currentTabId } from './index.js';
 
 const logger = createLogger('Communication');
 
@@ -64,7 +64,6 @@ async function handleIncomingMessage(message) {
     // Filter tab-specific messages early to reduce redundant processing
     const tabSpecificCommands = ['videos-state-update', 'update-ui-counters'];
     if (tabSpecificCommands.includes(message.command) && message.tabId) {
-        const currentTabId = getTabId();
         if (currentTabId && message.tabId !== currentTabId) {
             logger.debug(`Ignoring ${message.command} for tab ${message.tabId} (current: ${currentTabId})`);
             return;
