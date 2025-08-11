@@ -632,7 +632,7 @@ function updateConnectionStatus(state, info, statusText) {
         
         // Show FFmpeg info
         if (statusFFmpeg && statusFFmpegLine && info?.ffmpegVersion) {
-            statusFFmpeg.textContent = `v${info.ffmpegVersion} (bundled)`;
+            statusFFmpeg.textContent = `v${info.ffmpegVersion} (custom)`;
             statusFFmpegLine.style.display = 'flex';
         } else if (statusFFmpegLine) {
             statusFFmpegLine.style.display = 'none';

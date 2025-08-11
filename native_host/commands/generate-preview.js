@@ -88,6 +88,12 @@ class GeneratePreviewCommand extends BaseCommand {
                     }
                 }
                 
+                // Allow non-standard HLS segment extensions and whitelist protocols
+                ffmpegArgs.push(
+                    '-allowed_extensions', 'ALL',
+                    '-protocol_whitelist', 'file,http,https,tcp,tls,crypto'
+                );
+                
                 // Add the rest of the arguments
                 ffmpegArgs = ffmpegArgs.concat([
                     '-i', url,

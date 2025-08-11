@@ -5,7 +5,8 @@ native_host/node_modules/
 node_modules/
 
 # Build directories
-ffmpeg_build/
+# my-ffmpeg-builder/
+competitor-test/
 
 # IDE files
 .vscode/

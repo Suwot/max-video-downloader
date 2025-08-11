@@ -34,7 +34,7 @@ class ValidateConnectionCommand extends BaseCommand {
             const ffmpegService = this.getService('ffmpeg');
             if (ffmpegService) {
                 // Try to get FFmpeg version - this is a simple approach
-                ffmpegVersion = '6.1'; // Default bundled version
+                ffmpegVersion = '7.1.1'; // Default bundled version
                 // TODO: Could run ffmpeg -version to get actual version, but keeping it simple for now
             }
         } catch (error) {
