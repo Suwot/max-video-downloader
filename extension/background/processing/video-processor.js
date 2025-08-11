@@ -402,7 +402,7 @@ function handleVariantMasterRelationships(tabId, videoTracks, audioTracks, subti
  * @param {string} [sourceUrl=null] - Optional source URL to generate from (if different)
  */
 async function generateVideoPreview(videoData, sourceUrl = null) {
-    const { tabId, normalizedUrl, headers = {} } = videoData;
+    const { tabId, normalizedUrl, headers = {}, duration, type } = videoData;
 	
     try {
         // Skip if already has preview - use videoData directly
@@ -439,8 +439,9 @@ async function generateVideoPreview(videoData, sourceUrl = null) {
         const response = await nativeHostService.sendMessage({
             command: 'generatePreview',
             url: urlToUse,
-            headers: headers,
-            duration: videoData.duration || null
+            headers,
+            duration,
+            type
         });
                     
         if (response && response.previewUrl) {

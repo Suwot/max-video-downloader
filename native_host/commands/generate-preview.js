@@ -27,7 +27,7 @@ class GeneratePreviewCommand extends BaseCommand {
      * @param {string} params.url Video URL to generate preview for
      */
     async execute(params) {
-        const { url, headers = {}, duration } = params;
+        const { url, headers = {}, duration, type } = params;
         logDebug('Generating preview for video:', url);
         
         // Skip for blob URLs
@@ -88,11 +88,20 @@ class GeneratePreviewCommand extends BaseCommand {
                     }
                 }
                 
-                // Allow non-standard HLS segment extensions and whitelist protocols
-                ffmpegArgs.push(
-                    '-allowed_extensions', 'ALL',
-                    '-protocol_whitelist', 'file,http,https,tcp,tls,crypto'
-                );
+                // Apply format-specific options based on video type
+                if (type === 'hls') {
+                    ffmpegArgs.push(
+                        '-allowed_extensions', 'ALL',
+                        '-protocol_whitelist', 'file,http,https,tcp,tls,crypto',
+                        '-probesize', '1M'
+                    );
+                } else if (type === 'dash') {
+                    ffmpegArgs.push(
+                        '-protocol_whitelist', 'file,http,https,tcp,tls,crypto',
+                        '-probesize', '1M'
+                    );
+                }
+                // Direct media types use default FFmpeg protocol handling (no special options needed)
                 
                 // Add the rest of the arguments
                 ffmpegArgs = ffmpegArgs.concat([
