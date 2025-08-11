@@ -1,0 +1,3 @@
+[submodule "ffmpeg-builder"]
+	path = ffmpeg-builder
+	url = https://github.com/Suwot/FFmpeg-builder.git

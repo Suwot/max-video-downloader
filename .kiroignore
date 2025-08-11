@@ -1,5 +1,5 @@
 # Ignore FFmpeg source code and codec folders
-./my-ffmpeg-builder/
+./ffmpeg-builder/
 ./competitor-test/
 
 # Additional common ignores for performance
