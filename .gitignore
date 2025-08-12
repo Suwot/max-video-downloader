@@ -13,3 +13,6 @@ competitor-test/
 
 # Logs
 *.log
+
+# IDE generated diff files
+*.diff

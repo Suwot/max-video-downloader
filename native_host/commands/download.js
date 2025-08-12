@@ -663,19 +663,9 @@ class DownloadCommand extends BaseCommand {
 
     // Builds FFmpeg command arguments based on input parameters
     buildFFmpegArgs({
-        downloadUrl,
-        type,
-        outputPath,
-        container,
-        audioOnly = false,
-        subsOnly = false,
-        streamSelection,
-        inputs = null,
-        headers = {},
-        sourceAudioCodec = null,
-        sourceAudioBitrate = null,
-        allowOverwrite = false
-    }) {
+        downloadUrl,  type, outputPath, container, audioOnly = false, subsOnly = false, streamSelection, inputs = null, 
+		headers = {}, sourceAudioCodec = null, sourceAudioBitrate = null, allowOverwrite = false
+	}) {
         const args = [];
         
         // Determine download type using container-first logic
@@ -712,20 +702,24 @@ class DownloadCommand extends BaseCommand {
             }
         }
         
-        // Add inputs with headers and protocols per input
+        // Add inputs with headers, protocols, and stream mapping
         if (inputs?.length > 0) {
-            // HLS advanced mode: multiple inputs with separate tracks
+            // HLS advanced mode: multiple inputs with separate tracks (DASH never uses inputs array)
+            // FFmpeg requires: [global opts] [input opts -i url]... [output opts -map -c]... [output]
             inputs.forEach(input => {
                 if (headerArgs.length > 0) {
                     args.push(...headerArgs);
                 }
-                if (type === 'hls') {
-                    args.push('-protocol_whitelist', 'file,http,https,tcp,tls,crypto', '-f', 'hls', '-allowed_extensions', 'ALL', '-probesize', '5M', '-analyzeduration', '10M');
-                } else if (type === 'dash') {
-                    args.push('-protocol_whitelist', 'file,http,https,tcp,tls,crypto', '-probesize', '5M', '-analyzeduration', '10M', '-dash_allow_hier_sidx', '1');
-                }
+                // Only HLS can have multiple inputs - DASH always uses single input + streamSelection
+                args.push('-protocol_whitelist', 'file,http,https,tcp,tls,crypto', '-f', 'hls', '-allowed_extensions', 'ALL', '-probesize', '5M', '-analyzeduration', '10M');
                 args.push('-i', input.url);
             });
+            
+            // Add stream mapping for all inputs (output options must come after all inputs)
+            inputs.forEach(input => {
+                args.push('-map', input.streamMap);
+            });
+            args.push('-c', 'copy');
             logDebug('🎯 Added multiple inputs for HLS advanced mode:', inputs.length);
         } else {
             // Single input mode (all other cases)
@@ -739,31 +733,25 @@ class DownloadCommand extends BaseCommand {
             }
             args.push('-i', downloadUrl);
             logDebug('🎯 Added single input:', type);
-        }
-        
-        // Stream mapping - only complex cases need special handling
-        if (inputs?.length > 0) {
-            // HLS advanced video: multiple inputs with stream mapping
-            inputs.forEach(input => {
-                args.push('-map', input.streamMap);
-            });
-            args.push('-c', 'copy');
-        } else if (type === 'dash' && streamSelection) {
-            // DASH: map selected streams from single URL
-            streamSelection.split(',').forEach(streamSpec => {
-                args.push('-map', streamSpec);
-            });
-            args.push('-c', 'copy');
-        } else {
-            // All other cases: simple download based on container type
-            if (downloadType === 'audio') {
-                args.push('-map', '0:a:0', '-vn', '-sn');
-                this.addAudioCodecArgs(args, container, sourceAudioCodec, sourceAudioBitrate);
-            } else if (downloadType === 'subs') {
-                args.push('-map', '0:s:0', '-vn', '-an', '-c:s', 'copy');
-            } else {
-                // Video: copy all streams (default FFmpeg behavior)
+            
+            // Stream mapping for single input
+            if (type === 'dash' && streamSelection) {
+                // DASH: map selected streams from single URL
+                streamSelection.split(',').forEach(streamSpec => {
+                    args.push('-map', streamSpec);
+                });
                 args.push('-c', 'copy');
+            } else {
+                // All other cases: simple download based on container type
+                if (downloadType === 'audio') {
+                    args.push('-map', '0:a:0', '-vn', '-sn');
+                    this.addAudioCodecArgs(args, container, sourceAudioCodec, sourceAudioBitrate);
+                } else if (downloadType === 'subs') {
+                    args.push('-map', '0:s:0', '-vn', '-an', '-c:s', 'copy');
+                } else {
+                    // Video: copy all streams (default FFmpeg behavior)
+                    args.push('-c', 'copy');
+                }
             }
         }
         
