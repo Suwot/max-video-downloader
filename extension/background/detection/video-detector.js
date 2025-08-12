@@ -2,16 +2,13 @@ import { createLogger } from '../../shared/utils/logger.js';
 import { shouldIgnoreForMediaDetection } from './url-filters.js';
 import { addDetectedVideo } from '../processing/video-processor.js';
 import { getRequestHeaders, removeHeadersByRequestId } from '../../shared/utils/headers-utils.js';
-import { identifyVideoType, identifyVideoTypeFromMime, extractExpiryInfo, isMediaSegment } from './video-type-identifier.js';
+import { probe, gate } from './video-type-identifier.js';
 import { settingsManager } from '../index.js';
 import { generateId } from '../../shared/utils/processing-utils.js';
 
 // Create a logger instance for video detection
 const logger = createLogger('VideoDetector');
 logger.setLevel('ERROR');
-
-// Detection context tracking (tabId -> timestamp when MPD was detected)
-const tabsWithMpd = new Map();
 
 /**
  * Get containers from MIME type for direct assignment during detection
@@ -25,19 +22,18 @@ function getContainersFromMimeType(mimeType, mediaType) {
     const normalizedMime = mimeType.toLowerCase().split(';')[0]; // Remove parameters
     const subtype = normalizedMime.split('/')[1] || '';
 
-    let videoContainer = 'mp4'; // Default
-
-    // Special cases for webm and mkv
+    let videoContainer = 'mp4';
+    let audioContainer = 'm4a';
     if (subtype.includes('webm')) {
         videoContainer = 'webm';
+        audioContainer = 'webm';
     } else if (subtype.includes('matroska') || subtype.includes('mkv')) {
         videoContainer = 'mkv';
+        audioContainer = 'mka';
+    } else if (subtype === 'ogg' || subtype.includes('ogg')) {
+        videoContainer = 'ogg';
+        audioContainer = 'ogg';
     }
-
-    // Audio container based on video container
-    const audioContainer = videoContainer === 'webm' ? 'webm' :
-        videoContainer === 'mkv' ? 'mp3' : 'm4a';
-
     return {
         videoContainer,
         audioContainer,
@@ -126,8 +122,6 @@ async function getTabUrl(tabId, initiatorUrl = null) {
  * @param {Object|null} tabInfo - Tab information (url, title, favIconUrl, incognito)
  */
 function addVideoWithCommonProcessing(tabId, url, videoInfo, metadata, source, tabInfo = null, requestId = null) {
-    // Extract expiry info once
-    const expiryInfo = extractExpiryInfo(url);
     const videoData = {
         url,
         type: videoInfo.type,
@@ -137,8 +131,7 @@ function addVideoWithCommonProcessing(tabId, url, videoInfo, metadata, source, t
         ...(tabInfo || {}),
         ...(metadata && { metadata }),
         ...(videoInfo.mediaType && { mediaType: videoInfo.mediaType }),
-        ...(videoInfo.originalContainer && { originalContainer: videoInfo.originalContainer }),
-        ...(expiryInfo && { expiryInfo })
+        ...(videoInfo.originalContainer && { originalContainer: videoInfo.originalContainer })
     };
 
     // For direct videos, create videoTracks immediately with container info for instant download capability
@@ -196,51 +189,21 @@ export async function processWebRequest(details, metadata = null) {
     // Use resolved tabId if available
     const resolvedTabId = tabInfo.tabId || tabId;
 
-    // Try MIME type detection first (most reliable)
-    if (metadata?.contentType) {
-        const mimeTypeInfo = identifyVideoTypeFromMime(metadata.contentType, url);
-
-        if (mimeTypeInfo) {
-            // Handle DASH manifest detection
-            if (mimeTypeInfo.type === 'dash') {
-                tabsWithMpd.set(resolvedTabId, Date.now());
-                addVideoWithCommonProcessing(resolvedTabId, url, mimeTypeInfo, metadata, `BG_webRequest_mime_${mimeTypeInfo.type}`, tabInfo, requestId);
-                return;
-            }
-
-            // Handle direct video/audio files with additional filtering
-            if (mimeTypeInfo.type === 'direct') {
-                // Skip audio-only direct types
-                if (mimeTypeInfo.mediaType === 'audio') {
-                    logger.debug(`Skipping audio-only direct type: ${url}`);
-                    return;
-                }
-                // Skip small files based on user setting
-                const minFileSize = settingsManager.get('minFileSizeFilter');
-                if (metadata.contentLength && metadata.contentLength < minFileSize) {
-                    logger.debug(`Skipping small media file (${metadata.contentLength} bytes, min: ${minFileSize}): ${url}`);
-                    return;
-                }
-
-                // Skip media segments
-                const hasMpdContext = tabsWithMpd.has(resolvedTabId);
-
-                if (isMediaSegment(url, metadata.contentType, hasMpdContext)) {
-                    logger.debug(`Skipping media segment: ${url}`);
-                    return;
-                }
-            }
-
-            addVideoWithCommonProcessing(resolvedTabId, url, mimeTypeInfo, metadata, `BG_webRequest_mime_${mimeTypeInfo.type}`, tabInfo, requestId);
-            return;
-        }
+    // Use new probe → gate pattern
+    const candidate = probe(url, metadata);
+    if (!candidate) {
+        logger.debug(`No candidate type detected for: ${url}`);
+        return;
     }
 
-    // Fallback to URL-based detection
-    const videoInfo = identifyVideoType(url);
-    if (videoInfo) {
-        addVideoWithCommonProcessing(resolvedTabId, url, videoInfo, metadata, `BG_webRequest_${videoInfo.type}`, tabInfo, requestId);
+    // Apply gate filtering (pass candidate for type-aware filtering)
+    const minFileSize = settingsManager.get('minFileSizeFilter');
+    if (!gate(url, metadata, minFileSize, candidate)) {
+        logger.debug(`Candidate rejected by gate: ${url}`);
+        return;
     }
+
+    addVideoWithCommonProcessing(resolvedTabId, url, candidate, metadata, `BG_webRequest_${candidate.type}`, tabInfo, requestId);
 }
 
 /**
@@ -260,29 +223,11 @@ export function processContentScriptVideo(tabId, videoData) {
     addDetectedVideo(videoData);
 }
 
-
-
-/**
- * Clean up detection context for a tab
- * @param {number} tabId - Tab ID to clean up
- */
-export function cleanupMPDContextForTab(tabId) {
-    if (tabsWithMpd.has(tabId)) {
-        tabsWithMpd.delete(tabId);
-        logger.debug(`Cleaned up MPD context for tab ${tabId}`);
-    }
-
-
-}
-
 /**
  * Initialize the video detector - sets up web request listeners and message handlers
  */
 export function initVideoDetector() {
     logger.info('Initializing video detector');
-
-    // Clear any stale detection context on initialization
-    tabsWithMpd.clear();
 
     setupWebRequestListener();     // Set up web request listener for video detection    
     setupMessageListener();        // Set up message listener for content script and other communications
@@ -318,6 +263,7 @@ function setupWebRequestListener() {
             // Process important headers
             let shouldSkipRequest = false;
             for (const header of details.responseHeaders) {
+                if (shouldSkipRequest) break;
                 const headerName = header.name.toLowerCase();
                 switch(headerName) {
                     case 'content-range':
@@ -445,6 +391,8 @@ function shouldSkipBasedOnContentRange(contentRange, url) {
     const start = parseInt(rangeMatch[1], 10);
     const end = parseInt(rangeMatch[2], 10);
     const total = parseInt(rangeMatch[3], 10);
+
+    if (!Number.isFinite(total) || total <= 0) return false;
 
     // Calculate what percentage of the file this range covers
     const rangeSize = end - start + 1;

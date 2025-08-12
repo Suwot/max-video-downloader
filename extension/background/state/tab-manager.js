@@ -3,7 +3,6 @@
  * Tracks tab events for cleanup and management
  */
 
-import { cleanupMPDContextForTab } from "../detection/video-detector.js";
 import { cleanupVideosForTab, getVideosForDisplay } from "../processing/video-store.js";
 import { cleanupProcessingForTab } from "../processing/video-processor.js";
 import { createLogger } from "../../shared/utils/logger.js";
@@ -112,7 +111,6 @@ function initTabTracking() {
       // Cleanup all tab-related data
       cleanupVideosForTab(tabId, false);
       cleanupProcessingForTab(tabId);
-      cleanupMPDContextForTab(tabId);
 
       // Clean up domain tracking
       if (tabDomains.has(tabId)) {
