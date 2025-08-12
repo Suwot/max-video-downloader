@@ -4,7 +4,6 @@
  */
 
 import { createLogger } from './logger.js';
-import { shouldIgnoreForHeaderCapture } from '../../background/detection/url-filters.js';
 
 // Create a logger instance for the headers utilities
 const logger = createLogger('Headers Utils');
@@ -51,10 +50,6 @@ function extractHeaders(requestHeaders) {
  * @param {Object} details - Request details from webRequest API
  */
 function captureRequestHeaders(details) {
-    // Skip if should be ignored or missing requestId
-    if (shouldIgnoreForHeaderCapture(details.url)) {
-        return;
-    }
     if (!details.requestId) {
         logger.warn('No requestId in details, cannot store headers');
         return;

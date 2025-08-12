@@ -1,5 +1,4 @@
 import { createLogger } from '../../shared/utils/logger.js';
-import { shouldIgnoreForMediaDetection } from './url-filters.js';
 import { addDetectedVideo } from '../processing/video-processor.js';
 import { getRequestHeaders, removeHeadersByRequestId } from '../../shared/utils/headers-utils.js';
 import { probe, gate } from './video-type-identifier.js';
@@ -19,26 +18,39 @@ logger.setLevel('ERROR');
 function getContainersFromMimeType(mimeType, mediaType) {
     if (!mimeType) return null;
 
-    const normalizedMime = mimeType.toLowerCase().split(';')[0]; // Remove parameters
-    const subtype = normalizedMime.split('/')[1] || '';
+    const normalizedMime = mimeType.toLowerCase().split(';')[0];
+    const [top, sub] = normalizedMime.split('/');
 
+    // Audio-only precise mapping
+    if (top === 'audio') {
+        let audioContainer = 'm4a';
+        if (sub === 'mpeg') audioContainer = 'mp3';
+        else if (sub === 'mp4' || sub === 'aac') audioContainer = 'm4a';
+        else if (sub === 'wav' || sub === 'x-wav') audioContainer = 'wav';
+        else if (sub === 'flac') audioContainer = 'flac';
+        else if (sub === 'ogg' || sub === 'vorbis' || sub === 'opus') audioContainer = 'ogg';
+        else if (sub === 'webm') audioContainer = 'webm';
+        else if (sub === 'x-matroska' || sub === 'matroska') audioContainer = 'mka';
+        return { videoContainer: null, audioContainer, reason: `detection-mime: ${normalizedMime}` };
+    }
+
+    // Video (container defaults)
     let videoContainer = 'mp4';
     let audioContainer = 'm4a';
-    if (subtype.includes('webm')) {
+    if (sub.includes('webm')) {
         videoContainer = 'webm';
         audioContainer = 'webm';
-    } else if (subtype.includes('matroska') || subtype.includes('mkv')) {
+    } else if (sub.includes('matroska') || sub.includes('mkv')) {
         videoContainer = 'mkv';
         audioContainer = 'mka';
-    } else if (subtype === 'ogg' || subtype.includes('ogg')) {
+    } else if (sub.includes('quicktime')) {
+        videoContainer = 'mov';
+        audioContainer = 'm4a';
+    } else if (sub === 'ogg' || sub.includes('ogg')) {
         videoContainer = 'ogg';
         audioContainer = 'ogg';
     }
-    return {
-        videoContainer,
-        audioContainer,
-        reason: `detection-mime: ${normalizedMime}`
-    };
+    return { videoContainer, audioContainer, reason: `detection-mime: ${normalizedMime}` };
 }
 
 /**
@@ -172,10 +184,6 @@ function addVideoWithCommonProcessing(tabId, url, videoInfo, metadata, source, t
 export async function processWebRequest(details, metadata = null) {
     const { tabId, url, requestId, initiator } = details;
     // logger.info(`Received URL ${url} after processing in onHeadersReceived:`, metadata)
-
-    // First check if we should ignore this URL
-    if (shouldIgnoreForMediaDetection(url, metadata)) return;
-    logger.debug(`Processing video URL after ShouldIgnoreForMediaDetection: ${url} with metadata:`, metadata);
 
     // Get tab URL for page context tracking (with fallback for negative tabId)
     const tabInfo = await getTabUrl(tabId, initiator);
