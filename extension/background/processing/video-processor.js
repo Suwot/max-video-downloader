@@ -326,7 +326,7 @@ async function processDirectVideo(videoData) {
     const metadataResult = await getFFprobeMetadata(videoData);
     // Generate preview if enabled and video has video content
     if (settingsManager.get('autoGeneratePreviews') && metadataResult?.hasVideo) {
-        await generateVideoPreview(videoData);
+        await generateVideoPreview({ ...videoData, duration: metadataResult.duration });
     }
 }
 
