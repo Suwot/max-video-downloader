@@ -64,7 +64,7 @@ class GeneratePreviewCommand extends BaseCommand {
                 // Calculate ideal timestamp based on duration if available
                 let timestamp = '00:00:01'; // Default timestamp
                 if (duration) {
-                    // Choose 10% into the video, but not less than 1 sec and not more than 5 secs
+                    // Choose 10% into the video, but not less than 1 sec and not more than 10 secs
                     const durationSecs = parseFloat(duration);
                     if (!isNaN(durationSecs) && durationSecs > 0) {
                         const previewTime = Math.min(Math.max(durationSecs * 0.1, 1), 10);
@@ -93,12 +93,12 @@ class GeneratePreviewCommand extends BaseCommand {
                     ffmpegArgs.push(
                         '-allowed_extensions', 'ALL',
                         '-protocol_whitelist', 'file,http,https,tcp,tls,crypto',
-                        '-probesize', '1M'
+                        '-probesize', '3M'
                     );
                 } else if (type === 'dash') {
                     ffmpegArgs.push(
                         '-protocol_whitelist', 'file,http,https,tcp,tls,crypto',
-                        '-probesize', '1M',
+                        '-probesize', '3M',
                         '-dash_allow_hier_sidx', '1'
                     );
                 }
