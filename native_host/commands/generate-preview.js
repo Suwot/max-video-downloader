@@ -98,7 +98,8 @@ class GeneratePreviewCommand extends BaseCommand {
                 } else if (type === 'dash') {
                     ffmpegArgs.push(
                         '-protocol_whitelist', 'file,http,https,tcp,tls,crypto',
-                        '-probesize', '1M'
+                        '-probesize', '1M',
+                        '-dash_allow_hier_sidx', '1'
                     );
                 }
                 // Direct media types use default FFmpeg protocol handling (no special options needed)

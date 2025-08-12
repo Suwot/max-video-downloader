@@ -7,3 +7,46 @@ node_modules/
 .git/
 *.log
 *.tmp
+
+# Build artifacts and binaries
+native_host/build/
+extension/popup/styles/*.css
+*.DS_Store
+
+# Exclude common build/cache directories
+build/
+dist/
+out/
+target/
+.cache/
+.temp/
+tmp/
+
+# Exclude binary and media files
+*.exe
+*.dll
+*.so
+*.dylib
+*.bin
+
+# Exclude documentation and config files that clutter search
+*.txt
+*.rst
+*.cfg
+*.ini
+*.conf
+CHANGELOG*
+LICENSE*
+COPYING*
+
+# Exclude version control and IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Exclude package manager files
+yarn.lock
+pnpm-lock.yaml
+composer.lock

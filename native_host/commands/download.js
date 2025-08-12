@@ -722,7 +722,7 @@ class DownloadCommand extends BaseCommand {
                 if (type === 'hls') {
                     args.push('-protocol_whitelist', 'file,http,https,tcp,tls,crypto', '-f', 'hls', '-allowed_extensions', 'ALL', '-probesize', '5M', '-analyzeduration', '10M');
                 } else if (type === 'dash') {
-                    args.push('-protocol_whitelist', 'file,http,https,tcp,tls,crypto', '-probesize', '5M', '-analyzeduration', '10M');
+                    args.push('-protocol_whitelist', 'file,http,https,tcp,tls,crypto', '-probesize', '5M', '-analyzeduration', '10M', '-dash_allow_hier_sidx', '1');
                 }
                 args.push('-i', input.url);
             });
@@ -735,7 +735,7 @@ class DownloadCommand extends BaseCommand {
             if (type === 'hls') {
                 args.push('-protocol_whitelist', 'file,http,https,tcp,tls,crypto', '-allowed_extensions', 'ALL', '-probesize', '5M', '-analyzeduration', '10M');
             } else if (type === 'dash') {
-                args.push('-protocol_whitelist', 'file,http,https,tcp,tls,crypto', '-probesize', '5M', '-analyzeduration', '10M');
+                args.push('-protocol_whitelist', 'file,http,https,tcp,tls,crypto', '-probesize', '5M', '-analyzeduration', '10M', '-dash_allow_hier_sidx', '1');
             }
             args.push('-i', downloadUrl);
             logDebug('🎯 Added single input:', type);
