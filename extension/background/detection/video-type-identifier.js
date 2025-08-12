@@ -52,6 +52,9 @@ export function probe(url, metadata = null) {
         return { type: 'dash', mime: normalizedMime };
     }
 
+    // Skip video/mp2t (almost always HLS segments, too rare as direct video)
+    if (normalizedMime === 'video/mp2t') return null;
+
     // Direct: clear audio/video mime or rare direct mimes, or strong extension hint
     const hasDirectMime = (normalizedMime && (normalizedMime.startsWith('video/') || normalizedMime.startsWith('audio/') || DIRECT_MIMES.has(normalizedMime)));
     const hasDirectExt = DIRECT_EXT_RE.test(url);
