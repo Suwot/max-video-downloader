@@ -183,6 +183,30 @@
     }
 }
 
+// Subtle interactive background pattern (for icons, badges, etc.)
+%theme-subtle-interactive {
+    @extend %theme-text-secondary;
+    transition: all var(--transition-normal);
+    
+    .theme-dark & {
+        background-color: rgba(255, 255, 255, 0.15);
+        
+        &:hover:not(:disabled) {
+            background-color: rgba(255, 255, 255, 0.25);
+            color: var(--text-primary-dark);
+        }
+    }
+    
+    .theme-light & {
+        background-color: rgba(0, 0, 0, 0.1);
+        
+        &:hover:not(:disabled) {
+            background-color: rgba(0, 0, 0, 0.15);
+            color: var(--text-primary-light);
+        }
+    }
+}
+
 // Scrollbar theming
 %theme-scrollbar {
     scrollbar-width: none;

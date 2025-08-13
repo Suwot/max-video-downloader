@@ -216,24 +216,19 @@
 
 
 .tooltip-icon {
-    display: flex;
+    @extend %interactive-base;
+    @extend %theme-subtle-interactive;
+    display: inline-flex;
     align-items: center;
     justify-content: center;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
     cursor: help;
-    opacity: 0.7;
-    transition: opacity var(--transition-normal);
-
-    &:hover {
-        opacity: 1;
-        
-        svg {
-            @extend %theme-text-primary;
-        }
-    }
-
-    svg {
-        @extend %theme-text-secondary;
-    }
+    font-size: 10px;
+    font-weight: 600;
+    line-height: 1;
+    flex-shrink: 0;
 }
 
 // =====================================================
@@ -508,35 +503,17 @@
 
 .reconnect-icon {
     @extend %interactive-base;
+    @extend %theme-subtle-interactive;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     width: 16px;
     height: 16px;
-    margin-left: 6px;
     padding: 2px;
     border: none;
     border-radius: 3px;
     background: transparent;
     cursor: pointer;
-    
-    .theme-dark & {
-        color: var(--text-secondary-dark);
-        
-        &:hover:not(:disabled) {
-            color: var(--text-primary-dark);
-            background-color: rgba(255, 255, 255, 0.1);
-        }
-    }
-    
-    .theme-light & {
-        color: var(--text-secondary-light);
-        
-        &:hover:not(:disabled) {
-            color: var(--text-primary-light);
-            background-color: rgba(0, 0, 0, 0.1);
-        }
-    }
     
     &.hidden {
         display: none;
