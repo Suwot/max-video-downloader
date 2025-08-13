@@ -64,10 +64,10 @@ class GeneratePreviewCommand extends BaseCommand {
                 // Calculate ideal timestamp based on duration if available
                 let timestamp = '00:00:01'; // Default timestamp
                 if (duration) {
-                    // Choose 10% into the video, but not less than 1 sec and not more than 10 secs
+                    // Choose 10% into the video, but not less than 1 sec and not more than 5 secs
                     const durationSecs = parseFloat(duration);
                     if (!isNaN(durationSecs) && durationSecs > 0) {
-                        const previewTime = Math.min(Math.max(durationSecs * 0.1, 1), 10);
+                        const previewTime = Math.min(Math.max(durationSecs * 0.1, 1), 5);
                         timestamp = new Date(previewTime * 1000).toISOString().substring(11, 19);
                         logDebug(`Using smart timestamp for preview: ${timestamp} (${previewTime}s, 10% of ${durationSecs}s duration)`);
                     }
