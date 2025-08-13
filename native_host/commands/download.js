@@ -517,11 +517,19 @@ class DownloadCommand extends BaseCommand {
 
     // Generate clean output filename with mode-specific suffixes
     generateOutputFilename(filename, container, audioOnly = false, subsOnly = false, audioLabel = null, subsLabel = null) {
-        // Clean up filename: remove query params
-        let outputFilename = (filename ? filename.replace(/[?#].*$/, '') : 'video');
+        // Start with provided filename or default
+        let outputFilename = filename || 'video';
         
-        // Sanitize unsafe filesystem characters
-        outputFilename = outputFilename.replace(/[<>:"/\\|?*]/g, '_').replace(/\s+/g, ' ').trim();
+        // Map unsafe filesystem characters to safe alternatives (preserves meaning)
+        outputFilename = outputFilename
+            .replace(/[<>]/g, '()') // Angle brackets to parentheses
+            .replace(/[:"]/g, '-')  // Colon and quotes to dash
+            .replace(/[/\\|]/g, '_') // Slashes and pipe to underscore
+            .replace(/[?]/g, '？')   // Question mark to full-width question mark (preserves meaning)
+            .replace(/[*]/g, '★')    // Asterisk to star symbol
+            .replace(/[\x00-\x1f\x7f]/g, '') // Remove control characters
+            .replace(/\s+/g, ' ')    // Normalize whitespace
+            .trim();
         
         // Remove any existing extension to prevent double extensions
         const extensionMatch = outputFilename.match(/\.[a-zA-Z0-9]{1,5}$/);
