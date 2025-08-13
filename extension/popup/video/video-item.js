@@ -778,16 +778,9 @@ export class VideoItemComponent {
      * @returns {boolean} True if any tracks are incompatible
      */
     hasIncompatibleTracks(videoContainer) {
-        // Check audio tracks
+        // Check audio tracks only - subtitles will be transcoded based on final container
         for (const audioTrack of this.selectedTracks.audioTracks) {
             if (audioTrack.audioContainer && !isTrackCompatibleWithVideo(audioTrack.audioContainer, 'audio', videoContainer)) {
-                return true;
-            }
-        }
-        
-        // Check subtitle tracks
-        for (const subTrack of this.selectedTracks.subtitleTracks) {
-            if (subTrack.subtitleContainer && !isTrackCompatibleWithVideo(subTrack.subtitleContainer, 'subtitle', videoContainer)) {
                 return true;
             }
         }

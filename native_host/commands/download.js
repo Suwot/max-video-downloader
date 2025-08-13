@@ -719,7 +719,14 @@ class DownloadCommand extends BaseCommand {
             inputs.forEach(input => {
                 args.push('-map', input.streamMap);
             });
-            args.push('-c', 'copy');
+            
+            // Add codec arguments with subtitle transcoding for video mode
+            if (downloadType === 'video') {
+                args.push('-c:v', 'copy', '-c:a', 'copy');
+                this.addSubtitleCodecArgs(args, container);
+            } else {
+                args.push('-c', 'copy');
+            }
             logDebug('🎯 Added multiple inputs for HLS advanced mode:', inputs.length);
         } else {
             // Single input mode (all other cases)
@@ -740,7 +747,14 @@ class DownloadCommand extends BaseCommand {
                 streamSelection.split(',').forEach(streamSpec => {
                     args.push('-map', streamSpec);
                 });
-                args.push('-c', 'copy');
+                
+                // Add codec arguments with subtitle transcoding for video mode
+                if (downloadType === 'video') {
+                    args.push('-c:v', 'copy', '-c:a', 'copy');
+                    this.addSubtitleCodecArgs(args, container);
+                } else {
+                    args.push('-c', 'copy');
+                }
             } else {
                 // All other cases: simple download based on container type
                 if (downloadType === 'audio') {
@@ -749,8 +763,13 @@ class DownloadCommand extends BaseCommand {
                 } else if (downloadType === 'subs') {
                     args.push('-map', '0:s:0', '-vn', '-an', '-c:s', 'copy');
                 } else {
-                    // Video: copy all streams (default FFmpeg behavior)
-                    args.push('-c', 'copy');
+                    // Video: copy all streams with subtitle transcoding
+                    if (downloadType === 'video') {
+                        args.push('-c:v', 'copy', '-c:a', 'copy');
+                        this.addSubtitleCodecArgs(args, container);
+                    } else {
+                        args.push('-c', 'copy');
+                    }
                 }
             }
         }
@@ -801,6 +820,45 @@ class DownloadCommand extends BaseCommand {
             // Other containers (m4a, flac, ogg, etc.): Copy by default
             args.push('-c:a', 'copy');
             logDebug(`🎵 ${container} container: copying audio stream`);
+        }
+    }
+
+    /**
+     * Add appropriate subtitle codec arguments based on container format
+     * @param {Array} args - FFmpeg arguments array
+     * @param {string} container - Output container format (from extension)
+     * @private
+     */
+    addSubtitleCodecArgs(args, container) {
+        logDebug('📝 Subtitle codec selection for container:', container);
+        
+        // Container-specific subtitle format mapping
+        switch (container.toLowerCase()) {
+            case 'mp4':
+            case 'mov':
+            case 'm4v':
+                // MP4 containers: transcode to mov_text (native MP4 subtitle format)
+                args.push('-c:s', 'mov_text');
+                logDebug('📝 MP4 container: transcoding subtitles to mov_text');
+                break;
+                
+            case 'mkv':
+                // MKV containers: transcode to srt (widely compatible, no positioning artifacts)
+                args.push('-c:s', 'srt');
+                logDebug('📝 MKV container: transcoding subtitles to srt');
+                break;
+                
+            case 'webm':
+                // WebM containers: keep as webvtt (native WebM subtitle format)
+                args.push('-c:s', 'webvtt');
+                logDebug('📝 WebM container: transcoding subtitles to webvtt');
+                break;
+                
+            default:
+                // Other containers: copy by default
+                args.push('-c:s', 'copy');
+                logDebug(`📝 ${container} container: copying subtitle streams`);
+                break;
         }
     }
 

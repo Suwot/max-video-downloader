@@ -469,16 +469,6 @@ export class VideoDropdownComponent {
             option.classList.remove('compatible', 'incompatible');
             option.classList.add(isCompatible ? 'compatible' : 'incompatible');
         });
-        
-        // Check all subtitle tracks
-        columnsContainer.querySelectorAll('.column.subtitle .track-option').forEach(option => {
-            const trackData = this.getTrackFromOption(option, 'subtitle');
-            const isCompatible = trackData?.subtitleContainer ? 
-                isTrackCompatibleWithVideo(trackData.subtitleContainer, 'subtitle', videoContainer) : false;
-            
-            option.classList.remove('compatible', 'incompatible');
-            option.classList.add(isCompatible ? 'compatible' : 'incompatible');
-        });
     }
     
     /**
