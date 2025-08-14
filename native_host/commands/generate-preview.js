@@ -62,7 +62,7 @@ class GeneratePreviewCommand extends BaseCommand {
                     logDebug('Preview generation timeout after 30 seconds');
                     this.sendMessage({ timeout: true, success: false });
                     resolve({ timeout: true, success: false });
-                }, 30000); // 30 second timeout for preview generation
+                }, 40000); // 40 second timeout for preview generation
                 
                 // Calculate ideal timestamp based on duration if available
                 let timestamp = '00:00:01'; // Default timestamp
