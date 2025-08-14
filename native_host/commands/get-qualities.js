@@ -83,7 +83,25 @@ class GetQualitiesCommand extends BaseCommand {
                 // Add URL as the last argument
                 ffprobeArgs.push(analyzeUrl);
                 
-                const ffprobe = spawn(ffmpegService.getFFprobePath(), ffprobeArgs, { env: getFullEnv() });
+                // Log the complete FFprobe command for debugging
+                const ffprobePath = ffmpegService.getFFprobePath();
+                const commandLine = `${ffprobePath} ${ffprobeArgs.join(' ')}`;
+                logDebug('🔍 FFprobe analysis command:', commandLine);
+                
+                const ffprobe = spawn(ffprobePath, ffprobeArgs, { env: getFullEnv() });
+                let killedByTimeout = false;
+    
+                // Set timeout for FFprobe analysis
+                const timeout = setTimeout(() => {
+                    if (ffprobe && !ffprobe.killed) {
+                        logDebug('Killing FFprobe process due to timeout');
+                        killedByTimeout = true;
+                        ffprobe.kill('SIGTERM');
+                    }
+                    logDebug('Media analysis timeout after 30 seconds');
+                    this.sendMessage({ timeout: true, success: false });
+                    resolve({ timeout: true, success: false });
+                }, 30000); // 30 second timeout for media analysis
     
                 let output = '';
                 let errorOutput = '';
@@ -97,6 +115,14 @@ class GetQualitiesCommand extends BaseCommand {
                 });
     
                 ffprobe.on('close', (code) => {
+                    clearTimeout(timeout);
+                    
+                    // If killed by timeout, don't process results
+                    if (killedByTimeout) {
+                        logDebug('FFprobe process was killed by timeout, skipping result processing');
+                        return; // Promise already resolved by timeout handler
+                    }
+                    
                     if (code === 0 && output) {
                         try {
                             const info = JSON.parse(output);
@@ -310,9 +336,14 @@ class GetQualitiesCommand extends BaseCommand {
                 });
     
                 ffprobe.on('error', (err) => {
-                    logDebug('❌ FFprobe spawn error:', err);
-                    this.sendMessage('Failed to start FFprobe: ' + err.message);
-                    resolve({ error: 'Failed to start FFprobe: ' + err.message });
+                    clearTimeout(timeout);
+                    
+                    // Don't send duplicate error if already killed by timeout
+                    if (!killedByTimeout) {
+                        logDebug('❌ FFprobe spawn error:', err);
+                        this.sendMessage('Failed to start FFprobe: ' + err.message);
+                        resolve({ error: 'Failed to start FFprobe: ' + err.message });
+                    }
                 });
             });
         } catch (err) {

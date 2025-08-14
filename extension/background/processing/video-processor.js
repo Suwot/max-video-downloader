@@ -458,6 +458,13 @@ async function generateVideoPreview(videoData, sourceUrl = null) {
                 previewUrl: response.previewUrl,
                 previewSourceUrl: sourceUrl || null, // Track where preview came from
             });
+        } else if (response && response.timeout) {
+            logger.warn(`[GP] Preview generation timed out for: ${normalizedUrl} (killed after 30 seconds)`);
+            updateVideo('flag', 'update', { 
+                tabId, 
+                normalizedUrl, 
+                generatingPreview: false 
+            });
         } else {
             logger.debug(`[GP] No preview URL in response for: ${normalizedUrl}`);
             updateVideo('flag', 'update', { 
@@ -497,7 +504,18 @@ async function getFFprobeMetadata(videoData) {
 
         const streamInfo = response?.streamInfo || null;
 
-        if (streamInfo) {
+        if (response && response.timeout) {
+            logger.warn(`[FFprobe] Media analysis timed out for: ${normalizedUrl} (killed after 30 seconds)`);
+            // Remove video from UI as analysis failed
+            updateVideo('flag', 'remove', {
+                tabId,
+                normalizedUrl,
+                processing: false,
+                isValid: false,
+                validForDisplay: false
+            });
+            return null;
+        } else if (streamInfo) {
             logger.debug(`Got FFprobe stream analysis for ${normalizedUrl}`);
 
             // Add standardizedResolution if height is available

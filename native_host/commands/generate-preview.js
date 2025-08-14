@@ -49,17 +49,20 @@ class GeneratePreviewCommand extends BaseCommand {
             return new Promise((resolve, reject) => {
                 const previewPath = path.join(process.env.HOME || os.homedir(), '.cache', 'video-preview-' + Date.now() + '.jpg');
                 let ffmpeg = null;
+                let killedByTimeout = false;
                 
                 // Set a timeout to prevent hanging
                 const timeout = setTimeout(() => {
                     if (ffmpeg && !ffmpeg.killed) {
                         logDebug('Killing FFmpeg process due to timeout');
+                        killedByTimeout = true;
                         ffmpeg.kill('SIGTERM');
                     }
-                    const timeoutError = new Error('Preview generation timeout after 30 seconds');
-                    this.sendMessage({ error: timeoutError.message });
-                    reject(timeoutError);
-                }, 30000); // 30 second timeout
+                    // Send a clean timeout response instead of an error
+                    logDebug('Preview generation timeout after 30 seconds');
+                    this.sendMessage({ timeout: true, success: false });
+                    resolve({ timeout: true, success: false });
+                }, 30000); // 30 second timeout for preview generation
                 
                 // Calculate ideal timestamp based on duration if available
                 let timestamp = '00:00:01'; // Default timestamp
@@ -113,7 +116,12 @@ class GeneratePreviewCommand extends BaseCommand {
                     previewPath
                 ]);
                 
-                ffmpeg = spawn(ffmpegService.getFFmpegPath(), ffmpegArgs, { env: getFullEnv() });
+                // Log the complete FFmpeg command for debugging
+                const ffmpegPath = ffmpegService.getFFmpegPath();
+                const commandLine = `${ffmpegPath} ${ffmpegArgs.join(' ')}`;
+                logDebug('🎬 FFmpeg preview command:', commandLine);
+                
+                ffmpeg = spawn(ffmpegPath, ffmpegArgs, { env: getFullEnv() });
         
                 let errorOutput = '';
         
@@ -123,6 +131,13 @@ class GeneratePreviewCommand extends BaseCommand {
         
                 ffmpeg.on('close', (code) => {
                     clearTimeout(timeout);
+                    
+                    // If killed by timeout, don't try to process the file
+                    if (killedByTimeout) {
+                        logDebug('FFmpeg process was killed by timeout, skipping file processing');
+                        return; // Promise already rejected by timeout handler
+                    }
+                    
                     if (code === 0) {
                         try {
                             // Convert image to data URL
@@ -149,9 +164,13 @@ class GeneratePreviewCommand extends BaseCommand {
         
                 ffmpeg.on('error', (err) => {
                     clearTimeout(timeout);
-                    logDebug('FFmpeg process error:', err);
-                    this.sendMessage({ error: err.message });
-                    reject(err);
+                    
+                    // Don't send duplicate error if already killed by timeout
+                    if (!killedByTimeout) {
+                        logDebug('FFmpeg process error:', err);
+                        this.sendMessage({ error: err.message });
+                        reject(err);
+                    }
                 });
             });
         } catch (err) {

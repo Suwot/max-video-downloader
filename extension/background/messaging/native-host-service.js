@@ -201,11 +201,16 @@ export class NativeHostService {
                 callback: progressCallback,
                 timestamp: Date.now()
             });
-            
-            // Set timeout based on command type
-            const isLongRunning = ['download'].includes(message.command);
-            const isFileSystemCommand = message.command === 'fileSystem';
-            const timeout = isLongRunning ? 3600000 : (isFileSystemCommand ? 300000 : 30000); // 1 hour vs 5 minutes vs 30 seconds
+
+            // Safety net timeouts (much longer than native host timeouts)
+            let timeout;
+            if (message.command === 'download') {
+                timeout = 3600000 * 12; // 12 hours for downloads
+            } else if (message.command === 'fileSystem') {
+                timeout = 300000; // 5 minutes for file dialogs (user might leave dialog open)
+            } else {
+                timeout = 60000; // 1 minute for other operations (validation, etc.)
+            }
 
             setTimeout(() => {
                 if (this.pendingMessages.has(messageId)) {
@@ -231,10 +236,7 @@ export class NativeHostService {
         });
     }
     
-    /**
-     * Send a fire-and-forget message (no response expected)
-     * @param {Object} message - Message to send
-     */
+    // Send a fire-and-forget message (no response expected)
     async sendFireAndForget(message) {
         await this.ensureConnection();
         
@@ -258,9 +260,7 @@ export class NativeHostService {
     
 
     
-    /**
-     * Ensure connection is established (on-demand pattern)
-     */
+    // Ensure connection is established (on-demand pattern)
     async ensureConnection() {
         if (this.connectionState === 'connected' && this.port) {
             this.resetConnectionTimeout();
@@ -286,9 +286,7 @@ export class NativeHostService {
         return this.connect();
     }
     
-    /**
-     * Reset connection timeout (no-op - native host manages its own lifecycle)
-     */
+    // Reset connection timeout (no-op - native host manages its own lifecycle)
     resetConnectionTimeout() {
         // Clear any existing timeout but don't set a new one
         // Let the native host manage its own lifecycle based on active operations
@@ -300,9 +298,7 @@ export class NativeHostService {
 
 
 
-    /**
-     * Validate connection by sending heartbeat
-     */
+    // Validate connection by sending heartbeat
     async validateConnection() {
         this.connectionState = 'validating';
         this.broadcastConnectionState();
@@ -358,9 +354,7 @@ export class NativeHostService {
         this.broadcastConnectionState();
     }
     
-    /**
-     * Get current connection state and info
-     */
+    // Get current connection state and info
     getConnectionState() {
         return {
             state: this.connectionState,
@@ -372,9 +366,7 @@ export class NativeHostService {
     
 
     
-    /**
-     * Manually reconnect (for UI button)
-     */
+    // Manually reconnect (for UI button)
     async reconnect() {
         if (this.reconnectTimer) {
             clearTimeout(this.reconnectTimer);
@@ -384,16 +376,12 @@ export class NativeHostService {
         return this.connect();
     }
     
-    /**
-     * Set broadcast function (called from popup-communication.js to avoid circular dependency)
-     */
+    // Set broadcast function (called from popup-communication.js to avoid circular dependency)
     setBroadcastFunction(broadcastFn) {
         this.broadcastFn = broadcastFn;
     }
     
-    /**
-     * Broadcast connection state to all popup instances
-     */
+    // Broadcast connection state to all popup instances
     broadcastConnectionState() {
         if (this.broadcastFn) {
             try {
