@@ -300,6 +300,7 @@
     text-overflow: ellipsis;
 	overflow-wrap: break-word;
     margin-block-end: 2px;
+	word-break: break-all;
     @extend %theme-text-primary;
 }
 

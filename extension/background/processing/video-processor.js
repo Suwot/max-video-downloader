@@ -231,9 +231,13 @@ async function processHlsVideo(videoData) {
             }
         }
 
+        // Calculate stream flags
+        const streamFlags = detectStreamFlags(hlsResult);
+        
         // Send only the changes from HLS processing
         updateVideo('structural', 'update', {
             ...hlsResult,
+            ...streamFlags,
             tabId,
             normalizedUrl,
             processing: false
@@ -291,7 +295,13 @@ async function processDashVideo(videoData) {
             processing: false
         };
         
-        updateVideo('structural', 'update', dashUpdates);
+        // Calculate stream flags
+        const streamFlags = detectStreamFlags(dashUpdates);
+        
+        updateVideo('structural', 'update', {
+            ...dashUpdates,
+            ...streamFlags
+        });
         
                 // Generate preview for the manifest (if enabled)
         if (settingsManager.get('autoGeneratePreviews')) {
@@ -560,6 +570,9 @@ async function getFFprobeMetadata(videoData) {
                 standardizedResolution: standardizedRes,
                 estimatedFileSizeBytes: streamInfo.sizeBytes,
                 videoTracks: videoTracks,
+				hasVideo: streamInfo.hasVideo === true,
+				hasAudio: streamInfo.hasAudio === true,
+				hasSubtitles: streamInfo.hasSubs === true
             };
             
             updateVideo('structural', 'update', ffprobeUpdates);
@@ -613,11 +626,50 @@ function clearAllProcessing() {
     processingMap.clear();
 }
 
+// assigns media flags (0-3) based on existing media tracks / containers (HLS / DASH only)
+function detectStreamFlags(videoData) {
+    // Get all track arrays
+    const videoTracksLength = videoData.videoTracks?.length || 0;
+    const audioTracksLength = videoData.audioTracks?.length || 0;
+    const subtitleTracksLength = videoData.subtitleTracks?.length || 0;
+    
+    // Count how many arrays have values
+    const arraysWithValues = [
+        { length: videoTracksLength, tracks: videoData.videoTracks, type: 'video' },
+        { length: audioTracksLength, tracks: videoData.audioTracks, type: 'audio' },
+        { length: subtitleTracksLength, tracks: videoData.subtitleTracks, type: 'subtitle' }
+    ].filter(arr => arr.length > 0);
+    
+    // If more than 1 array has values, count flags by array presence
+    if (arraysWithValues.length > 1) {
+        return {
+            hasVideo: videoTracksLength > 0,
+            hasAudio: audioTracksLength > 0,
+            hasSubtitles: subtitleTracksLength > 0
+        };
+    }
+    
+    // If only 1 array has values, count flags by first entry's containers
+    if (arraysWithValues.length === 1) {
+        const singleArray = arraysWithValues[0];
+        const firstTrack = singleArray.tracks[0];
+        
+        return {
+            hasVideo: !!firstTrack.videoContainer,
+            hasAudio: !!firstTrack.audioContainer,
+            hasSubtitles: !!firstTrack.subtitleContainer
+        };
+    }
+
+    return { hasVideo: false, hasAudio: false,  hasSubtitles: false }; // no arrays have values
+}
+
 export {
     processVideo,
     addDetectedVideo,
     handleVariantMasterRelationships,
     cleanupProcessingForTab,
     clearAllProcessing,
-    generateVideoPreview
+    generateVideoPreview,
+    detectStreamFlags
 };

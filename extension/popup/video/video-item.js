@@ -25,12 +25,18 @@ export class VideoItemComponent {
             this.downloadId = downloadRequestOrVideoData.downloadId;
             this.filename = downloadRequestOrVideoData.filename;
             this.resolvedFilename = downloadRequestOrVideoData.resolvedFilename;
+            // Prefer top-level mode flags when present (do not mutate videoData)
+            this.audioOnly = !!downloadRequestOrVideoData.audioOnly;
+            this.subsOnly = !!downloadRequestOrVideoData.subsOnly;
         } else {
             // This is plain videoData (legacy)
             this.videoData = downloadRequestOrVideoData;
             this.downloadId = downloadId;
             this.filename = null;
             this.resolvedFilename = null;
+            // Fallback to flags embedded in videoData (if any)
+            this.audioOnly = !!this.videoData.audioOnly;
+            this.subsOnly = !!this.videoData.subsOnly;
         }
         
         this.initialDownloadState = initialDownloadState; // 'default', 'starting', 'downloading', 'queued'
@@ -39,6 +45,9 @@ export class VideoItemComponent {
         this.dropdown = null;
         this.downloadButton = null;
         this.selectedTracks = this.initializeDefaultSelection();
+        this.hasVideo = this.videoData.hasVideo || false;
+        this.hasAudio = this.videoData.hasAudio || false;
+        this.hasSubtitles = this.videoData.hasSubtitles || false;
         
         // Bind methods to preserve context
         this.handleDismiss = this.handleDismiss.bind(this);
@@ -117,6 +126,9 @@ export class VideoItemComponent {
         // Create status badge HTML if needed
         const statusBadgeHtml = this.createStatusBadgeHtml();
         
+        // Create stream icons HTML for simple mode
+        const streamIconsHtml = this.createStreamIconsHtml();
+        
         const htmlTemplate = `
             <div class="preview-column">
                 <div class="preview-container has-preview">
@@ -127,7 +139,8 @@ export class VideoItemComponent {
             </div>
             <div class="info-column">
                 <div class="title-row">
-                    <h3 class="video-title item-title">${title}</h3>
+                    ${streamIconsHtml}
+                    <h3 class="video-title item-title" style="${this.calculateSimpleModeTextIndent()}">${title}</h3>
                 </div>
                 <div class="download-group">
                     <div class="custom-dropdown" data-type="${this.videoData.type || 'unknown'}">
@@ -251,6 +264,68 @@ export class VideoItemComponent {
     }
 
     /**
+     * Calculate text-indent style for simple mode title
+     * @returns {string} CSS style string for text-indent
+     */
+    calculateSimpleModeTextIndent() {
+        // In audio-only or subtitles-only modes, indent for a single icon width
+        if (this.audioOnly || this.subsOnly) {
+            return 'text-indent: 18px;';
+        }
+        const textIndent = this.calculateTextIndent();
+        return textIndent > 0 ? `text-indent: ${textIndent}px;` : '';
+    }
+
+    /**
+     * Create stream icons HTML for simple mode
+     * @returns {string} Stream icons HTML string
+     */
+    createStreamIconsHtml() {
+        const icons = [];
+        
+        // Check for mode flags first (audioOnly/subsOnly from download commands)
+    const audioOnly = this.audioOnly === true;
+    const subsOnly = this.subsOnly === true;
+        
+        if (audioOnly) {
+            // Show only audio icon for audio extraction
+            icons.push(`
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-blue)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-volume2 lucide-volume-2 w-4 h-4 text-blue-500" aria-hidden="true"><path d="M11 4.702a.705.705 0 0 0-1.203-.498L6.413 7.587A1.4 1.4 0 0 1 5.416 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.416a1.4 1.4 0 0 1 .997.413l3.383 3.384A.705.705 0 0 0 11 19.298z"></path><path d="M16 9a5 5 0 0 1 0 6"></path><path d="M19.364 18.364a9 9 0 0 0 0-12.728"></path></svg>
+            `);
+        } else if (subsOnly) {
+            // Show only subtitles icon for subtitle extraction
+            icons.push(`
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="gray" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-captions w-4 h-4 text-green-500" aria-hidden="true"><rect width="18" height="14" x="3" y="5" rx="2" ry="2"></rect><path d="M7 15h4M15 15h2M7 11h2M13 11h4"></path></svg>
+            `);
+        } else {
+            // Show icons based on has* flags for regular downloads
+            if (this.hasVideo) {
+                icons.push(`
+                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--color-green)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-film w-4 h-4 text-red-500" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2"></rect><path d="M7 3v18"></path><path d="M3 7.5h4"></path><path d="M3 12h18"></path><path d="M3 16.5h4"></path><path d="M17 3v18"></path><path d="M17 7.5h4"></path><path d="M17 16.5h4"></path></svg>
+                `);
+            }
+            
+            if (this.hasAudio) {
+                icons.push(`
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-blue)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-volume2 lucide-volume-2 w-4 h-4 text-blue-500" aria-hidden="true"><path d="M11 4.702a.705.705 0 0 0-1.203-.498L6.413 7.587A1.4 1.4 0 0 1 5.416 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.416a1.4 1.4 0 0 1 .997.413l3.383 3.384A.705.705 0 0 0 11 19.298z"></path><path d="M16 9a5 5 0 0 1 0 6"></path><path d="M19.364 18.364a9 9 0 0 0 0-12.728"></path></svg>
+                `);
+            }
+            
+            if (this.hasSubtitles) {
+                icons.push(`
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="gray" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-captions w-4 h-4 text-green-500" aria-hidden="true"><rect width="18" height="14" x="3" y="5" rx="2" ry="2"></rect><path d="M7 15h4M15 15h2M7 11h2M13 11h4"></path></svg>
+                `);
+            }
+        }
+        
+        if (icons.length === 0) {
+            return '';
+        }
+        
+        return `<div class="stream-icons">${icons.join('')}</div>`;
+    }
+
+    /**
      * Create status badge for Live/Encrypted content
      * @returns {HTMLElement} Status badge element
      */
@@ -328,24 +403,22 @@ export class VideoItemComponent {
         const streamIcons = document.createElement('div');
         streamIcons.className = 'stream-icons';
         
-        const availableStreams = this.detectAvailableStreams();
-        
         // Video icon
-        if (availableStreams.hasVideo) {
+        if (this.hasVideo) {
             streamIcons.innerHTML += `
                 <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--color-green)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-film w-4 h-4 text-red-500" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2"></rect><path d="M7 3v18"></path><path d="M3 7.5h4"></path><path d="M3 12h18"></path><path d="M3 16.5h4"></path><path d="M17 3v18"></path><path d="M17 7.5h4"></path><path d="M17 16.5h4"></path></svg>
             `;
         }
         
         // Audio icon
-        if (availableStreams.hasAudio) {
+        if (this.hasAudio) {
             streamIcons.innerHTML += `
 				<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-blue)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-volume2 lucide-volume-2 w-4 h-4 text-blue-500" aria-hidden="true"><path d="M11 4.702a.705.705 0 0 0-1.203-.498L6.413 7.587A1.4 1.4 0 0 1 5.416 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.416a1.4 1.4 0 0 1 .997.413l3.383 3.384A.705.705 0 0 0 11 19.298z"></path><path d="M16 9a5 5 0 0 1 0 6"></path><path d="M19.364 18.364a9 9 0 0 0 0-12.728"></path></svg>
             `;
         }
         
         // Subtitles icon
-        if (availableStreams.hasSubtitles) {
+        if (this.hasSubtitles) {
             streamIcons.innerHTML += `
                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="gray" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-captions w-4 h-4 text-green-500" aria-hidden="true"><rect width="18" height="14" x="3" y="5" rx="2" ry="2"></rect><path d="M7 15h4M15 15h2M7 11h2M13 11h4"></path></svg>
             `;
@@ -356,13 +429,12 @@ export class VideoItemComponent {
     
     /**
      * Calculate text-indent width for title based on stream icons
-     * @param {Object} availableStreams - Object with hasVideo, hasAudio, hasSubtitles flags
      * @returns {number} Width in pixels for text-indent
      */
-    calculateTextIndent(availableStreams) {
-        const iconCount = (availableStreams.hasVideo ? 1 : 0) + 
-                         (availableStreams.hasAudio ? 1 : 0) + 
-                         (availableStreams.hasSubtitles ? 1 : 0);
+    calculateTextIndent() {
+        const iconCount = (this.hasVideo ? 1 : 0) + 
+                         (this.hasAudio ? 1 : 0) + 
+                         (this.hasSubtitles ? 1 : 0);
         
         if (iconCount === 0) return 0;
         
@@ -370,57 +442,14 @@ export class VideoItemComponent {
         // Video: 12px, Audio: 14px, Subtitles: 14px, gaps: 4px each
         let totalWidth = 0;
         
-        if (availableStreams.hasVideo) totalWidth += 12;
-        if (availableStreams.hasAudio) totalWidth += 14;
-        if (availableStreams.hasSubtitles) totalWidth += 14;
+        if (this.hasVideo) totalWidth += 12;
+        if (this.hasAudio) totalWidth += 14;
+        if (this.hasSubtitles) totalWidth += 14;
         
         // Add gaps: (iconCount - 1) gaps between icons + 1 gap after last icon
         totalWidth += iconCount * 4;
         
         return totalWidth;
-    }
-    
-    /**
-     * Detect available stream types based on video data
-     * Universal fallback chain that works for all cases (advanced/simple dropdowns)
-     * @returns {Object} Object with hasVideo, hasAudio, hasSubtitles flags
-     */
-    detectAvailableStreams() {
-        let hasVideo = false;
-        let hasAudio = false;
-        let hasSubtitles = false;
-        
-        // Check separate track arrays first (advanced mode)
-        const videoTracksLength = this.videoData.videoTracks?.length || 0;
-        const audioTracksLength = this.videoData.audioTracks?.length || 0;
-        const subtitleTracksLength = this.videoData.subtitleTracks?.length || 0;
-        
-        // If we have separate audio or subtitle tracks, this is advanced mode
-        if (audioTracksLength > 0 || subtitleTracksLength > 0) {
-            hasVideo = videoTracksLength > 0;
-            hasAudio = audioTracksLength > 0;
-            hasSubtitles = subtitleTracksLength > 0;
-            return { hasVideo, hasAudio, hasSubtitles };
-        }
-        
-        // If we only have videoTracks (or no separate tracks), check containers
-        if (videoTracksLength > 0) {
-            // Check all video tracks for available containers
-            for (const track of this.videoData.videoTracks) {
-                if (track.videoContainer) hasVideo = true;
-                if (track.audioContainer) hasAudio = true;
-                if (track.subtitleContainer) hasSubtitles = true;
-            }
-            return { hasVideo, hasAudio, hasSubtitles };
-        }
-        
-        // Fallback: check root video data (direct videos or legacy structure)
-        const rootData = this.videoData;
-        hasVideo = !!rootData.videoContainer;
-        hasAudio = !!rootData.audioContainer;
-        hasSubtitles = !!rootData.subtitleContainer;
-        
-        return { hasVideo, hasAudio, hasSubtitles };
     }
     
     /**
@@ -442,8 +471,7 @@ export class VideoItemComponent {
         // Add stream icons and apply text-indent (only in full mode)
         if (this.renderingMode === 'full') {
             const streamIcons = this.createStreamIcons();
-            const availableStreams = this.detectAvailableStreams();
-            const textIndent = this.calculateTextIndent(availableStreams);
+            const textIndent = this.calculateTextIndent();
             
             if (textIndent > 0) {
                 title.style.textIndent = `${textIndent}px`;
@@ -574,7 +602,10 @@ export class VideoItemComponent {
             // Include live/encryption status for downloads tab display
             isLive: this.videoData.isLive,
             isEncrypted: this.videoData.isEncrypted,
-            encryptionType: this.videoData.encryptionType
+            encryptionType: this.videoData.encryptionType,
+			hasVideo: this.hasVideo,
+			hasAudio: this.hasAudio,
+			hasSubtitles: this.hasSubtitles,
         };
         
         // Determine container based on command mode (container-first logic)

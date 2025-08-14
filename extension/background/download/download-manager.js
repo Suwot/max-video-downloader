@@ -254,6 +254,8 @@ async function queueDownload(downloadCommand) {
         filename: downloadCommand.filename,
         selectedOptionOrigText: downloadCommand.selectedOptionOrigText || null,
         videoData: downloadCommand.videoData, // Include video data for UI creation
+		audioOnly: downloadCommand.audioOnly || false,
+		subsOnly: downloadCommand.subsOnly || false,
         downloadId // For precise progress mapping
     });
     
@@ -307,6 +309,8 @@ async function startDownloadImmediately(downloadRequest) {
         selectedOptionOrigText: downloadRequest.selectedOptionOrigText || null,
         videoData: downloadRequest.videoData,
         isRedownload: downloadRequest.isRedownload || false,
+        audioOnly: downloadRequest.audioOnly || false,
+        subsOnly: downloadRequest.subsOnly || false,
         downloadId // For precise progress mapping
     });
     
@@ -409,9 +413,7 @@ async function handleDownloadEvent(event) {
                 selectedOptionOrigText: downloadEntry?.downloadRequest?.selectedOptionOrigText || null,
                 type: event.type,
                 downloadStats: event.downloadStats,
-                
-                // Actual processed duration (different from manifest duration in originalCommand)
-                duration: event.duration,
+                duration: event.duration,  // Actual processed duration (different from manifest duration in originalCommand)
                 
                 // Flags for UI display
                 isPartial: event.isPartial,
@@ -419,13 +421,14 @@ async function handleDownloadEvent(event) {
                 subsOnly: event.subsOnly,
                 isRedownload: event.isRedownload,
                 isLive: event.isLive || false, // Preserve isLive flag for UI rendering
+                hasVideo: event.hasVideo || false,
+                hasAudio: event.hasAudio || false,
+                hasSubtitles: event.hasSubtitles || false,
                 
                 // Error and diagnostic info
                 errorMessage: event.errorMessage,
                 terminationInfo: event.terminationInfo,
-                
-                // Complete originalCommand for retry functionality (with previewUrl removed)
-                originalCommand: cleanOriginalCommand
+                originalCommand: cleanOriginalCommand //  // Complete originalCommand for retry functionality (with previewUrl removed)
             };
 
             await addToHistoryStorage(minimalStorageData);

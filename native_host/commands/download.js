@@ -127,7 +127,8 @@ class DownloadCommand extends BaseCommand {
         const now = Date.now();
         
         // Check if download was already canceled - prevent late progress updates
-        if (!DownloadCommand.activeDownloads.has(progressState.downloadId)) {
+        const downloadEntry = DownloadCommand.activeDownloads.get(progressState.downloadId);
+        if (!downloadEntry || downloadEntry.wasCanceled) {
             logDebug('Skipping progress update for canceled download:', progressState.downloadId);
             return;
         }
@@ -162,9 +163,6 @@ class DownloadCommand extends BaseCommand {
         const timeElapsed = now - progressState.lastProgressUpdate > 250; // 250ms throttle
         
         if (significantChange || timeElapsed) {
-            // Get download entry for additional context
-            const downloadEntry = DownloadCommand.activeDownloads.get(progressState.downloadId);
-            
             // Calculate speed (simple 3-second window)
             const elapsedSeconds = (now - progressState.startTime) / 1000;
             const speed = elapsedSeconds > 0 ? progressState.downloadedBytes / elapsedSeconds : 0;
@@ -297,11 +295,9 @@ class DownloadCommand extends BaseCommand {
         
         const { process, outputPath } = downloadEntry;
         try {
-            // IMMEDIATELY remove from activeDownloads to prevent repeated cancels
-            DownloadCommand.activeDownloads.delete(downloadId);
-            logDebug('Removed download from activeDownloads Map immediately. Remaining downloads:', DownloadCommand.activeDownloads.size);
-            
-            // Terminate FFmpeg process: q command -> 5s timeout -> SIGKILL
+            downloadEntry.wasCanceled = true;
+
+			// Terminate FFmpeg process: q command -> 5s timeout -> SIGKILL
             if (process && process.pid && !process.killed) {
                 logDebug('Terminating FFmpeg process PID:', process.pid);
                 
@@ -323,7 +319,7 @@ class DownloadCommand extends BaseCommand {
             } else {
                 logDebug('FFmpeg process already terminated or killed');
             }
-            
+			
             // Clean up progress state if available
             if (downloadEntry.progressState) {
                 // No cleanup needed for simple progress state
@@ -354,6 +350,7 @@ class DownloadCommand extends BaseCommand {
             }
             
             // For regular HLS/DASH types, send immediate cancellation message
+            // But DON'T remove from activeDownloads yet - let close handler do cleanup
             this.sendMessage({
                 command: 'download-canceled',
                 downloadId: downloadId,
@@ -432,8 +429,14 @@ class DownloadCommand extends BaseCommand {
             isLive = false,
             audioLabel = null,
             subsLabel = null,
-            allowOverwrite = false
+            allowOverwrite = false,
+            videoData = {}
         } = params;
+
+        // Extract media flags from videoData object
+        const hasVideo = videoData?.hasVideo || false;
+        const hasAudio = videoData?.hasAudio || false;
+        const hasSubtitles = videoData?.hasSubtitles || false;
 
         // Use downloadId directly from extension (no need to generate sessionId)
         if (!downloadId) {
@@ -505,7 +508,10 @@ class DownloadCommand extends BaseCommand {
                 subsOnly,
                 downloadId, // Use downloadId instead of sessionId
                 selectedOptionOrigText, 
-				isLive
+				isLive,
+                hasVideo,
+                hasAudio,
+                hasSubtitles
             });
             
         } catch (err) {
@@ -527,7 +533,7 @@ class DownloadCommand extends BaseCommand {
             .replace(/[/\\|]/g, '_') // Slashes and pipe to underscore
             .replace(/[?]/g, '？')   // Question mark to full-width question mark (preserves meaning)
             .replace(/[*]/g, '★')    // Asterisk to star symbol
-            .replace(/[\x00-\x1f\x7f]/g, '') // Remove control characters
+            .replace(/[\x00-\x1f\x7f]/g, '') // eslint-disable-line no-control-regex
             .replace(/\s+/g, ' ')    // Normalize whitespace
             .trim();
         
@@ -987,7 +993,10 @@ class DownloadCommand extends BaseCommand {
         subsOnly,
         downloadId, // Use downloadId instead of sessionId
         selectedOptionOrigText,
-		isLive
+		isLive,
+        hasVideo,
+        hasAudio,
+        hasSubtitles
     }) {
         return new Promise((resolve, _reject) => {
             // Use an IIFE to handle async operations properly
@@ -1040,7 +1049,10 @@ class DownloadCommand extends BaseCommand {
                     headers: headers || null,
                     progressState,
                     selectedOptionOrigText,
-                    isRedownload
+                    isRedownload,
+                    hasVideo,
+                    hasAudio,
+                    hasSubtitles
                 });
                 
                 logDebug('Added download to activeDownloads Map. Total downloads:', DownloadCommand.activeDownloads.size);
@@ -1063,7 +1075,7 @@ class DownloadCommand extends BaseCommand {
                 
                 // Get download info from activeDownloads BEFORE deletion
                 const downloadEntry = DownloadCommand.activeDownloads.get(downloadId);
-                const wasCanceled = !downloadEntry; // Check if it was already removed by cancelDownload
+                const wasCanceled = downloadEntry?.wasCanceled || false; // Check if it was already canceled by cancelDownload
                 
                 // Get data from progress state
                 const finalDuration = progressState.finalProcessedTime || progressState.duration;
@@ -1145,6 +1157,9 @@ class DownloadCommand extends BaseCommand {
                         subsOnly,
                         isPartial: progressState.isLive ? null : isPartial, // Add partial flag for UI
                         isLive: progressState.isLive || false, // Add isLive flag for UI
+                        hasVideo: downloadEntry?.hasVideo || false,
+                        hasAudio: downloadEntry?.hasAudio || false,
+                        hasSubtitles: downloadEntry?.hasSubtitles || false,
                         headers: downloadEntry?.headers || null
                     }, { useMessageId: false }); // Event message, no response ID
                     resolve({ 
@@ -1183,6 +1198,9 @@ class DownloadCommand extends BaseCommand {
                         audioOnly,
                         subsOnly,
                         isLive: progressState.isLive || false, // Add isLive flag for UI
+                        hasVideo: downloadEntry?.hasVideo || false,
+                        hasAudio: downloadEntry?.hasAudio || false,
+                        hasSubtitles: downloadEntry?.hasSubtitles || false,
                         headers: downloadEntry?.headers || null
                     }, { useMessageId: false }); // Event message, no response ID
                     resolve({ 
@@ -1249,6 +1267,9 @@ class DownloadCommand extends BaseCommand {
                     isRedownload,
                     audioOnly,
                     isLive: progressState.isLive || false, // Add isLive flag for UI
+                    hasVideo: downloadEntry?.hasVideo || false,
+                    hasAudio: downloadEntry?.hasAudio || false,
+                    hasSubtitles: downloadEntry?.hasSubtitles || false,
                     headers: downloadEntry?.headers || null
                 }, { useMessageId: false }); // Event message, no response ID
 

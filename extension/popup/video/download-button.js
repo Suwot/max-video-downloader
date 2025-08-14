@@ -21,18 +21,7 @@ const BUTTON_STATES = {
 };
 
 // Original download button HTML template
-const DOWNLOAD_BUTTON_ORIGINAL_HTML = `<span class="download-btn-icon">
-    <svg width="9" height="9" viewBox="0 0 9 9" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <g clip-path="url(#clip0_43_340)">
-            <path d="M5.0625 0.5625C5.0625 0.251367 4.81113 0 4.5 0C4.18887 0 3.9375 0.251367 3.9375 0.5625V4.82871L2.64727 3.53848C2.42754 3.31875 2.0707 3.31875 1.85098 3.53848C1.63125 3.7582 1.63125 4.11504 1.85098 4.33477L4.10098 6.58477C4.3207 6.80449 4.67754 6.80449 4.89727 6.58477L7.14727 4.33477C7.36699 4.11504 7.36699 3.7582 7.14727 3.53848C6.92754 3.31875 6.5707 3.31875 6.35098 3.53848L5.0625 4.82871V0.5625ZM1.125 6.1875C0.504492 6.1875 0 6.69199 0 7.3125V7.875C0 8.49551 0.504492 9 1.125 9H7.875C8.49551 9 9 8.49551 9 7.875V7.3125C9 6.69199 8.49551 6.1875 7.875 6.1875H6.09082L5.29453 6.98379C4.85508 7.42324 4.14316 7.42324 3.70371 6.98379L2.90918 6.1875H1.125ZM7.59375 7.17188C7.70564 7.17188 7.81294 7.21632 7.89206 7.29544C7.97118 7.37456 8.01562 7.48186 8.01562 7.59375C8.01562 7.70564 7.97118 7.81294 7.89206 7.89206C7.81294 7.97118 7.70564 8.01562 7.59375 8.01562C7.48186 8.01562 7.37456 7.97118 7.29544 7.89206C7.21632 7.81294 7.17188 7.70564 7.17188 7.59375C7.17188 7.48186 7.21632 7.37456 7.29544 7.29544C7.37456 7.21632 7.48186 7.17188 7.59375 7.17188Z" fill="#FAFAFA"/>
-        </g>
-        <defs>
-            <clipPath id="clip0_43_340">
-                <path d="M0 0H9V9H0V0Z" fill="white"/>
-            </clipPath>
-        </defs>
-    </svg>
-</span><span>Download</span>`;
+const DOWNLOAD_BUTTON_ORIGINAL_HTML = `<span>Download</span>`;
 
 /**
  * VideoDownloadButtonComponent - Manages download button state and actions
@@ -45,6 +34,9 @@ export class VideoDownloadButtonComponent {
         this.downloadBtn = null;
         this.menuBtn = null;
         this.menuDropdown = null;
+        this.hasVideo = this.videoItemComponent.videoData.hasVideo || false;
+        this.hasAudio = this.videoItemComponent.videoData.hasAudio || false;
+        this.hasSubtitles = this.videoItemComponent.videoData.hasSubtitles || false;
         
         // State management
         this.currentState = BUTTON_STATES.DEFAULT;
@@ -228,7 +220,7 @@ export class VideoDownloadButtonComponent {
         const menuItems = [];
 
         // Conditionally add menu items
-        if (this.hasAudio()) {
+        if (this.hasAudio) {
             menuItems.push({
                 icon: `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-audio-lines w-3 h-3" aria-hidden="true">
                     <path d="M2 10v3"></path>
@@ -243,7 +235,7 @@ export class VideoDownloadButtonComponent {
             });
         }
 
-        if (this.hasSubs()) {
+        if (this.hasSubtitles) {
             menuItems.push({
                 icon: `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-captions w-3 h-3" aria-hidden="true">
                     <rect width="18" height="14" x="3" y="5" rx="2" ry="2"></rect>
@@ -293,46 +285,7 @@ export class VideoDownloadButtonComponent {
 
         return menuDropdown;
     }
-    
-    /**
-     * Check if video has audio track(s)
-     * @returns {boolean}
-     */
-    hasAudio() {
-        const videoData = this.videoItemComponent.videoData;
-        const type = videoData.type;
-        
-        if (type === 'hls') {
-            if (videoData.isMaster) {
-                return videoData.audioTracks?.length > 0 || videoData.videoTracks?.[0]?.audioContainer;
-            } else {
-                return true; // assume audio exists in a variant
-            }
-        } else if (type === 'direct') {
-            return videoData.metaFFprobe?.hasAudio === true;
-        } else if (type === 'dash') {
-            return videoData.audioTracks?.length > 0;
-        }
-        return false;
-    }
-    
-    /**
-     * Check if video has subtitles
-     * @returns {boolean}
-     */
-    hasSubs() {
-        const videoData = this.videoItemComponent.videoData;
-        const type = videoData.type;
-        
-        if (type === 'hls' || type === 'dash') {
-            return videoData.subtitleTracks?.length > 0;
-        }
-        if (type === 'direct') {
-            return videoData.metaFFprobe?.hasSubs === true;
-        }
-        return false;
-    }
-    
+
     /**
      * Handle menu item clicks
      * @param {string} action - Action identifier
