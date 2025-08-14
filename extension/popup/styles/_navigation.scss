@@ -69,7 +69,7 @@
 .dismiss-button {
     background: none;
     border: none;
-    padding: 3px;
+    padding: 0 3px;
     flex-shrink: 0;
     position: relative;
     @extend %interactive-base;
@@ -102,7 +102,7 @@
     display: flex;
     width: 100%;
     padding: 3px;
-    border-radius: 16px;
+    border-radius: 18px;
     gap: 7px;
 
     .theme-dark & {

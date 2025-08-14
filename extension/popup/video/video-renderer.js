@@ -277,7 +277,7 @@ function buildFlagsHtml(progressData) {
     if (progressData.subsOnly) {
         icons.push(`
             <span class="history-flag-icon" data-tooltip="Extracted Subtitles">
-                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-captions w-3 h-3 flex-shrink-0 text-cyan-500" aria-hidden="true"><rect width="20" height="16" x="2" y="4" rx="3" ry="3"></rect><path d="M6 16h5M14 16h2M6 12h2M11 12h4"></path></svg>
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-captions w-3 h-3 flex-shrink-0 text-cyan-500" aria-hidden="true"><rect width="20" height="16" x="2" y="4" rx="3" ry="3"></rect><path d="M6 16h7M16 16h2M6 12h2M11 12h7"></path></svg>
             </span>
         `);
     }

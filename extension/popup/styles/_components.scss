@@ -418,8 +418,8 @@
 .section-content {
     display: flex;
     flex-direction: column;
-    padding: 8px;
-    gap: 8px;
+    padding: 4px;
+    gap: 6px;
     transition: max-height var(--transition-fast) ease, opacity var(--transition-fast) ease;
     overflow-y: visible;
     opacity: 1;

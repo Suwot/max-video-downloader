@@ -57,7 +57,8 @@
 .video-item {
     display: flex;
     padding: 6px;
-    border-radius: 16px;
+    border-radius: 12px;
+	gap: 6px;
     @extend %theme-bg-static;
 
     .theme-light & {
@@ -68,7 +69,6 @@
 .preview-column {
     width: 100px;
     flex-shrink: 0;
-    margin-inline-end: 8px;
 }
 
 .preview-container {
@@ -150,11 +150,37 @@
     gap: 4px;
 }
 
+// Stream icons (prepended to title row)
+.stream-icons {
+	position: absolute;
+	top: 0;
+	left: 0;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    
+    svg {
+        flex-shrink: 0;
+        cursor: help;
+        
+        // Hover effect
+        &:hover {
+            opacity: 0.8;
+            transform: scale(1.1);
+            transition: all 0.15s ease;
+        }
+    }
+}
+
 .title-row {
+	position: relative;
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
     width: 100%;
+	gap: 4px;
+	
+	h3 {line-height: 1.3;}
 }
 
 .video-title {
@@ -257,8 +283,7 @@
 .download-group {
     display: flex;
     flex-wrap: nowrap;
-    gap: 4px;
-    margin-block-start: 4px;
+    gap: 6px;
 }
 
 // Style for positioning wider options container

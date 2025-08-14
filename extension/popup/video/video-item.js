@@ -321,6 +321,109 @@ export class VideoItemComponent {
     }
     
     /**
+     * Create stream icons based on available streams
+     * @returns {HTMLElement} Stream icons container
+     */
+    createStreamIcons() {
+        const streamIcons = document.createElement('div');
+        streamIcons.className = 'stream-icons';
+        
+        const availableStreams = this.detectAvailableStreams();
+        
+        // Video icon
+        if (availableStreams.hasVideo) {
+            streamIcons.innerHTML += `
+                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--color-green)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-film w-4 h-4 text-red-500" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2"></rect><path d="M7 3v18"></path><path d="M3 7.5h4"></path><path d="M3 12h18"></path><path d="M3 16.5h4"></path><path d="M17 3v18"></path><path d="M17 7.5h4"></path><path d="M17 16.5h4"></path></svg>
+            `;
+        }
+        
+        // Audio icon
+        if (availableStreams.hasAudio) {
+            streamIcons.innerHTML += `
+				<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-blue)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-volume2 lucide-volume-2 w-4 h-4 text-blue-500" aria-hidden="true"><path d="M11 4.702a.705.705 0 0 0-1.203-.498L6.413 7.587A1.4 1.4 0 0 1 5.416 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.416a1.4 1.4 0 0 1 .997.413l3.383 3.384A.705.705 0 0 0 11 19.298z"></path><path d="M16 9a5 5 0 0 1 0 6"></path><path d="M19.364 18.364a9 9 0 0 0 0-12.728"></path></svg>
+            `;
+        }
+        
+        // Subtitles icon
+        if (availableStreams.hasSubtitles) {
+            streamIcons.innerHTML += `
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="gray" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-captions w-4 h-4 text-green-500" aria-hidden="true"><rect width="18" height="14" x="3" y="5" rx="2" ry="2"></rect><path d="M7 15h4M15 15h2M7 11h2M13 11h4"></path></svg>
+            `;
+        }
+        
+        return streamIcons;
+    }
+    
+    /**
+     * Calculate text-indent width for title based on stream icons
+     * @param {Object} availableStreams - Object with hasVideo, hasAudio, hasSubtitles flags
+     * @returns {number} Width in pixels for text-indent
+     */
+    calculateTextIndent(availableStreams) {
+        const iconCount = (availableStreams.hasVideo ? 1 : 0) + 
+                         (availableStreams.hasAudio ? 1 : 0) + 
+                         (availableStreams.hasSubtitles ? 1 : 0);
+        
+        if (iconCount === 0) return 0;
+        
+        // Calculate: (icon widths) + (gaps between icons) + (gap after last icon)
+        // Video: 12px, Audio: 14px, Subtitles: 14px, gaps: 4px each
+        let totalWidth = 0;
+        
+        if (availableStreams.hasVideo) totalWidth += 12;
+        if (availableStreams.hasAudio) totalWidth += 14;
+        if (availableStreams.hasSubtitles) totalWidth += 14;
+        
+        // Add gaps: (iconCount - 1) gaps between icons + 1 gap after last icon
+        totalWidth += iconCount * 4;
+        
+        return totalWidth;
+    }
+    
+    /**
+     * Detect available stream types based on video data
+     * Universal fallback chain that works for all cases (advanced/simple dropdowns)
+     * @returns {Object} Object with hasVideo, hasAudio, hasSubtitles flags
+     */
+    detectAvailableStreams() {
+        let hasVideo = false;
+        let hasAudio = false;
+        let hasSubtitles = false;
+        
+        // Check separate track arrays first (advanced mode)
+        const videoTracksLength = this.videoData.videoTracks?.length || 0;
+        const audioTracksLength = this.videoData.audioTracks?.length || 0;
+        const subtitleTracksLength = this.videoData.subtitleTracks?.length || 0;
+        
+        // If we have separate audio or subtitle tracks, this is advanced mode
+        if (audioTracksLength > 0 || subtitleTracksLength > 0) {
+            hasVideo = videoTracksLength > 0;
+            hasAudio = audioTracksLength > 0;
+            hasSubtitles = subtitleTracksLength > 0;
+            return { hasVideo, hasAudio, hasSubtitles };
+        }
+        
+        // If we only have videoTracks (or no separate tracks), check containers
+        if (videoTracksLength > 0) {
+            // Check all video tracks for available containers
+            for (const track of this.videoData.videoTracks) {
+                if (track.videoContainer) hasVideo = true;
+                if (track.audioContainer) hasAudio = true;
+                if (track.subtitleContainer) hasSubtitles = true;
+            }
+            return { hasVideo, hasAudio, hasSubtitles };
+        }
+        
+        // Fallback: check root video data (direct videos or legacy structure)
+        const rootData = this.videoData;
+        hasVideo = !!rootData.videoContainer;
+        hasAudio = !!rootData.audioContainer;
+        hasSubtitles = !!rootData.subtitleContainer;
+        
+        return { hasVideo, hasAudio, hasSubtitles };
+    }
+    
+    /**
      * Create info column with title, dismiss button, and download actions
      * @returns {HTMLElement} Info column element
      */
@@ -335,6 +438,19 @@ export class VideoItemComponent {
         const title = document.createElement('h3');
         title.className = 'video-title item-title';
         title.textContent = this.resolvedFilename || this.filename || this.videoData.title || 'Untitled Video';
+        
+        // Add stream icons and apply text-indent (only in full mode)
+        if (this.renderingMode === 'full') {
+            const streamIcons = this.createStreamIcons();
+            const availableStreams = this.detectAvailableStreams();
+            const textIndent = this.calculateTextIndent(availableStreams);
+            
+            if (textIndent > 0) {
+                title.style.textIndent = `${textIndent}px`;
+            }
+            
+            titleRow.appendChild(streamIcons);
+        }
         
         // Dismiss (X) button
         const dismissButton = document.createElement('button');
