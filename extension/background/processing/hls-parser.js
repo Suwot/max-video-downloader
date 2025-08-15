@@ -756,6 +756,12 @@ function parseStreamInf(line) {
         }
     }
     
+    // Apply HLS default containers if none were assigned (no CODECS attribute or unrecognized codecs)
+    if (!result.videoContainer && !result.audioContainer) {
+        result.videoContainer = 'mp4';
+        result.audioContainer = 'm4a';
+    }
+    
     return result;
 }
 
