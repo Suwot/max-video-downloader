@@ -262,12 +262,9 @@ export function updateUICounters(params = {}) {
  * Switch to specified tab
  */
 export function switchTab(tabId) {
-	let activeTab = null;
-
-    if (activeTab === tabId) return;
-    
-    // Update active tab
-    activeTab = tabId;
+    // Check if tab is already active (read from DOM state)
+    const currentActiveTab = document.querySelector('.tab-button.active')?.dataset.tabId;
+    if (currentActiveTab === tabId) return;
     
     // Update tab buttons
     document.querySelectorAll('.tab-button').forEach(button => {
@@ -328,12 +325,21 @@ export function initializeTooltips() {
         });
         
         activeTooltip = { el: element, tip };
+        
+        // Liveness check (runs only while visible) - safety net for missed removals
+        requestAnimationFrame(function tick() {
+            if (!activeTooltip) return;
+            if (!activeTooltip.el.isConnected) return hideTooltip(); // element removed
+            requestAnimationFrame(tick);
+        });
     }
     
     // Use pointer events (better than mouse events)
     document.addEventListener('pointerover', (e) => {
         const target = e.target.closest('[data-tooltip]');
-        if (target) showTooltip(target);
+		if (!target) return;
+        if (activeTooltip && activeTooltip.el === target) return; // Avoid recreating on same element
+        showTooltip(target);
     }, { passive: true });
     
     document.addEventListener('pointerout', (e) => {
@@ -342,6 +348,10 @@ export function initializeTooltips() {
         if (e.relatedTarget && activeTooltip.el.contains(e.relatedTarget)) return;
         hideTooltip();
     }, { passive: true });
+	
+    // Hide on scroll/resize (position becomes invalid)
+    window.addEventListener('scroll', () => hideTooltip(), { passive: true });
+    window.addEventListener('resize', () => hideTooltip());
     
     // Export cleanup function for manual use
     window.hideActiveTooltip = hideTooltip;
