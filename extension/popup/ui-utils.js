@@ -296,8 +296,8 @@ export function initializeTooltips() {
     }
     
     document.addEventListener('mouseenter', (e) => {
-        // Ensure target is an element node and has the attribute
-        if (!e.target || e.target.nodeType !== Node.ELEMENT_NODE || !e.target.hasAttribute('data-tooltip')) return;
+        // Ensure target is an element node (nodeType 1) and has the attribute
+        if (!e.target || e.target.nodeType !== 1 || !e.target.hasAttribute('data-tooltip')) return;
         if (e.target === currentTooltipElement) return;
         
         cleanupTooltip();
@@ -337,8 +337,8 @@ export function initializeTooltips() {
     }, true);
     
     document.addEventListener('mouseleave', (e) => {
-        // Ensure target is an element node before comparing
-        if (e.target && e.target.nodeType === Node.ELEMENT_NODE && e.target === currentTooltipElement) {
+        // Ensure target is an element node (nodeType 1) before comparing
+        if (e.target && e.target.nodeType === 1 && e.target === currentTooltipElement) {
             cleanupTooltip();
         }
     }, true);
