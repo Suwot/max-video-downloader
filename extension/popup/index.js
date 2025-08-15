@@ -8,7 +8,7 @@ import { connect, disconnect, sendPortMessage } from './communication.js';
 import { restoreActiveDownloads, cleanupAllElapsedTimeTimers } from './video/download-progress-handler.js';
 import { renderHistoryItems } from './video/video-renderer.js';
 import { initializeSettingsTab } from './settings-tab.js';
-import { switchTab } from './ui-utils.js';
+import { switchTab, initializeTooltips } from './ui-utils.js';
 
 const logger = createLogger('Popup');
 
@@ -79,6 +79,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         // Initialize UI event handlers
         initializeUIEventHandlers();
+
+        // Initialize global tooltip system
+        initializeTooltips();
 
         // Initialize settings tab
         await initializeSettingsTab();

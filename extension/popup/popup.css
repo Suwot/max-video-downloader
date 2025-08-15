@@ -43,20 +43,14 @@
   --font-badge: 8px;
 }
 
-.history-play-btn,
-.history-folder-btn,
-.history-retry-btn,
-.history-delete-file-btn, .download-menu-item, .action-button, .reconnect-icon, .section-header.collapsible, .btn, .tooltip-icon, .toggle-switch, .custom-dropdown, .tab-button, .dismiss-button {
+.history-btn, .download-menu-item, .action-button, .reconnect-icon, .section-header.collapsible, .btn, .tooltip-icon, .toggle-switch, .custom-dropdown, .tab-button, .dismiss-button {
   cursor: pointer;
   -webkit-user-select: none;
      -moz-user-select: none;
       -ms-user-select: none;
           user-select: none;
 }
-.history-play-btn:disabled,
-.history-folder-btn:disabled,
-.history-retry-btn:disabled,
-.history-delete-file-btn:disabled, .download-menu-item:disabled, .action-button:disabled, .reconnect-icon:disabled, .section-header.collapsible:disabled, .btn:disabled, .tooltip-icon:disabled, .toggle-switch:disabled, .custom-dropdown:disabled, .tab-button:disabled, .dismiss-button:disabled {
+.history-btn:disabled, .download-menu-item:disabled, .action-button:disabled, .reconnect-icon:disabled, .section-header.collapsible:disabled, .btn:disabled, .tooltip-icon:disabled, .toggle-switch:disabled, .custom-dropdown:disabled, .tab-button:disabled, .dismiss-button:disabled {
   opacity: 0.6;
   cursor: not-allowed;
 }
@@ -94,22 +88,10 @@
           box-shadow: var(--bg-element-shadow-light);
 }
 
-.theme-dark .history-item .filename, .history-item .theme-dark .filename, .theme-dark .history-play-btn:hover svg, .history-play-btn:hover .theme-dark svg,
-.theme-dark .history-folder-btn:hover svg,
-.history-folder-btn:hover .theme-dark svg,
-.theme-dark .history-retry-btn:hover svg,
-.history-retry-btn:hover .theme-dark svg,
-.theme-dark .history-delete-file-btn:hover svg,
-.history-delete-file-btn:hover .theme-dark svg, .theme-dark .download-menu-item:hover, .theme-dark .status-line .status-label, .status-line .theme-dark .status-label, .theme-dark .input-group .input-label, .input-group .theme-dark .input-label, .theme-dark .track-option.selected, .theme-dark .column .column-title, .column .theme-dark .column-title, .theme-dark .dropdown-option.downloading, .theme-dark .dropdown-option:not(.selected):hover, .theme-dark .dropdown-option.selected, .theme-dark .tab-placeholder h3, .tab-placeholder .theme-dark h3, .theme-dark h3, .theme-dark .h3, .theme-dark .item-title, .theme-dark h2, .theme-dark .h2, .theme-dark .section-title, .theme-dark h1, .theme-dark .h1, .theme-dark .app-title {
+.theme-dark .history-item .filename, .history-item .theme-dark .filename, .theme-dark .history-btn:hover svg, .history-btn:hover .theme-dark svg, .theme-dark .download-menu-item:hover, .theme-dark .status-line .status-label, .status-line .theme-dark .status-label, .theme-dark .input-group .input-label, .input-group .theme-dark .input-label, .theme-dark .track-option.selected, .theme-dark .column .column-title, .column .theme-dark .column-title, .theme-dark .dropdown-option.downloading, .theme-dark .dropdown-option:not(.selected):hover, .theme-dark .dropdown-option.selected, .theme-dark .tab-placeholder h3, .tab-placeholder .theme-dark h3, .theme-dark h3, .theme-dark .h3, .theme-dark .item-title, .theme-dark h2, .theme-dark .h2, .theme-dark .section-title, .theme-dark h1, .theme-dark .h1, .theme-dark .app-title {
   color: var(--text-primary-dark);
 }
-.theme-light .history-item .filename, .history-item .theme-light .filename, .theme-light .history-play-btn:hover svg, .history-play-btn:hover .theme-light svg,
-.theme-light .history-folder-btn:hover svg,
-.history-folder-btn:hover .theme-light svg,
-.theme-light .history-retry-btn:hover svg,
-.history-retry-btn:hover .theme-light svg,
-.theme-light .history-delete-file-btn:hover svg,
-.history-delete-file-btn:hover .theme-light svg, .theme-light .download-menu-item:hover, .theme-light .status-line .status-label, .status-line .theme-light .status-label, .theme-light .input-group .input-label, .input-group .theme-light .input-label, .theme-light .track-option.selected, .theme-light .column .column-title, .column .theme-light .column-title, .theme-light .dropdown-option.downloading, .theme-light .dropdown-option:not(.selected):hover, .theme-light .dropdown-option.selected, .theme-light .tab-placeholder h3, .tab-placeholder .theme-light h3, .theme-light h3, .theme-light .h3, .theme-light .item-title, .theme-light h2, .theme-light .h2, .theme-light .section-title, .theme-light h1, .theme-light .h1, .theme-light .app-title {
+.theme-light .history-item .filename, .history-item .theme-light .filename, .theme-light .history-btn:hover svg, .history-btn:hover .theme-light svg, .theme-light .download-menu-item:hover, .theme-light .status-line .status-label, .status-line .theme-light .status-label, .theme-light .input-group .input-label, .input-group .theme-light .input-label, .theme-light .track-option.selected, .theme-light .column .column-title, .column .theme-light .column-title, .theme-light .dropdown-option.downloading, .theme-light .dropdown-option:not(.selected):hover, .theme-light .dropdown-option.selected, .theme-light .tab-placeholder h3, .tab-placeholder .theme-light h3, .theme-light h3, .theme-light .h3, .theme-light .item-title, .theme-light h2, .theme-light .h2, .theme-light .section-title, .theme-light h1, .theme-light .h1, .theme-light .app-title {
   color: var(--text-primary-light);
 }
 
@@ -129,13 +111,7 @@
   color: var(--text-secondary-dark);
 }
 
-.theme-dark .download-stats .type-badge, .download-stats .theme-dark .type-badge, .theme-dark .download-stats, .theme-dark .completion-time, .theme-dark .history-play-btn svg, .history-play-btn .theme-dark svg,
-.theme-dark .history-folder-btn svg,
-.history-folder-btn .theme-dark svg,
-.theme-dark .history-retry-btn svg,
-.history-retry-btn .theme-dark svg,
-.theme-dark .history-delete-file-btn svg,
-.history-delete-file-btn .theme-dark svg, .theme-dark .downloads-history .download-timestamp, .downloads-history .theme-dark .download-timestamp, .theme-dark .download-menu-item, .theme-dark .status-line .status-value, .status-line .theme-dark .status-value, .theme-dark .input-group .input-description, .input-group .theme-dark .input-description, .theme-dark .input-field::placeholder, .theme-dark .track-option, .theme-dark .dropdown-option, .theme-dark .tab-button, .theme-dark .cache-stats, .theme-dark .tab-placeholder p, .tab-placeholder .theme-dark p, .theme-dark .tab-placeholder .placeholder-icon svg, .tab-placeholder .placeholder-icon .theme-dark svg, .theme-dark .reconnect-icon, .theme-dark .tooltip-icon {
+.theme-dark .download-stats .type-badge, .download-stats .theme-dark .type-badge, .theme-dark .download-stats, .theme-dark .completion-time, .theme-dark .history-btn svg, .history-btn .theme-dark svg, .theme-dark .downloads-history .download-timestamp, .downloads-history .theme-dark .download-timestamp, .theme-dark .download-menu-item, .theme-dark .status-line .status-value, .status-line .theme-dark .status-value, .theme-dark .input-group .input-description, .input-group .theme-dark .input-description, .theme-dark .input-field::placeholder, .theme-dark .track-option, .theme-dark .dropdown-option, .theme-dark .tab-button, .theme-dark .cache-stats, .theme-dark .tab-placeholder p, .tab-placeholder .theme-dark p, .theme-dark .tab-placeholder .placeholder-icon svg, .tab-placeholder .placeholder-icon .theme-dark svg, .theme-dark .reconnect-icon, .theme-dark .tooltip-icon {
   color: var(--text-secondary-dark);
 }
 .theme-light .input-field::-webkit-input-placeholder {
@@ -150,13 +126,7 @@
 .theme-light .input-field::-ms-input-placeholder {
   color: var(--text-secondary-light);
 }
-.theme-light .download-stats .type-badge, .download-stats .theme-light .type-badge, .theme-light .download-stats, .theme-light .completion-time, .theme-light .history-play-btn svg, .history-play-btn .theme-light svg,
-.theme-light .history-folder-btn svg,
-.history-folder-btn .theme-light svg,
-.theme-light .history-retry-btn svg,
-.history-retry-btn .theme-light svg,
-.theme-light .history-delete-file-btn svg,
-.history-delete-file-btn .theme-light svg, .theme-light .downloads-history .download-timestamp, .downloads-history .theme-light .download-timestamp, .theme-light .download-menu-item, .theme-light .status-line .status-value, .status-line .theme-light .status-value, .theme-light .input-group .input-description, .input-group .theme-light .input-description, .theme-light .input-field::placeholder, .theme-light .track-option, .theme-light .dropdown-option, .theme-light .tab-button, .theme-light .cache-stats, .theme-light .tab-placeholder p, .tab-placeholder .theme-light p, .theme-light .tab-placeholder .placeholder-icon svg, .tab-placeholder .placeholder-icon .theme-light svg, .theme-light .reconnect-icon, .theme-light .tooltip-icon {
+.theme-light .download-stats .type-badge, .download-stats .theme-light .type-badge, .theme-light .download-stats, .theme-light .completion-time, .theme-light .history-btn svg, .history-btn .theme-light svg, .theme-light .downloads-history .download-timestamp, .downloads-history .theme-light .download-timestamp, .theme-light .download-menu-item, .theme-light .status-line .status-value, .status-line .theme-light .status-value, .theme-light .input-group .input-description, .input-group .theme-light .input-description, .theme-light .input-field::placeholder, .theme-light .track-option, .theme-light .dropdown-option, .theme-light .tab-button, .theme-light .cache-stats, .theme-light .tab-placeholder p, .tab-placeholder .theme-light p, .theme-light .tab-placeholder .placeholder-icon svg, .tab-placeholder .placeholder-icon .theme-light svg, .theme-light .reconnect-icon, .theme-light .tooltip-icon {
   color: var(--text-secondary-light);
 }
 
@@ -178,15 +148,15 @@
   background-color: rgba(0, 202, 85, 0.1);
 }
 
-.download-menu-dropdown, .custom-dropdown .selected-option.has-progress-tooltip:hover::after, .cache-stats, header {
+.download-menu-dropdown, .cache-stats, header {
   -webkit-backdrop-filter: var(--backdrop-filter);
           backdrop-filter: var(--backdrop-filter);
 }
-.theme-dark .download-menu-dropdown, .theme-dark .custom-dropdown .selected-option.has-progress-tooltip:hover::after, .custom-dropdown .theme-dark .selected-option.has-progress-tooltip:hover::after, .theme-dark .cache-stats, .theme-dark header {
+.theme-dark .download-menu-dropdown, .theme-dark .cache-stats, .theme-dark header {
   background: var(--bg-backdrop-dark);
   border: 1px solid var(--border-primary-dark);
 }
-.theme-light .download-menu-dropdown, .theme-light .custom-dropdown .selected-option.has-progress-tooltip:hover::after, .custom-dropdown .theme-light .selected-option.has-progress-tooltip:hover::after, .theme-light .cache-stats, .theme-light header {
+.theme-light .download-menu-dropdown, .theme-light .cache-stats, .theme-light header {
   background: var(--bg-backdrop-light);
   -webkit-box-shadow: var(--bg-element-shadow-light);
           box-shadow: var(--bg-element-shadow-light);
@@ -765,18 +735,17 @@ header .heading-row {
   left: 0;
   right: 0;
   padding: 6px 8px;
-  border-radius: 6px;
+  border-radius: 4px;
   font-size: var(--font-body);
   white-space: nowrap;
   text-align: center;
   z-index: 200;
   pointer-events: none;
-}
-.theme-dark .custom-dropdown .selected-option.has-progress-tooltip:hover::after {
-  color: var(--text-primary-dark);
-}
-.theme-light .custom-dropdown .selected-option.has-progress-tooltip:hover::after {
-  color: var(--text-primary-light);
+  -webkit-box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  background-color: rgba(0, 0, 0, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: white;
 }
 .custom-dropdown .selected-option.processing .progress-container::before {
   content: "";
@@ -1497,6 +1466,10 @@ header .heading-row {
   color: white;
 }
 
+[data-tooltip] {
+  cursor: help;
+}
+
 .tooltip {
   position: fixed;
   padding: 6px 8px;
@@ -2016,6 +1989,7 @@ header .heading-row {
 .videos-container {
   padding: 8px;
   height: auto;
+  overflow: visible;
 }
 
 .video-type-group {
@@ -2044,6 +2018,7 @@ header .heading-row {
   padding: 6px;
   border-radius: 12px;
   gap: 6px;
+  overflow: visible;
 }
 .theme-light .video-item {
   background-color: var(--bg-primary-light);
@@ -2626,28 +2601,6 @@ header .heading-row {
   border-radius: 16px;
   gap: 4px;
 }
-.history-item span[data-tooltip] {
-  cursor: help;
-}
-.history-item [data-tooltip] {
-  position: relative;
-}
-.history-item [data-tooltip]:hover::after {
-  content: attr(data-tooltip);
-  position: absolute;
-  bottom: 100%;
-  left: 50%;
-  -webkit-transform: translateX(-50%);
-          transform: translateX(-50%);
-  background-color: rgba(0, 0, 0, 0.9);
-  color: white;
-  padding: 4px 8px;
-  border-radius: 4px;
-  font-size: var(--font-body);
-  white-space: nowrap;
-  z-index: 101;
-  pointer-events: none;
-}
 
 .history-header {
   display: -webkit-box;
@@ -2733,10 +2686,7 @@ header .heading-row {
           margin-inline-start: auto;
 }
 
-.history-play-btn,
-.history-folder-btn,
-.history-retry-btn,
-.history-delete-file-btn {
+.history-btn {
   background: none;
   border: none;
   padding: 2px;
@@ -2753,29 +2703,18 @@ header .heading-row {
   opacity: 0.6;
   -webkit-transition: opacity var(--transition-fast);
   transition: opacity var(--transition-fast);
+  cursor: pointer;
 }
-.history-play-btn:hover,
-.history-folder-btn:hover,
-.history-retry-btn:hover,
-.history-delete-file-btn:hover {
+.history-btn:hover {
   opacity: 1;
 }
-.theme-dark .history-play-btn:hover,
-.theme-dark .history-folder-btn:hover,
-.theme-dark .history-retry-btn:hover,
-.theme-dark .history-delete-file-btn:hover {
+.theme-dark .history-btn:hover {
   background-color: rgba(255, 255, 255, 0.05);
 }
-.theme-light .history-play-btn:hover,
-.theme-light .history-folder-btn:hover,
-.theme-light .history-retry-btn:hover,
-.theme-light .history-delete-file-btn:hover {
+.theme-light .history-btn:hover {
   background-color: rgba(0, 0, 0, 0.05);
 }
-.history-play-btn svg,
-.history-folder-btn svg,
-.history-retry-btn svg,
-.history-delete-file-btn svg {
+.history-btn svg {
   -ms-flex-negative: 0;
       flex-shrink: 0;
 }

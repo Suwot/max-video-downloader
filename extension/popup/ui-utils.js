@@ -279,3 +279,65 @@ export function switchTab(tabId) {
         content.classList.toggle('active', content.dataset.tabId === tabId);
     });
 }
+
+/**
+ * Initialize global tooltip system for any [data-tooltip] element
+ */
+export function initializeTooltips() {
+    let currentTooltip = null;
+    let currentTooltipElement = null;
+    
+    function cleanupTooltip() {
+        if (currentTooltip) {
+            currentTooltip.remove();
+            currentTooltip = null;
+            currentTooltipElement = null;
+        }
+    }
+    
+    document.addEventListener('mouseenter', (e) => {
+        if (!e.target.hasAttribute('data-tooltip')) return;
+        if (e.target === currentTooltipElement) return;
+        
+        cleanupTooltip();
+        
+        const text = e.target.getAttribute('data-tooltip');
+        if (!text) return;
+        
+        // Create and position tooltip
+        currentTooltip = document.createElement('div');
+        currentTooltip.className = 'tooltip';
+        currentTooltip.textContent = text;
+        currentTooltipElement = e.target;
+        document.body.appendChild(currentTooltip);
+        
+        // Position tooltip with boundary detection
+        const rect = e.target.getBoundingClientRect();
+        const tooltipRect = currentTooltip.getBoundingClientRect();
+        const headerHeight = 98;
+        
+        // Vertical: above if space, otherwise below
+        const top = rect.top - headerHeight >= tooltipRect.height + 8 
+            ? rect.top - tooltipRect.height - 8
+            : rect.bottom + 8;
+            
+        // Horizontal: centered, bounded to viewport
+        const left = Math.max(8, Math.min(
+            window.innerWidth - tooltipRect.width - 8,
+            rect.left + rect.width / 2 - tooltipRect.width / 2
+        ));
+        
+        Object.assign(currentTooltip.style, {
+            position: 'fixed',
+            left: `${left}px`,
+            top: `${Math.max(headerHeight + 8, top)}px`,
+            transform: 'none'
+        });
+    }, true);
+    
+    document.addEventListener('mouseleave', (e) => {
+        if (e.target === currentTooltipElement) {
+            cleanupTooltip();
+        }
+    }, true);
+}

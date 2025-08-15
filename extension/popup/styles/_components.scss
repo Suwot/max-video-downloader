@@ -79,6 +79,11 @@
 // TOOLTIPS & NOTIFICATIONS
 // =====================================================
 
+// Global data-tooltip styling (positioning handled by JS)
+[data-tooltip] {
+    cursor: help;
+}
+
 .tooltip {
     position: fixed;
     padding: 6px 8px;

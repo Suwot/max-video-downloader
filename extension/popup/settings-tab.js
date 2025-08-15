@@ -52,8 +52,7 @@ export async function initializeSettingsTab() {
     // Settings HTML is now in popup.html - just set up event listeners
     setupEventListeners();
 
-    // Set up tooltip functionality
-    setupTooltips();
+    // Tooltips now handled by global system
     
     // Set up native host status handlers
     setupNativeHostStatus();
@@ -224,42 +223,6 @@ function showSuccessFeedback(input) {
     setTimeout(() => {
         input.classList.remove('success');
     }, 1000);
-}
-
-/**
- * Set up tooltip functionality
- */
-function setupTooltips() {
-    const tooltipIcons = document.querySelectorAll('.tooltip-icon');
-
-    tooltipIcons.forEach(icon => {
-        let tooltip = null;
-
-        icon.addEventListener('mouseenter', () => {
-            const tooltipText = icon.getAttribute('data-tooltip');
-            if (!tooltipText) return;
-
-            // Create tooltip element
-            tooltip = document.createElement('div');
-            tooltip.className = 'tooltip';
-            tooltip.textContent = tooltipText;
-            document.body.appendChild(tooltip);
-
-            // Position tooltip
-            const rect = icon.getBoundingClientRect();
-            const tooltipRect = tooltip.getBoundingClientRect();
-
-            tooltip.style.left = `${rect.left + rect.width / 2 - tooltipRect.width / 2}px`;
-            tooltip.style.top = `${rect.top - tooltipRect.height - 8}px`;
-        });
-
-        icon.addEventListener('mouseleave', () => {
-            if (tooltip) {
-                tooltip.remove();
-                tooltip = null;
-            }
-        });
-    });
 }
 
 /**
