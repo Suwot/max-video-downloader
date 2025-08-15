@@ -486,7 +486,8 @@ class DownloadCommand extends BaseCommand {
                 headers,
                 sourceAudioCodec,
                 sourceAudioBitrate,
-                allowOverwrite
+                allowOverwrite,
+                trackLabels: params.trackLabels || {}
             });
             
             logDebug('FFmpeg command:', ffmpegService.getFFmpegPath(), ffmpegArgs.join(' '));
@@ -678,7 +679,7 @@ class DownloadCommand extends BaseCommand {
     // Builds FFmpeg command arguments based on input parameters
     buildFFmpegArgs({
         downloadUrl,  type, outputPath, container, audioOnly = false, subsOnly = false, streamSelection, inputs = null, 
-		headers = {}, sourceAudioCodec = null, sourceAudioBitrate = null, allowOverwrite = false
+		headers = {}, sourceAudioCodec = null, sourceAudioBitrate = null, allowOverwrite = false, trackLabels = {}
 	}) {
         const args = [];
         
@@ -729,9 +730,23 @@ class DownloadCommand extends BaseCommand {
                 args.push('-i', input.url);
             });
             
-            // Add stream mapping for all inputs (output options must come after all inputs)
+            // Add stream mapping for all inputs and metadata (output options must come after all inputs)
+            let audioIndex = 0;
+            let subtitleIndex = 0;
+            
             inputs.forEach(input => {
                 args.push('-map', input.streamMap);
+                
+                // Add metadata directly from input label
+                if (input.label) {
+                    if (input.streamMap.includes(':a:')) {
+                        args.push(`-metadata:s:a:${audioIndex}`, `title=${input.label}`);
+                        audioIndex++;
+                    } else if (input.streamMap.includes(':s:')) {
+                        args.push(`-metadata:s:s:${subtitleIndex}`, `title=${input.label}`);
+                        subtitleIndex++;
+                    }
+                }
             });
             
             // Add codec arguments with subtitle transcoding for video mode
@@ -757,9 +772,30 @@ class DownloadCommand extends BaseCommand {
             
             // Stream mapping for single input
             if (type === 'dash' && streamSelection) {
-                // DASH: map selected streams from single URL
-                streamSelection.split(',').forEach(streamSpec => {
+                // DASH: map selected streams from single URL and add metadata
+                const streams = streamSelection.split(',');
+                let audioIndex = 0;
+                let subtitleIndex = 0;
+                
+                streams.forEach(streamSpec => {
                     args.push('-map', streamSpec);
+                    
+                    // Add metadata while we're iterating
+                    if (trackLabels && Object.keys(trackLabels).length > 0) {
+                        if (streamSpec.includes(':a:')) {
+                            const audioLabel = trackLabels[`audio_${audioIndex}`];
+                            if (audioLabel) {
+                                args.push(`-metadata:s:a:${audioIndex}`, `title=${audioLabel}`);
+                            }
+                            audioIndex++;
+                        } else if (streamSpec.includes(':s:')) {
+                            const subtitleLabel = trackLabels[`subtitle_${subtitleIndex}`];
+                            if (subtitleLabel) {
+                                args.push(`-metadata:s:s:${subtitleIndex}`, `title=${subtitleLabel}`);
+                            }
+                            subtitleIndex++;
+                        }
+                    }
                 });
                 
                 // Add codec arguments with subtitle transcoding for video mode
@@ -781,6 +817,22 @@ class DownloadCommand extends BaseCommand {
                     if (downloadType === 'video') {
                         args.push('-c:v', 'copy', '-c:a', 'copy');
                         this.addSubtitleCodecArgs(args, container);
+                        
+                        // Add metadata for video downloads with multiple tracks
+                        if (trackLabels && Object.keys(trackLabels).length > 0) {
+                            let audioIndex = 0;
+                            let subtitleIndex = 0;
+                            
+                            Object.keys(trackLabels).forEach(key => {
+                                if (key.startsWith('audio_')) {
+                                    args.push(`-metadata:s:a:${audioIndex}`, `title=${trackLabels[key]}`);
+                                    audioIndex++;
+                                } else if (key.startsWith('subtitle_')) {
+                                    args.push(`-metadata:s:s:${subtitleIndex}`, `title=${trackLabels[key]}`);
+                                    subtitleIndex++;
+                                }
+                            });
+                        }
                     } else {
                         args.push('-c', 'copy');
                     }

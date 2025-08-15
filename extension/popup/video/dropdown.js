@@ -177,7 +177,12 @@ export class VideoDropdownComponent {
             
             const labelSpan = document.createElement('span');
             labelSpan.className = 'label';
-            labelSpan.textContent = buildTrackLabel(track, 'video', this.videoData.type);
+            
+            // Build and store label on track object to avoid duplication
+            if (!track._cachedLabel) {
+                track._cachedLabel = buildTrackLabel(track, 'video', this.videoData.type);
+            }
+            labelSpan.textContent = track._cachedLabel;
             option.appendChild(labelSpan);
             
             option.addEventListener('click', () => {
@@ -267,7 +272,12 @@ export class VideoDropdownComponent {
             
             const label = document.createElement('span');
             label.className = 'track-label';
-            label.textContent = buildTrackLabel(track, type, this.videoData.type);
+            
+            // Build and store label on track object to avoid duplication
+            if (!track._cachedLabel) {
+                track._cachedLabel = buildTrackLabel(track, type, this.videoData.type);
+            }
+            label.textContent = track._cachedLabel;
             
             option.appendChild(input);
             option.appendChild(label);
@@ -386,7 +396,8 @@ export class VideoDropdownComponent {
                 label.textContent = this.buildAdvancedSummary();
             } else {
                 const track = this.selectedTracks.videoTrack || this.videoData.videoTracks?.[0] || this.videoData;
-                const fullLabel = buildTrackLabel(track, 'video', this.videoData.type);
+                // Use cached label or build if not available
+                const fullLabel = track._cachedLabel || buildTrackLabel(track, 'video', this.videoData.type);
                 const parts = fullLabel.split(' • ');
                 label.textContent = parts.slice(0, 2).join(' • ');
             }
@@ -402,9 +413,9 @@ export class VideoDropdownComponent {
         let summary = '';
         let totalSize = 0;
         
-        // Get resolution from video track using shared utility
+        // Get resolution from video track using cached label
         if (this.selectedTracks.videoTrack) {
-            const trackLabel = buildTrackLabel(this.selectedTracks.videoTrack, 'video', this.videoData.type);
+            const trackLabel = this.selectedTracks.videoTrack._cachedLabel || buildTrackLabel(this.selectedTracks.videoTrack, 'video', this.videoData.type);
             const resMatch = trackLabel.match(/(\d+p\d*)/);
             summary = resMatch?.[0] || 'Custom';
             
@@ -483,11 +494,8 @@ export class VideoDropdownComponent {
         
         const tracks = type === 'audio' ? this.videoData.audioTracks : this.videoData.subtitleTracks;
         
-        // Find track by matching label (simple approach)
-        return tracks?.find(track => {
-            const formattedLabel = buildTrackLabel(track, type, this.videoData.type);
-            return formattedLabel === trackLabel;
-        });
+        // Find track by matching cached label
+        return tracks?.find(track => track._cachedLabel === trackLabel);
     }
     
     // Update video data (for dynamic updates)

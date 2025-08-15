@@ -301,19 +301,19 @@ export class VideoItemComponent {
             // Show icons based on has* flags for regular downloads
             if (this.hasVideo) {
                 icons.push(`
-                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--color-green)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-film w-4 h-4 text-red-500" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2"></rect><path d="M7 3v18"></path><path d="M3 7.5h4"></path><path d="M3 12h18"></path><path d="M3 16.5h4"></path><path d="M17 3v18"></path><path d="M17 7.5h4"></path><path d="M17 16.5h4"></path></svg>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--color-green)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-film w-4 h-4 text-red-500" data-tooltip="Has Video" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2"></rect><path d="M7 3v18"></path><path d="M3 7.5h4"></path><path d="M3 12h18"></path><path d="M3 16.5h4"></path><path d="M17 3v18"></path><path d="M17 7.5h4"></path><path d="M17 16.5h4"></path></svg>
                 `);
             }
             
             if (this.hasAudio) {
                 icons.push(`
-                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-blue)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-volume2 lucide-volume-2 w-4 h-4 text-blue-500" aria-hidden="true"><path d="M11 4.702a.705.705 0 0 0-1.203-.498L6.413 7.587A1.4 1.4 0 0 1 5.416 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.416a1.4 1.4 0 0 1 .997.413l3.383 3.384A.705.705 0 0 0 11 19.298z"></path><path d="M16 9a5 5 0 0 1 0 6"></path><path d="M19.364 18.364a9 9 0 0 0 0-12.728"></path></svg>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-blue)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-volume2 lucide-volume-2 w-4 h-4 text-blue-500" data-tooltip="Has Audio" aria-hidden="true"><path d="M11 4.702a.705.705 0 0 0-1.203-.498L6.413 7.587A1.4 1.4 0 0 1 5.416 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.416a1.4 1.4 0 0 1 .997.413l3.383 3.384A.705.705 0 0 0 11 19.298z"></path><path d="M16 9a5 5 0 0 1 0 6"></path><path d="M19.364 18.364a9 9 0 0 0 0-12.728"></path></svg>
                 `);
             }
             
             if (this.hasSubtitles) {
                 icons.push(`
-                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="gray" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-captions w-4 h-4 text-green-500" aria-hidden="true"><rect width="18" height="14" x="3" y="5" rx="2" ry="2"></rect><path d="M7 15h4M15 15h2M7 11h2M13 11h4"></path></svg>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="gray" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-captions w-4 h-4 text-green-500" data-tooltip="Has Subs" aria-hidden="true"><rect width="18" height="14" x="3" y="5" rx="2" ry="2"></rect><path d="M7 15h4M15 15h2M7 11h2M13 11h4"></path></svg>
                 `);
             }
         }
@@ -420,7 +420,7 @@ export class VideoItemComponent {
         // Subtitles icon
         if (this.hasSubtitles) {
             streamIcons.innerHTML += `
-                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="gray" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-captions w-4 h-4 text-green-500" data-tooltip="Has Subtitles" aria-hidden="true"><rect width="18" height="14" x="3" y="5" rx="2" ry="2"></rect><path d="M7 15h4M15 15h2M7 11h2M13 11h4"></path></svg>
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="gray" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-captions w-4 h-4 text-green-500" data-tooltip="Has Subs" aria-hidden="true"><rect width="18" height="14" x="3" y="5" rx="2" ry="2"></rect><path d="M7 15h4M15 15h2M7 11h2M13 11h4"></path></svg>
             `;
         }
         
@@ -782,6 +782,7 @@ export class VideoItemComponent {
         return {
             ...baseData,
             downloadUrl: videoTrack.url,
+            trackLabels: this.getTrackLabels(),
             container: videoTrack.videoContainer || 'mp4',
             fileSizeBytes: videoTrack.fileSize || videoTrack.estimatedFileSizeBytes || null,
             sourceAudioCodec: this.videoData.metaFFprobe?.audioCodec?.name || null,
@@ -814,6 +815,7 @@ export class VideoItemComponent {
             return {
                 ...baseData,
                 downloadUrl: videoTrack?.url,
+                trackLabels: this.getTrackLabels(),
                 container: videoTrack?.videoContainer || videoTrack?.audioContainer || 'mp4',
                 fileSizeBytes: videoTrack?.metaJS?.estimatedFileSizeBytes || null,
                 segmentCount: this.videoData.segmentCount || null
@@ -831,6 +833,7 @@ export class VideoItemComponent {
             ...baseData,
             downloadUrl: this.selectedTracks.videoTrack?.url || this.videoData.url,
             streamSelection: this.buildDashStreamSelection(),
+            trackLabels: this.getTrackLabels(),
             container: this.getOptimalContainer(),
             fileSizeBytes: this.calculateTotalFileSize()
         };
@@ -857,7 +860,8 @@ export class VideoItemComponent {
             if (audioTrack.url) {
                 inputs.push({
                     url: audioTrack.url,
-                    streamMap: `${streamIndex++}:a:0`
+                    streamMap: `${streamIndex++}:a:0`,
+                    label: audioTrack._cachedLabel
                 });
             }
         });
@@ -867,7 +871,8 @@ export class VideoItemComponent {
             if (subTrack.url) {
                 inputs.push({
                     url: subTrack.url,
-                    streamMap: `${streamIndex++}:s:0`
+                    streamMap: `${streamIndex++}:s:0`,
+                    label: subTrack._cachedLabel
                 });
             }
         });
@@ -917,6 +922,38 @@ export class VideoItemComponent {
         const hasIncompatibleTracks = this.hasIncompatibleTracks(primaryContainer);
         
         return hasIncompatibleTracks ? 'mkv' : primaryContainer;
+    }
+    
+    /**
+     * Get cached track labels for FFmpeg metadata (multi-track video only)
+     * @returns {Object} Track labels mapped to stream indices
+     */
+    getTrackLabels() {
+        const labels = {};
+        
+        // Add metadata for video downloads with any audio or subtitle tracks
+        // Skip only for single-track audio/subtitle-only downloads (not video downloads)
+        const totalTracks = this.selectedTracks.audioTracks.length + this.selectedTracks.subtitleTracks.length;
+        
+        if (totalTracks === 0) {
+            return labels; // No additional tracks to label
+        }
+        
+        // Audio track labels
+        this.selectedTracks.audioTracks.forEach((track, index) => {
+            if (track._cachedLabel) {
+                labels[`audio_${index}`] = track._cachedLabel;
+            }
+        });
+        
+        // Subtitle track labels
+        this.selectedTracks.subtitleTracks.forEach((track, index) => {
+            if (track._cachedLabel) {
+                labels[`subtitle_${index}`] = track._cachedLabel;
+            }
+        });
+        
+        return labels;
     }
     
     /**
@@ -1096,6 +1133,7 @@ export class VideoItemComponent {
             ...baseCommand,
             container: subTrack.subtitleContainer || 'srt',
             subsLabel // Pass label to native host for filename generation
+            // No trackLabels for single-track downloads - metadata not useful
         };
         
         // Add track-specific data for DASH/HLS
