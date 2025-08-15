@@ -99,18 +99,18 @@
         &.has-progress-tooltip:hover::after {
             content: attr(data-tooltip-content);
             position: absolute;
-            bottom: calc(100% + 8px);
+            bottom: calc(100% + 4px);
             left: 0;
             right: 0;
             padding: 6px 8px;
-            border-radius: 4px;
+            border-radius: 6px;
             font-size: var(--font-body);
             white-space: nowrap;
             text-align: center;
             z-index: 200;
             pointer-events: none;
             box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-			background-color: rgba(0,0,0,0.8);
+			background-color: rgba(0,0,0,0.9);
 			border: 1px solid rgba(255,255,255,0.3);
             color: white;
         }

@@ -284,62 +284,65 @@ export function switchTab(tabId) {
  * Initialize global tooltip system for any [data-tooltip] element
  */
 export function initializeTooltips() {
-    let currentTooltip = null;
-    let currentTooltipElement = null;
+    let activeTooltip = null; // { el, tip }
     
-    function cleanupTooltip() {
-        if (currentTooltip) {
-            currentTooltip.remove();
-            currentTooltip = null;
-            currentTooltipElement = null;
-        }
+    function hideTooltip() {
+        if (!activeTooltip) return;
+        activeTooltip.tip.remove();
+        activeTooltip = null;
     }
     
-    document.addEventListener('mouseenter', (e) => {
-        // Ensure target is an element node (nodeType 1) and has the attribute
-        if (!e.target || e.target.nodeType !== 1 || !e.target.hasAttribute('data-tooltip')) return;
-        if (e.target === currentTooltipElement) return;
+    function showTooltip(element) {
+        hideTooltip();
         
-        cleanupTooltip();
-        
-        const text = e.target.getAttribute('data-tooltip');
+        const text = element.getAttribute('data-tooltip');
         if (!text) return;
         
-        // Create and position tooltip
-        currentTooltip = document.createElement('div');
-        currentTooltip.className = 'tooltip';
-        currentTooltip.textContent = text;
-        currentTooltipElement = e.target;
-        document.body.appendChild(currentTooltip);
+        const tip = document.createElement('div');
+        tip.className = 'tooltip';
+        tip.textContent = text;
+        document.body.appendChild(tip);
         
         // Position tooltip with boundary detection
-        const rect = e.target.getBoundingClientRect();
-        const tooltipRect = currentTooltip.getBoundingClientRect();
+        const rect = element.getBoundingClientRect();
+        const tipRect = tip.getBoundingClientRect();
         const headerHeight = 98;
         
         // Vertical: above if space, otherwise below
-        const top = rect.top - headerHeight >= tooltipRect.height + 8 
-            ? rect.top - tooltipRect.height - 8
+        const top = rect.top - headerHeight >= tipRect.height + 8 
+            ? rect.top - tipRect.height - 8
             : rect.bottom + 8;
             
         // Horizontal: centered, bounded to viewport
         const left = Math.max(8, Math.min(
-            window.innerWidth - tooltipRect.width - 8,
-            rect.left + rect.width / 2 - tooltipRect.width / 2
+            window.innerWidth - tipRect.width - 8,
+            rect.left + rect.width / 2 - tipRect.width / 2
         ));
         
-        Object.assign(currentTooltip.style, {
+        Object.assign(tip.style, {
             position: 'fixed',
             left: `${left}px`,
             top: `${Math.max(headerHeight + 8, top)}px`,
-            transform: 'none'
+            transform: 'none',
+            pointerEvents: 'none'
         });
-    }, true);
+        
+        activeTooltip = { el: element, tip };
+    }
     
-    document.addEventListener('mouseleave', (e) => {
-        // Ensure target is an element node (nodeType 1) before comparing
-        if (e.target && e.target.nodeType === 1 && e.target === currentTooltipElement) {
-            cleanupTooltip();
-        }
-    }, true);
+    // Use pointer events (better than mouse events)
+    document.addEventListener('pointerover', (e) => {
+        const target = e.target.closest('[data-tooltip]');
+        if (target) showTooltip(target);
+    }, { passive: true });
+    
+    document.addEventListener('pointerout', (e) => {
+        if (!activeTooltip) return;
+        // Don't hide if moving to child element
+        if (e.relatedTarget && activeTooltip.el.contains(e.relatedTarget)) return;
+        hideTooltip();
+    }, { passive: true });
+    
+    // Export cleanup function for manual use
+    window.hideActiveTooltip = hideTooltip;
 }

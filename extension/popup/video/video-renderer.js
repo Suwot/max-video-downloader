@@ -566,6 +566,8 @@ async function deleteHistoryItem(completedAt) {
         const historyContainer = document.querySelector('.downloads-history');
         const historyItem = historyContainer.querySelector(`[data-completion="${completedAt}"]`);
         if (historyItem) {
+            // Clean up tooltip if removing element with active tooltip
+            if (window.hideActiveTooltip) window.hideActiveTooltip();
             historyItem.remove();
         }
         
@@ -784,6 +786,8 @@ export async function removeVideoFromUI(videoUrl) {
         }
         
         const group = existingElement.closest('.video-type-group');
+        // Clean up tooltip if removing element with active tooltip
+        if (window.hideActiveTooltip) window.hideActiveTooltip();
         existingElement.remove();
         
         // Check if group is now empty
@@ -855,6 +859,8 @@ export function updateHistoryItemDeleted(completedAt) {
     // Remove delete button
     const deleteFileBtn = historyItem.querySelector('.history-delete-file-btn');
     if (deleteFileBtn) {
+        // Clean up tooltip if this button had one active
+        if (window.hideActiveTooltip) window.hideActiveTooltip();
         deleteFileBtn.remove();
     }
 

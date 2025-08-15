@@ -715,7 +715,7 @@ function updateProgressTooltip(selectedOption, progressData) {
 
     // Add segment info
     if (progressData.progress !== 0 && progressData.currentSegment) {
-        parts.push(`${progressData.currentSegment} segments`);
+        parts.push(`${progressData.currentSegment} seg.`);
     }
 
     // Add speed
