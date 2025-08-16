@@ -326,62 +326,33 @@ async function startDownloadImmediately(downloadRequest) {
  * @param {Object} event - Event from native host
  */
 async function handleDownloadEvent(event) {
-    const { command, downloadUrl, sessionId } = event;
+    const { command, downloadUrl, sessionId, downloadId } = event;
     
     logger.debug('Handling download event:', command, downloadUrl, sessionId);
     logger.debug('Event downloadId:', event.downloadId);
     
-    // Use downloadId from native host event (now passed through)
-    let downloadId = event.downloadId;
-    let downloadEntry = null;
-    
-    // If no downloadId in event, find it from map or storage (legacy support)
-    if (!downloadId) {
-        // Try to find in current downloads map first
-        for (const [id, entry] of allDownloads.entries()) {
-            if (entry.downloadRequest.downloadUrl === downloadUrl) {
-                downloadId = id;
-                downloadEntry = entry;
-                break;
-            }
-        }
-        
-        // Final fallback to URL for legacy compatibility
-        if (!downloadId) {
-            downloadId = downloadUrl;
-            logger.debug('Using URL as downloadId fallback:', downloadId);
-        }
-    }
-    
-    // Get download entry from map
-    if (!downloadEntry) {
-        downloadEntry = allDownloads.get(downloadId);
-    }
-    
+    const downloadEntry = allDownloads.get(downloadId);
+
     // Handle filename resolution
     if (command === 'filename-resolved') {
-        if (downloadEntry) {
-            downloadEntry.resolvedFilename = event.resolvedFilename;
-            downloadEntry.progressData = { ...downloadEntry.progressData, resolvedFilename: event.resolvedFilename };
-            
-            // Broadcast filename update to UI
-            broadcastToPopups({
-                command: 'filename-resolved',
-                downloadId,
-                resolvedFilename: event.resolvedFilename,
-                downloadUrl: downloadEntry.downloadRequest.downloadUrl,
-                masterUrl: downloadEntry.downloadRequest.masterUrl || null
-            });
-            
-            logger.debug('Filename resolved for download:', downloadId, event.resolvedFilename);
-        }
+        downloadEntry.resolvedFilename = event.resolvedFilename;
+        downloadEntry.progressData = { ...downloadEntry.progressData, resolvedFilename: event.resolvedFilename };
+
+        // Broadcast filename update to UI
+        broadcastToPopups({
+            command: 'filename-resolved',
+            downloadId,
+            resolvedFilename: event.resolvedFilename,
+            downloadUrl: downloadEntry.downloadRequest.downloadUrl,
+            masterUrl: downloadEntry.downloadRequest.masterUrl || null
+        });
+
+        logger.debug('Filename resolved for download:', downloadId, event.resolvedFilename);
         return; // Don't process further for filename-resolved events
     }
-    
+
     // Update progress data in the entry
-    if (downloadEntry) {
-        downloadEntry.progressData = { ...event, downloadId };
-    }
+    downloadEntry.progressData = { ...event, downloadId };
 
     // Handle completion/error/cancellation - clean up active tracking
     if (['download-canceled', 'download-success', 'download-error'].includes(command)) {
@@ -414,17 +385,17 @@ async function handleDownloadEvent(event) {
                 type: event.type,
                 downloadStats: event.downloadStats,
                 duration: event.duration,  // Actual processed duration (different from manifest duration in originalCommand)
-                
+
                 // Flags for UI display
                 isPartial: event.isPartial,
                 audioOnly: event.audioOnly,
                 subsOnly: event.subsOnly,
-                isRedownload: event.isRedownload,
+                isRedownload: downloadEntry?.downloadRequest?.isRedownload || false,
                 isLive: event.isLive || false, // Preserve isLive flag for UI rendering
                 hasVideo: event.hasVideo || false,
                 hasAudio: event.hasAudio || false,
                 hasSubtitles: event.hasSubtitles || false,
-                
+
                 // Error and diagnostic info
                 errorMessage: event.errorMessage,
                 terminationInfo: event.terminationInfo,

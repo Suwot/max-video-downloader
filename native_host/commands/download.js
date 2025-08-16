@@ -351,7 +351,6 @@ class DownloadCommand extends BaseCommand {
                 downloadStats: downloadEntry.progressState?.finalStats || null,
                 message: 'Download was canceled',
                 completedAt: Date.now(),
-                isRedownload: false,
                 headers: downloadEntry.headers || null
             }, { useMessageId: false }); // Event message, no response ID
             
@@ -377,7 +376,6 @@ class DownloadCommand extends BaseCommand {
      * @param {string} params.masterUrl Optional master manifest URL (for reporting)
      * @param {Object} params.duration Video duration (optional)
      * @param {Object} params.headers HTTP headers to use (optional)
-     * @param {boolean} params.isRedownload Whether this is a re-download request (optional)
      * @param {boolean} params.isLive Whether this is a livestream (optional)
      * @param {string} params.audioLabel Audio track label for filename generation (optional)
      * @param {string} params.subsLabel Subtitle track label for filename generation (optional)
@@ -415,7 +413,6 @@ class DownloadCommand extends BaseCommand {
             fileSizeBytes = null,
             duration = null,
             segmentCount = null,
-            isRedownload = false,
             downloadId = null,
             isLive = false,
             audioLabel = null,
@@ -435,10 +432,6 @@ class DownloadCommand extends BaseCommand {
         }
 
         logDebug('Starting download with downloadId:', downloadId, params);
-        
-        if (isRedownload) {
-            logDebug('🔄 This is a re-download request');
-        }
         
         if (headers && Object.keys(headers).length > 0) {
             logDebug('🔑 Using headers for download request:', Object.keys(headers));
@@ -495,7 +488,6 @@ class DownloadCommand extends BaseCommand {
                 duration,
                 fileSizeBytes,
                 segmentCount,
-                isRedownload, 
                 audioOnly,
                 subsOnly,
                 downloadId, // Use downloadId instead of sessionId
@@ -1030,7 +1022,6 @@ class DownloadCommand extends BaseCommand {
         duration,
         fileSizeBytes,
         segmentCount,
-        isRedownload, 
         audioOnly,
         subsOnly,
         downloadId, // Use downloadId instead of sessionId
@@ -1089,7 +1080,6 @@ class DownloadCommand extends BaseCommand {
                     masterUrl,
                     headers: headers || null,
                     progressState,
-                    isRedownload,
                     hasVideo,
                     hasAudio,
                     hasSubtitles
@@ -1159,7 +1149,6 @@ class DownloadCommand extends BaseCommand {
                             downloadStats: downloadStats || null,
                             message: isLivestream ? 'Livestream recording canceled' : 'Download was canceled',
                             completedAt: Date.now(),
-                            isRedownload: downloadEntry?.isRedownload || false,
                             audioOnly,
                             subsOnly,
                             headers: downloadEntry?.headers || null
@@ -1192,7 +1181,6 @@ class DownloadCommand extends BaseCommand {
                         downloadDuration,
                         message: isPartial && downloadEntry?.progressState?.isLive ? 'Livestream recording stopped' : null,
                         completedAt: Date.now(),
-                        isRedownload,
                         audioOnly,
                         subsOnly,
                         isPartial: progressState.isLive ? null : isPartial, // Add partial flag for UI
@@ -1234,7 +1222,6 @@ class DownloadCommand extends BaseCommand {
                         terminationInfo,
 						downloadDuration,
                         completedAt: Date.now(),
-                        isRedownload,
                         audioOnly,
                         subsOnly,
                         isLive: progressState.isLive || false, // Add isLive flag for UI
@@ -1304,7 +1291,6 @@ class DownloadCommand extends BaseCommand {
                     downloadStats: downloadStats || null,
                     downloadDuration,
                     completedAt: Date.now(),
-                    isRedownload,
                     audioOnly,
                     isLive: progressState.isLive || false, // Add isLive flag for UI
                     hasVideo: downloadEntry?.hasVideo || false,
