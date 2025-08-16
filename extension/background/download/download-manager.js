@@ -524,13 +524,10 @@ export async function cancelDownload(cancelRequest) {
         // Notify count change
         notifyDownloadCountChange();
         
-        // Broadcast cancellation to UI - compose from entry data
+        // Broadcast cancellation to UI - minimal data
         broadcastToPopups({
             command: 'download-canceled',
-            downloadId,
-            downloadUrl: entry.downloadRequest.downloadUrl,
-            masterUrl: entry.downloadRequest.masterUrl || null,
-            selectedOptionOrigText: entry.downloadRequest.selectedOptionOrigText || null
+            downloadId
         });
         
         logger.debug('Queued download removed immediately:', downloadId);
@@ -539,23 +536,17 @@ export async function cancelDownload(cancelRequest) {
         // Set stopping state, wait for native host
         entry.status = 'stopping';
         
-        // Broadcast stopping state to UI - compose from entry data
+        // Broadcast stopping state to UI - minimal data
         broadcastToPopups({
             command: 'download-stopping',
-            downloadId,
-            downloadUrl: entry.downloadRequest.downloadUrl,
-            masterUrl: entry.downloadRequest.masterUrl || null,
-            filename: entry.downloadRequest.filename,
-            selectedOptionOrigText: entry.downloadRequest.selectedOptionOrigText || null
+            downloadId
         });
         
-        // Send cancellation request to native host
+        // Send cancellation request to native host - minimal data
         // Response will come through event listeners
         nativeHostService.sendMessage({
             command: 'cancel-download',
-            downloadUrl: entry.downloadRequest.downloadUrl,
-            type: entry.downloadRequest.type,
-            downloadId // Pass downloadId for consistent tracking
+            downloadId // Only need downloadId for cancellation
         }, { expectResponse: false });
         
         logger.debug('Cancellation command sent, status set to stopping:', downloadId);
@@ -597,9 +588,10 @@ async function processNextDownload() {
     const downloadId = Array.from(allDownloads.entries())
         .find(([id, entry]) => entry === queuedEntry)?.[0];
     
-    // Broadcast download start to UI - compose from entry data
+    // Broadcast download start to UI - compose from entry data with downloadId
     broadcastToPopups({
         command: 'download-started',
+        downloadId, // Essential for UI deduplication
         videoData: queuedEntry.downloadRequest.videoData
     });
     

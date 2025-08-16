@@ -262,12 +262,7 @@ class DownloadCommand extends BaseCommand {
             // Send response even when no process exists - UI needs confirmation
             this.sendMessage({
                 command: 'download-canceled',
-                downloadId: downloadId || null,
-                downloadUrl,
-                message: 'Download already stopped or not found',
-                downloadStats: null,
-                duration: null,
-                completedAt: Date.now()
+                downloadId
             }, { useMessageId: false }); // Event message, no response ID
             return;
         }
@@ -332,13 +327,7 @@ class DownloadCommand extends BaseCommand {
             // But DON'T remove from activeDownloads yet - let close handler do cleanup
             this.sendMessage({
                 command: 'download-canceled',
-                downloadId: downloadId,
-                downloadUrl: downloadUrl,
-                duration: downloadEntry.progressState?.duration || null,
-                downloadStats: downloadEntry.progressState?.finalStats || null,
-                message: 'Download was canceled',
-                completedAt: Date.now(),
-                headers: downloadEntry.headers || null
+                downloadId: downloadId
             }, { useMessageId: false }); // Event message, no response ID
             
         } catch (error) {
@@ -1129,16 +1118,7 @@ class DownloadCommand extends BaseCommand {
                     if (type === 'direct' || isLivestream) {
                         this.sendMessage({
                             command: 'download-canceled',
-                            downloadId, // Use downloadId for both session and progress mapping
-                            downloadUrl,
-                            masterUrl: downloadEntry?.masterUrl,
-                            duration: finalDuration,
-                            downloadStats: downloadStats || null,
-                            message: isLivestream ? 'Livestream recording canceled' : 'Download was canceled',
-                            completedAt: Date.now(),
-                            audioOnly,
-                            subsOnly,
-                            headers: downloadEntry?.headers || null
+                            downloadId
                         }, { useMessageId: false }); // Event message, no response ID
                     }
                     

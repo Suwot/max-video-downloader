@@ -379,14 +379,9 @@ export class VideoDownloadButtonComponent {
      * Send cancel message for download
      */
     sendCancelMessage() {
-        const downloadData = this.videoItemComponent.getDownloadData();
         const cancelMessage = {
             command: 'cancel-download',
-            downloadId: this.videoItemComponent.getDownloadIdForCancellation(),
-            type: downloadData.type,
-            downloadUrl: downloadData.downloadUrl,
-            masterUrl: downloadData.masterUrl || null,
-            selectedOptionOrigText: this.getSelectedOptionText()
+            downloadId: this.videoItemComponent.getDownloadIdForCancellation()
         };
         
         sendPortMessage(cancelMessage);
