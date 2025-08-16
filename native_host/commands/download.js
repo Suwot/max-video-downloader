@@ -175,7 +175,7 @@ class DownloadCommand extends BaseCommand {
                 elapsedTime: Math.round(elapsedSeconds),
                 type: progressState.type,
                 strategy,
-                isLive: progressState.isLive,
+                isLive: progressState.isLive, // used to determine dl-tooltip presence
                 
                 // Byte data
                 downloadedBytes: progressState.downloadedBytes,
@@ -192,7 +192,6 @@ class DownloadCommand extends BaseCommand {
             // Add segment data for HLS (include totalSegments)
             if (progressState.type === 'hls') {
                 progressData.currentSegment = progressState.currentSegment;
-                progressData.totalSegments = progressState.totalSegments; // Important for HLS progress tracking
             }
             
             // Send progress message with complete context
@@ -201,10 +200,6 @@ class DownloadCommand extends BaseCommand {
                 downloadId: progressState.downloadId,
                 downloadUrl: progressState.downloadUrl,
                 masterUrl: downloadEntry?.masterUrl || null,
-                filename: path.basename(downloadEntry?.outputPath || ''),
-                selectedOptionOrigText: downloadEntry?.selectedOptionOrigText,
-                downloadStartTime: progressState.startTime,
-                isRedownload: downloadEntry?.isRedownload || false,
                 ...progressData
             }, { useMessageId: false });
             
@@ -243,10 +238,7 @@ class DownloadCommand extends BaseCommand {
         logDebug('Parsed final download stats:', stats);
     }
 
-    /**
-     * Get error message from collected error lines (for any error case)
-     * @private
-     */
+    // Get error message from collected error lines (for any error case)
     getErrorMessage(progressState) {
         if (!progressState.errorLines.length) {
             return null;
@@ -423,7 +415,6 @@ class DownloadCommand extends BaseCommand {
             fileSizeBytes = null,
             duration = null,
             segmentCount = null,
-            selectedOptionOrigText = null,
             isRedownload = false,
             downloadId = null,
             isLive = false,
@@ -508,7 +499,6 @@ class DownloadCommand extends BaseCommand {
                 audioOnly,
                 subsOnly,
                 downloadId, // Use downloadId instead of sessionId
-                selectedOptionOrigText, 
 				isLive,
                 hasVideo,
                 hasAudio,
@@ -1044,7 +1034,6 @@ class DownloadCommand extends BaseCommand {
         audioOnly,
         subsOnly,
         downloadId, // Use downloadId instead of sessionId
-        selectedOptionOrigText,
 		isLive,
         hasVideo,
         hasAudio,
@@ -1100,7 +1089,6 @@ class DownloadCommand extends BaseCommand {
                     masterUrl,
                     headers: headers || null,
                     progressState,
-                    selectedOptionOrigText,
                     isRedownload,
                     hasVideo,
                     hasAudio,
