@@ -65,6 +65,7 @@ async function processHistoryQueue() {
 
 /**
  * Get active downloads from in-memory Map for UI restoration
+ * Composes complete data from entry + progressData without duplication
  */
 export function getActiveDownloads() {
     const activeDownloads = [];
@@ -72,19 +73,21 @@ export function getActiveDownloads() {
     for (const [downloadId, entry] of allDownloads.entries()) {
         if (entry.downloadRequest && entry.downloadRequest.videoData) {
             activeDownloads.push({
-                downloadId: entry.downloadId,
+                // Core identifiers and metadata from downloadRequest
+                downloadId,
                 status: entry.status,
                 videoData: entry.downloadRequest.videoData,
                 downloadUrl: entry.downloadRequest.downloadUrl,
                 masterUrl: entry.downloadRequest.masterUrl,
                 filename: entry.downloadRequest.filename,
-                resolvedFilename: entry.resolvedFilename, // Include resolved filename
+                resolvedFilename: entry.resolvedFilename,
                 selectedOptionOrigText: entry.downloadRequest.selectedOptionOrigText,
                 streamSelection: entry.downloadRequest.streamSelection,
                 isRedownload: entry.downloadRequest.isRedownload || false,
                 audioOnly: entry.downloadRequest.audioOnly || false,
                 subsOnly: entry.downloadRequest.subsOnly || false,
-                // Include progress data for complete UI restoration
+                type: entry.downloadRequest.type,
+                // Pure progress data only (null if no progress yet)
                 progressData: entry.progressData,
                 timestamp: entry.timestamp
             });
@@ -227,36 +230,28 @@ async function resolveDownloadPaths(downloadCommand) {
 async function queueDownload(downloadCommand) {
     const downloadId = downloadCommand.downloadId;
     
-    // Add to unified downloads map (keep previewUrl for UI recreation during download)
+    // Add to unified downloads map - no progressData needed for queued state
     allDownloads.set(downloadId, {
-        downloadId,
         status: 'queued',
-        downloadRequest: downloadCommand, // This serves as originalCommand for retry functionality
-        progressData: {
-            command: 'download-queued',
-            downloadUrl: downloadCommand.downloadUrl,
-            masterUrl: downloadCommand.masterUrl || null,
-            filename: downloadCommand.filename,
-            selectedOptionOrigText: downloadCommand.selectedOptionOrigText || null,
-            downloadId
-        },
+        downloadRequest: downloadCommand, // Complete original command
+        progressData: null, // No progress data until download starts
         timestamp: Date.now()
     });
     
     // Notify count change
     notifyDownloadCountChange();
     
-    // Broadcast queue state to UI and create downloads tab item
+    // Broadcast queue state to UI - compose from entry data
     broadcastToPopups({
         command: 'download-queued',
+        downloadId,
         downloadUrl: downloadCommand.downloadUrl,
         masterUrl: downloadCommand.masterUrl || null,
         filename: downloadCommand.filename,
         selectedOptionOrigText: downloadCommand.selectedOptionOrigText || null,
         videoData: downloadCommand.videoData, // Include video data for UI creation
-		audioOnly: downloadCommand.audioOnly || false,
-		subsOnly: downloadCommand.subsOnly || false,
-        downloadId // For precise progress mapping
+        audioOnly: downloadCommand.audioOnly || false,
+        subsOnly: downloadCommand.subsOnly || false
     });
     
     logger.debug('Download queued:', downloadId);
@@ -270,23 +265,11 @@ async function startDownloadImmediately(downloadRequest) {
     // Use the generated downloadId
     const downloadId = downloadRequest.downloadId;
     
-    // Add to unified downloads map
+    // Add to unified downloads map - no progressData until first progress event
     allDownloads.set(downloadId, {
-        downloadId,
         status: 'downloading',
         downloadRequest: downloadRequest,
-        progressData: {
-            command: 'download-started',
-            downloadUrl: downloadRequest.downloadUrl,
-            masterUrl: downloadRequest.masterUrl || null,
-            filename: downloadRequest.filename,
-            selectedOptionOrigText: downloadRequest.selectedOptionOrigText || null,
-            videoData: downloadRequest.videoData,
-            isRedownload: downloadRequest.isRedownload || false,
-            audioOnly: downloadRequest.audioOnly || false,
-            subsOnly: downloadRequest.subsOnly || false,
-            downloadId
-        },
+        progressData: null, // Will be populated by first progress event from native host
         timestamp: Date.now()
     });
     
@@ -300,9 +283,10 @@ async function startDownloadImmediately(downloadRequest) {
         logger.debug('🔄 Using preserved headers for re-download:', Object.keys(downloadRequest.headers || {}));
     }
     
-    // Broadcast download start to UI for downloads tab creation (one-time event)
+    // Broadcast download start to UI - compose from entry data
     broadcastToPopups({
         command: 'download-started',
+        downloadId,
         downloadUrl: downloadRequest.downloadUrl,
         masterUrl: downloadRequest.masterUrl || null,
         filename: downloadRequest.filename,
@@ -310,8 +294,7 @@ async function startDownloadImmediately(downloadRequest) {
         videoData: downloadRequest.videoData,
         isRedownload: downloadRequest.isRedownload || false,
         audioOnly: downloadRequest.audioOnly || false,
-        subsOnly: downloadRequest.subsOnly || false,
-        downloadId // For precise progress mapping
+        subsOnly: downloadRequest.subsOnly || false
     });
     
     // Send download command (fire-and-forget)
@@ -321,10 +304,7 @@ async function startDownloadImmediately(downloadRequest) {
     logger.debug('Download command sent:', downloadId);
 }
 
-/**
- * Handle download events from native host (event-driven)
- * @param {Object} event - Event from native host
- */
+// Handle download events from native host (event-driven)
 async function handleDownloadEvent(event) {
     const { command, downloadUrl, sessionId, downloadId } = event;
     
@@ -332,13 +312,16 @@ async function handleDownloadEvent(event) {
     logger.debug('Event downloadId:', event.downloadId);
     
     const downloadEntry = allDownloads.get(downloadId);
+    if (!downloadEntry) {
+        logger.warn('Download entry not found for downloadId:', downloadId);
+        return;
+    }
 
     // Handle filename resolution
     if (command === 'filename-resolved') {
         downloadEntry.resolvedFilename = event.resolvedFilename;
-        downloadEntry.progressData = { ...downloadEntry.progressData, resolvedFilename: event.resolvedFilename };
 
-        // Broadcast filename update to UI
+        // Broadcast filename update to UI - compose from entry data
         broadcastToPopups({
             command: 'filename-resolved',
             downloadId,
@@ -351,8 +334,27 @@ async function handleDownloadEvent(event) {
         return; // Don't process further for filename-resolved events
     }
 
-    // Update progress data in the entry
-    downloadEntry.progressData = { ...event, downloadId };
+    // Handle pure progress updates - store only progress data
+    if (command === 'download-progress') {
+        // Extract progress data by removing command and downloadId
+        const { command: _, downloadId: __, ...progressData } = event;
+        
+        // Store pure progress data only
+        downloadEntry.progressData = progressData;
+
+        // Broadcast progress update - compose complete message
+        broadcastToPopups({
+            command: 'download-progress',
+            downloadId,
+            downloadUrl: downloadEntry.downloadRequest.downloadUrl,
+            masterUrl: downloadEntry.downloadRequest.masterUrl || null,
+            selectedOptionOrigText: downloadEntry.downloadRequest.selectedOptionOrigText || null,
+            type: downloadEntry.downloadRequest.type,
+            ...progressData
+        });
+        
+        return; // Don't process completion logic for progress events
+    }
 
     // Handle completion/error/cancellation - clean up active tracking
     if (['download-canceled', 'download-success', 'download-error'].includes(command)) {
@@ -416,21 +418,17 @@ async function handleDownloadEvent(event) {
         
         // Process next download in queue after ANY completion (success, error, or cancellation)
         processNextDownload();
-    }
 
-    // Prepare broadcast data with completion flags and downloadId (no videoData needed for progress events)
-    const broadcastData = (['download-canceled', 'download-success', 'download-error'].includes(command))
-        ? { 
+        // Broadcast completion event - add composed metadata
+        broadcastToPopups({
             ...event, 
+            downloadId,
             selectedOptionOrigText: downloadEntry?.downloadRequest?.selectedOptionOrigText || null,
             addedToHistory: settingsManager.get('saveDownloadsInHistory') && (command === 'download-success' || command === 'download-error'),
             originalCommand: downloadEntry?.downloadRequest,
             masterUrl: downloadEntry?.downloadRequest?.masterUrl || null
-        }
-        : event;
-
-    // Always notify UI with progress data via direct broadcast
-    broadcastToPopups(broadcastData);
+        });
+    }
 }
 
 // Create download start notification
@@ -496,9 +494,9 @@ export function getActiveDownloadUrls() {
 
 // Debug function to log current download manager state
 export function debugDownloadManagerState() {
-    const entries = Array.from(allDownloads.values());
+    const entries = Array.from(allDownloads.entries());
     logger.debug('Download Manager State:', {
-        allDownloads: entries.map(e => ({ id: e.downloadId, status: e.status, url: e.downloadRequest.downloadUrl })),
+        allDownloads: entries.map(([id, entry]) => ({ id, status: entry.status, url: entry.downloadRequest.downloadUrl })),
         counts: getActiveDownloadCount()
     });
 }
@@ -526,15 +524,13 @@ export async function cancelDownload(cancelRequest) {
         // Notify count change
         notifyDownloadCountChange();
         
-        // Broadcast cancellation to UI
+        // Broadcast cancellation to UI - compose from entry data
         broadcastToPopups({
             command: 'download-canceled',
-            type: cancelRequest.type,
+            downloadId,
             downloadUrl: entry.downloadRequest.downloadUrl,
             masterUrl: entry.downloadRequest.masterUrl || null,
-            filename: entry.downloadRequest.filename,
-            selectedOptionOrigText: entry.downloadRequest.selectedOptionOrigText || null,
-            downloadId
+            selectedOptionOrigText: entry.downloadRequest.selectedOptionOrigText || null
         });
         
         logger.debug('Queued download removed immediately:', downloadId);
@@ -543,7 +539,7 @@ export async function cancelDownload(cancelRequest) {
         // Set stopping state, wait for native host
         entry.status = 'stopping';
         
-        // Broadcast stopping state to UI
+        // Broadcast stopping state to UI - compose from entry data
         broadcastToPopups({
             command: 'download-stopping',
             downloadId,
@@ -592,31 +588,25 @@ async function processNextDownload() {
     
     // Update status to downloading
     queuedEntry.status = 'downloading';
-    queuedEntry.progressData = {
-        ...queuedEntry.progressData,
-        command: 'download-started'
-    };
+    // Don't update progressData here - it will be set by first progress event
     
     // Notify count change
     notifyDownloadCountChange();
     
-    // Broadcast download start to UI
+    // Get downloadId from the Map entry we found
+    const downloadId = Array.from(allDownloads.entries())
+        .find(([id, entry]) => entry === queuedEntry)?.[0];
+    
+    // Broadcast download start to UI - compose from entry data
     broadcastToPopups({
         command: 'download-started',
-        downloadUrl: queuedEntry.downloadRequest.downloadUrl,
-        masterUrl: queuedEntry.downloadRequest.masterUrl || null,
-        filename: queuedEntry.downloadRequest.filename, // Already includes container extension
-        selectedOptionOrigText: queuedEntry.downloadRequest.selectedOptionOrigText || null,
-        videoData: queuedEntry.downloadRequest.videoData,
-        downloadId: queuedEntry.downloadId
+        videoData: queuedEntry.downloadRequest.videoData
     });
-    
-
     
     // Send download command to native host
     nativeHostService.sendMessage(queuedEntry.downloadRequest, { expectResponse: false });
     
-    logger.debug('Queued download promoted to active:', queuedEntry.downloadId);
+    logger.debug('Queued download promoted to active:', downloadId);
 }
 
 /**
@@ -768,7 +758,6 @@ async function handleDownloadAsFlow(downloadCommand) {
                 command: 'download-canceled',
                 downloadUrl: downloadCommand.downloadUrl,
                 masterUrl: downloadCommand.masterUrl || null,
-                filename: downloadCommand.filename,
                 selectedOptionOrigText: downloadCommand.selectedOptionOrigText || null,
                 error: 'File selection canceled'
             });
@@ -833,7 +822,6 @@ async function handleDownloadAsFlow(downloadCommand) {
             command: 'download-canceled',
             downloadUrl: downloadCommand.downloadUrl,
             masterUrl: downloadCommand.masterUrl || null,
-            filename: downloadCommand.filename,
             selectedOptionOrigText: downloadCommand.selectedOptionOrigText || null,
             error: `Download As failed: ${error.message}`
         });

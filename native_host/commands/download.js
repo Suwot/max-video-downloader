@@ -169,37 +169,24 @@ class DownloadCommand extends BaseCommand {
             
             // Build progress data matching original structure
             const progressData = {
-                // Core progress data
                 progress: progressPercent,
                 speed: Math.round(speed),
                 elapsedTime: Math.round(elapsedSeconds),
                 type: progressState.type,
                 strategy,
                 isLive: progressState.isLive, // used to determine dl-tooltip presence
-                
-                // Byte data
                 downloadedBytes: progressState.downloadedBytes,
                 totalBytes: progressState.fileSizeBytes || null,
-                
-                // Time data
                 currentTime: Math.round(progressState.currentTime),
                 totalDuration: progressState.isLive ? null : Math.round(progressState.duration),
-                
-                // ETA calculation (not applicable for livestreams)
+				currentSegment: progressState.currentSegment || null,
                 eta: progressState.isLive ? null : (progress > 0 && speed > 0 ? Math.round(((100 - progress) / 100) * (progressState.fileSizeBytes || (progressState.downloadedBytes / (progress / 100))) / speed) : null)
             };
-
-            // Add segment data for HLS (include totalSegments)
-            if (progressState.type === 'hls') {
-                progressData.currentSegment = progressState.currentSegment;
-            }
             
-            // Send progress message with complete context
+            // Send progress message with only progress data
             this.sendMessage({
                 command: 'download-progress',
                 downloadId: progressState.downloadId,
-                downloadUrl: progressState.downloadUrl,
-                masterUrl: downloadEntry?.masterUrl || null,
                 ...progressData
             }, { useMessageId: false });
             
