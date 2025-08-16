@@ -746,7 +746,10 @@ export class VideoItemComponent {
      * @returns {Object} Complete download data object
      */
     getDownloadData() {
-        const baseData = {
+        const videoTrack = this.selectedTracks.videoTrack || this.videoData.videoTracks?.[0] || this.videoData;
+        
+        // Build complete download data in one place
+        const downloadData = {
             tabId: this.videoData.tabId,
             filename: this.videoData.title,
             type: this.videoData.type,
@@ -755,88 +758,45 @@ export class VideoItemComponent {
             pageUrl: this.videoData.pageUrl || null,
             pageFavicon: this.videoData.pageFavicon || null,
             headers: this.videoData.headers || {},
-            isLive: this.videoData.isLive || false
-        };
-        
-        // Add type-specific data
-        switch (this.videoData.type) {
-            case 'direct':
-                return this.getDirectDownloadData(baseData);
-            case 'hls':
-                return this.getHlsDownloadData(baseData);
-            case 'dash':
-                return this.getDashDownloadData(baseData);
-            default:
-                return { ...baseData, container: 'mp4' };
-        }
-    }
-    
-    /**
-     * Get download data for direct videos
-     * @param {Object} baseData - Base download data
-     * @returns {Object} Complete direct download data
-     */
-    getDirectDownloadData(baseData) {
-        const videoTrack = this.selectedTracks.videoTrack || this.videoData.videoTracks?.[0] || this.videoData;
-        
-        return {
-            ...baseData,
-            downloadUrl: videoTrack.url,
-            trackLabels: this.getTrackLabels(),
-            container: videoTrack.videoContainer || 'mp4',
-            fileSizeBytes: videoTrack.fileSize || videoTrack.estimatedFileSizeBytes || null,
-            sourceAudioCodec: this.videoData.metaFFprobe?.audioCodec?.name || null,
-            sourceAudioBitrate: this.videoData.metaFFprobe?.audioBitrate || null
-        };
-    }
-    
-    /**
-     * Get download data for HLS videos
-     * @param {Object} baseData - Base download data
-     * @returns {Object} Complete HLS download data
-     */
-    getHlsDownloadData(baseData) {
-        const hasAdvancedTracks = (this.videoData.audioTracks?.length || 0) > 0 || 
-                                 (this.videoData.subtitleTracks?.length || 0) > 0;
-        
-        if (hasAdvancedTracks) {
-            // Advanced HLS mode - multiple inputs
-            return {
-                ...baseData,
-                downloadUrl: this.selectedTracks.videoTrack?.url,
-                inputs: this.buildHlsInputsArray(),
-                container: this.getOptimalContainer(),
-                fileSizeBytes: this.calculateTotalFileSize(),
-                segmentCount: this.videoData.segmentCount || null
-            };
-        } else {
-            // Simple HLS mode - use container-first logic
-            const videoTrack = this.selectedTracks.videoTrack || this.videoData.videoTracks?.[0];
-            return {
-                ...baseData,
-                downloadUrl: videoTrack?.url,
-                trackLabels: this.getTrackLabels(),
-                container: videoTrack?.videoContainer || videoTrack?.audioContainer || 'mp4',
-                fileSizeBytes: videoTrack?.metaJS?.estimatedFileSizeBytes || null,
-                segmentCount: this.videoData.segmentCount || null
-            };
-        }
-    }
-    
-    /**
-     * Get download data for DASH videos
-     * @param {Object} baseData - Base download data
-     * @returns {Object} Complete DASH download data
-     */
-    getDashDownloadData(baseData) {
-        return {
-            ...baseData,
-            downloadUrl: this.selectedTracks.videoTrack?.url || this.videoData.url,
-            streamSelection: this.buildDashStreamSelection(),
-            trackLabels: this.getTrackLabels(),
+            isLive: this.videoData.isLive || false,
+            
+            // Common properties (calculated once)
             container: this.getOptimalContainer(),
-            fileSizeBytes: this.calculateTotalFileSize()
+            fileSizeBytes: this.calculateTotalFileSize(),
+            trackLabels: this.getTrackLabels()
         };
+        
+        // Add type-specific properties
+        if (this.videoData.type === 'hls') {
+            const hasAdvancedTracks = (this.videoData.audioTracks?.length || 0) > 0 || 
+                                     (this.videoData.subtitleTracks?.length || 0) > 0;
+            
+            if (hasAdvancedTracks) {
+                // HLS Advanced mode
+                downloadData.downloadUrl = videoTrack?.url;
+                downloadData.inputs = this.buildHlsInputsArray();
+                downloadData.segmentCount = this.videoData.segmentCount || null;
+            } else {
+                // HLS Simple mode
+                downloadData.downloadUrl = videoTrack?.url;
+                downloadData.container = videoTrack?.videoContainer || videoTrack?.audioContainer || 'mp4';
+                downloadData.fileSizeBytes = videoTrack?.metaJS?.estimatedFileSizeBytes || null;
+                downloadData.segmentCount = this.videoData.segmentCount || null;
+            }
+        } else if (this.videoData.type === 'dash') {
+            // DASH mode
+            downloadData.downloadUrl = videoTrack?.url || this.videoData.url;
+            downloadData.streamSelection = this.buildDashStreamSelection();
+        } else {
+            // Direct mode
+            downloadData.downloadUrl = videoTrack.url;
+            downloadData.container = videoTrack.videoContainer || 'mp4';
+            downloadData.fileSizeBytes = videoTrack.fileSize || videoTrack.estimatedFileSizeBytes || null;
+            downloadData.sourceAudioCodec = this.videoData.metaFFprobe?.audioCodec?.name || null;
+            downloadData.sourceAudioBitrate = this.videoData.metaFFprobe?.audioBitrate || null;
+        }
+        
+        return downloadData;
     }
     
     /**
