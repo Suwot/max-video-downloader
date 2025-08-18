@@ -34,9 +34,6 @@ export class VideoDownloadButtonComponent {
         this.downloadBtn = null;
         this.menuBtn = null;
         this.menuDropdown = null;
-        this.hasVideo = this.videoItemComponent.videoData.hasVideo || false;
-        this.hasAudio = this.videoItemComponent.videoData.hasAudio || false;
-        this.hasSubtitles = this.videoItemComponent.videoData.hasSubtitles || false;
         
         // State management
         this.currentState = BUTTON_STATES.DEFAULT;

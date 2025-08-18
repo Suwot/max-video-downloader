@@ -603,10 +603,10 @@ export class VideoItemComponent {
             isLive: this.videoData.isLive,
             isEncrypted: this.videoData.isEncrypted,
             encryptionType: this.videoData.encryptionType,
-			// For advanced dropdowns (HLS/DASH), use selection-based flags; for simple dropdowns, use original flags
-			hasVideo: this.isAdvancedDropdown() ? (this.selectedTracks.videoTrack !== null) : this.hasVideo,
-			hasAudio: this.isAdvancedDropdown() ? (this.selectedTracks.audioTracks.length > 0) : this.hasAudio,
-			hasSubtitles: this.isAdvancedDropdown() ? (this.selectedTracks.subtitleTracks.length > 0) : this.hasSubtitles
+			// For advanced dropdowns (HLS/DASH), use selection-based flags; for simple dropdowns, use container-based flags
+			hasVideo: this.dropdown?.isAdvancedMode ? (this.selectedTracks.videoTrack !== null) : !!this.selectedTracks.videoTrack?.videoContainer,
+			hasAudio: this.dropdown?.isAdvancedMode ? (this.selectedTracks.audioTracks.length > 0) : !!this.selectedTracks.videoTrack?.audioContainer,
+			hasSubtitles: this.dropdown?.isAdvancedMode ? (this.selectedTracks.subtitleTracks.length > 0) : this.hasSubtitles
         };
         
         // Determine container based on command mode (container-first logic)
@@ -1244,17 +1244,6 @@ export class VideoItemComponent {
         // Fallback to URL for videos tab (no downloadId available)
         const downloadData = this.getDownloadData();
         return downloadData.downloadUrl;
-    }
-    
-    /**
-     * Check if this is an advanced dropdown (HLS/DASH with separate track arrays)
-     * @returns {boolean} True if advanced dropdown, false if simple dropdown
-     */
-    isAdvancedDropdown() {
-        // Advanced dropdowns have separate track arrays for audio/subtitles
-        return (this.videoData.type === 'hls' || this.videoData.type === 'dash') &&
-               ((this.videoData.audioTracks?.length || 0) > 0 || 
-                (this.videoData.subtitleTracks?.length || 0) > 0);
     }
     
     /**
