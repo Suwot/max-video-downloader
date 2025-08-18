@@ -82,21 +82,37 @@ export function probe(url, metadata = null) {
  * @returns {boolean} True if should process, false if should skip
  */
 export function gate(url, metadata = null, minSize = 1024, candidate = null) {
-    if (!url) return false;
+    if (!url) {
+        console.log(`[GATE] Rejected: No URL provided`);
+        return false;
+    }
 
     // Conservative URL range param skip: only for direct candidates (manifests are often tiny and chunked)
     if (candidate?.type === 'direct' && /[?&](?:bytes|range)=\d+-\d+/i.test(url)) {
+        console.log(`[GATE] Rejected: Direct candidate with range params in URL`, { url, candidate });
         return false;
     }
 
     // Reject segment extensions with proper boundaries, and common segment patterns
     if (SEGMENT_EXT_RE.test(url) || INIT_HEADER_RE.test(url) || SEGMENT_PATTERNS.some(p => p.test(url))) {
+        console.log(`[GATE] Rejected: Segment pattern detected`, { 
+            url, 
+            segmentExt: SEGMENT_EXT_RE.test(url),
+            initHeader: INIT_HEADER_RE.test(url),
+            segmentPattern: SEGMENT_PATTERNS.some(p => p.test(url))
+        });
         return false;
     }
 
     // Size check ONLY for direct media (not manifests)
     const contentLength = Number.isFinite(metadata?.contentLength) ? metadata.contentLength : null;
     if (candidate?.type === 'direct' && contentLength !== null && contentLength < minSize) {
+        console.log(`[GATE] Rejected: Direct candidate below size threshold`, { 
+            url, 
+            contentLength, 
+            minSize, 
+            candidate 
+        });
         return false;
     }
 
@@ -105,12 +121,29 @@ export function gate(url, metadata = null, minSize = 1024, candidate = null) {
     if (mime === 'application/octet-stream') {
         const hasFilename = !!metadata?.filename;
         if (candidate?.type === 'hls' || candidate?.type === 'dash') {
-            return hasFilename || contentLength == null || contentLength > 0;
+            const result = hasFilename || contentLength == null || contentLength > 0;
+            if (!result) {
+                console.log(`[GATE] Rejected: Octet-stream manifest without filename or size`, { 
+                    url, 
+                    hasFilename, 
+                    contentLength, 
+                    candidate 
+                });
+            }
+            return result;
         }
         if (!hasFilename && (contentLength == null || contentLength < minSize)) {
+            console.log(`[GATE] Rejected: Octet-stream without filename and insufficient size`, { 
+                url, 
+                hasFilename, 
+                contentLength, 
+                minSize, 
+                candidate 
+            });
             return false;
         }
     }
 
+    console.log(`[GATE] Passed:`, { url, candidate, metadata, minSize });
     return true;
 }

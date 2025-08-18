@@ -248,6 +248,13 @@ function setupWebRequestListener() {
     chrome.webRequest.onHeadersReceived.addListener(
         function (details) {
             logger.info(`NEW onHeadersReceived request for url: ${details.url}, requestId: ${details.requestId}`, details);
+            
+            // Filter out extension-initiated requests to prevent self-processing loops
+            if (details.initiator && details.initiator.startsWith('chrome-extension://')) {
+                logger.debug(`Skipping extension-initiated request: ${details.initiator}`);
+                return;
+            }
+            
             // Centralized cleanup - ensure headers are always cleaned up
             const cleanupHeaders = () => {
                 if (details.requestId) {
