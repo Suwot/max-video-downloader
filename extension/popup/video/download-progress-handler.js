@@ -64,11 +64,7 @@ export async function updateDownloadProgress(progressData = {}) {
                 const cancelHandler = () => {
                     const cancelMessage = {
                         command: 'cancel-download',
-                        downloadId: progressData.downloadId || progressData.downloadUrl,
-                        type: progressData.type,
-                        downloadUrl: progressData.downloadUrl,
-                        masterUrl: progressData.masterUrl || null,
-                        selectedOptionOrigText: progressData.selectedOptionOrigText
+                        downloadId: progressData.downloadId || progressData.downloadUrl
                     };
                     sendPortMessage(cancelMessage);
                 };
@@ -138,11 +134,7 @@ export function restoreDownloadStates(activeDownloads = []) {
                 const cancelHandler = () => {
                     const cancelMessage = {
                         command: 'cancel-download',
-                        downloadId: downloadEntry.downloadId || downloadEntry.downloadUrl,
-                        type: downloadEntry.type,
-                        downloadUrl: downloadEntry.downloadUrl,
-                        masterUrl: downloadEntry.masterUrl || null,
-                        selectedOptionOrigText: downloadEntry.selectedOptionOrigText
+                        downloadId: downloadEntry.downloadId || downloadEntry.downloadUrl
                     };
                     sendPortMessage(cancelMessage);
                 };
@@ -261,11 +253,7 @@ function updateComponentButtonState(downloadButtonComponent, progressData = {}) 
     const cancelHandler = () => {
         const cancelMessage = {
             command: 'cancel-download',
-            downloadId: progressData.downloadId || progressData.downloadUrl,
-            type: progressData.type,
-            downloadUrl: progressData.downloadUrl,
-            masterUrl: progressData.masterUrl || null,
-            selectedOptionOrigText: progressData.selectedOptionOrigText
+            downloadId: progressData.downloadId || progressData.downloadUrl
         };
         sendPortMessage(cancelMessage);
     };

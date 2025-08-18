@@ -25,7 +25,7 @@ class DownloadCommand extends BaseCommand {
     static activeDownloads = new Map();
 
     // Initialize progress tracking state for a download
-    initProgressState(downloadId, { type, duration, fileSizeBytes, downloadUrl, segmentCount, isLive }) {
+    initProgressState(downloadId, { type, duration, fileSizeBytes, downloadUrl, isLive }) {
         const now = Date.now();
         return {
             // Basic info
@@ -37,7 +37,6 @@ class DownloadCommand extends BaseCommand {
             // Metadata
             duration: duration || 0,
             fileSizeBytes: fileSizeBytes || 0,
-            totalSegments: segmentCount || 0, // For HLS progress tracking
             isLive: isLive || false, // Track if this is a livestream
             
             // Current progress
@@ -201,7 +200,7 @@ class DownloadCommand extends BaseCommand {
         
         // Parse stream sizes: video:0kB audio:7405kB subtitle:0kB other streams:0kB
         // Convert to bytes for consistency with original structure
-        const streamMatch = output.match(/video:(\d+)kB audio:(\d+)kB subtitle:(\d+)kB other streams:(\d+)kB/);
+		const streamMatch = output.match(/video:(\d+)(?:kB|KiB|KB) audio:(\d+)(?:kB|KiB|KB) subtitle:(\d+)(?:kB|KiB|KB) other streams:(\d+)(?:kB|KiB|KB)/);
         if (streamMatch) {
             stats.videoSize = parseInt(streamMatch[1], 10) * 1024; // Convert KB to bytes
             stats.audioSize = parseInt(streamMatch[2], 10) * 1024; // Convert KB to bytes  
@@ -344,19 +343,12 @@ class DownloadCommand extends BaseCommand {
             sourceAudioBitrate = null,
             fileSizeBytes = null,
             duration = null,
-            segmentCount = null,
             downloadId = null,
             isLive = false,
             audioLabel = null,
             subsLabel = null,
-            allowOverwrite = false,
-            videoData = {}
+            allowOverwrite = false
         } = params;
-
-        // Extract media flags from videoData object
-        const hasVideo = videoData?.hasVideo || false;
-        const hasAudio = videoData?.hasAudio || false;
-        const hasSubtitles = videoData?.hasSubtitles || false;
 
         // Use downloadId directly from extension (no need to generate sessionId)
         if (!downloadId) {
@@ -419,14 +411,10 @@ class DownloadCommand extends BaseCommand {
                 headers, 
                 duration,
                 fileSizeBytes,
-                segmentCount,
                 audioOnly,
                 subsOnly,
                 downloadId, // Use downloadId instead of sessionId
-				isLive,
-                hasVideo,
-                hasAudio,
-                hasSubtitles
+				isLive
             });
             
         } catch (err) {
@@ -953,14 +941,10 @@ class DownloadCommand extends BaseCommand {
         headers,
         duration,
         fileSizeBytes,
-        segmentCount,
         audioOnly,
         subsOnly,
         downloadId, // Use downloadId instead of sessionId
-		isLive,
-        hasVideo,
-        hasAudio,
-        hasSubtitles
+		isLive
     }) {
         return new Promise((resolve, _reject) => {
             // Use an IIFE to handle async operations properly
@@ -988,7 +972,6 @@ class DownloadCommand extends BaseCommand {
                     duration: finalDuration,
                     fileSizeBytes,
                     downloadUrl,
-                    segmentCount,
                     isLive
                 });
                 
@@ -1012,10 +995,7 @@ class DownloadCommand extends BaseCommand {
                     type,
                     masterUrl,
                     headers: headers || null,
-                    progressState,
-                    hasVideo,
-                    hasAudio,
-                    hasSubtitles
+                    progressState
                 });
                 
                 logDebug('Added download to activeDownloads Map. Total downloads:', DownloadCommand.activeDownloads.size);
@@ -1066,13 +1046,12 @@ class DownloadCommand extends BaseCommand {
                     { code, signal, completed, wasKilled, isGracefulCancel, wasCanceled, fileExists, fileSize, bigEnough, type });
                 
                 // Enhanced downloadStats
-                const downloadStats = {
-                    ...(progressState.finalStats || {}),
-                    finalFileSize: progressState.downloadedBytes || null,
-                    finalDuration: progressState.finalProcessedTime || progressState.duration || null,
-                    isLive: progressState.isLive || false,
-                    downloadDurationSeconds: downloadDuration
-                };
+                    const rawDuration = progressState.finalProcessedTime || progressState.duration || null;
+                    const downloadStats = {
+                        ...(progressState.finalStats || {}),
+                        finalDuration: rawDuration != null ? Math.round(rawDuration) : null,
+                        downloadDurationSeconds: downloadDuration
+                    };
                 
                 // Single decision ladder - simplified rules
                 let outcome, message, shouldPreserveFile = false;
@@ -1113,7 +1092,7 @@ class DownloadCommand extends BaseCommand {
                 
                 logDebug(message);
                 
-                // Send appropriate message
+                // Send appropriate message - FFmpeg-only data
                 if (outcome.command === 'download-success') {
                     this.sendMessage({
                         command: 'download-success',
@@ -1121,28 +1100,17 @@ class DownloadCommand extends BaseCommand {
                         ...(shouldPreserveFile && {
                             path: uniqueOutput,
                             filename: path.basename(uniqueOutput),
-                            downloadUrl,
-                            masterUrl,
-                            type,
-                            duration: downloadStats.finalDuration,
-                            downloadStats,
-                            completedAt: Date.now(),
-                            audioOnly,
-                            subsOnly,
-                            isLive: isLivestream,
-                            hasVideo: downloadEntry?.hasVideo || false,
-                            hasAudio: downloadEntry?.hasAudio || false,
-                            hasSubtitles: downloadEntry?.hasSubtitles || false,
-                            headers: downloadEntry?.headers || null
+                            downloadStats
                         }),
+                        completedAt: Date.now(),
                         isPartial: outcome.isPartial || false,
                         ...(outcome.message && { message: outcome.message })
                     }, { useMessageId: false });
                     
                     resolve({ 
                         success: true, 
-                        ...(shouldPreserveFile && { path: uniqueOutput }), 
                         downloadStats, 
+                        ...(shouldPreserveFile && { path: uniqueOutput }), 
                         ...(outcome.isPartial && { isPartial: true }) 
                     });
                     
@@ -1166,20 +1134,8 @@ class DownloadCommand extends BaseCommand {
                         success: false,
                         message: message,
                         errorMessage: collectedErrors || null,
-                        downloadUrl,
-                        masterUrl,
-                        type,
-                        duration: downloadStats.finalDuration,
                         downloadStats,
-                        downloadDuration,
-                        completedAt: Date.now(),
-                        audioOnly,
-                        subsOnly,
-                        isLive: isLivestream,
-                        hasVideo: downloadEntry?.hasVideo || false,
-                        hasAudio: downloadEntry?.hasAudio || false,
-                        hasSubtitles: downloadEntry?.hasSubtitles || false,
-                        headers: downloadEntry?.headers || null
+                        completedAt: Date.now()
                     }, { useMessageId: false });
                     
                     resolve({ success: false, downloadStats, error: message });
@@ -1215,14 +1171,10 @@ class DownloadCommand extends BaseCommand {
                         headers,
                         duration,
                         fileSizeBytes,
-                        segmentCount,
                         audioOnly,
                         subsOnly,
                         downloadId, // reuse the same id
-                        isLive,
-                        hasVideo,
-                        hasAudio,
-                        hasSubtitles
+                        isLive
                     }).then(resolve);
                     return;
                 }
@@ -1233,8 +1185,6 @@ class DownloadCommand extends BaseCommand {
                     downloadId,
                     success: false,
                     message: `FFmpeg failed to start: ${err.message}`,
-                    downloadUrl,
-                    type,
                     completedAt: Date.now()
                 }, { useMessageId: false });
 

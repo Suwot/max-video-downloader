@@ -1183,11 +1183,7 @@ export class VideoItemComponent {
         const cancelHandler = () => {
             const cancelMessage = {
                 command: 'cancel-download',
-                downloadId: this.getDownloadIdForCancellation(),
-                type: this.videoData.type,
-                downloadUrl: this.getDownloadData().downloadUrl,
-                masterUrl: this.videoData.isMaster ? this.videoData.url : null,
-                selectedOptionOrigText: this.getSelectedOptionText()
+                downloadId: this.getDownloadIdForCancellation()
             };
             sendPortMessage(cancelMessage);
         };

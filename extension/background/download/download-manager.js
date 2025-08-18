@@ -361,54 +361,16 @@ async function handleDownloadEvent(event) {
         // Remove from unified downloads map
         allDownloads.delete(downloadId);
         
-        // Notify count change
         notifyDownloadCountChange();
         
-        // Add to history storage for success/error only
+        // Add to history storage for success/error only (merge FFmpeg data with stored entry data)
         if (command === 'download-success' || command === 'download-error') {
-            // Create clean originalCommand for history storage (remove heavy previewUrl)
-            const cleanOriginalCommand = downloadEntry?.downloadRequest ? {
-                ...downloadEntry.downloadRequest,
-                videoData: downloadEntry.downloadRequest.videoData ? {
-                    ...downloadEntry.downloadRequest.videoData,
-                    previewUrl: undefined // Remove heavy preview data for storage efficiency
-                } : undefined
-            } : undefined;
+			// Deconstruct videoData to remove previewUrl for history storage
+			const { previewUrl: _, ...cleanVideoData } = downloadEntry?.downloadRequest?.videoData || {};
+			const cleanOriginalCommand = { ...downloadEntry.downloadRequest, videoData: cleanVideoData };
 
-            // Create minimal storage object - keep only essential fields for UI and retry
-            const minimalStorageData = {
-                // Essential completion data
-                command: event.command,
-                completedAt: event.completedAt,
-                path: event.path,
-                filename: event.filename,
-                downloadUrl: downloadUrl, // Keep - used as filename fallback in UI
-                selectedOptionOrigText: downloadEntry?.downloadRequest?.selectedOptionOrigText || null,
-                type: event.type,
-                downloadStats: event.downloadStats,
-                duration: event.duration,  // Actual processed duration (different from manifest duration in originalCommand)
-
-                // Flags for UI display
-                isPartial: event.isPartial,
-                audioOnly: event.audioOnly,
-                subsOnly: event.subsOnly,
-                isRedownload: downloadEntry?.downloadRequest?.isRedownload || false,
-                isLive: event.isLive || false, // Preserve isLive flag for UI rendering
-                hasVideo: event.hasVideo || false,
-                hasAudio: event.hasAudio || false,
-                hasSubtitles: event.hasSubtitles || false,
-
-                // Error and diagnostic info
-                errorMessage: event.errorMessage,
-                terminationInfo: event.terminationInfo,
-                originalCommand: cleanOriginalCommand //  // Complete originalCommand for retry functionality (with previewUrl removed)
-            };
-
-            await addToHistoryStorage(minimalStorageData);
+            await addToHistoryStorage({ ...event, originalCommand: cleanOriginalCommand });
         }
-        
-        // Notify count change
-        notifyDownloadCountChange();
 
         // Handle specific completion types
         if (command === 'download-success') {
@@ -419,14 +381,14 @@ async function handleDownloadEvent(event) {
         // Process next download in queue after ANY completion (success, error, or cancellation)
         processNextDownload();
 
-        // Broadcast completion event - add composed metadata
+        // Broadcast minimal UI update - only data needed for element state reset
         broadcastToPopups({
-            ...event, 
+            command: event.command,
             downloadId,
+            downloadUrl: downloadEntry?.downloadRequest?.downloadUrl,
+            masterUrl: downloadEntry?.downloadRequest?.masterUrl || null,
             selectedOptionOrigText: downloadEntry?.downloadRequest?.selectedOptionOrigText || null,
-            addedToHistory: settingsManager.get('saveDownloadsInHistory') && (command === 'download-success' || command === 'download-error'),
-            originalCommand: downloadEntry?.downloadRequest,
-            masterUrl: downloadEntry?.downloadRequest?.masterUrl || null
+            addedToHistory: settingsManager.get('saveDownloadsInHistory') && (command === 'download-success' || command === 'download-error')
         });
     }
 }

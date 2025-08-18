@@ -263,14 +263,14 @@ function buildFlagsHtml(progressData) {
     
     // Stream icons based on mode flags and has* flags
     const streamIcons = [];
-    if (progressData.audioOnly) {
+    if (progressData.originalCommand.audioOnly) {
         // Show only audio icon for audio extraction
         streamIcons.push(`
             <span class="history-flag-icon" data-tooltip="Extracted Audio">
                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-blue)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-volume2 w-3 h-3 flex-shrink-0" aria-hidden="true"><path d="M11 4.702a.705.705 0 0 0-1.203-.498L6.413 7.587A1.4 1.4 0 0 1 5.416 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.416a1.4 1.4 0 0 1 .997.413l3.383 3.384A.705.705 0 0 0 11 19.298z"></path><path d="M16 9a5 5 0 0 1 0 6"></path><path d="M19.364 18.364a9 9 0 0 0 0-12.728"></path></svg>
             </span>
         `);
-    } else if (progressData.subsOnly) {
+    } else if (progressData.originalCommand.subsOnly) {
         // Show only subtitles icon for subtitle extraction
         streamIcons.push(`
             <span class="history-flag-icon" data-tooltip="Extracted Subs">
@@ -279,7 +279,7 @@ function buildFlagsHtml(progressData) {
         `);
     } else {
         // Show icons based on has* flags for regular downloads
-        if (progressData.hasVideo) {
+        if (progressData.originalCommand.videoData.hasVideo) {
             streamIcons.push(`
                 <span class="history-flag-icon" data-tooltip="Has Video">
                     <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--color-green)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-film w-3 h-3 flex-shrink-0" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2"></rect><path d="M7 3v18"></path><path d="M3 7.5h4"></path><path d="M3 12h18"></path><path d="M3 16.5h4"></path><path d="M17 3v18"></path><path d="M17 7.5h4"></path><path d="M17 16.5h4"></path></svg>
@@ -287,7 +287,7 @@ function buildFlagsHtml(progressData) {
             `);
         }
         
-        if (progressData.hasAudio) {
+        if (progressData.originalCommand.videoData.hasAudio) {
             streamIcons.push(`
                 <span class="history-flag-icon" data-tooltip="Has Audio">
                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-blue)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-volume2 w-3 h-3 flex-shrink-0" aria-hidden="true"><path d="M11 4.702a.705.705 0 0 0-1.203-.498L6.413 7.587A1.4 1.4 0 0 1 5.416 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.416a1.4 1.4 0 0 1 .997.413l3.383 3.384A.705.705 0 0 0 11 19.298z"></path><path d="M16 9a5 5 0 0 1 0 6"></path><path d="M19.364 18.364a9 9 0 0 0 0-12.728"></path></svg>
@@ -295,7 +295,7 @@ function buildFlagsHtml(progressData) {
             `);
         }
         
-        if (progressData.hasSubtitles) {
+        if (progressData.originalCommand.videoData.hasSubtitles) {
             streamIcons.push(`
                 <span class="history-flag-icon" data-tooltip="Has Subs">
                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="gray" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-captions w-3 h-3 flex-shrink-0" aria-hidden="true"><rect width="18" height="14" x="3" y="5" rx="2" ry="2"></rect><path d="M7 15h4M15 15h2M7 11h2M13 11h4"></path></svg>
@@ -315,14 +315,14 @@ function buildFlagsHtml(progressData) {
             </span>
         `);
     }
-    if (progressData.isRedownload) {
+    if (progressData.originalCommand.isRedownload) {
         icons.push(`
             <span class="history-flag-icon" data-tooltip="Redownloaded">
                 <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-rotate-ccw w-3 h-3 flex-shrink-0 text-blue-500" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path></svg>
             </span>
         `);
     }
-    if (progressData.isLive) {
+    if (progressData.originalCommand.isLive) {
         icons.push(`
             <span class="history-flag-text live-flag">LIVE REC</span>
         `);
@@ -417,9 +417,7 @@ function buildFlagsHtml(progressData) {
                 // Send original command with isRedownload flag (videoData already included from native host)
                 const retryCommand = {
                     ...progressData.originalCommand,
-                    selectedOptionOrigText: progressData.selectedOptionOrigText,
                     isRedownload: true
-                    // videoData is already in originalCommand from native host (robust approach)
                 };
                 
                 sendPortMessage(retryCommand);
@@ -437,16 +435,18 @@ function buildFlagsHtml(progressData) {
  */
 function buildStatsHtml(progressData) {
     const stats = [];
-    
-    // Type badge from progressData.type (bubble style)
-    if (progressData.type) {
+
+    // Type badge from progressData.originalCommand.type (bubble style)
+    if (progressData.originalCommand?.type) {
         stats.push(`
             <span class="type-badge">
-                ${progressData.type.toUpperCase()}
+                ${progressData.originalCommand.type.toUpperCase()}
             </span>
         `);
     }
-    
+
+	let origLabel = progressData.originalCommand?.selectedOptionOrigText;
+
     // Quality or bitrate (white circle)
     if (progressData.audioOnly && progressData.downloadStats?.bitrateKbps) {
         const bitrate = formatBitrate(progressData.downloadStats.bitrateKbps);
@@ -467,11 +467,11 @@ function buildStatsHtml(progressData) {
                 Subs
             </span>
         `);
-    } else if (progressData.selectedOptionOrigText) {
-        const advancedDropdown = progressData.selectedOptionOrigText.includes('≈')
+    } else if (origLabel) {
+        const advancedDropdown = origLabel.includes('≈')
         const qualityText = advancedDropdown ? 
-            progressData.selectedOptionOrigText.split('≈')[0]?.trim() : 
-            progressData.selectedOptionOrigText.split('•')[0]?.trim();
+            origLabel.split('≈')[0]?.trim() : 
+            origLabel.split('•')[0]?.trim();
 
         if (qualityText) {
             let displayQuality = qualityText;
@@ -528,8 +528,8 @@ function buildStatsHtml(progressData) {
     }
     
     // Duration (orange circle)
-    if (progressData.duration) {
-        const duration = formatDuration(progressData.duration);
+    if (progressData.downloadStats.finalDuration) {
+        const duration = formatDuration(progressData.downloadStats.finalDuration);
         stats.push(`
             <span class="duration">
                 <svg width="4" height="4" viewBox="0 0 6 6" fill="none">
