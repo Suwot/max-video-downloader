@@ -59,15 +59,8 @@ export function probe(url, metadata = null) {
     const hasDirectMime = (normalizedMime && (normalizedMime.startsWith('video/') || normalizedMime.startsWith('audio/') || DIRECT_MIMES.has(normalizedMime)));
     const hasDirectExt = DIRECT_EXT_RE.test(url);
     if (hasDirectMime || hasDirectExt) {
-        let originalContainer = null;
-        if (normalizedMime) {
-            originalContainer = normalizedMime.split('/')[1];
-        } else {
-            const extMatch = DIRECT_EXT_RE.exec(url);
-            originalContainer = extMatch ? extMatch[1].toLowerCase() : null;
-        }
         const mediaType = normalizedMime?.startsWith('audio/') ? 'audio' : 'video';
-        return { type: 'direct', mediaType, originalContainer, mime: normalizedMime };
+        return { type: 'direct', mediaType, mime: normalizedMime };
     }
 
     return null;

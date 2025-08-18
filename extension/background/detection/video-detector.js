@@ -134,7 +134,7 @@ async function getTabUrl(tabId, initiatorUrl = null) {
  * @param {Object|null} tabInfo - Tab information (url, title, favIconUrl, incognito)
  */
 function addVideoWithCommonProcessing(tabId, url, videoInfo, metadata, source, tabInfo = null, requestId = null) {
-    const videoData = {
+    let videoData = {
         url,
         type: videoInfo.type,
         source,
@@ -142,22 +142,26 @@ function addVideoWithCommonProcessing(tabId, url, videoInfo, metadata, source, t
         tabId,
         ...(tabInfo || {}),
         ...(metadata && { metadata }),
-        ...(videoInfo.mediaType && { mediaType: videoInfo.mediaType }),
-        ...(videoInfo.originalContainer && { originalContainer: videoInfo.originalContainer })
+        ...(videoInfo.mediaType && { mediaType: videoInfo.mediaType })
     };
 
     // For direct videos, create videoTracks immediately with container info for instant download capability
     if (videoInfo.type === 'direct' && metadata?.contentType) {
         const containers = getContainersFromMimeType(metadata.contentType, videoInfo.mediaType);
         if (containers) {
-            videoData.videoTracks = [{
-                url,
-                trackId: generateId(url), // Generate trackId for UI matching
-                type: 'direct',
-                videoContainer: containers.videoContainer,
-                audioContainer: containers.audioContainer,
-                containerDetectionReason: containers.reason
-            }];
+			videoData = {
+				...videoData,
+				hasVideo: !!containers.videoContainer,
+				hasAudio: !!containers.audioContainer,
+				videoTracks: {
+					url,
+					trackId: generateId(url), // Generate trackId for UI matching
+					type: 'direct',
+					videoContainer: containers.videoContainer,
+					audioContainer: containers.audioContainer,
+					containerDetectionReason: containers.reason
+				}
+			}
         }
     }
 
