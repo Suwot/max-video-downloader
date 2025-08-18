@@ -775,13 +775,11 @@ export class VideoItemComponent {
                 // HLS Advanced mode
                 downloadData.downloadUrl = videoTrack?.url;
                 downloadData.inputs = this.buildHlsInputsArray();
-                downloadData.segmentCount = this.videoData.segmentCount || null;
             } else {
                 // HLS Simple mode
                 downloadData.downloadUrl = videoTrack?.url;
                 downloadData.container = videoTrack?.videoContainer || videoTrack?.audioContainer || 'mp4';
                 downloadData.fileSizeBytes = videoTrack?.metaJS?.estimatedFileSizeBytes || null;
-                downloadData.segmentCount = this.videoData.segmentCount || null;
             }
         } else if (this.videoData.type === 'dash') {
             // DASH mode

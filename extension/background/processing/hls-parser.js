@@ -102,7 +102,6 @@ export async function parseHlsManifest(videoObject) {
         // For master playlists, parse video tracks
         let videoTracks = [];
         let duration = null;
-        let segmentCount = null;
         let isEncrypted = false;
         let encryptionType = null;
         let isLive = false;
@@ -181,7 +180,6 @@ export async function parseHlsManifest(videoObject) {
             if (variantInfo) {
                 // Extract metadata from successful track
                 duration = variantInfo.isLive ? null : variantInfo.duration; // No duration for live streams
-                segmentCount = variantInfo.isLive ? null : variantInfo.segmentCount; // No segment count for live streams
                 isEncrypted = variantInfo.isEncrypted || false;
                 encryptionType = variantInfo.encryptionType;
                 isLive = variantInfo.isLive || false;
@@ -193,7 +191,6 @@ export async function parseHlsManifest(videoObject) {
                     updatedVideoTrack.metaJS.isLive = isLive;
                     updatedVideoTrack.metaJS.isEncrypted = isEncrypted;
                     updatedVideoTrack.metaJS.encryptionType = encryptionType;
-                    updatedVideoTrack.metaJS.segmentCount = segmentCount;
                     updatedVideoTrack.metaJS.version = variantInfo.version || version;
                     
                     // Mark the track that was actually fetched
@@ -219,7 +216,6 @@ export async function parseHlsManifest(videoObject) {
                         const updatedTrack = { ...track };
                         updatedTrack.duration = duration;
                         updatedTrack.isLive = isLive;
-                        updatedTrack.segmentCount = segmentCount;  // Add missing segmentCount
                         updatedTrack.version = variantInfo.version || version;
                         return updatedTrack;
                     }
@@ -237,10 +233,9 @@ export async function parseHlsManifest(videoObject) {
             logger.debug(`Parsing standalone variant playlist`);
             const variantInfo = calculateHlsVariantDuration(content);
             duration = variantInfo.duration;
-            segmentCount = variantInfo.segmentCount;
             isLive = variantInfo.isLive;
             
-            logger.debug(`Variant duration: ${duration}s, segmentCount: ${segmentCount}, isLive: ${isLive}`);
+            logger.debug(`Variant duration: ${duration}s, isLive: ${isLive}`);
             
             // Extract encryption info
             const encryptionInfo = extractHlsEncryptionInfo(content);
@@ -266,7 +261,6 @@ export async function parseHlsManifest(videoObject) {
                 metaJS: {
                     duration: duration,
                     isLive: isLive,
-                    segmentCount: variantInfo.segmentCount,
                     isEncrypted: isEncrypted,
                     encryptionType: encryptionType,
                     version: version
@@ -292,7 +286,6 @@ export async function parseHlsManifest(videoObject) {
             timestampValidated: timestampValidated,
             timestampParsed: timestampParsed,
             duration: duration,
-            segmentCount: segmentCount,  // Add segmentCount at main level for easy access
             isLive: isLive,
             isEncrypted: isEncrypted,
             encryptionType: encryptionType,
@@ -527,7 +520,6 @@ async function parseHlsVariant(variantUrl, headers = null, _tabId) {
             return { 
                 duration: null, 
                 isLive: true,
-                segmentCount: null,
                 isEncrypted: false,
                 encryptionType: null,
                 retryCount: fetchResult.retryCount || 0,
@@ -545,7 +537,6 @@ async function parseHlsVariant(variantUrl, headers = null, _tabId) {
             return { 
                 duration: null, 
                 isLive: true,
-                segmentCount: null,
                 isEncrypted: false,
                 encryptionType: null,
                 // HLS default containers
@@ -569,7 +560,6 @@ async function parseHlsVariant(variantUrl, headers = null, _tabId) {
         const result = {
             duration: durationInfo.duration,
             isLive: durationInfo.isLive,
-            segmentCount: durationInfo.segmentCount,
             isEncrypted: encryptionInfo.isEncrypted,
             encryptionType: encryptionInfo.isEncrypted ? encryptionInfo.encryptionType : null,
             version: version,
@@ -586,7 +576,6 @@ async function parseHlsVariant(variantUrl, headers = null, _tabId) {
         return { 
             duration: null, 
             isLive: true,
-            segmentCount: null,
             isEncrypted: false,
             encryptionType: null,
             // HLS default containers
@@ -605,7 +594,6 @@ async function parseHlsVariant(variantUrl, headers = null, _tabId) {
 function calculateHlsVariantDuration(content) {
     const lines = content.split(/\r?\n/);
     let totalDuration = 0;
-    let segmentCount = 0;
     
     // Parse #EXTINF lines which contain segment durations
     for (let i = 0; i < lines.length; i++) {
@@ -616,7 +604,6 @@ function calculateHlsVariantDuration(content) {
             const segmentDuration = parseFloat(durationStr);
             if (!isNaN(segmentDuration)) {
                 totalDuration += segmentDuration;
-                segmentCount++;
             }
         }
     }
@@ -626,8 +613,7 @@ function calculateHlsVariantDuration(content) {
     
     return {
         duration: isLive ? null : Math.round(totalDuration), // Don't calculate duration for live streams
-        isLive: isLive,
-        segmentCount: isLive ? null : segmentCount // Segment count is also meaningless for live streams
+        isLive: isLive
     };
 }
 

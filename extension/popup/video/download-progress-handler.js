@@ -92,11 +92,6 @@ export async function updateDownloadProgress(progressData = {}) {
         // Use the addedToHistory flag from background instead of making UI decision
         const addedToHistory = progressData.addedToHistory || false;
 
-        // Stop elapsed time timer for this download
-        if (progressData.downloadId) {
-            stopElapsedTimeTimer(progressData.downloadId);
-        }
-
         // Call immediately to remove from downloads-tab and prevent deduplication issues
         handleDownloadCompletion(progressData, addedToHistory);
     }
@@ -586,11 +581,6 @@ export function handleActiveDownloadsData(activeDownloads) {
                     updateDownloadButton(downloadEntry.progressData);
                     updateDropdown(downloadEntry.progressData);
                 }
-
-                // Clear any stale timers for this downloadId (in case of popup reopen)
-                if (downloadEntry.downloadId) {
-                    stopElapsedTimeTimer(downloadEntry.downloadId);
-                }
             } else {
                 logger.warn('Download entry missing videoData, skipping:', downloadEntry.downloadUrl);
             }
@@ -692,18 +682,13 @@ function resetVideosTabButtonStates(lookupUrl) {
  * @param {Object} progressData - Progress data from native host
  */
 function updateProgressTooltip(selectedOption, progressData) {
-    // No tooltips for live downloads - only for VOD
-    if (progressData.isLive) {
-        return; // Skip tooltip for livestreams
-    }
-
-    // Build compact tooltip content for VOD downloads only
+    // Build compact tooltip content for VOD downloads only: segments • speed
     const parts = [];
-    // VOD tooltip: segments • speed • elapsed time
 
     // Add segment info
     if (progressData.progress !== 0 && progressData.currentSegment) {
-        parts.push(`${progressData.currentSegment} seg.`);
+        parts.push(`${progressData.currentSegment} segments`);
+		selectedOption.classList.add('has-progress-tooltip');
     }
 
     // Add speed
@@ -711,32 +696,11 @@ function updateProgressTooltip(selectedOption, progressData) {
         parts.push(`${formatSize(progressData.speed)}/s`);
     }
 
-    // Elapsed time - use UI calculation if we have startTime, otherwise fallback to progressData
-    let elapsedSeconds;
-    if (progressData.downloadStartTime) {
-        elapsedSeconds = Math.round((Date.now() - progressData.downloadStartTime) / 1000);
-        // Start timer for continuous updates
-        if (progressData.downloadId) {
-            const lookupUrl = progressData.masterUrl || progressData.downloadUrl;
-            startElapsedTimeTimer(progressData.downloadId, progressData.downloadStartTime, lookupUrl);
-        }
-    } else {
-        elapsedSeconds = progressData.elapsedTime || 0;
-    }
-
-    if (elapsedSeconds > 0) {
-        parts.push(formatTime(elapsedSeconds));
-    }
-
     // Set single tooltip content attribute
     selectedOption.setAttribute('data-tooltip-content', parts.join(' • '));
 
     // Keep quality for potential future use (but don't display)
-    selectedOption.setAttribute('data-tooltip-quality',
-        progressData.selectedOptionOrigText || 'Unknown');
-
-    // Add tooltip class for CSS styling
-    selectedOption.classList.add('has-progress-tooltip');
+    selectedOption.setAttribute('data-tooltip-quality', progressData.selectedOptionOrigText || 'Unknown');
 }
 
 /**
@@ -747,93 +711,4 @@ function clearProgressTooltip(selectedOption) {
     selectedOption.removeAttribute('data-tooltip-content');
     selectedOption.removeAttribute('data-tooltip-quality');
     selectedOption.classList.remove('has-progress-tooltip');
-}
-
-// Map to track elapsed time timers: downloadId -> {timer, startTime}
-const elapsedTimeTimers = new Map();
-
-/**
- * Start elapsed time timer for a download
- * @param {string} downloadId - Download ID
- * @param {number} downloadStartTime - Download start timestamp
- * @param {string} lookupUrl - Lookup URL for videos-tab mapping (masterUrl || downloadUrl)
- */
-function startElapsedTimeTimer(downloadId, downloadStartTime, lookupUrl) {
-    // Clear existing timer if any
-    stopElapsedTimeTimer(downloadId);
-
-    // Start new timer that updates every second
-    const timer = setInterval(() => {
-        updateElapsedTimeForDownload(downloadId, downloadStartTime, lookupUrl);
-    }, 1000);
-
-    elapsedTimeTimers.set(downloadId, { timer, downloadStartTime, lookupUrl });
-}
-
-/**
- * Stop elapsed time timer for a download
- * @param {string} downloadId - Download ID
- */
-function stopElapsedTimeTimer(downloadId) {
-    const timerData = elapsedTimeTimers.get(downloadId);
-    if (timerData) {
-        clearInterval(timerData.timer);
-        elapsedTimeTimers.delete(downloadId);
-    }
-}
-
-/**
- * Update elapsed time display for a specific download
- * @param {string} downloadId - Download ID
- * @param {number} downloadStartTime - Download start timestamp
- * @param {string} lookupUrl - Lookup URL for videos-tab mapping
- */
-function updateElapsedTimeForDownload(downloadId, downloadStartTime, lookupUrl) {
-    const elapsedSeconds = Math.round((Date.now() - downloadStartTime) / 1000);
-
-    // Find elements in downloads-tab (which has data-download-id)
-    const downloadsTabElements = document.querySelectorAll(`[data-download-id="${downloadId}"] .selected-option.has-progress-tooltip`);
-    downloadsTabElements.forEach(selectedOption => {
-        updateTooltipElapsedTime(selectedOption, elapsedSeconds);
-    });
-
-    // Find elements in videos-tab (which uses data-url for lookup)
-    if (lookupUrl) {
-        const videosTabElements = document.querySelectorAll(`[data-url="${lookupUrl}"] .selected-option.has-progress-tooltip`);
-        videosTabElements.forEach(selectedOption => {
-            updateTooltipElapsedTime(selectedOption, elapsedSeconds);
-        });
-    }
-}
-
-/**
- * Update just the elapsed time part of an existing tooltip
- * @param {HTMLElement} selectedOption - The selected-option element
- * @param {number} elapsedSeconds - Elapsed time in seconds
- */
-function updateTooltipElapsedTime(selectedOption, elapsedSeconds) {
-    const currentContent = selectedOption.getAttribute('data-tooltip-content') || '';
-    const parts = currentContent.split(' • ');
-
-    // Replace or add elapsed time (always last part)
-    const elapsedTimeText = formatTime(elapsedSeconds);
-    if (parts.length > 0 && (parts[parts.length - 1].includes(' s') || parts[parts.length - 1].includes(' m') || parts[parts.length - 1].includes(' h') || parts[parts.length - 1].includes(' d'))) {
-        // Replace existing elapsed time
-        parts[parts.length - 1] = elapsedTimeText;
-    } else {
-        // Add elapsed time
-        parts.push(elapsedTimeText);
-    }
-
-    selectedOption.setAttribute('data-tooltip-content', parts.join(' • '));
-}
-
-/**
- * Clean up all elapsed time timers (called on popup close)
- */
-export function cleanupAllElapsedTimeTimers() {
-    elapsedTimeTimers.forEach((timerData, downloadId) => {
-        clearInterval(timerData.timer);
-    });
-    elapsedTimeTimers.clear();
 }

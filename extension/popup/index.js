@@ -5,7 +5,7 @@
 import { createLogger } from '../shared/utils/logger.js';
 import { normalizeUrl } from '../shared/utils/processing-utils.js';
 import { connect, disconnect, sendPortMessage } from './communication.js';
-import { restoreActiveDownloads, cleanupAllElapsedTimeTimers } from './video/download-progress-handler.js';
+import { restoreActiveDownloads } from './video/download-progress-handler.js';
 import { renderHistoryItems } from './video/video-renderer.js';
 import { initializeSettingsTab } from './settings-tab.js';
 import { switchTab, initializeTooltips } from './ui-utils.js';
@@ -122,8 +122,6 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 // Clean up on popup close
 window.addEventListener('beforeunload', () => {
-    // Clean up elapsed time timers
-    cleanupAllElapsedTimeTimers();
     // Disconnect from background
     disconnect();
 });

@@ -304,7 +304,6 @@ class DownloadCommand extends BaseCommand {
      * @param {boolean} params.subsOnly Whether to download subtitles only (optional)
      * @param {string} params.streamSelection Stream selection spec for DASH (optional)
      * @param {Array} params.inputs Array of input objects for HLS advanced mode (optional)
-     * @param {string} params.masterUrl Optional master manifest URL (for reporting)
      * @param {Object} params.duration Video duration (optional)
      * @param {Object} params.headers HTTP headers to use (optional)
      * @param {boolean} params.isLive Whether this is a livestream (optional)
@@ -337,7 +336,6 @@ class DownloadCommand extends BaseCommand {
             audioOnly = false,
             subsOnly = false,
             streamSelection,
-            masterUrl = null,
             headers = {},
             sourceAudioCodec = null,
             sourceAudioBitrate = null,
@@ -407,7 +405,6 @@ class DownloadCommand extends BaseCommand {
                 uniqueOutput,
                 downloadUrl,
                 type,
-                masterUrl,
                 headers, 
                 duration,
                 fileSizeBytes,
@@ -936,7 +933,6 @@ class DownloadCommand extends BaseCommand {
         ffmpegArgs,
         uniqueOutput,
         downloadUrl,
-        masterUrl,
         type,
         headers,
         duration,
@@ -993,7 +989,6 @@ class DownloadCommand extends BaseCommand {
                     startTime: downloadStartTime,
                     outputPath: uniqueOutput,
                     type,
-                    masterUrl,
                     headers: headers || null,
                     progressState
                 });
@@ -1166,7 +1161,6 @@ class DownloadCommand extends BaseCommand {
                         ffmpegArgs,
                         uniqueOutput,
                         downloadUrl,
-                        masterUrl,
                         type,
                         headers,
                         duration,
