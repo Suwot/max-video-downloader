@@ -238,101 +238,57 @@ class DownloadCommand extends BaseCommand {
      * Cancel an ongoing download by downloadId
      * @param {Object} params Command parameters
      * @param {string} params.downloadId The download ID to cancel
-     * @param {string} params.downloadUrl The download URL to cancel (fallback lookup)
-     * @param {string} params.type Media type for cleanup decisions
      */
     async cancelDownload(params) {
-        const { downloadId, downloadUrl, type } = params;
+        const downloadId = params.downloadId;
+        logDebug('Canceling download with downloadId:', downloadId);
         
-        logDebug('Canceling download with downloadId:', downloadId, 'downloadUrl:', downloadUrl);
-        logDebug('Active downloads Map has', DownloadCommand.activeDownloads.size, 'entries');
-        logDebug('Active download IDs:', Array.from(DownloadCommand.activeDownloads.keys()));
-        
-        // Find download by downloadId only
-        let downloadEntry = null;
-        if (downloadId && DownloadCommand.activeDownloads.has(downloadId)) {
-            downloadEntry = DownloadCommand.activeDownloads.get(downloadId);
-            logDebug('Found download by downloadId:', downloadId);
-        }
-        
+        // Find download by downloadId
+        const downloadEntry = DownloadCommand.activeDownloads.get(downloadId);
         if (!downloadEntry) {
-            logDebug('No active download found for:', downloadId || downloadUrl);
-            logDebug('Cancel request ignored - no matching download process');
+            logDebug('No active download found for:', downloadId);
             
-            // Send response even when no process exists - UI needs confirmation
+            // Send confirmation when no process exists - UI needs it
             this.sendMessage({
                 command: 'download-canceled',
                 downloadId
-            }, { useMessageId: false }); // Event message, no response ID
+            }, { useMessageId: false });
             return;
         }
         
-        const { process, outputPath } = downloadEntry;
+        const { process, type, container } = downloadEntry;
+        
         try {
+            // 1. Mark as canceled for close handler detection
             downloadEntry.wasCanceled = true;
 
-			// Terminate FFmpeg process: q command -> 5s timeout -> SIGKILL
+            // 2. Terminate FFmpeg process (will trigger close/error handler)
             if (process && process.pid && !process.killed) {
-                logDebug('Terminating FFmpeg process PID:', process.pid);
+                logDebug('Terminating FFmpeg process with PID:', process.pid);
                 
+                // Send SIGTERM for graceful termination (FFmpeg handles this properly)
                 try {
-                    // Send 'q' command for graceful shutdown
-                    process.stdin.write('q\n');
-                    logDebug('Sent "q" command to FFmpeg stdin');
-                } catch (err) {
-                    logDebug('Error sending "q" command:', err.message);
+                    process.kill('SIGTERM');
+                    logDebug('Sent SIGTERM to FFmpeg for graceful termination');
+                } catch (termError) {
+                    logDebug('Could not send SIGTERM:', termError.message);
                 }
                 
-                // Force kill after 5 seconds if still running
+                // Force kill with SIGKILL after shorter delay for faster cancellation
                 setTimeout(() => {
-                    if (process && !process.killed) {
-                        logDebug('Force killing FFmpeg PID:', process.pid);
-                        process.kill('SIGKILL');
+                    if (process && process.pid && !process.killed) {
+                        logDebug('FFmpeg still running after SIGTERM, sending SIGKILL');
+                        try {
+                            process.kill('SIGKILL'); // Use SIGKILL for immediate termination
+                        } catch (killError) {
+                            logDebug('Error sending SIGKILL:', killError.message);
+                        }
                     }
-                }, 5000);
-            } else {
-                logDebug('FFmpeg process already terminated or killed');
-            }
-			
-            // Clean up progress state if available
-            if (downloadEntry.progressState) {
-                // No cleanup needed for simple progress state
-                logDebug('Progress state cleanup completed');
-            }
-            
-            // Remove partial file if it exists and type is not 'direct' and not a livestream
-            // For livestreams, preserve the downloaded content even on cancellation
-            const shouldPreserveFile = type === 'direct' || (downloadEntry.progressState?.isLive);
-            if (!shouldPreserveFile && outputPath && fs.existsSync(outputPath)) {
-                try {
-                    fs.unlinkSync(outputPath);
-                    logDebug('Removed partial download file:', outputPath);
-                } catch (err) {
-                    logDebug('Failed to remove partial file:', err.message);
-                }
-            } else if (shouldPreserveFile && outputPath && fs.existsSync(outputPath)) {
-                logDebug('Preserving file for livestream/direct type:', outputPath);
-            }
-            
-            logDebug('Download cancellation completed for downloadId:', downloadId);
-            
-            // For direct types and livestreams, defer cancellation message to close handler
-            // The close handler will determine final outcome based on file existence and get rich FFmpeg stats
-            if (type === 'direct' || downloadEntry.progressState?.isLive) {
-                logDebug(`${type === 'direct' ? 'Direct' : 'Livestream'} type cancellation - deferring message to close handler`);
-                return; // Let close handler send the final message with rich stats
-            }
-            
-            // For regular HLS/DASH types, send immediate cancellation message
-            // But DON'T remove from activeDownloads yet - let close handler do cleanup
-            this.sendMessage({
-                command: 'download-canceled',
-                downloadId: downloadId
-            }, { useMessageId: false }); // Event message, no response ID
-            
+                }, 6000); // Reduced from 8000ms to 2000ms for faster response
+            }            
         } catch (error) {
             logDebug('Error during download cancellation:', error);
-            logDebug('Cancel operation failed, but not sending error message to extension');
+            // Process termination will still trigger close/error handler
         }
     }
 
@@ -653,8 +609,8 @@ class DownloadCommand extends BaseCommand {
         // Progress tracking arguments
         args.push('-stats', '-progress', 'pipe:2');
         
-        // Network resilience and stream optimization
-        args.push('-timeout', '30000000', '-icy', '0'); // 30s timeout, disable ICY metadata
+        // Network resilience and stream optimization with cancel-friendly timeouts
+        args.push('-timeout', '5000000', '-rw_timeout', '5000000', '-icy', '0'); // 5s timeouts for responsiveness
         if (type === 'hls' || type === 'dash') {
             args.push(
                 '-reconnect', '1',
@@ -1009,21 +965,22 @@ class DownloadCommand extends BaseCommand {
         return new Promise((resolve, _reject) => {
             // Use an IIFE to handle async operations properly
             (async () => {
+                // Track spawn retry attempts
+                let spawnRetried = false;
+                
                 // Probe duration upfront if not provided to avoid race conditions
                 // Skip probing for livestreams as duration is meaningless
                 let finalDuration = duration;
-                if (!isLive && (!duration || typeof duration !== 'number' || duration <= 0)) {
-                    logDebug('No valid duration provided, probing media...');
-                    finalDuration = await this.probeMediaDuration(ffmpegService, downloadUrl, headers);
-                    if (finalDuration) {
-                        logDebug('Got duration from probe:', finalDuration);
-                    } else {
-                        logDebug('Could not probe duration, will rely on FFmpeg output parsing');
-                    }
-                } else if (isLive) {
+                if (isLive) {
                     logDebug('Skipping duration probe for livestream');
                     finalDuration = null; // Ensure duration is null for livestreams
-                }
+                } else if (!isLive && (!duration || typeof duration !== 'number' || duration <= 0)) {
+					logDebug('No valid duration provided, probing media...');
+					finalDuration = await this.probeMediaDuration(ffmpegService, downloadUrl, headers);
+					finalDuration
+						? logDebug('Got duration from probe:', finalDuration)
+						: logDebug('Could not probe duration, will rely on FFmpeg output parsing');
+				}
             
                 // Initialize progress state
                 const progressState = this.initProgressState(downloadId, {
@@ -1081,337 +1038,213 @@ class DownloadCommand extends BaseCommand {
                 
                 // Get download info from activeDownloads BEFORE deletion
                 const downloadEntry = DownloadCommand.activeDownloads.get(downloadId);
-                const wasCanceled = downloadEntry?.wasCanceled || false; // Check if it was already canceled by cancelDownload
-                
-                // Get data from progress state
-                const finalDuration = progressState.finalProcessedTime || progressState.duration;
-                
-                // Enhance downloadStats with final progress data
-                const downloadStats = {
-                    ...(progressState.finalStats || {}),
-                    // Add final progress data for UI display
-                    finalFileSize: progressState.downloadedBytes || null,
-                    finalDuration: finalDuration || null,
-                    isLive: progressState.isLive || false,
-                    downloadDurationSeconds: downloadEntry?.startTime ? Math.round((Date.now() - downloadEntry.startTime) / 1000) : null
-                };
-                
                 const downloadDuration = downloadEntry?.startTime ? Math.round((Date.now() - downloadEntry.startTime) / 1000) : null;
                 
-                // Clean up activeDownloads if not already done by cancelDownload
+                // Clean up activeDownloads
                 if (DownloadCommand.activeDownloads.has(downloadId)) {
                     DownloadCommand.activeDownloads.delete(downloadId);
                 }
 
-                // Determine termination reason using signal, exit code, and output file verification
-                // Get livestream info from progressState (available even if downloadEntry was removed)
+                // Get minimal state needed for decision
+                const userCanceled = downloadEntry?.wasCanceled || false;
                 const isLivestream = progressState.isLive || false;
-                const terminationInfo = this.analyzeProcessTermination(code, signal, wasCanceled, uniqueOutput, type, subsOnly, isLivestream);
-                logDebug(`FFmpeg process (PID: ${downloadEntry?.process?.pid}) terminated after ${downloadDuration}s:`, terminationInfo);
+                const fileExists = fs.existsSync(uniqueOutput);
+                const fileSize = fileExists ? fs.statSync(uniqueOutput).size : 0;
                 
-                if (terminationInfo.wasCanceled && !terminationInfo.isPartialSuccess) {
-                    logDebug('Download was canceled by user.');
-                    
-                    // For direct types and livestreams, send cancellation message here (deferred from cancelDownload)
-                    // Use progressState.isLive since downloadEntry might be null
-                    const isLivestream = progressState.isLive || false;
-                    if (type === 'direct' || isLivestream) {
-                        this.sendMessage({
-                            command: 'download-canceled',
-                            downloadId
-                        }, { useMessageId: false }); // Event message, no response ID
-                    }
-                    
-                    // Don't send additional response for regular HLS/DASH - already sent by cancelDownload()
-                    return resolve({ 
-                        success: false, 
-                        downloadStats
-                    });
+                // Configurable thresholds
+                const MIN_MEDIA_BYTES = 50 * 1024; // 50KB for media files
+                const MIN_SUBS_BYTES = 100; // 100 bytes for subtitle files
+                
+                // Ground truth signals
+                const completed = (code === 0 && signal === null);
+                const wasKilled = (signal !== null); // SIGTERM/SIGKILL 
+                const isGracefulCancel = (code === 255 && signal === null); // q/Ctrl-C style
+                const wasCanceled = userCanceled || isGracefulCancel || wasKilled;
+                const bigEnough = subsOnly ? fileSize >= MIN_SUBS_BYTES : fileSize >= MIN_MEDIA_BYTES;
+                
+                logDebug(`FFmpeg process (PID: ${downloadEntry?.process?.pid}) terminated after ${downloadDuration}s:`, 
+                    { code, signal, completed, wasKilled, isGracefulCancel, wasCanceled, fileExists, fileSize, bigEnough, type });
+                
+                // Enhanced downloadStats
+                const downloadStats = {
+                    ...(progressState.finalStats || {}),
+                    finalFileSize: progressState.downloadedBytes || null,
+                    finalDuration: progressState.finalProcessedTime || progressState.duration || null,
+                    isLive: progressState.isLive || false,
+                    downloadDurationSeconds: downloadDuration
+                };
+                
+                // Single decision ladder - simplified rules
+                let outcome, message, shouldPreserveFile = false;
+                
+                if (wasCanceled && fileExists && bigEnough) {
+                    // Canceled with valid file above threshold = always preserve and send as success
+                    const isPartial = !isLivestream;
+                    outcome = { command: 'download-success', success: true, isPartial };
+                    message = isLivestream ? 'Livestream recording completed successfully (user stopped)' : 'Partial download completed (file preserved)';
+                    shouldPreserveFile = true;
+                } else if (wasCanceled) {
+                    // Canceled without valid file = true cancellation
+                    outcome = { command: 'download-canceled', success: false };
+                    message = 'Download was canceled by user';
+                    shouldPreserveFile = false;
+                } else if (completed && bigEnough) {
+                    // Process completed successfully with valid file
+                    outcome = { command: 'download-success', success: true, isPartial: false };
+                    message = 'Download completed successfully';
+                    shouldPreserveFile = true;
+                } else {
+                    // All other cases = error (includes completed but too small, crashes, etc.)
+                    outcome = { command: 'download-error', success: false };
+                    message = completed ? 'Download completed but output file is too small or empty' : 
+                             `Process exited with code ${code}${signal ? ` (signal: ${signal})` : ''}`;
+                    shouldPreserveFile = false;
                 }
                 
-                if (terminationInfo.isSuccess || terminationInfo.isPartialSuccess) {
-                    const isPartial = terminationInfo.isPartialSuccess || false;
-                    logDebug(isPartial ? 'Download completed partially.' : 'Download completed successfully.');
-                    
-                    this.sendMessage({ 
+                // Handle file operations based on decision
+                if (fileExists && !shouldPreserveFile) {
+                    try {
+                        fs.unlinkSync(uniqueOutput);
+                        logDebug('Removed file (not preservable for this outcome):', uniqueOutput);
+                    } catch (deleteError) {
+                        logDebug('Could not delete file:', deleteError.message);
+                    }
+                }
+                
+                logDebug(message);
+                
+                // Send appropriate message
+                if (outcome.command === 'download-success') {
+                    this.sendMessage({
                         command: 'download-success',
-                        downloadId, // Use downloadId instead of sessionId
-                        path: uniqueOutput,
-                        filename: path.basename(uniqueOutput),
-                        downloadUrl,
-                        masterUrl,
-                        type,
-                        duration: finalDuration,
-                        downloadStats: downloadStats || null,
-                        errorMessage: this.getErrorMessage(progressState) || null,
-                        terminationInfo,
-                        downloadDuration,
-                        message: isPartial && downloadEntry?.progressState?.isLive ? 'Livestream recording stopped' : null,
-                        completedAt: Date.now(),
-                        audioOnly,
-                        subsOnly,
-                        isPartial: progressState.isLive ? null : isPartial, // Add partial flag for UI
-                        isLive: progressState.isLive || false, // Add isLive flag for UI
-                        hasVideo: downloadEntry?.hasVideo || false,
-                        hasAudio: downloadEntry?.hasAudio || false,
-                        hasSubtitles: downloadEntry?.hasSubtitles || false,
-                        headers: downloadEntry?.headers || null
-                    }, { useMessageId: false }); // Event message, no response ID
+                        downloadId,
+                        ...(shouldPreserveFile && {
+                            path: uniqueOutput,
+                            filename: path.basename(uniqueOutput),
+                            downloadUrl,
+                            masterUrl,
+                            type,
+                            duration: downloadStats.finalDuration,
+                            downloadStats,
+                            completedAt: Date.now(),
+                            audioOnly,
+                            subsOnly,
+                            isLive: isLivestream,
+                            hasVideo: downloadEntry?.hasVideo || false,
+                            hasAudio: downloadEntry?.hasAudio || false,
+                            hasSubtitles: downloadEntry?.hasSubtitles || false,
+                            headers: downloadEntry?.headers || null
+                        }),
+                        isPartial: outcome.isPartial || false,
+                        ...(outcome.message && { message: outcome.message })
+                    }, { useMessageId: false });
+                    
                     resolve({ 
                         success: true, 
-                        path: uniqueOutput,
-                        downloadStats,
-                        isPartial
+                        ...(shouldPreserveFile && { path: uniqueOutput }), 
+                        downloadStats, 
+                        ...(outcome.isPartial && { isPartial: true }) 
                     });
-                } else {
-                    // Mark as error to prevent duplicate handling
+                    
+                } else if (outcome.command === 'download-canceled') {
+                    this.sendMessage({
+                        command: 'download-canceled',
+                        downloadId,
+                        timestamp: Date.now()
+                    }, { useMessageId: false });
+                    
+                    resolve({ success: false, downloadStats, wasCanceled: true });
+                    
+                } else if (outcome.command === 'download-error') {
                     hasError = true;
-                    const errorMessage = `FFmpeg exited with code ${code}${signal ? ` (signal: ${signal})` : ''}`;
-                    logDebug('Download failed:', errorMessage);
-                    
                     const collectedErrors = this.getErrorMessage(progressState);
-                    if (collectedErrors) {
-                        logDebug('Collected error lines:', collectedErrors);
-                    }
+                    if (collectedErrors) logDebug('Collected error lines:', collectedErrors);
                     
-                    // Send error as event - this resolves the promise
                     this.sendMessage({
                         command: 'download-error',
-                        downloadId, // Use downloadId instead of sessionId
+                        downloadId,
                         success: false,
-                        message: errorMessage,
+                        message: message,
                         errorMessage: collectedErrors || null,
                         downloadUrl,
                         masterUrl,
                         type,
-                        duration: finalDuration,
-                        downloadStats: downloadStats || null,
-                        terminationInfo,
-						downloadDuration,
+                        duration: downloadStats.finalDuration,
+                        downloadStats,
+                        downloadDuration,
                         completedAt: Date.now(),
                         audioOnly,
                         subsOnly,
-                        isLive: progressState.isLive || false, // Add isLive flag for UI
+                        isLive: isLivestream,
                         hasVideo: downloadEntry?.hasVideo || false,
                         hasAudio: downloadEntry?.hasAudio || false,
                         hasSubtitles: downloadEntry?.hasSubtitles || false,
                         headers: downloadEntry?.headers || null
-                    }, { useMessageId: false }); // Event message, no response ID
-                    resolve({ 
-                        success: false,
-                        downloadStats,
-                        error: errorMessage
-                    });
+                    }, { useMessageId: false });
+                    
+                    resolve({ success: false, downloadStats, error: message });
                 }
             });
             
             ffmpeg.on('error', (err) => {
                 // Guard against multiple event handling
                 if (hasError) return;
-                
                 hasError = true;
-                // Clean up activeDownloads if not already done
+                
+                logDebug(`FFmpeg spawn failed for downloadId ${downloadId}:`, err.message);
+                
+                // Clean up activeDownloads (spawn failed, so no close event will fire)
                 if (DownloadCommand.activeDownloads.has(downloadId)) {
                     DownloadCommand.activeDownloads.delete(downloadId);
                 }
                 
-                // Get data from progress state
-                const finalDuration = progressState.finalProcessedTime || progressState.duration;
-                
-                // Enhance downloadStats with final progress data
-                const downloadStats = {
-                    ...(progressState.finalStats || {}),
-                    // Add final progress data for UI display
-                    finalFileSize: progressState.downloadedBytes || null,
-                    finalDuration: finalDuration || null,
-                    isLive: progressState.isLive || false,
-                    downloadDurationSeconds: null // Will be calculated below
-                };
-                
-                const collectedErrors = this.getErrorMessage(progressState);
-                
-                // Get download info and calculate durations (same logic as close handler)
-                const downloadEntry = DownloadCommand.activeDownloads.get(downloadId);
-                const downloadDuration = downloadEntry?.startTime ? Math.round((Date.now() - downloadEntry.startTime) / 1000) : null;
-                
-                // Update downloadStats with calculated duration
-                if (downloadDuration) {
-                    downloadStats.downloadDurationSeconds = downloadDuration;
+                // Only retry for transient spawn errors (filesystem/system level)
+                const code = err && err.code;
+                const retriable = code === 'EAGAIN' || code === 'ETXTBSY'; // transient spawn errors only
+                if (retriable && !spawnRetried) {
+                    spawnRetried = true;
+                    logDebug(`FFmpeg spawn failed with ${code}; retrying once…`);
+                    // Re-run the same pipeline once. We don't emit any terminal message here; the retried run will.
+                    this.executeFFmpegWithProgress({
+                        ffmpegService,
+                        ffmpegArgs,
+                        uniqueOutput,
+                        downloadUrl,
+                        masterUrl,
+                        type,
+                        headers,
+                        duration,
+                        fileSizeBytes,
+                        segmentCount,
+                        audioOnly,
+                        subsOnly,
+                        downloadId, // reuse the same id
+                        isLive,
+                        hasVideo,
+                        hasAudio,
+                        hasSubtitles
+                    }).then(resolve);
+                    return;
                 }
-
-                logDebug(`FFmpeg spawn error (PID: ${downloadEntry?.process?.pid}) after ${downloadDuration}s:`, err);
-                if (collectedErrors) {
-                    logDebug('Collected error lines:', collectedErrors);
-                }
-
-                // Send spawn error as event - this resolves the promise
+                
+                // Send minimal error message (no stats available since FFmpeg never started)
                 this.sendMessage({
-                    success: false,
                     command: 'download-error',
-                    downloadId, // Use downloadId instead of sessionId
-                    message: `FFmpeg spawn error: ${err.message}`,
-                    errorMessage: collectedErrors || null,
+                    downloadId,
+                    success: false,
+                    message: `FFmpeg failed to start: ${err.message}`,
                     downloadUrl,
-                    masterUrl,
                     type,
-                    duration: finalDuration,
-                    downloadStats: downloadStats || null,
-                    downloadDuration,
-                    completedAt: Date.now(),
-                    audioOnly,
-                    isLive: progressState.isLive || false, // Add isLive flag for UI
-                    hasVideo: downloadEntry?.hasVideo || false,
-                    hasAudio: downloadEntry?.hasAudio || false,
-                    hasSubtitles: downloadEntry?.hasSubtitles || false,
-                    headers: downloadEntry?.headers || null
-                }, { useMessageId: false }); // Event message, no response ID
+                    completedAt: Date.now()
+                }, { useMessageId: false });
 
                 resolve({ 
                     success: false, 
-                    downloadStats,
                     error: `FFmpeg spawn error: ${err.message}`
                 });
             });
             })(); // Close the IIFE
         });
-    }
-    
-    /**
-     * Analyze process termination to determine the exact reason
-     * @param {number} exitCode - Process exit code
-     * @param {string|null} signal - Termination signal (SIGTERM, SIGKILL, etc.)
-     * @param {boolean} wasCanceled - Whether the download was canceled (determined by caller)
-     * @param {string} outputPath - Expected output file path
-     * @param {string} type - Media type ('hls', 'dash', 'direct')
-     * @param {boolean} subsOnly - Whether this was a subtitle-only download
-     * @param {boolean} isLivestream - Whether this is a livestream (passed directly)
-     * @returns {Object} Termination analysis with reason, type, and flags
-     * @private
-     */
-    analyzeProcessTermination(exitCode, signal, wasCanceled, outputPath = null, type = null, subsOnly = false, isLivestream = false) {
-        const hasValidFile = outputPath && this.verifyDownloadCompletion(outputPath, type, subsOnly);
-        
-        logDebug('Termination analysis:', { exitCode, signal, wasCanceled, hasValidFile, type, outputPath, subsOnly, isLivestream });
-        
-        // Signal-based detection (most reliable for cancellation)
-        if (signal) {
-            return {
-                wasCanceled: true,
-                isSuccess: false,
-                isPartialSuccess: false,
-                reason: `${signal} (signal termination)`,
-                signal,
-                exitCode,
-                method: 'signal-detection'
-            };
-        }
-        
-        // Cancellation-based logic with file verification
-        if (wasCanceled) {
-            if (hasValidFile && (type === 'direct' || isLivestream)) {
-                // Direct type or livestream with valid file after cancellation = partial success
-                const reasonType = type === 'direct' ? 'direct type' : 'livestream';
-                return {
-                    wasCanceled: true,
-                    isSuccess: false,
-                    isPartialSuccess: true,
-                    reason: `canceled but partial file is playable (${reasonType})`,
-                    signal: null,
-                    exitCode,
-                    method: 'partial-success-detection'
-                };
-            } else {
-                // No valid file OR regular HLS/DASH types = cancellation
-                return {
-                    wasCanceled: true,
-                    isSuccess: false,
-                    isPartialSuccess: false,
-                    reason: hasValidFile ? 'canceled with file cleanup' : 'canceled before file creation',
-                    signal: null,
-                    exitCode,
-                    method: 'cancellation-detection'
-                };
-            }
-        }
-        
-        // Non-cancellation outcomes
-        if (exitCode === 0) {
-            if (hasValidFile) {
-                return {
-                    wasCanceled: false,
-                    isSuccess: true,
-                    isPartialSuccess: false,
-                    reason: 'successful completion (verified)',
-                    signal: null,
-                    exitCode,
-                    method: 'file-verification'
-                };
-            } else {
-                return {
-                    wasCanceled: false,
-                    isSuccess: false,
-                    isPartialSuccess: false,
-                    reason: 'exit code 0 but no valid output file',
-                    signal: null,
-                    exitCode,
-                    method: 'file-verification'
-                };
-            }
-        } else {
-            // Any non-zero exit code = error
-            return {
-                wasCanceled: false,
-                isSuccess: false,
-                isPartialSuccess: false,
-                reason: `error exit code ${exitCode}`,
-                signal: null,
-                exitCode,
-                method: 'exit-code'
-            };
-        }
-    }
-
-    /**
-     * Verify if download actually completed successfully by checking output file
-     * @param {string} outputPath - Path to the expected output file
-     * @param {string} type - Media type ('hls', 'dash', 'direct')
-     * @returns {boolean} - True if download appears to have completed successfully
-     * @private
-     */
-    verifyDownloadCompletion(outputPath, type, subsOnly = false) {
-        try {
-            if (!fs.existsSync(outputPath)) {
-                logDebug('Download verification: Output file does not exist');
-                return false;
-            }
-
-            const stats = fs.statSync(outputPath);
-            const fileSizeBytes = stats.size;
-            
-            // Different minimum size thresholds based on content type
-            let minSizeBytes;
-            if (subsOnly) {
-                // Subtitle files can be very small (even 1KB for short content)
-                minSizeBytes = 100; // 100 bytes - just ensure file has some content
-                logDebug('Download verification: Using subtitle file threshold');
-            } else {
-                // Media files (video/audio) should be larger
-                minSizeBytes = 10 * 1024; // 10KB
-                logDebug('Download verification: Using media file threshold');
-            }
-            
-            if (fileSizeBytes < minSizeBytes) {
-                logDebug(`Download verification: File too small (${fileSizeBytes} bytes < ${minSizeBytes} bytes)`);
-                return false;
-            }
-            
-            logDebug(`Download verification: File exists with valid size (${fileSizeBytes} bytes, threshold: ${minSizeBytes} bytes)`);
-            return true;
-            
-        } catch (error) {
-            logDebug('Download verification error:', error.message);
-            return false;
-        }
     }
 }
 
