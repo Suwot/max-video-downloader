@@ -43,28 +43,25 @@ function initializeUIEventHandlers() {
         })
     );
 
-    // Clear cache button
+    // Clear cache button - stats are stored in the button's dataset.constraint
     const clearCacheButton = document.getElementById('clear-cache-button');
-    const cacheStats = clearCacheButton?.querySelector('.cache-stats');
-    
-    if (clearCacheButton && cacheStats) {
-        // Request initial stats
-        sendPortMessage({ command: 'getPreviewCacheStats' });
-        
-        // Handle click
-        clearCacheButton.addEventListener('click', () => {
-            clearCacheButton.disabled = true;
-            try {
-                sendPortMessage({ command: 'clearCaches' });
-                cacheStats.textContent = 'Cache cleared!';
-            } catch (error) {
-                logger.error('Error clearing cache:', error);
-                cacheStats.textContent = 'Failed to clear cache';
-            } finally {
-                clearCacheButton.disabled = false;
-            }
-        });
-    }
+
+    // Request initial stats (background should respond and update dataset via port message)
+    sendPortMessage({ command: 'getPreviewCacheStats' });
+
+    // Handle click - update dataset.constraint directly
+    clearCacheButton.addEventListener('click', () => {
+        clearCacheButton.disabled = true;
+        try {
+            sendPortMessage({ command: 'clearCaches' });
+            clearCacheButton.dataset.constraint = 'Cache cleared!';
+        } catch (error) {
+            logger.error('Error clearing cache:', error);
+            clearCacheButton.dataset.constraint = 'Failed to clear cache';
+        } finally {
+            clearCacheButton.disabled = false;
+        }
+    });
 }
 
 // Initialize when DOM is ready

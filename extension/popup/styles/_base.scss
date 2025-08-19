@@ -8,11 +8,13 @@
     box-sizing: border-box;
     border: none;
     outline: none;
+	scrollbar-width: thin;
 }
 
-body {
+html, body {
     width: 420px;
     min-height: 50px;
+	max-height: 600px;
     height: auto;
     margin: 0;
     padding: 0;
@@ -21,7 +23,7 @@ body {
     overflow-x: hidden;
 
     &.expanded {
-        min-height: 500px;
+        min-height: 600px;
     }
 
     // Theme variants
@@ -34,6 +36,16 @@ body {
         background-color: var(--bg-primary-light);
         color: var(--text-primary-light);
     }
+}
+
+// Ensure form controls inherit fonts and reset UA stylesheet overrides
+button,
+input,
+select,
+textarea {
+    font: inherit;
+    color: inherit;
+    background: none;
 }
 
 // =====================================================

@@ -79,6 +79,37 @@
 // TOOLTIPS & NOTIFICATIONS
 // =====================================================
 
+[data-constraint] {
+	&:hover::after,
+	&:focus-within::after {
+		content: attr(data-constraint);
+		box-sizing: border-box;
+		position: absolute;
+		top: calc(100% + 4px);
+		left: 0;
+		min-width: 100%;
+		max-width: fit-content;
+		z-index: 4;
+		padding: 4px 6px;
+		font-size: 11px;
+		border-radius: 4px;
+		pointer-events: none;
+		white-space: nowrap;
+		border: 1px solid rgba(255, 255, 255, 0.2);
+		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+		
+		.theme-dark & {
+			background-color: rgba(0, 0, 0, 0.95);
+			color: #fff;
+		}
+		
+		.theme-light & {
+			background-color: rgba(0, 0, 0, 0.9);
+			color: #fff;
+		}
+	}
+}
+
 // Global data-tooltip styling (positioning handled by JS)
 [data-tooltip] {
     cursor: help;
@@ -91,7 +122,7 @@
     border-radius: 4px;
     font-size: var(--font-body);
     white-space: normal;
-    z-index: 1000;
+    z-index: 9;
     pointer-events: none;
     max-width: 250px;
     line-height: 1.3;
@@ -109,7 +140,7 @@
     font-size: var(--font-h2);
     font-weight: 500;
     box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-    z-index: 1000;
+    z-index: 9;
     opacity: 0;
     transition: opacity var(--transition-fast) ease;
     max-width: 320px;
@@ -154,7 +185,7 @@
     right: 0;
     bottom: 0;
     background-color: rgba(0, 0, 0, 0.3);
-    z-index: 2000;
+    z-index: 9;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -235,7 +266,7 @@
     position: fixed;
     top: 0;
     left: 0;
-    z-index: 1000;
+    z-index: 10;
     padding: 4px;
     border-radius: 6px;
     box-shadow: 0 4px 15px rgba(0, 0, 0, 0.6);
@@ -351,7 +382,7 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 8px;
+    padding: 6px;
     width: 100%;
 
     .section-title {
@@ -367,19 +398,25 @@
         @extend %interactive-base;
         position: sticky;
         top: 0;
-        z-index: 50;
+        z-index: 3;
 
         .theme-dark & {
+			background-color: var(--bg-primary-dark);
             &:hover {
                 background-color: var(--bg-primary-dark-hover);
             }
         }
 
         .theme-light & {
+			background-color: var(--bg-primary-light);
             &:hover {
                 background-color: var(--bg-element-hover-light);
             }
         }
+		
+		// .videos-container & {
+		// 	top: 88px;
+		// }
         
         .toggle-icon {
             margin-inline-start: auto;
@@ -415,19 +452,17 @@
 .section-content {
     display: flex;
     flex-direction: column;
-    padding: 4px;
+    padding: 0 6px 6px;
     gap: 6px;
     transition: max-height var(--transition-fast) ease, opacity var(--transition-fast) ease;
     overflow-y: visible;
     opacity: 1;
     
     &.collapsed {
-        max-height: 0;
-        opacity: 0;
-        padding: 0;
-        overflow: hidden;
+        display: none;
     }
 }
+
 // =====================================================
 // NATIVE HOST STATUS COMPONENTS
 // =====================================================

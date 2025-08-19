@@ -41,7 +41,7 @@ export async function renderVideos(videos = []) {
         
         if (typeVideos.length > 0) {
             // Show group
-            group.style.display = 'block';
+            group.style.display = 'flex';
             
             // Update section count - simple textContent update
             const sectionCount = group.querySelector('.counter');
@@ -644,7 +644,7 @@ export async function addVideoToUI(video) {
         }
         
         // Show the group
-        group.style.display = 'block';
+        group.style.display = 'flex';
         
         // Get the videos container within the group
         const groupBody = group.querySelector('.section-content');

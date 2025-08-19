@@ -1,5 +1,3 @@
-// Shared utility functions for video processing
-
 // Format file size bytes to human readable format
 export function formatSize(bytes) {
     if (!bytes || bytes === 0) return '0 KB';

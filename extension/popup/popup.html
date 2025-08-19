@@ -7,19 +7,7 @@
     <link rel="stylesheet" href="popup.css">
 </head>
 <body class="theme-dark">
-    <header>
-        <section class="heading-row">
-            <div class="left-buttons-container">
-                <button class="clear-cache-button" id="clear-cache-button">
-                    <svg viewBox="0 0 24 24" width="16" height="16">
-                        <path d="M15 16h4v2h-4zm0-8h7v2h-7zm0 4h6v2h-6zM3 18c0 1.1.9 2 2 2h6c1.1 0 2-.9 2-2V8H3v10zm2-8h6v8H5v-8zm5-6H6L5 5H2v2h12V5h-3z"/>
-                    </svg>
-                    <div class="cache-stats">Loading cache stats...</div>
-                </button>
-            </div>
-            <h1 class="app-title">MAX Video Downloader</h1>
-            <div class="right-buttons-container"></div>
-        </section>
+    <header class="header">
         <nav class="tab-navigation">
             <button class="tab-button active" data-tab-id="videos-tab">
                 Videos<span class="counter"></span>
@@ -29,6 +17,13 @@
             </button>
             <button class="tab-button" data-tab-id="settings-tab">Settings</button>
         </nav>
+		<div class="controls">
+			<button class="clear-cache-button" id="clear-cache-button">
+				<svg viewBox="0 0 24 24" width="16" height="16">
+					<path d="M15 16h4v2h-4zm0-8h7v2h-7zm0 4h6v2h-6zM3 18c0 1.1.9 2 2 2h6c1.1 0 2-.9 2-2V8H3v10zm2-8h6v8H5v-8zm5-6H6L5 5H2v2h12V5h-3z"/>
+				</svg>
+			</button>
+		</div>
     </header>
     <main class="container">
         <section class="tab-contents">
@@ -138,6 +133,8 @@
             
             <div class="tab-content" data-tab-id="settings-tab">
 				<section class="settings-container">
+            	<h1 class="app-title">MAX Video Downloader</h1>
+				
 					<!-- Native Host Connection Section -->
 					<div class="settings-section">
 						<div class="status-info">

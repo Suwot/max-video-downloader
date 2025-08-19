@@ -41,6 +41,7 @@
 .video-type-group {
     display: flex;
     flex-direction: column;
+	gap: 6px;
     overflow: visible;
     position: relative;
 }
@@ -138,7 +139,7 @@
     color: white;
     font-size: var(--font-body);
     font-weight: 500;
-    z-index: 3;
+    z-index: 2;
     pointer-events: none;
 }
 
@@ -527,7 +528,7 @@
     position: absolute;
     top: calc(100% + 2px);
     right: 0;
-    z-index: 100; // Consistent with existing dropdowns
+    z-index: 10; // Consistent with existing dropdowns
     min-width: 160px;
     border-radius: 6px;
     opacity: 0;

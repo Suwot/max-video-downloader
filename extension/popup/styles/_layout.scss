@@ -18,12 +18,12 @@
     justify-content: center;
     text-align: center;
     font-size: var(--font-h2);
-    border-radius: 16px;
+    border-radius: 12px;
     min-height: 76px;
     @extend %theme-bg-static;
 
 	#videos-list & {
-		margin: 8px;
+		margin: 6px;
 	}
 
     // Override text color for muted appearance
@@ -57,20 +57,21 @@
 // HEADER
 // =====================================================
 
-header {
+.header {
     position: sticky;
     top: 0;
     display: flex;
     flex-wrap: wrap;
     flex-direction: column;
     justify-content: space-between;
-    align-items: center;
-    z-index: 101;
+    align-items: flex-start;
+    z-index: 15;
     transition: box-shadow var(--transition-normal);
     backdrop-filter: saturate(180%) blur(20px);
-    padding: 8px;
-    gap: 8px;
+    padding: 6px;
+	gap: 6px;
     @extend %theme-backdrop;
+	border: none !important;
 
     .heading-row {
         width: 100%;
@@ -94,14 +95,6 @@ header {
             fill: #666;
         }
     }
-}
-
-// Button containers
-.left-buttons-container,
-.right-buttons-container {
-    position: relative;
-    display: flex;
-    align-items: center;
 }
 
 // =====================================================
@@ -128,52 +121,14 @@ header {
 }
 
 // =====================================================
-// TAB PLACEHOLDERS
-// =====================================================
-
-.tab-placeholder {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    height: 300px;
-    text-align: center;
-    padding: 32px;
-    gap: 16px;
-
-    .placeholder-icon {
-        opacity: 0.6;
-        margin-block-end: 8px;
-
-        svg {
-            @extend %theme-text-secondary;
-        }
-    }
-
-    h3 {
-        font-size: var(--font-h1);
-        font-weight: 500;
-        margin: 0;
-        @extend %theme-text-primary;
-    }
-
-    p {
-        font-size: var(--font-h2);
-        margin: 0;
-        opacity: 0.8;
-        @extend %theme-text-secondary;
-    }
-}
-
-// =====================================================
 // SETTINGS CONTAINER
 // =====================================================
 
 .settings-container {
     display: flex;
     flex-direction: column;
-    padding: 8px;
-    gap: 8px;
+    padding: 6px;
+    gap: 6px;
     height: 100%;
     overflow-y: auto;
 

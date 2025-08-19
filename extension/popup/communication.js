@@ -8,6 +8,7 @@ import { createLogger } from '../shared/utils/logger.js';
 import { updateDownloadProgress } from './video/download-progress-handler.js';
 import { renderVideos, addVideoToUI, updateVideoInUI, removeVideoFromUI, renderHistoryItems, updateHistoryItemDeleted } from './video/video-renderer.js';
 import { updateUICounters, showToast, showSuccess, showError } from './ui-utils.js';
+import { formatSize } from '../shared/utils/processing-utils.js';
 import { updateSettingsUI, updateNativeHostStatus } from './settings-tab.js';
 import { currentTabId } from './index.js';
 
@@ -283,17 +284,10 @@ function disconnect() {
  * Update cache stats display
  */
 function updateCacheStatsDisplay(stats) {
-    const element = document.querySelector('.cache-stats');
-    if (!element) return;
-    
-    if (!stats) {
-        element.textContent = 'No cache stats available';
-        return;
-    }
-    
-    const count = stats.count || 0;
-    const sizeInKB = Math.round((stats.size || 0) / 1024);
-    element.textContent = `${count} previews (${sizeInKB} KB)`;
+    // Minimal assignment: always write into the button's dataset.dataConstraint.
+    const btn = document.getElementById('clear-cache-button');
+    const count = (stats?.count) || 0;
+    btn.dataset.constraint = (stats && `${count} imgs = ${formatSize(stats?.size || 0)}`) || 'No cache stats available';
 }
 
 /**

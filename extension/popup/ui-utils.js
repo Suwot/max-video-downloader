@@ -275,6 +275,10 @@ export function switchTab(tabId) {
     document.querySelectorAll('.tab-content').forEach(content => {
         content.classList.toggle('active', content.dataset.tabId === tabId);
     });
+
+    // Show header controls only on videos tab. Clear inline style when showing.
+    const headerControls = document.querySelector('header .controls');
+    if (headerControls) headerControls.style.display = (tabId === 'videos-tab') ? '' : 'none';
 }
 
 /**

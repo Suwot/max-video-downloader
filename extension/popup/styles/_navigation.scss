@@ -7,18 +7,14 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 36px;
-    height: 36px;
+    height: 34px;
+	width: 34px;
     border-radius: 50%;
     padding: 0;
     position: relative;
     @extend %theme-bg-primary;
-
-    .theme-light & {
-        box-shadow: var(--bg-element-shadow-light);
-    }
-
-    svg {
+	
+	svg {
         .theme-dark & {
             fill: #fff;
         }
@@ -27,42 +23,8 @@
             fill: #666;
         }
     }
-}
-
-.clear-cache-button {
-    svg {
-        width: 16px;
-        height: 16px;
-        flex-shrink: 0;
-    }
-
-    &:hover, &:focus {
-        .cache-stats {
-            display: block;
-        }
-    }
-
-    .tooltip {
-        top: unset;
-        left: 120%;
-        transform: unset;
-    }
-}
-
-// Cache stats
-.cache-stats {
-    font-size: var(--font-body);
-    display: none;
-    position: absolute;
-    left: 110%;
-    top: 50%;
-    transform: translateY(-50%);
-    padding: 4px 10px;
-    border-radius: 6px;
-    white-space: nowrap;
-    z-index: 10;
-    @extend %theme-backdrop;
-    @extend %theme-text-secondary;
+	
+	
 }
 
 // Dismiss button
