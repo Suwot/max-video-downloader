@@ -1148,14 +1148,6 @@ export class VideoItemComponent {
      */
     updateVideoData(newVideoData) {
         this.videoData = { ...this.videoData, ...newVideoData };
-        
-        // Update components if needed
-        if (this.dropdown) {
-            this.dropdown.updateVideoData(newVideoData);
-        }
-        if (this.downloadButton) {
-            this.downloadButton.updateVideoData(newVideoData);
-        }
     }
     
     /**
@@ -1244,20 +1236,5 @@ export class VideoItemComponent {
         // Fallback to URL for videos tab (no downloadId available)
         const downloadData = this.getDownloadData();
         return downloadData.downloadUrl;
-    }
-    
-    /**
-     * Cleanup component resources
-     */
-    cleanup() {
-        if (this.dropdown) {
-            this.dropdown.cleanup();
-        }
-        if (this.downloadButton) {
-            this.downloadButton.cleanup();
-        }
-        if (this.element) {
-            this.element._component = null;
-        }
     }
 }

@@ -497,20 +497,6 @@ export class VideoDropdownComponent {
         // Find track by matching cached label
         return tracks?.find(track => track._cachedLabel === trackLabel);
     }
-    
-    // Update video data (for dynamic updates)
-    updateVideoData(newVideoData) {
-        this.videoData = { ...this.videoData, ...newVideoData };
-        // Update display to reflect new processing state or quality info
-        this.updateSelectedDisplay();
-    }
-    
-    // Cleanup component resources
-    cleanup() {
-        if (this.element) {
-            this.element._component = null;
-        }
-    }
 }
 
 /**

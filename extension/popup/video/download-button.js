@@ -217,7 +217,7 @@ export class VideoDownloadButtonComponent {
         const menuItems = [];
 
         // Conditionally add menu items
-        if (this.hasAudio) {
+        if (this.videoItemComponent.hasAudio) {
             menuItems.push({
                 icon: `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-audio-lines w-3 h-3" aria-hidden="true">
                     <path d="M2 10v3"></path>
@@ -232,7 +232,7 @@ export class VideoDownloadButtonComponent {
             });
         }
 
-        if (this.hasSubtitles) {
+        if (this.videoItemComponent.hasSubtitles) {
             menuItems.push({
                 icon: `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-captions w-3 h-3" aria-hidden="true">
                     <rect width="18" height="14" x="3" y="5" rx="2" ry="2"></rect>
@@ -435,29 +435,6 @@ export class VideoDownloadButtonComponent {
             setTimeout(() => {
                 document.addEventListener('click', this.handleClickOutside, { once: true });
             }, 0);
-        }
-    }
-    
-    /**
-     * Update video data (for dynamic updates)
-     * @param {Object} newVideoData - Updated video data
-     */
-    updateVideoData(newVideoData) {
-        // Update reference in video item component
-        this.videoItemComponent.updateVideoData(newVideoData);
-    }
-    
-    /**
-     * Cleanup component resources
-     */
-    cleanup() {
-        if (this.restoreTimer) {
-            clearTimeout(this.restoreTimer);
-            this.restoreTimer = null;
-        }
-        
-        if (this.buttonWrapper) {
-            this.buttonWrapper._component = null;
         }
     }
 }

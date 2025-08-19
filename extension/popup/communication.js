@@ -152,64 +152,52 @@ async function handleIncomingMessage(message) {
 }
 
 /**
- * Handle action-based video state updates
+ * Handle video state updates
  */
 async function handleVideoStateUpdate(message) {
-    logger.debug(`Video update: ${message.type} ${message.action}`, message);
+    logger.debug(`Video update: ${message.action}`, message);
 
     try {
-        if (message.type === 'full-refresh') {
-            // Full refresh with all videos and counts
-            if (message.videos) {
-                await renderVideos(message.videos);
-            }
-            if (message.counts) {
-                updateUICounters({ videos: message.counts });
-            }
-            return;
-        }
+        switch (message.action) {
+            case 'full-refresh':
+                if (message.videos) {
+                    await renderVideos(message.videos);
+                }
+                if (message.counts) {
+                    updateUICounters({ videos: message.counts });
+                }
+                break;
 
-        if (message.type === 'structural') {
-            // Structural updates with complete video data
-            switch (message.action) {
-                case 'add':
-                    if (message.videoData) {
-                        await addVideoToUI(message.videoData);
-                    }
-                    break;
-                    
-                case 'update':
-                    if (message.videoData && message.normalizedUrl) {
-                        await updateVideoInUI(message.normalizedUrl, message.videoData, 'structural');
-                    }
-                    break;
-            }
-        } 
-        else if (message.type === 'flag') {
-            // Flag updates with minimal data
-            if (message.action === 'remove') {
-                // Handle batch removal
+            case 'add':
+                if (message.videoData) {
+                    await addVideoToUI(message.videoData);
+                }
+                break;
+                
+            case 'update':
+                if (message.normalizedUrl && message.videoData) {
+                    const updateData = message.videoData;
+                    await updateVideoInUI(message.normalizedUrl, updateData);
+                }
+                break;
+
+            case 'remove':
                 if (Array.isArray(message.normalizedUrl)) {
                     // Batch removal for variant deduplication
                     for (const url of message.normalizedUrl) {
                         await removeVideoFromUI(url);
                     }
-                } else {
+                } else if (message.normalizedUrl) {
                     // Single removal
                     await removeVideoFromUI(message.normalizedUrl);
                 }
-            } else if (message.action === 'update') {
-                // Flag updates (like generatingPreview)
-                if (message.normalizedUrl && message.flags) {
-                    await updateVideoInUI(message.normalizedUrl, message.flags, 'flag');
-                }
-            }
+                break;
         }
     } catch (error) {
         logger.error('Error handling video state update:', error);
         // Fallback to full refresh on error
         if (message.videos) {
-            await renderVideos(message.videos || []);
+            await renderVideos(message.videos);
         }
     }
 }

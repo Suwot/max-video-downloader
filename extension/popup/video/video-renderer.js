@@ -5,10 +5,7 @@ import { VideoItemComponent } from './video-item.js';
 
 const logger = createLogger('Video Renderer');
 
-/**
- * Render videos using static group structure
- * @param {Array} videos - Videos array to render
- */
+// Render videos using static group structure
 export async function renderVideos(videos = []) {
     const container = document.getElementById('videos-list');
     
@@ -671,100 +668,65 @@ export async function addVideoToUI(video) {
 }
 
 /**
- * Update video flags without full re-render
- * @param {string} videoUrl - Video URL to update
- * @param {Object} video - Updated video object with flags
- */
-export function updateVideoFlags(videoUrl, video) {
-    logger.debug(`[FLAG] Updating flags for video/-s`, videoUrl, video);
-    try {
-        const container = document.getElementById('videos-list');
-        const existingElement = container.querySelector(`.video-item[data-url="${videoUrl}"]`);
-        
-        if (!existingElement) {
-            logger.debug(`[FLAG] Video element not found for flag update: ${videoUrl}`);
-            return false;
-        }
-        
-        const previewContainer = existingElement.querySelector('.preview-container');
-        const previewImage = existingElement.querySelector('.preview-image');
-        
-        // Handle preview generation flag
-        if ('generatingPreview' in video) {
-            if (video.generatingPreview) {
-                if (previewContainer) previewContainer.classList.add('loading');
-                if (previewImage) previewImage.classList.add('generating');
-            } else {
-                if (previewContainer) previewContainer.classList.remove('loading');
-                if (previewImage) previewImage.classList.remove('generating');
-            }
-        }
-        
-        // Handle preview URL update
-        if (video.previewUrl && previewImage) {
-            if (previewContainer) previewContainer.classList.add('has-preview');
-            previewImage.onload = () => {
-                previewImage.classList.remove('placeholder');
-                previewImage.classList.add('loaded');
-                if (previewContainer) previewContainer.classList.remove('loading');
-            };
-            previewImage.src = video.previewUrl;
-        }
-        
-        // Handle processing flag (could add visual indicators later)
-        if ('processing' in video) {
-            // For now, just log - can add visual indicators later
-            logger.debug(`[FLAG] Processing flag updated for ${videoUrl}:`, {
-                processing: video.processing
-            });
-        }
-        
-        logger.debug(`[FLAG] Updated flags for video: ${videoUrl}`);
-        return true;
-        
-    } catch (error) {
-        logger.error('[FLAG] Error updating video flags:', error);
-        return false;
-    }
-}
-
-/**
  * Update an existing video in the UI
  * @param {string} videoUrl - Video URL to update
  * @param {Object} video - Updated video object
- * @param {string} [updateType='structural'] - Type of update: 'flags' or 'structural'
  */
-export async function updateVideoInUI(videoUrl, video, updateType = 'structural') {
-	logger.debug(`[UPD] received updateType: ${updateType} for url: ${videoUrl}, video:`, video);
+export async function updateVideoInUI(videoUrl, video) {
+    logger.debug(`[UPD] Updating video:`, videoUrl, video);
     try {
-        // For flag-only updates, use selective update
-        if (updateType === 'flag') {
-            const success = updateVideoFlags(videoUrl, video);
-            if (success) {
-                logger.debug(`[UPD] Updated flags for video: ${videoUrl}`);
-                return;
-            }
-            // Fall back to full update if flag update failed
-            logger.debug(`[UPD] Flag update failed, falling back to full update: ${videoUrl}`);
-        }
-        
-        // Full structural update
         const container = document.getElementById('videos-list');
         const existingElement = container.querySelector(`.video-item[data-url="${videoUrl}"]`);
         
         if (!existingElement) {
-            logger.debug(`[UPD] Video element not found for update: ${videoUrl}, skipping update.`);
+            logger.debug(`[UPD] Video element not found for update: ${videoUrl}`);
             return;
         }
         
-        // Create new element
+        // Handle preview updates with targeted DOM manipulation
+        if ('previewUrl' in video || 'generatingPreview' in video) {
+            const component = existingElement._component;
+            if (component) {
+                component.updateVideoData(video);
+            }
+            
+            const previewContainer = existingElement.querySelector('.preview-container');
+            const previewImage = existingElement.querySelector('.preview-image');
+            
+            // Handle preview generation flag
+            if ('generatingPreview' in video) {
+                if (video.generatingPreview) {
+                    if (previewContainer) previewContainer.classList.add('loading');
+                    if (previewImage) previewImage.classList.add('generating');
+                } else {
+                    if (previewContainer) previewContainer.classList.remove('loading');
+                    if (previewImage) previewImage.classList.remove('generating');
+                }
+            }
+            
+            // Handle preview URL update
+            if (video.previewUrl && previewImage) {
+                if (previewContainer) previewContainer.classList.add('has-preview');
+                previewImage.onload = () => {
+                    previewImage.classList.remove('placeholder');
+                    previewImage.classList.add('loaded');
+                    if (previewContainer) previewContainer.classList.remove('loading');
+                };
+                previewImage.src = video.previewUrl;
+            }
+            
+            logger.debug(`[UPD] Applied targeted preview updates for: ${videoUrl}`);
+            return;
+        }
+        
+        // For all other updates, use full re-render
         const videoComponent = new VideoItemComponent(video, 'default');
         const newElement = videoComponent.render();
         
         // Replace the existing element
         existingElement.parentNode.replaceChild(newElement, existingElement);
         
-        logger.debug(`[UPD] Updated video in UI: ${videoUrl} (${updateType})`);
+        logger.debug(`[UPD] Full re-render completed for: ${videoUrl}`);
         
     } catch (error) {
         logger.error('[UPD] Error updating video in UI:', error);

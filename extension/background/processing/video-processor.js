@@ -111,7 +111,7 @@ function addDetectedVideo(videoInfo) {
         validForDisplay: true
     };
     
-    updateVideo('structural', 'add', newVideo);
+    updateVideo('add', newVideo);
     logger.debug(`Added new video to detection map: ${videoInfo.url} (type: ${videoInfo.type})`);
 
     // Start processing immediately
@@ -160,7 +160,7 @@ async function processVideo(videoData) {
     } catch (error) {
         logger.error(`Error processing ${normalizedUrl}:`, error);
         // Remove failed video from UI - send only changes
-        updateVideo('flag', 'remove', { 
+        updateVideo('remove', { 
             tabId,
             normalizedUrl,
             processing: false,
@@ -235,7 +235,7 @@ async function processHlsVideo(videoData) {
         const streamFlags = detectStreamFlags(hlsResult);
         
         // Send only the changes from HLS processing
-        updateVideo('structural', 'update', {
+        updateVideo('update', {
             ...hlsResult,
             ...streamFlags,
             tabId,
@@ -249,7 +249,7 @@ async function processHlsVideo(videoData) {
         }
     } else {
         // Remove failed HLS video from UI - send only changes
-        updateVideo('flag', 'remove', {
+        updateVideo('remove', {
             tabId,
             normalizedUrl,
             isValid: false,
@@ -298,7 +298,7 @@ async function processDashVideo(videoData) {
         // Calculate stream flags
         const streamFlags = detectStreamFlags(dashUpdates);
         
-        updateVideo('structural', 'update', {
+        updateVideo('update', {
             ...dashUpdates,
             ...streamFlags
         });
@@ -309,7 +309,7 @@ async function processDashVideo(videoData) {
         }
     } else {
         // Remove failed DASH video from UI - send only changes
-        updateVideo('flag', 'remove', {
+        updateVideo('remove', {
             tabId,
             normalizedUrl,
             isValid: false,
@@ -391,7 +391,7 @@ function handleVariantMasterRelationships(tabId, videoTracks, audioTracks, subti
 
     // Batch remove all variant URLs from UI if any were found
     if (urlsToRemove.length > 0) {
-        updateVideo('flag', 'remove', {
+        updateVideo('remove', {
             tabId,
             normalizedUrl: urlsToRemove, // Array for batch operation
             hasKnownMaster: true,
@@ -426,7 +426,7 @@ async function generateVideoPreview(videoData, sourceUrl = null) {
         if (cachedPreview) {
             logger.debug(`[GP] Using cached preview for: ${normalizedUrl}`);
             // Send only the preview change
-            updateVideo('structural', 'update', {
+            updateVideo('update', {
                 tabId,
                 normalizedUrl,
                 previewUrl: cachedPreview
@@ -435,7 +435,7 @@ async function generateVideoPreview(videoData, sourceUrl = null) {
         }
         
         // Set generating flag before starting - send only the flag change
-        updateVideo('flag', 'update', { 
+        updateVideo('update', { 
             tabId, 
             normalizedUrl, 
             generatingPreview: true 
@@ -461,7 +461,7 @@ async function generateVideoPreview(videoData, sourceUrl = null) {
             await storePreview(normalizedUrl, response.previewUrl);
             
             // Send only the preview changes
-            updateVideo('structural', 'update', {
+            updateVideo('update', {
                 tabId,
                 normalizedUrl,
                 generatingPreview: false,
@@ -470,14 +470,14 @@ async function generateVideoPreview(videoData, sourceUrl = null) {
             });
         } else if (response && response.timeout) {
             logger.warn(`[GP] Preview generation timed out for: ${normalizedUrl} (killed after 30 seconds)`);
-            updateVideo('flag', 'update', { 
+            updateVideo('update', { 
                 tabId, 
                 normalizedUrl, 
                 generatingPreview: false 
             });
         } else {
             logger.debug(`[GP] No preview URL in response for: ${normalizedUrl}`);
-            updateVideo('flag', 'update', { 
+            updateVideo('update', { 
                 tabId, 
                 normalizedUrl, 
                 generatingPreview: false 
@@ -485,7 +485,7 @@ async function generateVideoPreview(videoData, sourceUrl = null) {
         }
     } catch (error) {
         logger.error(`[GP] Error generating preview for ${normalizedUrl}: ${error.message}`);
-        updateVideo('flag', 'update', { 
+        updateVideo('update', { 
             tabId, 
             normalizedUrl, 
             generatingPreview: false 
@@ -517,7 +517,7 @@ async function getFFprobeMetadata(videoData) {
         if (response && response.timeout) {
             logger.warn(`[FFprobe] Media analysis timed out for: ${normalizedUrl} (killed after 30 seconds)`);
             // Remove video from UI as analysis failed
-            updateVideo('flag', 'remove', {
+            updateVideo('remove', {
                 tabId,
                 normalizedUrl,
                 processing: false,
@@ -575,12 +575,12 @@ async function getFFprobeMetadata(videoData) {
 				hasSubtitles: streamInfo.hasSubs === true
             };
             
-            updateVideo('structural', 'update', ffprobeUpdates);
+            updateVideo('update', ffprobeUpdates);
             return streamInfo;
         } else {
             logger.warn(`No stream info in ffprobe response for: ${normalizedUrl}`);
             // Remove video from UI as it failed FFprobe
-            updateVideo('flag', 'remove', {
+            updateVideo('remove', {
                 tabId,
                 normalizedUrl,
                 processing: false,
@@ -592,7 +592,7 @@ async function getFFprobeMetadata(videoData) {
     } catch (error) {
         logger.error(`Error getting FFprobe metadata for ${normalizedUrl}: ${error.message}`);
         // Remove video from UI as FFprobe failed
-        updateVideo('flag', 'remove', {
+        updateVideo('remove', {
             tabId,
             normalizedUrl,
             processing: false,

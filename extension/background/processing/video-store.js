@@ -60,16 +60,12 @@ function getVideoByUrl(url) {
 // Remove the old determineUpdateType function - no longer needed
 
 /**
- * Simplified video update function with explicit type and action
- * @param {string} updateType - 'structural' or 'flag'
+ * Update video in store and notify UI
  * @param {string} action - 'add', 'update', or 'remove'
- * @param {number} tabId - Tab ID
- * @param {string|Array<string>} urlOrUrls - Single URL or array of URLs for batch operations
- * @param {Object} videoData - Complete video data (for structural) or flags (for flag updates)
- * @param {string} [functionName] - Function making the update (for logging)
+ * @param {Object} updates - Update object containing tabId, normalizedUrl, and video data
  * @returns {boolean} - Success status
  */
-function updateVideo(type, action, updates) {
+function updateVideo(action, updates) {
     const { tabId, normalizedUrl } = updates;
     
     if (!tabId || !normalizedUrl) {
@@ -77,7 +73,7 @@ function updateVideo(type, action, updates) {
         return false;
     }
     
-    logger.debug(`[UV]: received update with type: ${type}, action: ${action}`, updates);
+    logger.debug(`[UV]: ${action} for ${normalizedUrl}`, updates);
 
     // Initialize tab map if it doesn't exist
     if (!allDetectedVideos.has(tabId)) {
@@ -85,36 +81,31 @@ function updateVideo(type, action, updates) {
     }
     const tabMap = allDetectedVideos.get(tabId);
 
-    // Handle batch operations for flag+remove (variant deduplication)
-    if (type === 'flag' && action === 'remove' && Array.isArray(normalizedUrl)) {
+    // Handle batch removal operations (variant deduplication)
+    if (action === 'remove' && Array.isArray(normalizedUrl)) {
         const urls = normalizedUrl;
         logger.debug(`[UV]: Batch remove operation: ${urls.length} URLs`);
         
         // Apply updates to all URLs with consistent merge logic
         urls.forEach(url => {
             const existingVideo = tabMap.get(url) || {};
-			
-			if (existingVideo) {
-				const mergedVideo = { 
-					...existingVideo, 
-					...updates,
-					normalizedUrl: url, // Override with individual URL
-				};
-				tabMap.set(url, mergedVideo);
-			}
+            if (existingVideo) {
+                const mergedVideo = { 
+                    ...existingVideo, 
+                    ...updates,
+                    normalizedUrl: url, // Override with individual URL
+                };
+                tabMap.set(url, mergedVideo);
+            }
         });
 
-        // Extract flags from updates (exclude tabId, normalizedUrl)
-        const { tabId: _, normalizedUrl: __, ...flags } = updates;
-
-        // Send batch removal to UI
+        // Send batch removal to UI with complete video data
         broadcastToPopups({
             command: 'videos-state-update',
-            type: type,
             action: action,
             tabId: tabId,
             normalizedUrl: urls, // Array for batch operation
-            flags: flags
+            videoData: updates // Send the update data
         });
 
         // Batch remove always affects count, so update icon and counters
@@ -137,35 +128,16 @@ function updateVideo(type, action, updates) {
     // Always store merged result
     tabMap.set(normalizedUrl, finalVideo);
     
-    if (type === 'structural') {
-        // Send complete merged video data to UI
-        broadcastToPopups({
-            command: 'videos-state-update',
-            type: type,
-            action: action,
-            tabId: tabId,
-            normalizedUrl: normalizedUrl,
-            videoData: JSON.parse(JSON.stringify(finalVideo)) // Deep clone for UI
-        });
-        
-        logger.debug(`[UV]: ${type} ${action}: ${normalizedUrl}`);
-    } 
-    else if (type === 'flag') {
-        // Extract flags from updates (exclude tabId, normalizedUrl)
-        const { tabId: _, normalizedUrl: __, ...flags } = updates;
-        
-        // Send only flags to UI
-        broadcastToPopups({
-            command: 'videos-state-update',
-            type: type,
-            action: action,
-            tabId: tabId,
-            normalizedUrl: normalizedUrl,
-            flags: flags
-        });
-        
-        logger.debug(`[UV]: ${type} ${action}: ${normalizedUrl}`, flags);
-    }
+    // Send complete merged video data to UI
+    broadcastToPopups({
+        command: 'videos-state-update',
+        action: action,
+        tabId: tabId,
+        normalizedUrl: normalizedUrl,
+        videoData: JSON.parse(JSON.stringify(finalVideo)) // Deep clone for UI
+    });
+    
+    logger.debug(`[UV]: ${action} completed for ${normalizedUrl}`);
 
     // Only update tab icon and send counters when video count changes (add/remove actions)
     if (action === 'add' || action === 'remove') {
@@ -182,11 +154,7 @@ function updateVideo(type, action, updates) {
     return true;
 }
 
-/**
- * Dismiss a video for a tab (hide from UI, skip processing)
- * @param {number} tabId - Tab ID
- * @param {string} url - Video URL
- */
+// hide from UI display basically
 function dismissVideoFromTab(tabId, url) {
     const tabMap = allDetectedVideos.get(tabId);
     if (!tabMap) return;
@@ -194,7 +162,7 @@ function dismissVideoFromTab(tabId, url) {
     if (!tabMap.has(normalizedUrl)) return;
     
     // Send only the changes - updateVideo will merge internally
-    updateVideo('flag', 'remove', {
+    updateVideo('remove', {
         tabId,
         normalizedUrl,
         timestampDismissed: Date.now(),
@@ -205,11 +173,7 @@ function dismissVideoFromTab(tabId, url) {
 }
 
 
-/**
- * Restore a dismissed video for a tab (show in UI, allow processing)
- * @param {number} tabId - Tab ID
- * @param {string} url - Video URL
- */
+// recover in UI display – not used yet
 function restoreVideoInTab(tabId, url) {
     const tabMap = allDetectedVideos.get(tabId);
     if (!tabMap) return;
@@ -220,7 +184,7 @@ function restoreVideoInTab(tabId, url) {
     if (!video.timestampDismissed) return;
     
     // Send only the changes - updateVideo will merge and calculate validForDisplay
-    updateVideo('structural', 'add', {
+    updateVideo('add', {
         tabId,
         normalizedUrl,
         timestampDismissed: undefined, // Remove the dismissed timestamp
@@ -229,11 +193,7 @@ function restoreVideoInTab(tabId, url) {
     logger.info(`Restored video ${url} for tab ${tabId}`);
 }
 
-/**
- * Get videos for UI display with efficient filtering
- * @param {number} tabId - Tab ID
- * @returns {Array} Filtered and processed videos
- */
+// Get videos for UI display with efficient filtering
 function getVideosForDisplay(tabId) {
     const tabVideosMap = allDetectedVideos.get(tabId);
     if (!tabVideosMap) return [];
@@ -242,10 +202,7 @@ function getVideosForDisplay(tabId) {
         .sort((a, b) => b.timestampDetected - a.timestampDetected);
 }
 
-/**
- * Send full refresh of all videos to UI (for popup open)
- * @param {number} tabId - Tab ID
- */
+// Send full refresh of all videos to UI (for popup open)
 function sendFullRefresh(tabId) {
     const videos = getVideosForDisplay(tabId);
     const videoCounts = getVideoTypeCounts(tabId);
@@ -253,7 +210,7 @@ function sendFullRefresh(tabId) {
     // Send both counters and videos in a single message for efficiency
     broadcastToPopups({
         command: 'videos-state-update',
-        type: 'full-refresh',
+        action: 'full-refresh',
         tabId: tabId,
         videos: videos,
         counts: videoCounts // Include counts in full refresh
@@ -262,11 +219,7 @@ function sendFullRefresh(tabId) {
     logger.debug(`Sent full refresh with ${videos.length} videos for tab ${tabId}`);
 }
 
-/**
- * Get video counts by type for a tab (only validForDisplay videos)
- * @param {number} tabId - Tab ID
- * @returns {Object} { hls, dash, direct, unknown, total }
- */
+// Get video counts by type for a tab (only validForDisplay videos) { hls, dash, direct, unknown, total }
 function getVideoTypeCounts(tabId) {
     const tabVideosMap = allDetectedVideos.get(tabId);
     const counts = { hls: 0, dash: 0, direct: 0, unknown: 0, total: 0 };
@@ -283,10 +236,7 @@ function getVideoTypeCounts(tabId) {
     return counts;
 }
 
-/**
- * Clean up videos for a specific tab
- * @param {number} tabId - Tab ID
- */
+// Clean up videos for a specific tab
 function cleanupVideosForTab(tabId) {
     logger.debug(`Cleaning up videos for tab ${tabId}`);
     
@@ -304,9 +254,7 @@ function cleanupVideosForTab(tabId) {
     updateTabIcon(tabId);
 }
 
-/**
- * Clean up all videos from all tabs
- */
+// Clean up all videos from all tabs
 function cleanupAllVideos() {
     logger.debug('Cleaning up all detected videos');
     
@@ -325,12 +273,8 @@ export {
     getVideoByUrl,
     updateVideo,
     getVideoTypeCounts,
-
-    // Video dismissal
     dismissVideoFromTab,
     restoreVideoInTab,
-
-    // Display and cleanup
     getVideosForDisplay,
     sendFullRefresh,
     cleanupVideosForTab,
