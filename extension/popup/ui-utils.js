@@ -1,7 +1,3 @@
-/* 
-* Helpers for UI operations
-*/
-
 // Unified toast system with progress bar and hover pause
 export function showToast(message, type = 'info', duration = 3000) {
     const toast = document.createElement('div');
@@ -580,6 +576,9 @@ function filterVideosBySearch(searchTerm) {
         
         item.classList.toggle('search-hidden', !matches);
     });
+    
+    // Update initial message visibility to handle "no matches" state
+    updateInitialMessageVisibility();
 }
 
 /**
@@ -605,7 +604,7 @@ function updateGroupVisibilityWithFilters(activeFilters, isFilterActive) {
 }
 
 /**
- * Update initial message visibility based on visible groups
+ * Update initial message visibility based on visible groups and search state
  */
 export function updateInitialMessageVisibility() {
     const container = document.getElementById('videos-list');
@@ -615,8 +614,30 @@ export function updateInitialMessageVisibility() {
         .some(group => group.style.display !== 'none');
     
     const initialMessage = container.querySelector('.initial-message');
-    if (initialMessage) {
-        initialMessage.style.display = hasVisibleGroups ? 'none' : 'flex';
+    if (!initialMessage) return;
+    
+    if (hasVisibleGroups) {
+        // Check if we have a search term and all videos are hidden by search
+        const searchTerm = getCurrentSearchTerm();
+        if (searchTerm.length > 0) {
+            const hasVisibleVideos = Array.from(container.querySelectorAll('.video-item'))
+                .some(item => !item.classList.contains('search-hidden'));
+            
+            if (!hasVisibleVideos) {
+                // We have videos but all are hidden by search - show "no matches" message
+                initialMessage.classList.add('no-matches');
+                initialMessage.style.display = 'flex';
+                return;
+            }
+        }
+        
+        // Normal case: hide initial message when we have visible groups with visible videos
+        initialMessage.classList.remove('no-matches');
+        initialMessage.style.display = 'none';
+    } else {
+        // No visible groups - show initial message (default "no videos" state)
+        initialMessage.classList.remove('no-matches');
+        initialMessage.style.display = 'flex';
     }
 }
 

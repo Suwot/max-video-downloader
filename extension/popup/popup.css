@@ -345,6 +345,18 @@ h3, .h3, .item-title {
 .initial-message p {
   margin: 4px 0;
 }
+.initial-message .no-videos-message {
+  display: block;
+}
+.initial-message .no-matches-message {
+  display: none;
+}
+.initial-message.no-matches .no-videos-message {
+  display: none;
+}
+.initial-message.no-matches .no-matches-message {
+  display: block;
+}
 
 .header {
   position: sticky;

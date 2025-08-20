@@ -51,6 +51,26 @@
     p {
         margin: 4px 0;
     }
+    
+    // Default state: show no-videos message, hide no-matches message
+    .no-videos-message {
+        display: block;
+    }
+    
+    .no-matches-message {
+        display: none;
+    }
+    
+    // No-matches state: hide no-videos message, show no-matches message
+    &.no-matches {
+        .no-videos-message {
+            display: none;
+        }
+        
+        .no-matches-message {
+            display: block;
+        }
+    }
 }
 
 // =====================================================
