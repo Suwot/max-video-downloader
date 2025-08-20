@@ -4,11 +4,11 @@
  */
 
 import { formatDuration } from '../../shared/utils/processing-utils.js';
-import { showHoverPreview, hideHoverPreview } from './preview-hover.js';
 import { sendPortMessage } from '../communication.js';
 import { createLogger } from '../../shared/utils/logger.js';
 import { VideoDropdownComponent, isTrackCompatibleWithVideo } from './dropdown.js';
 import { VideoDownloadButtonComponent } from './download-button.js';
+import { setupPreviewHover } from './preview-hover.js';
 import { showInfo, showError } from '../ui-utils.js';
 
 const logger = createLogger('VideoItemComponent');
@@ -384,14 +384,8 @@ export class VideoItemComponent {
             };
             previewImage.src = previewUrl;
             
-            // Add hover functionality for preview
-            previewContainer.addEventListener('mouseenter', (event) => {
-                showHoverPreview(previewUrl, event);
-            });
-            previewContainer.addEventListener('mousemove', (event) => {
-                showHoverPreview(previewUrl, event);
-            });
-            previewContainer.addEventListener('mouseleave', hideHoverPreview);
+            // Setup individual hover handlers for this preview
+            setupPreviewHover(previewContainer, previewUrl);
         }
     }
     

@@ -13,6 +13,33 @@ function initHoverPreview() {
 }
 
 /**
+ * Setup hover preview functionality for a specific preview container
+ * This is the simple, correct approach - individual handlers per element
+ * @param {HTMLElement} previewContainer - The preview container element
+ * @param {string} previewUrl - The preview URL to show on hover
+ */
+export function setupPreviewHover(previewContainer, previewUrl) {
+    if (!previewContainer || !previewUrl || previewUrl.includes('video-placeholder.png')) {
+        return;
+    }
+
+    // Mouse enter - show preview
+    previewContainer.addEventListener('mouseenter', (event) => {
+        showHoverPreview(previewUrl, event);
+    });
+
+    // Mouse move - update preview position  
+    previewContainer.addEventListener('mousemove', (event) => {
+        showHoverPreview(previewUrl, event);
+    });
+
+    // Mouse leave - hide preview
+    previewContainer.addEventListener('mouseleave', () => {
+        hideHoverPreview();
+    });
+}
+
+/**
  * Show hover preview at specific position
  * @param {string} previewUrl - URL of the full-size preview image
  * @param {MouseEvent} event - Mouse event to position the preview

@@ -3,6 +3,7 @@ import { createLogger } from '../../shared/utils/logger.js';
 import { formatSize, formatDuration, formatBitrate } from '../../shared/utils/processing-utils.js';
 import { VideoItemComponent } from './video-item.js';
 import { applySearchToVideoItem, updateInitialMessageVisibility, applySortingToGroups } from '../ui-utils.js';
+import { setupPreviewHover } from './preview-hover.js';
 
 const logger = createLogger('Video Renderer');
 
@@ -722,6 +723,11 @@ export async function updateVideoInUI(videoUrl, video) {
                     if (previewContainer) previewContainer.classList.remove('loading');
                 };
                 previewImage.src = video.previewUrl;
+                
+                // Setup hover handlers for the new preview
+                if (previewContainer && video.previewUrl) {
+                    setupPreviewHover(previewContainer, video.previewUrl);
+                }
             }
             
             logger.debug(`[UPD] Applied targeted preview updates for: ${videoUrl}`);
