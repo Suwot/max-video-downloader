@@ -2,6 +2,7 @@ import { sendPortMessage } from '../communication.js';
 import { createLogger } from '../../shared/utils/logger.js';
 import { formatSize, formatDuration, formatBitrate } from '../../shared/utils/processing-utils.js';
 import { VideoItemComponent } from './video-item.js';
+import { applySearchToVideoItem } from '../ui-utils.js';
 
 const logger = createLogger('Video Renderer');
 
@@ -56,6 +57,8 @@ export async function renderVideos(videos = []) {
             typeVideos.forEach(video => {
                 const videoComponent = new VideoItemComponent(video, 'default');
                 const videoElement = videoComponent.render();
+                // Apply current search filter to new video item
+                applySearchToVideoItem(videoElement);
                 content.appendChild(videoElement);
             });
         } else {
@@ -657,6 +660,9 @@ export async function addVideoToUI(video) {
         const videoComponent = new VideoItemComponent(video, 'default');
         const videoElement = videoComponent.render();
         
+        // Apply current search filter to new video item
+        applySearchToVideoItem(videoElement);
+        
         // Prepend to the group (newest first)
         groupBody.insertBefore(videoElement, groupBody.firstChild);
         
@@ -722,6 +728,9 @@ export async function updateVideoInUI(videoUrl, video) {
         // For all other updates, use full re-render
         const videoComponent = new VideoItemComponent(video, 'default');
         const newElement = videoComponent.render();
+        
+        // Apply current search filter to updated video item
+        applySearchToVideoItem(newElement);
         
         // Replace the existing element
         existingElement.parentNode.replaceChild(newElement, existingElement);

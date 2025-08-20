@@ -33,20 +33,6 @@
     display: flex;
     flex-direction: column;
     gap: 6px;
-
-    .history-item {
-        &.history-success {
-            border-left: 3px solid var(--color-green);
-        }
-        
-        &.history-error {
-            border-left: 3px solid var(--color-red);
-        }
-        
-        &.history-partial {
-            border-left: 3px solid var(--color-orange);
-        }
-    }
     
     .download-timestamp {
         font-size: var(--font-badge);
@@ -72,12 +58,33 @@
 .history-item {
     display: flex;
     flex-direction: column;
-    padding: 8px;
+    padding: 6px;
     border-radius: 16px;
-    gap: 4px;
+    gap: 6px;
     @extend %theme-bg-static;
 
-    // Tooltips now handled by global system
+	.filename {
+		font-size: var(--font-h2);
+		font-weight: 500;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		overflow-wrap: break-word;
+		margin-block-end: 2px;
+		word-break: break-all;
+		@extend %theme-text-primary;
+	}
+	
+	 &.history-success {
+		border-left: 3px solid var(--color-green);
+	}
+	
+	&.history-error {
+		border-left: 3px solid var(--color-red);
+	}
+	
+	&.history-partial {
+		border-left: 3px solid var(--color-orange);
+	}
 }
 
 .history-header {
@@ -259,17 +266,6 @@
             }
         }
     }
-}
-
-.history-item .filename {
-    font-size: var(--font-h2);
-    font-weight: 500;
-    overflow: hidden;
-    text-overflow: ellipsis;
-	overflow-wrap: break-word;
-    margin-block-end: 2px;
-	word-break: break-all;
-    @extend %theme-text-primary;
 }
 
 .download-stats {

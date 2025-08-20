@@ -282,8 +282,194 @@ export function switchTab(tabId) {
 }
 
 /**
- * Initialize global tooltip system for any [data-tooltip] element
+ * Initialize filter and search components
  */
+export function initializeFiltersAndSearch() {
+    initializeFilterDropdown();
+    initializeSearchInput();
+}
+
+/**
+ * Initialize filter dropdown functionality
+ */
+function initializeFilterDropdown() {
+    const filterDropdown = document.getElementById('filter-dropdown');
+    const filterBtn = document.getElementById('filter-btn');
+    const filterOptions = document.getElementById('filter-options');
+    
+    if (!filterDropdown || !filterBtn || !filterOptions) return;
+    
+    // Toggle dropdown on button click
+    filterBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const isOpen = filterOptions.classList.contains('open');
+        
+        // Close all other dropdowns first
+        document.querySelectorAll('.filter-options.open').forEach(options => {
+            options.classList.remove('open');
+        });
+        
+        // Toggle this dropdown
+        filterOptions.classList.toggle('open', !isOpen);
+    });
+    
+    // Handle filter option changes
+    filterOptions.addEventListener('change', (e) => {
+        if (e.target.type === 'checkbox') {
+            handleFilterChange();
+        }
+    });
+    
+    // Close dropdown when clicking outside
+    document.addEventListener('click', (e) => {
+        if (!filterDropdown.contains(e.target)) {
+            filterOptions.classList.remove('open');
+        }
+    });
+}
+
+/**
+ * Handle filter changes (dummy implementation)
+ */
+function handleFilterChange() {
+    const checkboxes = document.querySelectorAll('#filter-options input[type="checkbox"]');
+    const activeFilters = Array.from(checkboxes)
+        .filter(cb => cb.checked)
+        .map(cb => cb.value);
+    
+    console.log('Filter changed:', activeFilters);
+    
+    // TODO: Implement actual filtering logic
+    // This would filter the video groups based on selected types
+    // For now, just show which filters are active
+    showInfo(`Active filters: ${activeFilters.join(', ') || 'None'}`, 2000);
+}
+
+/**
+ * Initialize search input functionality
+ */
+function initializeSearchInput() {
+    const searchContainer = document.getElementById('search-container');
+    const searchInput = document.getElementById('search-input');
+    const clearBtn = document.getElementById('search-clear-btn');
+    
+    if (!searchContainer || !searchInput || !clearBtn) return;
+    
+    // Handle input changes
+    searchInput.addEventListener('input', (e) => {
+        const hasValue = e.target.value.length > 0;
+        clearBtn.style.display = hasValue ? 'flex' : 'none';
+        handleSearchInput(e.target.value);
+    });
+    
+    // Handle clear button click
+    clearBtn.addEventListener('click', () => {
+        searchInput.value = '';
+        clearBtn.style.display = 'none';
+        handleSearchInput('');
+        searchInput.focus();
+    });
+    
+    // Focus input when clicking anywhere on search container
+    searchContainer.addEventListener('click', (e) => {
+        // Don't focus if clicking on the clear button
+        if (e.target !== clearBtn && !clearBtn.contains(e.target)) {
+            searchInput.focus();
+        }
+    });
+    
+    // Handle focus/blur for better UX
+    searchInput.addEventListener('focus', () => {
+        searchContainer.classList.add('focused');
+    });
+    
+    searchInput.addEventListener('blur', () => {
+        searchContainer.classList.remove('focused');
+    });
+    
+    // Handle escape key to clear
+    searchInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            e.preventDefault(); // Prevent popup from closing
+            e.stopPropagation(); // Stop event bubbling
+            searchInput.value = '';
+            clearBtn.style.display = 'none';
+            handleSearchInput('');
+            searchInput.blur();
+        }
+    });
+}
+
+/**
+ * Handle search input changes with debouncing
+ */
+let searchDebounceTimer = null;
+function handleSearchInput(searchTerm) {
+    // Clear previous timer
+    if (searchDebounceTimer) {
+        clearTimeout(searchDebounceTimer);
+    }
+    
+    // Debounce search execution (300ms)
+    searchDebounceTimer = setTimeout(() => {
+        filterVideosBySearch(searchTerm.trim());
+    }, 300);
+}
+
+/**
+ * Filter videos by search term
+ */
+function filterVideosBySearch(searchTerm) {
+    const videoItems = document.querySelectorAll('.video-item');
+    const hasSearch = searchTerm.length > 0;
+    
+    videoItems.forEach(item => {
+        if (!hasSearch) {
+            // No search term - show all items
+            item.classList.remove('search-hidden');
+            return;
+        }
+        
+        // Check if video matches search term
+        const component = item._component;
+        const title = component?.videoData?.title || '';
+        const matches = title.toLowerCase().includes(searchTerm.toLowerCase());
+        
+        item.classList.toggle('search-hidden', !matches);
+    });
+}
+
+/**
+ * Apply current search filter to a newly rendered video item
+ */
+export function applySearchToVideoItem(videoElement) {
+    const searchTerm = getCurrentSearchTerm();
+    if (searchTerm.length === 0) return;
+    
+    const component = videoElement._component;
+    const title = component?.videoData?.title || '';
+    const matches = title.toLowerCase().includes(searchTerm.toLowerCase());
+    
+    videoElement.classList.toggle('search-hidden', !matches);
+}
+
+/**
+ * Get current filter state
+ */
+export function getCurrentFilters() {
+    const checkboxes = document.querySelectorAll('#filter-options input[type="checkbox"]');
+    return Array.from(checkboxes)
+        .filter(cb => cb.checked)
+        .map(cb => cb.value);
+}
+
+/**
+ * Get current search term
+ */
+export function getCurrentSearchTerm() {
+    const searchInput = document.getElementById('search-input');
+    return searchInput ? searchInput.value.trim() : '';
+}
 export function initializeTooltips() {
     let activeTooltip = null; // { el, tip }
     

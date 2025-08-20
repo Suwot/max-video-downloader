@@ -67,6 +67,11 @@
     .theme-light & {
         background-color: var(--bg-primary-light); // Override for video items
     }
+    
+    // Hide when filtered by search
+    &.search-hidden {
+        display: none;
+    }
 }
 
 .preview-column {

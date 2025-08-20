@@ -55,23 +55,23 @@
   cursor: not-allowed;
 }
 
-.theme-dark .action-button, .theme-dark .btn.btn-secondary, .theme-dark .input-field, .theme-dark .custom-dropdown .selected-option, .custom-dropdown .theme-dark .selected-option, .theme-dark .clear-cache-button {
+.theme-dark .action-button, .theme-dark .search-container, .theme-dark .rounded-btn, .theme-dark .filter-dropdown .filter-btn, .filter-dropdown .theme-dark .filter-btn, .theme-dark .btn.btn-secondary, .theme-dark .input-field, .theme-dark .custom-dropdown .selected-option, .custom-dropdown .theme-dark .selected-option {
   background-color: var(--bg-secondary-dark);
   border: 1px solid var(--border-primary-dark);
 }
-.theme-dark .action-button:hover:not(:disabled), .theme-dark .btn.btn-secondary:hover:not(:disabled), .theme-dark .input-field:hover:not(:disabled), .theme-dark .custom-dropdown .selected-option:hover:not(:disabled), .custom-dropdown .theme-dark .selected-option:hover:not(:disabled), .theme-dark .clear-cache-button:hover:not(:disabled) {
+.theme-dark .action-button:hover:not(:disabled), .theme-dark .search-container:hover:not(:disabled), .theme-dark .rounded-btn:hover:not(:disabled), .theme-dark .filter-dropdown .filter-btn:hover:not(:disabled), .filter-dropdown .theme-dark .filter-btn:hover:not(:disabled), .theme-dark .btn.btn-secondary:hover:not(:disabled), .theme-dark .input-field:hover:not(:disabled), .theme-dark .custom-dropdown .selected-option:hover:not(:disabled), .custom-dropdown .theme-dark .selected-option:hover:not(:disabled) {
   background-color: var(--bg-primary-dark-hover);
 }
-.theme-light .action-button, .theme-light .btn.btn-secondary, .theme-light .input-field, .theme-light .custom-dropdown .selected-option, .custom-dropdown .theme-light .selected-option, .theme-light .clear-cache-button {
+.theme-light .action-button, .theme-light .search-container, .theme-light .rounded-btn, .theme-light .filter-dropdown .filter-btn, .filter-dropdown .theme-light .filter-btn, .theme-light .btn.btn-secondary, .theme-light .input-field, .theme-light .custom-dropdown .selected-option, .custom-dropdown .theme-light .selected-option {
   background-color: var(--bg-element-light);
   color: var(--text-primary-light);
   -webkit-box-shadow: var(--bg-element-shadow-light);
           box-shadow: var(--bg-element-shadow-light);
 }
-.theme-light .action-button:hover:not(:disabled), .theme-light .btn.btn-secondary:hover:not(:disabled), .theme-light .input-field:hover:not(:disabled), .theme-light .custom-dropdown .selected-option:hover:not(:disabled), .custom-dropdown .theme-light .selected-option:hover:not(:disabled), .theme-light .clear-cache-button:hover:not(:disabled) {
+.theme-light .action-button:hover:not(:disabled), .theme-light .search-container:hover:not(:disabled), .theme-light .rounded-btn:hover:not(:disabled), .theme-light .filter-dropdown .filter-btn:hover:not(:disabled), .filter-dropdown .theme-light .filter-btn:hover:not(:disabled), .theme-light .btn.btn-secondary:hover:not(:disabled), .theme-light .input-field:hover:not(:disabled), .theme-light .custom-dropdown .selected-option:hover:not(:disabled), .custom-dropdown .theme-light .selected-option:hover:not(:disabled) {
   background-color: var(--bg-element-hover-light);
 }
-.theme-light .action-button:active:not(:disabled), .theme-light .btn.btn-secondary:active:not(:disabled), .theme-light .input-field:active:not(:disabled), .theme-light .custom-dropdown .selected-option:active:not(:disabled), .custom-dropdown .theme-light .selected-option:active:not(:disabled), .theme-light .clear-cache-button:active:not(:disabled) {
+.theme-light .action-button:active:not(:disabled), .theme-light .search-container:active:not(:disabled), .theme-light .rounded-btn:active:not(:disabled), .theme-light .filter-dropdown .filter-btn:active:not(:disabled), .filter-dropdown .theme-light .filter-btn:active:not(:disabled), .theme-light .btn.btn-secondary:active:not(:disabled), .theme-light .input-field:active:not(:disabled), .theme-light .custom-dropdown .selected-option:active:not(:disabled), .custom-dropdown .theme-light .selected-option:active:not(:disabled) {
   background-color: var(--bg-element-active-light);
 }
 
@@ -87,45 +87,45 @@
           box-shadow: var(--bg-element-shadow-light);
 }
 
-.theme-dark .history-item .filename, .history-item .theme-dark .filename, .theme-dark .history-btn:hover svg, .history-btn:hover .theme-dark svg, .theme-dark .download-menu-item:hover, .theme-dark .status-line .status-label, .status-line .theme-dark .status-label, .theme-dark .input-group .input-label, .input-group .theme-dark .input-label, .theme-dark .track-option.selected, .theme-dark .column .column-title, .column .theme-dark .column-title, .theme-dark .dropdown-option.downloading, .theme-dark .dropdown-option:not(.selected):hover, .theme-dark .dropdown-option.selected, .theme-dark h3, .theme-dark .h3, .theme-dark .item-title, .theme-dark h2, .theme-dark .h2, .theme-dark .section-title, .theme-dark h1, .theme-dark .h1, .theme-dark .app-title {
+.theme-dark .history-btn:hover svg, .history-btn:hover .theme-dark svg, .theme-dark .history-item .filename, .history-item .theme-dark .filename, .theme-dark .download-menu-item:hover, .theme-dark .status-line .status-label, .status-line .theme-dark .status-label, .theme-dark .search-container .search-clear-btn:hover, .search-container .theme-dark .search-clear-btn:hover, .theme-dark .search-container .search-input, .search-container .theme-dark .search-input, .theme-dark .filter-dropdown .filter-option span, .filter-dropdown .filter-option .theme-dark span, .theme-dark .input-group .input-label, .input-group .theme-dark .input-label, .theme-dark .track-option.selected, .theme-dark .column .column-title, .column .theme-dark .column-title, .theme-dark .dropdown-option.downloading, .theme-dark .dropdown-option:not(.selected):hover, .theme-dark .dropdown-option.selected, .theme-dark h3, .theme-dark .h3, .theme-dark .item-title, .theme-dark h2, .theme-dark .h2, .theme-dark .section-title, .theme-dark h1, .theme-dark .h1, .theme-dark .app-title {
   color: var(--text-primary-dark);
 }
-.theme-light .history-item .filename, .history-item .theme-light .filename, .theme-light .history-btn:hover svg, .history-btn:hover .theme-light svg, .theme-light .download-menu-item:hover, .theme-light .status-line .status-label, .status-line .theme-light .status-label, .theme-light .input-group .input-label, .input-group .theme-light .input-label, .theme-light .track-option.selected, .theme-light .column .column-title, .column .theme-light .column-title, .theme-light .dropdown-option.downloading, .theme-light .dropdown-option:not(.selected):hover, .theme-light .dropdown-option.selected, .theme-light h3, .theme-light .h3, .theme-light .item-title, .theme-light h2, .theme-light .h2, .theme-light .section-title, .theme-light h1, .theme-light .h1, .theme-light .app-title {
+.theme-light .history-btn:hover svg, .history-btn:hover .theme-light svg, .theme-light .history-item .filename, .history-item .theme-light .filename, .theme-light .download-menu-item:hover, .theme-light .status-line .status-label, .status-line .theme-light .status-label, .theme-light .search-container .search-clear-btn:hover, .search-container .theme-light .search-clear-btn:hover, .theme-light .search-container .search-input, .search-container .theme-light .search-input, .theme-light .filter-dropdown .filter-option span, .filter-dropdown .filter-option .theme-light span, .theme-light .input-group .input-label, .input-group .theme-light .input-label, .theme-light .track-option.selected, .theme-light .column .column-title, .column .theme-light .column-title, .theme-light .dropdown-option.downloading, .theme-light .dropdown-option:not(.selected):hover, .theme-light .dropdown-option.selected, .theme-light h3, .theme-light .h3, .theme-light .item-title, .theme-light h2, .theme-light .h2, .theme-light .section-title, .theme-light h1, .theme-light .h1, .theme-light .app-title {
   color: var(--text-primary-light);
 }
 
-.theme-dark .input-field::-webkit-input-placeholder {
+.theme-dark .search-container .search-input::-webkit-input-placeholder, .search-container .theme-dark .search-input::-webkit-input-placeholder, .theme-dark .input-field::-webkit-input-placeholder {
   color: var(--text-secondary-dark);
 }
 
-.theme-dark .input-field::-moz-placeholder {
+.theme-dark .search-container .search-input::-moz-placeholder, .search-container .theme-dark .search-input::-moz-placeholder, .theme-dark .input-field::-moz-placeholder {
   color: var(--text-secondary-dark);
 }
 
-.theme-dark .input-field:-ms-input-placeholder {
+.theme-dark .search-container .search-input:-ms-input-placeholder, .search-container .theme-dark .search-input:-ms-input-placeholder, .theme-dark .input-field:-ms-input-placeholder {
   color: var(--text-secondary-dark);
 }
 
-.theme-dark .input-field::-ms-input-placeholder {
+.theme-dark .search-container .search-input::-ms-input-placeholder, .search-container .theme-dark .search-input::-ms-input-placeholder, .theme-dark .input-field::-ms-input-placeholder {
   color: var(--text-secondary-dark);
 }
 
-.theme-dark .download-stats .type-badge, .download-stats .theme-dark .type-badge, .theme-dark .download-stats, .theme-dark .completion-time, .theme-dark .history-btn svg, .history-btn .theme-dark svg, .theme-dark .downloads-history .download-timestamp, .downloads-history .theme-dark .download-timestamp, .theme-dark .download-menu-item, .theme-dark .status-line .status-value, .status-line .theme-dark .status-value, .theme-dark .input-group .input-description, .input-group .theme-dark .input-description, .theme-dark .input-field::placeholder, .theme-dark .track-option, .theme-dark .dropdown-option, .theme-dark .tab-button, .theme-dark .reconnect-icon, .theme-dark .tooltip-icon {
+.theme-dark .download-stats .type-badge, .download-stats .theme-dark .type-badge, .theme-dark .download-stats, .theme-dark .completion-time, .theme-dark .history-btn svg, .history-btn .theme-dark svg, .theme-dark .downloads-history .download-timestamp, .downloads-history .theme-dark .download-timestamp, .theme-dark .download-menu-item, .theme-dark .status-line .status-value, .status-line .theme-dark .status-value, .theme-dark .search-container .search-clear-btn, .search-container .theme-dark .search-clear-btn, .theme-dark .search-container .search-input::placeholder, .search-container .theme-dark .search-input::placeholder, .theme-dark .search-container .search-icon, .search-container .theme-dark .search-icon, .theme-dark .input-group .input-description, .input-group .theme-dark .input-description, .theme-dark .input-field::placeholder, .theme-dark .track-option, .theme-dark .dropdown-option, .theme-dark .tab-button, .theme-dark .reconnect-icon, .theme-dark .tooltip-icon {
   color: var(--text-secondary-dark);
 }
-.theme-light .input-field::-webkit-input-placeholder {
+.theme-light .search-container .search-input::-webkit-input-placeholder, .search-container .theme-light .search-input::-webkit-input-placeholder, .theme-light .input-field::-webkit-input-placeholder {
   color: var(--text-secondary-light);
 }
-.theme-light .input-field::-moz-placeholder {
+.theme-light .search-container .search-input::-moz-placeholder, .search-container .theme-light .search-input::-moz-placeholder, .theme-light .input-field::-moz-placeholder {
   color: var(--text-secondary-light);
 }
-.theme-light .input-field:-ms-input-placeholder {
+.theme-light .search-container .search-input:-ms-input-placeholder, .search-container .theme-light .search-input:-ms-input-placeholder, .theme-light .input-field:-ms-input-placeholder {
   color: var(--text-secondary-light);
 }
-.theme-light .input-field::-ms-input-placeholder {
+.theme-light .search-container .search-input::-ms-input-placeholder, .search-container .theme-light .search-input::-ms-input-placeholder, .theme-light .input-field::-ms-input-placeholder {
   color: var(--text-secondary-light);
 }
-.theme-light .download-stats .type-badge, .download-stats .theme-light .type-badge, .theme-light .download-stats, .theme-light .completion-time, .theme-light .history-btn svg, .history-btn .theme-light svg, .theme-light .downloads-history .download-timestamp, .downloads-history .theme-light .download-timestamp, .theme-light .download-menu-item, .theme-light .status-line .status-value, .status-line .theme-light .status-value, .theme-light .input-group .input-description, .input-group .theme-light .input-description, .theme-light .input-field::placeholder, .theme-light .track-option, .theme-light .dropdown-option, .theme-light .tab-button, .theme-light .reconnect-icon, .theme-light .tooltip-icon {
+.theme-light .download-stats .type-badge, .download-stats .theme-light .type-badge, .theme-light .download-stats, .theme-light .completion-time, .theme-light .history-btn svg, .history-btn .theme-light svg, .theme-light .downloads-history .download-timestamp, .downloads-history .theme-light .download-timestamp, .theme-light .download-menu-item, .theme-light .status-line .status-value, .status-line .theme-light .status-value, .theme-light .search-container .search-clear-btn, .search-container .theme-light .search-clear-btn, .theme-light .search-container .search-input::placeholder, .search-container .theme-light .search-input::placeholder, .theme-light .search-container .search-icon, .search-container .theme-light .search-icon, .theme-light .input-group .input-description, .input-group .theme-light .input-description, .theme-light .input-field::placeholder, .theme-light .track-option, .theme-light .dropdown-option, .theme-light .tab-button, .theme-light .reconnect-icon, .theme-light .tooltip-icon {
   color: var(--text-secondary-light);
 }
 
@@ -420,27 +420,6 @@ h3, .h3, .item-title {
   padding: 12px;
 }
 
-.clear-cache-button {
-  display: -webkit-box;
-  display: -ms-flexbox;
-  display: flex;
-  -webkit-box-align: center;
-      -ms-flex-align: center;
-          align-items: center;
-  -webkit-box-pack: center;
-      -ms-flex-pack: center;
-          justify-content: center;
-  height: 34px;
-  width: 34px;
-  border-radius: 50%;
-  padding: 0;
-  position: relative;
-}
-.clear-cache-button:hover {
-  background-color: var(--color-red-hover) !important;
-  cursor: pointer;
-}
-
 .dismiss-button {
   background: none;
   border: none;
@@ -466,7 +445,7 @@ h3, .h3, .item-title {
   display: -webkit-box;
   display: -ms-flexbox;
   display: flex;
-  width: 90%;
+  width: 100%;
   padding: 3px;
   border-radius: 18px;
   gap: 7px;
@@ -1684,6 +1663,8 @@ h3, .h3, .item-title {
 .section-header.collapsible .toggle-icon {
   -webkit-margin-start: auto;
           margin-inline-start: auto;
+  -webkit-margin-end: 13px;
+          margin-inline-end: 13px;
   -webkit-transition: -webkit-transform 0.2s ease;
   transition: -webkit-transform 0.2s ease;
   transition: transform 0.2s ease;
@@ -1728,6 +1709,157 @@ h3, .h3, .item-title {
 }
 .section-content.collapsed {
   display: none;
+}
+
+.controls {
+  display: -webkit-box;
+  display: -ms-flexbox;
+  display: flex;
+  -webkit-box-pack: justify;
+      -ms-flex-pack: justify;
+          justify-content: space-between;
+  padding: 4px 6px;
+  gap: 6px;
+}
+
+.rounded-btn, .filter-dropdown .filter-btn {
+  display: -webkit-box;
+  display: -ms-flexbox;
+  display: flex;
+  -webkit-box-align: center;
+      -ms-flex-align: center;
+          align-items: center;
+  -webkit-box-pack: center;
+      -ms-flex-pack: center;
+          justify-content: center;
+  height: 34px;
+  width: 34px;
+  border-radius: 17px;
+  padding: 0;
+  position: relative;
+  cursor: pointer;
+}
+.rounded-btn:not(.search-container), .filter-dropdown .filter-btn:not(.search-container) {
+  -ms-flex-negative: 1;
+      flex-shrink: 1;
+}
+.rounded-btn.clear-cache-button:hover, .filter-dropdown .clear-cache-button.filter-btn:hover {
+  background-color: var(--color-red-hover) !important;
+}
+
+.filter-dropdown {
+  position: relative;
+}
+.filter-dropdown .filter-options {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  background: var(--bg-secondary-dark);
+  border: 1px solid var(--border-primary-dark);
+  border-radius: 6px;
+  padding: 6px;
+  min-width: 120px;
+  z-index: 10;
+  display: none;
+  opacity: 0;
+  -webkit-transform: translateY(-5px);
+          transform: translateY(-5px);
+  -webkit-transition: opacity 0.15s ease, -webkit-transform 0.15s ease;
+  transition: opacity 0.15s ease, -webkit-transform 0.15s ease;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  transition: opacity 0.15s ease, transform 0.15s ease, -webkit-transform 0.15s ease;
+}
+.theme-light .filter-dropdown .filter-options {
+  background: var(--bg-secondary-light);
+  border: 1px solid var(--border-color-light);
+}
+.filter-dropdown .filter-options.open {
+  display: block;
+  opacity: 1;
+  -webkit-transform: translateY(0);
+          transform: translateY(0);
+}
+.filter-dropdown .filter-option {
+  display: -webkit-box;
+  display: -ms-flexbox;
+  display: flex;
+  -webkit-box-align: center;
+      -ms-flex-align: center;
+          align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: var(--font-body);
+}
+.theme-dark .filter-dropdown .filter-option:hover {
+  background: var(--bg-primary-dark-hover);
+}
+.theme-light .filter-dropdown .filter-option:hover {
+  background: var(--bg-element-hover-light);
+}
+.filter-dropdown .filter-option input {
+  margin: 0;
+}
+.search-container {
+  -webkit-box-flex: 1;
+      -ms-flex-positive: 1;
+          flex-grow: 1;
+  display: -webkit-box;
+  display: -ms-flexbox;
+  display: flex;
+  -webkit-box-align: center;
+      -ms-flex-align: center;
+          align-items: center;
+  height: 34px;
+  border-radius: 17px;
+  padding: 0 12px;
+  gap: 8px;
+  position: relative;
+  -webkit-transition: border-color 0.15s ease, -webkit-box-shadow 0.15s ease;
+  transition: border-color 0.15s ease, -webkit-box-shadow 0.15s ease;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, -webkit-box-shadow 0.15s ease;
+}
+.theme-dark .search-container.focused {
+  border: 1px solid var(--color-blue);
+}
+.theme-light .search-container.focused {
+  border: 1px solid var(--color-blue);
+  -webkit-box-shadow: 0 0 0 2px rgba(3, 122, 251, 0.1);
+          box-shadow: 0 0 0 2px rgba(3, 122, 251, 0.1);
+}
+.search-container .search-icon {
+  -ms-flex-negative: 0;
+      flex-shrink: 0;
+}
+.search-container .search-input {
+  -webkit-box-flex: 1;
+      -ms-flex: 1;
+          flex: 1;
+  border: none;
+  background: none;
+  outline: none;
+  font-size: var(--font-body);
+}
+.search-container .search-clear-btn {
+  display: none;
+  background: none;
+  border: none;
+  padding: 2px;
+  cursor: pointer;
+  border-radius: 3px;
+}
+.search-container .search-clear-btn.visible {
+  display: -webkit-box;
+  display: -ms-flexbox;
+  display: flex;
+  -webkit-box-align: center;
+      -ms-flex-align: center;
+          align-items: center;
+  -webkit-box-pack: center;
+      -ms-flex-pack: center;
+          justify-content: center;
 }
 
 .status-info {
@@ -1934,6 +2066,9 @@ h3, .h3, .item-title {
 }
 .theme-light .video-item {
   background-color: var(--bg-primary-light);
+}
+.video-item.search-hidden {
+  display: none;
 }
 
 .preview-column {
@@ -2477,15 +2612,6 @@ h3, .h3, .item-title {
           flex-direction: column;
   gap: 6px;
 }
-.downloads-history .history-item.history-success {
-  border-left: 3px solid var(--color-green);
-}
-.downloads-history .history-item.history-error {
-  border-left: 3px solid var(--color-red);
-}
-.downloads-history .history-item.history-partial {
-  border-left: 3px solid var(--color-orange);
-}
 .downloads-history .download-timestamp {
   font-size: var(--font-badge);
   -webkit-margin-before: 4px;
@@ -2508,9 +2634,28 @@ h3, .h3, .item-title {
   -webkit-box-direction: normal;
       -ms-flex-direction: column;
           flex-direction: column;
-  padding: 8px;
+  padding: 6px;
   border-radius: 16px;
-  gap: 4px;
+  gap: 6px;
+}
+.history-item .filename {
+  font-size: var(--font-h2);
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  overflow-wrap: break-word;
+  -webkit-margin-after: 2px;
+          margin-block-end: 2px;
+  word-break: break-all;
+}
+.history-item.history-success {
+  border-left: 3px solid var(--color-green);
+}
+.history-item.history-error {
+  border-left: 3px solid var(--color-red);
+}
+.history-item.history-partial {
+  border-left: 3px solid var(--color-orange);
 }
 
 .history-header {
@@ -2707,17 +2852,6 @@ h3, .h3, .item-title {
 }
 .theme-light .page-info .page-url:hover {
   color: var(--color-blue-hover);
-}
-
-.history-item .filename {
-  font-size: var(--font-h2);
-  font-weight: 500;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  overflow-wrap: break-word;
-  -webkit-margin-after: 2px;
-          margin-block-end: 2px;
-  word-break: break-all;
 }
 
 .download-stats {

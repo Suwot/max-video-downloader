@@ -2,24 +2,6 @@
 // NAVIGATION & INTERACTIVE BUTTONS
 // =====================================================
 
-// Clear cache buttons
-.clear-cache-button {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    height: 34px;
-	width: 34px;
-    border-radius: 50%;
-    padding: 0;
-    position: relative;
-    @extend %theme-bg-primary;
-	
-	&:hover {
-		background-color: var(--color-red-hover) !important;
-		cursor: pointer;
-	}
-}
-
 // Dismiss button
 .dismiss-button {
     background: none;
@@ -55,7 +37,7 @@
 
 .tab-navigation {
     display: flex;
-    width: 90%;
+    width: 100%;
     padding: 3px;
     border-radius: 18px;
     gap: 7px;

@@ -17,15 +17,49 @@
             </button>
             <button class="tab-button" data-tab-id="settings-tab">Settings</button>
         </nav>
-		<div class="controls">
-			<button class="clear-cache-button" id="clear-cache-button">
-				<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-trash2 lucide-trash-2 w-4 h-4" aria-hidden="true"><path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path><line x1="10" x2="10" y1="11" y2="17"></line><line x1="14" x2="14" y1="11" y2="17"></line></svg>
-			</button>
-		</div>
     </header>
     <main class="container">
         <section class="tab-contents">
             <div class="tab-content active" data-tab-id="videos-tab">
+				<div class="controls">
+					<!-- Filter Dropdown -->
+					<div class="filter-dropdown" id="filter-dropdown">
+						<button class="filter-btn rounded-btn" id="filter-btn">
+							<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" class="w-4 h-4"><rect x="2" y="3" width="12" height="1.5" rx="0.75" fill="currentColor"></rect><rect x="4" y="7" width="8" height="1.5" rx="0.75" fill="currentColor"></rect><rect x="6" y="11" width="4" height="1.5" rx="0.75" fill="currentColor"></rect></svg>
+						</button>
+						<div class="filter-options" id="filter-options">
+							<label class="filter-option">
+								<input type="checkbox" value="hls" checked>
+								<span>Show HLS</span>
+							</label>
+							<label class="filter-option">
+								<input type="checkbox" value="dash" checked>
+								<span>Show DASH</span>
+							</label>
+							<label class="filter-option">
+								<input type="checkbox" value="direct" checked>
+								<span>Show Direct</span>
+							</label>
+						</div>
+					</div>
+					
+					<!-- Search Input -->
+					<div class="search-container" id="search-container">
+						<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="search-icon" aria-hidden="true"><path d="m21 21-4.34-4.34"></path><circle cx="11" cy="11" r="8"></circle></svg>
+						<input type="text" id="search-input" class="search-input" placeholder="Search">
+						<button class="search-clear-btn" id="search-clear-btn" style="display: none;" aria-label="Clear search">
+							<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+								<line x1="18" y1="6" x2="6" y2="18"></line>
+								<line x1="6" y1="6" x2="18" y2="18"></line>
+							</svg>
+						</button>
+					</div>
+					
+					<!-- Clear Cache Button -->
+					<button class="clear-cache-button rounded-btn" id="clear-cache-button" data-constraint="3 imgs = 8 KB">
+						<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-trash2 lucide-trash-2 w-4 h-4" aria-hidden="true"><path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path><line x1="10" x2="10" y1="11" y2="17"></line><line x1="14" x2="14" y1="11" y2="17"></line></svg>
+					</button>
+				</div>
                 <section id="videos-list" class="videos-container">
                     <!-- HLS Group -->
                     <div class="video-type-group" data-video-type="hls" style="display: none;">
