@@ -23,7 +23,7 @@
     @extend %theme-bg-static;
 
 	#videos-list & {
-		margin: 6px;
+		margin: 0 6px 6px;
 	}
 
     // Override text color for muted appearance
@@ -120,7 +120,7 @@
     .settings-section {
         display: flex;
         flex-direction: column;
-        border-radius: 8px;
+        border-radius: 12px;
 		gap: 12px;
         padding: 12px;
         @extend %theme-bg-static;

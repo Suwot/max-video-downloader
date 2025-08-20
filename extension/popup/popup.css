@@ -1,3 +1,4 @@
+@charset "UTF-8";
 /* Video Downloader MV3 - Main SCSS File */
 :root {
   --color-blue: #037AFB;
@@ -87,10 +88,10 @@
           box-shadow: var(--bg-element-shadow-light);
 }
 
-.theme-dark .history-btn:hover svg, .history-btn:hover .theme-dark svg, .theme-dark .history-item .filename, .history-item .theme-dark .filename, .theme-dark .download-menu-item:hover, .theme-dark .status-line .status-label, .status-line .theme-dark .status-label, .theme-dark .search-container .search-clear-btn:hover, .search-container .theme-dark .search-clear-btn:hover, .theme-dark .search-container .search-input, .search-container .theme-dark .search-input, .theme-dark .filter-dropdown .filter-option span, .filter-dropdown .filter-option .theme-dark span, .theme-dark .input-group .input-label, .input-group .theme-dark .input-label, .theme-dark .track-option.selected, .theme-dark .column .column-title, .column .theme-dark .column-title, .theme-dark .dropdown-option.downloading, .theme-dark .dropdown-option:not(.selected):hover, .theme-dark .dropdown-option.selected, .theme-dark h3, .theme-dark .h3, .theme-dark .item-title, .theme-dark h2, .theme-dark .h2, .theme-dark .section-title, .theme-dark h1, .theme-dark .h1, .theme-dark .app-title {
+.theme-dark .history-btn:hover svg, .history-btn:hover .theme-dark svg, .theme-dark .history-item .filename, .history-item .theme-dark .filename, .theme-dark .download-menu-item:hover, .theme-dark .status-line .status-label, .status-line .theme-dark .status-label, .theme-dark .search-container .search-clear-btn:hover, .search-container .theme-dark .search-clear-btn:hover, .theme-dark .search-container .search-input, .search-container .theme-dark .search-input, .theme-dark .filter-dropdown .filter-option span, .filter-dropdown .filter-option .theme-dark span, .theme-dark .filter-dropdown .sort-btn, .filter-dropdown .theme-dark .sort-btn, .theme-dark .input-group .input-label, .input-group .theme-dark .input-label, .theme-dark .track-option.selected, .theme-dark .column .column-title, .column .theme-dark .column-title, .theme-dark .dropdown-option.downloading, .theme-dark .dropdown-option:not(.selected):hover, .theme-dark .dropdown-option.selected, .theme-dark h3, .theme-dark .h3, .theme-dark .item-title, .theme-dark h2, .theme-dark .h2, .theme-dark .section-title, .theme-dark h1, .theme-dark .h1, .theme-dark .app-title {
   color: var(--text-primary-dark);
 }
-.theme-light .history-btn:hover svg, .history-btn:hover .theme-light svg, .theme-light .history-item .filename, .history-item .theme-light .filename, .theme-light .download-menu-item:hover, .theme-light .status-line .status-label, .status-line .theme-light .status-label, .theme-light .search-container .search-clear-btn:hover, .search-container .theme-light .search-clear-btn:hover, .theme-light .search-container .search-input, .search-container .theme-light .search-input, .theme-light .filter-dropdown .filter-option span, .filter-dropdown .filter-option .theme-light span, .theme-light .input-group .input-label, .input-group .theme-light .input-label, .theme-light .track-option.selected, .theme-light .column .column-title, .column .theme-light .column-title, .theme-light .dropdown-option.downloading, .theme-light .dropdown-option:not(.selected):hover, .theme-light .dropdown-option.selected, .theme-light h3, .theme-light .h3, .theme-light .item-title, .theme-light h2, .theme-light .h2, .theme-light .section-title, .theme-light h1, .theme-light .h1, .theme-light .app-title {
+.theme-light .history-btn:hover svg, .history-btn:hover .theme-light svg, .theme-light .history-item .filename, .history-item .theme-light .filename, .theme-light .download-menu-item:hover, .theme-light .status-line .status-label, .status-line .theme-light .status-label, .theme-light .search-container .search-clear-btn:hover, .search-container .theme-light .search-clear-btn:hover, .theme-light .search-container .search-input, .search-container .theme-light .search-input, .theme-light .filter-dropdown .filter-option span, .filter-dropdown .filter-option .theme-light span, .theme-light .filter-dropdown .sort-btn, .filter-dropdown .theme-light .sort-btn, .theme-light .input-group .input-label, .input-group .theme-light .input-label, .theme-light .track-option.selected, .theme-light .column .column-title, .column .theme-light .column-title, .theme-light .dropdown-option.downloading, .theme-light .dropdown-option:not(.selected):hover, .theme-light .dropdown-option.selected, .theme-light h3, .theme-light .h3, .theme-light .item-title, .theme-light h2, .theme-light .h2, .theme-light .section-title, .theme-light h1, .theme-light .h1, .theme-light .app-title {
   color: var(--text-primary-light);
 }
 
@@ -322,7 +323,7 @@ h3, .h3, .item-title {
   min-height: 76px;
 }
 #videos-list .initial-message {
-  margin: 6px;
+  margin: 0 6px 6px;
 }
 .theme-dark .initial-message {
   color: #aaa;
@@ -415,7 +416,7 @@ h3, .h3, .item-title {
   -webkit-box-direction: normal;
       -ms-flex-direction: column;
           flex-direction: column;
-  border-radius: 8px;
+  border-radius: 12px;
   gap: 12px;
   padding: 12px;
 }
@@ -1663,8 +1664,8 @@ h3, .h3, .item-title {
 .section-header.collapsible .toggle-icon {
   -webkit-margin-start: auto;
           margin-inline-start: auto;
-  -webkit-margin-end: 13px;
-          margin-inline-end: 13px;
+  -webkit-margin-end: 10px;
+          margin-inline-end: 10px;
   -webkit-transition: -webkit-transform 0.2s ease;
   transition: -webkit-transform 0.2s ease;
   transition: transform 0.2s ease;
@@ -1718,8 +1719,12 @@ h3, .h3, .item-title {
   -webkit-box-pack: justify;
       -ms-flex-pack: justify;
           justify-content: space-between;
-  padding: 4px 6px;
+  padding: 6px;
   gap: 6px;
+  backdrop-filter: var(--backdrop-filter);
+  position: sticky;
+  top: 47px;
+  z-index: 5;
 }
 
 .rounded-btn, .filter-dropdown .filter-btn {
@@ -1750,6 +1755,12 @@ h3, .h3, .item-title {
 .filter-dropdown {
   position: relative;
 }
+.filter-dropdown.active .filter-btn {
+  background-color: var(--color-blue);
+}
+.filter-dropdown.active .filter-btn:hover {
+  background-color: var(--color-blue-hover) !important;
+}
 .filter-dropdown .filter-options {
   position: absolute;
   top: calc(100% + 4px);
@@ -1778,6 +1789,65 @@ h3, .h3, .item-title {
   opacity: 1;
   -webkit-transform: translateY(0);
           transform: translateY(0);
+}
+.filter-dropdown .sort-controls {
+  display: -webkit-box;
+  display: -ms-flexbox;
+  display: flex;
+  -webkit-box-orient: vertical;
+  -webkit-box-direction: normal;
+      -ms-flex-direction: column;
+          flex-direction: column;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+.filter-dropdown .sort-btn {
+  display: -webkit-box;
+  display: -ms-flexbox;
+  display: flex;
+  -webkit-box-align: center;
+      -ms-flex-align: center;
+          align-items: center;
+  -webkit-box-pack: justify;
+      -ms-flex-pack: justify;
+          justify-content: space-between;
+  padding: 6px 8px;
+  border-radius: 4px;
+  font-size: var(--font-body);
+  font-weight: 500;
+  border: none;
+  cursor: pointer;
+  position: relative;
+  -webkit-transition: all 0.15s ease;
+  transition: all 0.15s ease;
+  background: transparent;
+}
+.theme-dark .filter-dropdown .sort-btn:hover {
+  background: var(--bg-primary-dark-hover);
+}
+.theme-light .filter-dropdown .sort-btn:hover {
+  background: var(--bg-element-hover-light);
+}
+.filter-dropdown .sort-btn:not(.active) {
+  opacity: 0.7;
+}
+.filter-dropdown .sort-btn.active.descending::after {
+  content: "↓";
+  font-size: 12px;
+  font-weight: bold;
+}
+.filter-dropdown .sort-btn.active.ascending::after {
+  content: "↑";
+  font-size: 12px;
+  font-weight: bold;
+}
+.filter-dropdown .filter-options-separator {
+  height: 1px;
+  background: var(--border-primary-dark);
+  margin: 4px 0 8px 0;
+}
+.theme-light .filter-dropdown .filter-options-separator {
+  background: var(--border-color-light);
 }
 .filter-dropdown .filter-option {
   display: -webkit-box;

@@ -285,8 +285,142 @@ export function switchTab(tabId) {
  * Initialize filter and search components
  */
 export function initializeFiltersAndSearch() {
+    initializeSortControls();
     initializeFilterDropdown();
     initializeSearchInput();
+    
+    // Apply initial filter state if any filter is unchecked
+    const activeFilters = getCurrentFilters();
+    const isFilterActive = activeFilters.length < 3;
+    
+    if (isFilterActive) {
+        const filterDropdown = document.getElementById('filter-dropdown');
+        if (filterDropdown) {
+            filterDropdown.classList.add('active');
+        }
+        updateGroupVisibilityWithFilters(activeFilters, isFilterActive);
+    }
+}
+
+/**
+ * Initialize sort controls functionality
+ */
+function initializeSortControls() {
+    const sortButtons = document.querySelectorAll('.sort-btn');
+    
+    sortButtons.forEach(button => {
+        button.addEventListener('click', (e) => {
+            handleSortButtonClick(e.target);
+        });
+    });
+}
+
+/**
+ * Handle sort button clicks with 2-state behavior (asc/desc)
+ */
+function handleSortButtonClick(button) {
+    const sortType = button.dataset.sort;
+    const isCurrentlyActive = button.classList.contains('active');
+    const isCurrentlyDescending = button.classList.contains('descending');
+    
+    if (!isCurrentlyActive) {
+        // Make this button active, deactivate others
+        document.querySelectorAll('.sort-btn').forEach(btn => {
+            btn.classList.remove('active', 'ascending', 'descending');
+        });
+        
+        // Set this button to active descending (default first state)
+        button.classList.add('active', 'descending');
+    } else {
+        // Toggle between ascending and descending
+        if (isCurrentlyDescending) {
+            button.classList.remove('descending');
+            button.classList.add('ascending');
+        } else {
+            button.classList.remove('ascending');
+            button.classList.add('descending');
+        }
+    }
+    
+    // Apply sorting
+    const direction = button.classList.contains('descending') ? 'descending' : 'ascending';
+    applySorting({ type: sortType, direction });
+}
+
+/**
+ * Apply sorting to video groups
+ */
+function applySorting(sortConfig) {
+    const videoGroups = document.querySelectorAll('.video-type-group');
+    
+    videoGroups.forEach(group => {
+        const sectionContent = group.querySelector('.section-content');
+        if (!sectionContent) return;
+        
+        const videoItems = Array.from(sectionContent.querySelectorAll('.video-item'));
+        if (videoItems.length <= 1) return; // No need to sort single items
+        
+        // Apply sorting
+        videoItems.sort((a, b) => sortVideoItems(a, b, sortConfig));
+        
+        // Re-append items in sorted order
+        videoItems.forEach(item => sectionContent.appendChild(item));
+    });
+}
+
+/**
+ * Sort video items with live stream duration handling
+ */
+function sortVideoItems(a, b, sortConfig) {
+    const aComponent = a._component;
+    const bComponent = b._component;
+    
+    if (!aComponent || !bComponent) return 0;
+    
+    const { type, direction } = sortConfig;
+    let comparison = 0;
+    
+    switch (type) {
+        case 'detection-time':
+            const aTime = aComponent.videoData?.timestampDetected || 0;
+            const bTime = bComponent.videoData?.timestampDetected || 0;
+            comparison = aTime - bTime;
+            break;
+            
+        case 'duration':
+            const aDuration = aComponent.videoData?.duration || 0;
+            const bDuration = bComponent.videoData?.duration || 0;
+            
+            // Live streams (duration = 0) go to the end, with fallback sorting by timestampDetected
+            if (aDuration === 0 && bDuration === 0) {
+                // Both are live streams - sort by detection time descending (newest first)
+                const aTime = aComponent.videoData?.timestampDetected || 0;
+                const bTime = bComponent.videoData?.timestampDetected || 0;
+                comparison = bTime - aTime;
+            } else if (aDuration === 0) {
+                // a is live stream - goes to end
+                comparison = 1;
+            } else if (bDuration === 0) {
+                // b is live stream - goes to end
+                comparison = -1;
+            } else {
+                // Both have duration - normal comparison
+                comparison = aDuration - bDuration;
+            }
+            break;
+            
+        case 'title':
+            const aTitle = (aComponent.resolvedFilename || aComponent.filename || aComponent.videoData?.title || 'Untitled Video').toLowerCase();
+            const bTitle = (bComponent.resolvedFilename || bComponent.filename || bComponent.videoData?.title || 'Untitled Video').toLowerCase();
+            comparison = aTitle.localeCompare(bTitle);
+            break;
+            
+        default:
+            return 0;
+    }
+    
+    // Apply direction
+    return direction === 'descending' ? -comparison : comparison;
 }
 
 /**
@@ -311,6 +445,13 @@ function initializeFilterDropdown() {
         
         // Toggle this dropdown
         filterOptions.classList.toggle('open', !isOpen);
+        
+        // Add/remove expanded class on body when dropdown opens/closes
+        if (!isOpen) {
+            document.body.classList.add('expanded');
+        } else {
+            document.body.classList.remove('expanded');
+        }
     });
     
     // Handle filter option changes
@@ -324,25 +465,27 @@ function initializeFilterDropdown() {
     document.addEventListener('click', (e) => {
         if (!filterDropdown.contains(e.target)) {
             filterOptions.classList.remove('open');
+            // Remove expanded class when closing dropdown
+            document.body.classList.remove('expanded');
         }
     });
 }
 
 /**
- * Handle filter changes (dummy implementation)
+ * Handle filter changes
  */
 function handleFilterChange() {
-    const checkboxes = document.querySelectorAll('#filter-options input[type="checkbox"]');
-    const activeFilters = Array.from(checkboxes)
-        .filter(cb => cb.checked)
-        .map(cb => cb.value);
+    const activeFilters = getCurrentFilters();
+    const isFilterActive = activeFilters.length < 3; // Not all types selected
     
-    console.log('Filter changed:', activeFilters);
+    // Update filter button visual state
+    const filterDropdown = document.getElementById('filter-dropdown');
+    if (filterDropdown) {
+        filterDropdown.classList.toggle('active', isFilterActive);
+    }
     
-    // TODO: Implement actual filtering logic
-    // This would filter the video groups based on selected types
-    // For now, just show which filters are active
-    showInfo(`Active filters: ${activeFilters.join(', ') || 'None'}`, 2000);
+    // Apply group-level filtering
+    updateGroupVisibilityWithFilters(activeFilters, isFilterActive);
 }
 
 /**
@@ -440,6 +583,44 @@ function filterVideosBySearch(searchTerm) {
 }
 
 /**
+ * Update group visibility based on filter state and content
+ */
+function updateGroupVisibilityWithFilters(activeFilters, isFilterActive) {
+    document.querySelectorAll('.video-type-group').forEach(group => {
+        const type = group.dataset.videoType;
+        const hasContent = group.querySelector('.section-content').children.length > 0;
+        
+        if (isFilterActive) {
+            // Filter is active - only show if type is selected AND has content
+            const shouldShow = activeFilters.includes(type) && hasContent;
+            group.style.display = shouldShow ? 'flex' : 'none';
+        } else {
+            // No filter active - show based on content only
+            group.style.display = hasContent ? 'flex' : 'none';
+        }
+    });
+    
+    // Show/hide initial message
+    updateInitialMessageVisibility();
+}
+
+/**
+ * Update initial message visibility based on visible groups
+ */
+export function updateInitialMessageVisibility() {
+    const container = document.getElementById('videos-list');
+    if (!container) return;
+    
+    const hasVisibleGroups = Array.from(container.querySelectorAll('.video-type-group'))
+        .some(group => group.style.display !== 'none');
+    
+    const initialMessage = container.querySelector('.initial-message');
+    if (initialMessage) {
+        initialMessage.style.display = hasVisibleGroups ? 'none' : 'flex';
+    }
+}
+
+/**
  * Apply current search filter to a newly rendered video item
  */
 export function applySearchToVideoItem(videoElement) {
@@ -470,6 +651,27 @@ export function getCurrentSearchTerm() {
     const searchInput = document.getElementById('search-input');
     return searchInput ? searchInput.value.trim() : '';
 }
+
+/**
+ * Apply current sorting when videos are added/updated
+ */
+export function applySortingToGroups() {
+    // Get current active sort state
+    const activeSortBtn = document.querySelector('.sort-btn.active');
+    if (!activeSortBtn) {
+        // No active sorting - apply default (detection time descending)
+        applySorting({ type: 'detection-time', direction: 'descending' });
+        return;
+    }
+    
+    const sortConfig = {
+        type: activeSortBtn.dataset.sort,
+        direction: activeSortBtn.classList.contains('descending') ? 'descending' : 'ascending'
+    };
+    
+    applySorting(sortConfig);
+}
+
 export function initializeTooltips() {
     let activeTooltip = null; // { el, tip }
     

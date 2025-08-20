@@ -2,7 +2,7 @@ import { sendPortMessage } from '../communication.js';
 import { createLogger } from '../../shared/utils/logger.js';
 import { formatSize, formatDuration, formatBitrate } from '../../shared/utils/processing-utils.js';
 import { VideoItemComponent } from './video-item.js';
-import { applySearchToVideoItem } from '../ui-utils.js';
+import { applySearchToVideoItem, updateInitialMessageVisibility, applySortingToGroups } from '../ui-utils.js';
 
 const logger = createLogger('Video Renderer');
 
@@ -41,10 +41,7 @@ export async function renderVideos(videos = []) {
         if (!group) continue;
         
         if (typeVideos.length > 0) {
-            // Show group
-            group.style.display = 'flex';
-            
-            // Update section count - simple textContent update
+            // Update section count
             const sectionCount = group.querySelector('.counter');
             if (sectionCount) {
                 sectionCount.textContent = typeVideos.length;
@@ -61,13 +58,16 @@ export async function renderVideos(videos = []) {
                 applySearchToVideoItem(videoElement);
                 content.appendChild(videoElement);
             });
+            
+            // Show group with content (ignore filter state during initial render)
+            group.style.display = 'flex';
         } else {
-            // Hide group if no videos and clear count
-            group.style.display = 'none';
+            // Hide group with no content and clear count
             const sectionCount = group.querySelector('.counter');
             if (sectionCount) {
                 sectionCount.textContent = '';
             }
+            group.style.display = 'none';
         }
     }
 }
@@ -448,7 +448,7 @@ function buildStatsHtml(progressData) {
 	let origLabel = progressData.originalCommand?.selectedOptionOrigText;
 
     // Quality or bitrate (white circle)
-    if (progressData.audioOnly && progressData.downloadStats?.bitrateKbps) {
+    if ((progressData.originalCommand?.audioOnly || progressData.originalCommand?.selectedOptionOrigText === 'Unknown Quality') && progressData.downloadStats?.bitrateKbps) {
         const bitrate = formatBitrate(progressData.downloadStats.bitrateKbps);
         stats.push(`
             <span class="quality">
@@ -646,7 +646,7 @@ export async function addVideoToUI(video) {
             initialMessage.style.display = 'none';
         }
         
-        // Show the group
+        // Show the group (content-based, ignore filter state during addition)
         group.style.display = 'flex';
         
         // Get the videos container within the group
@@ -665,6 +665,9 @@ export async function addVideoToUI(video) {
         
         // Prepend to the group (newest first)
         groupBody.insertBefore(videoElement, groupBody.firstChild);
+        
+        // Apply current sorting to maintain sort order
+        applySortingToGroups();
         
         logger.debug(`[ADD] Added video to UI: ${video.normalizedUrl}`);
         
@@ -735,6 +738,9 @@ export async function updateVideoInUI(videoUrl, video) {
         // Replace the existing element
         existingElement.parentNode.replaceChild(newElement, existingElement);
         
+        // Apply current sorting to maintain sort order
+        applySortingToGroups();
+        
         logger.debug(`[UPD] Full re-render completed for: ${videoUrl}`);
         
     } catch (error) {
@@ -761,7 +767,7 @@ export async function removeVideoFromUI(videoUrl) {
         if (window.hideActiveTooltip) window.hideActiveTooltip();
         existingElement.remove();
         
-        // Check if group is now empty
+        // Check if group is now empty and update visibility
         if (group) {
             const groupBody = group.querySelector('.section-content');
             if (groupBody && groupBody.children.length === 0) {
@@ -769,16 +775,8 @@ export async function removeVideoFromUI(videoUrl) {
             }
         }
         
-        // Check if all groups are empty and show initial message
-        const allGroups = container.querySelectorAll('.video-type-group');
-        const hasVisibleGroups = Array.from(allGroups).some(g => g.style.display !== 'none');
-        
-        if (!hasVisibleGroups) {
-            const initialMessage = container.querySelector('.initial-message');
-            if (initialMessage) {
-                initialMessage.style.display = 'flex';
-            }
-        }
+        // Update initial message visibility using centralized helper
+        updateInitialMessageVisibility();
         
         logger.debug(`[RM] Removed video from UI: ${videoUrl}`);
         
