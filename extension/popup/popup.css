@@ -58,7 +58,6 @@
 .theme-dark .action-button, .theme-dark .btn.btn-secondary, .theme-dark .input-field, .theme-dark .custom-dropdown .selected-option, .custom-dropdown .theme-dark .selected-option, .theme-dark .clear-cache-button {
   background-color: var(--bg-secondary-dark);
   border: 1px solid var(--border-primary-dark);
-  color: var(--text-primary-dark);
 }
 .theme-dark .action-button:hover:not(:disabled), .theme-dark .btn.btn-secondary:hover:not(:disabled), .theme-dark .input-field:hover:not(:disabled), .theme-dark .custom-dropdown .selected-option:hover:not(:disabled), .custom-dropdown .theme-dark .selected-option:hover:not(:disabled), .theme-dark .clear-cache-button:hover:not(:disabled) {
   background-color: var(--bg-primary-dark-hover);
@@ -231,14 +230,15 @@ html, body {
   overflow-y: auto;
   overflow-x: hidden;
 }
-html.expanded, body.expanded {
+
+body.expanded {
   min-height: 600px;
 }
-html.theme-dark, body.theme-dark {
+body.theme-dark {
   background-color: var(--bg-primary-dark);
   color: var(--text-primary-dark);
 }
-html.theme-light, body.theme-light {
+body.theme-light {
   background-color: var(--bg-primary-light);
   color: var(--text-primary-light);
 }
@@ -250,6 +250,11 @@ textarea {
   font: inherit;
   color: inherit;
   background: none;
+}
+
+svg {
+  -ms-flex-negative: 0;
+      flex-shrink: 0;
 }
 
 h1, .h1, .app-title {
@@ -348,10 +353,6 @@ h3, .h3, .item-title {
   display: flex;
   -ms-flex-wrap: wrap;
       flex-wrap: wrap;
-  -webkit-box-orient: vertical;
-  -webkit-box-direction: normal;
-      -ms-flex-direction: column;
-          flex-direction: column;
   -webkit-box-pack: justify;
       -ms-flex-pack: justify;
           justify-content: space-between;
@@ -368,27 +369,12 @@ h3, .h3, .item-title {
   gap: 6px;
   border: none !important;
 }
-.header .heading-row {
-  width: 100%;
-  display: -webkit-box;
-  display: -ms-flexbox;
-  display: flex;
-  -webkit-box-pack: justify;
-      -ms-flex-pack: justify;
-          justify-content: space-between;
-}
 .theme-dark .header {
   -webkit-box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
           box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
-.theme-dark .header svg {
-  fill: white;
-}
 .theme-light .header {
   background-color: rgba(255, 255, 255, 0.8);
-}
-.theme-light .header svg {
-  fill: #666;
 }
 
 .tab-contents {
@@ -450,11 +436,9 @@ h3, .h3, .item-title {
   padding: 0;
   position: relative;
 }
-.theme-dark .clear-cache-button svg {
-  fill: #fff;
-}
-.theme-light .clear-cache-button svg {
-  fill: #666;
+.clear-cache-button:hover {
+  background-color: var(--color-red-hover) !important;
+  cursor: pointer;
 }
 
 .dismiss-button {
@@ -482,7 +466,7 @@ h3, .h3, .item-title {
   display: -webkit-box;
   display: -ms-flexbox;
   display: flex;
-  width: 100%;
+  width: 90%;
   padding: 3px;
   border-radius: 18px;
   gap: 7px;
@@ -1347,8 +1331,8 @@ h3, .h3, .item-title {
   -webkit-box-pack: center;
       -ms-flex-pack: center;
           justify-content: center;
-  min-width: 16px;
-  height: 16px;
+  min-width: 15px;
+  height: 15px;
   padding: 0 4px;
   font-size: var(--font-body);
   font-weight: 600;
@@ -1377,7 +1361,7 @@ h3, .h3, .item-title {
           box-sizing: border-box;
   position: absolute;
   top: calc(100% + 4px);
-  left: 0;
+  right: 0;
   min-width: 100%;
   max-width: -webkit-fit-content;
   max-width: -moz-fit-content;
@@ -1843,8 +1827,6 @@ h3, .h3, .item-title {
 .reconnect-icon svg {
   width: 10px;
   height: 10px;
-  -ms-flex-negative: 0;
-      flex-shrink: 0;
 }
 
 .action-button {
@@ -1864,8 +1846,6 @@ h3, .h3, .item-title {
 .action-button svg {
   width: 12px;
   height: 12px;
-  -ms-flex-negative: 0;
-      flex-shrink: 0;
 }
 .action-button.primary {
   background-color: var(--color-blue);
@@ -2051,8 +2031,6 @@ h3, .h3, .item-title {
   gap: 4px;
 }
 .stream-icons svg {
-  -ms-flex-negative: 0;
-      flex-shrink: 0;
   cursor: help;
 }
 .stream-icons svg:hover {
@@ -2374,6 +2352,9 @@ h3, .h3, .item-title {
   -webkit-transition: background-color var(--transition-fast);
   transition: background-color var(--transition-fast);
 }
+.download-menu-btn:hover, .download-menu-btn.open {
+  background-color: var(--color-blue-hover) !important;
+}
 .download-menu-btn svg {
   width: 10px;
   height: 16px;
@@ -2400,7 +2381,7 @@ h3, .h3, .item-title {
   transition: opacity var(--transition-normal), visibility var(--transition-normal), transform var(--transition-normal), height var(--transition-normal), padding var(--transition-normal);
   transition: opacity var(--transition-normal), visibility var(--transition-normal), transform var(--transition-normal), height var(--transition-normal), padding var(--transition-normal), -webkit-transform var(--transition-normal);
 }
-.download-menu-dropdown.show {
+.download-menu-btn.open + .download-menu-dropdown {
   opacity: 1;
   visibility: visible;
   overflow: visible;
@@ -2453,8 +2434,6 @@ h3, .h3, .item-title {
   height: 14px;
   -webkit-margin-end: 8px;
           margin-inline-end: 8px;
-  -ms-flex-negative: 0;
-      flex-shrink: 0;
 }
 
 .downloads-container {
@@ -2646,10 +2625,6 @@ h3, .h3, .item-title {
 .theme-light .history-btn:hover {
   background-color: rgba(0, 0, 0, 0.05);
 }
-.history-btn svg {
-  -ms-flex-negative: 0;
-      flex-shrink: 0;
-}
 .theme-dark .history-delete-file-btn:hover {
   background-color: rgba(255, 59, 66, 0.1);
 }
@@ -2669,10 +2644,6 @@ h3, .h3, .item-title {
       -ms-flex-align: center;
           align-items: center;
   gap: 4px;
-}
-.completion-time svg {
-  -ms-flex-negative: 0;
-      flex-shrink: 0;
 }
 
 .history-delete-btn {
@@ -2696,10 +2667,6 @@ h3, .h3, .item-title {
 }
 .history-delete-btn:hover {
   opacity: 1;
-}
-.history-delete-btn svg {
-  -ms-flex-negative: 0;
-      flex-shrink: 0;
 }
 
 .page-info {
@@ -2773,10 +2740,6 @@ h3, .h3, .item-title {
 .theme-light .download-stats .quality circle {
   fill: var(--text-secondary-light);
 }
-.download-stats .quality svg {
-  -ms-flex-negative: 0;
-      flex-shrink: 0;
-}
 .download-stats .type-badge {
   display: inline-block;
   font-weight: 500;
@@ -2798,10 +2761,6 @@ h3, .h3, .item-title {
           align-items: center;
   gap: 4px;
 }
-.download-stats .filesize svg {
-  -ms-flex-negative: 0;
-      flex-shrink: 0;
-}
 .download-stats .duration {
   display: -webkit-box;
   display: -ms-flexbox;
@@ -2810,10 +2769,6 @@ h3, .h3, .item-title {
       -ms-flex-align: center;
           align-items: center;
   gap: 4px;
-}
-.download-stats .duration svg {
-  -ms-flex-negative: 0;
-      flex-shrink: 0;
 }
 .download-stats span:empty {
   display: none;

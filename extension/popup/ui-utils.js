@@ -277,8 +277,8 @@ export function switchTab(tabId) {
     });
 
     // Show header controls only on videos tab. Clear inline style when showing.
-    const headerControls = document.querySelector('header .controls');
-    if (headerControls) headerControls.style.display = (tabId === 'videos-tab') ? '' : 'none';
+    // const headerControls = document.querySelector('header .controls');
+    // if (headerControls) headerControls.style.display = (tabId === 'videos-tab') ? '' : 'none';
 }
 
 /**

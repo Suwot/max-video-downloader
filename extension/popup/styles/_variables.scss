@@ -89,7 +89,6 @@
     .theme-dark & {
         background-color: var(--bg-secondary-dark);
         border: 1px solid var(--border-primary-dark);
-        color: var(--text-primary-dark);
         
         &:hover:not(:disabled) {
             background-color: var(--bg-primary-dark-hover);

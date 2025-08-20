@@ -14,17 +14,10 @@
     position: relative;
     @extend %theme-bg-primary;
 	
-	svg {
-        .theme-dark & {
-            fill: #fff;
-        }
-
-        .theme-light & {
-            fill: #666;
-        }
-    }
-	
-	
+	&:hover {
+		background-color: var(--color-red-hover) !important;
+		cursor: pointer;
+	}
 }
 
 // Dismiss button
@@ -62,7 +55,7 @@
 
 .tab-navigation {
     display: flex;
-    width: 100%;
+    width: 90%;
     padding: 3px;
     border-radius: 18px;
     gap: 7px;

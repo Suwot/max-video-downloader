@@ -170,7 +170,6 @@
     }
 
     svg {
-        flex-shrink: 0;
         @extend %theme-text-secondary;
     }
 
@@ -201,10 +200,6 @@
     align-items: center;
     gap: 4px;
     @extend %theme-text-secondary;
-
-    svg {
-        flex-shrink: 0;
-    }
 }
 
 .history-delete-btn {
@@ -221,10 +216,6 @@
 
     &:hover {
         opacity: 1;
-    }
-
-    svg {
-        flex-shrink: 0;
     }
 }
 
@@ -298,10 +289,6 @@
                 fill: var(--text-secondary-light);
             }
         }
-
-        svg {
-            flex-shrink: 0;
-        }
     }
     
     .type-badge {
@@ -324,20 +311,12 @@
         display: flex;
         align-items: center;
         gap: 4px;
-
-        svg {
-            flex-shrink: 0;
-        }
     }
 
     .duration {
         display: flex;
         align-items: center;
         gap: 4px;
-
-        svg {
-            flex-shrink: 0;
-        }
     }
 
     // Hide empty stats

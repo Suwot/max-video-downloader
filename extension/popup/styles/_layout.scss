@@ -62,7 +62,6 @@
     top: 0;
     display: flex;
     flex-wrap: wrap;
-    flex-direction: column;
     justify-content: space-between;
     align-items: flex-start;
     z-index: 15;
@@ -73,27 +72,13 @@
     @extend %theme-backdrop;
 	border: none !important;
 
-    .heading-row {
-        width: 100%;
-        display: flex;
-        justify-content: space-between;
-    }
-
     // Additional header-specific styling
     .theme-dark & {
         box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-
-        svg {
-            fill: white;
-        }
     }
 
     .theme-light & {
         background-color: rgba(255, 255, 255, 0.8); // Override backdrop for header
-
-        svg {
-            fill: #666;
-        }
     }
 }
 

@@ -124,16 +124,20 @@ export class VideoDropdownComponent {
     handleClick() {
         this.element.classList.toggle('open');
         
-        // Close other dropdowns
-        document.querySelectorAll('.custom-dropdown.open').forEach(dropdown => {
-            if (dropdown !== this.element) {
-                dropdown.classList.remove('open');
+        // Close all other dropdowns and button menus (mutually exclusive)
+        document.querySelectorAll('.custom-dropdown.open, .download-menu-btn.open').forEach(menu => {
+            if (menu !== this.element) {
+                menu.classList.remove('open');
+                // Also close the associated dropdown if it's a menu button
+                if (menu.classList.contains('download-menu-btn')) {
+                    menu.parentElement?.querySelector('.download-menu-dropdown')?.classList.remove('open');
+                }
             }
         });
         
-        // Update body expanded state
-        const anyDropdownOpen = document.querySelector('.custom-dropdown.open') !== null;
-        document.body.classList.toggle('expanded', anyDropdownOpen);
+        // Update body expanded state - check for any open menu
+        const anyMenuOpen = document.querySelector('.custom-dropdown.open, .download-menu-btn.open') !== null;
+        document.body.classList.toggle('expanded', anyMenuOpen);
         
         // Setup click outside handler when opened
         if (this.element.classList.contains('open')) {
@@ -148,9 +152,9 @@ export class VideoDropdownComponent {
         if (!this.element.contains(e.target)) {
             this.element.classList.remove('open');
             
-            // Update body expanded state
-            const anyDropdownOpen = document.querySelector('.custom-dropdown.open') !== null;
-            document.body.classList.toggle('expanded', anyDropdownOpen);
+            // Update body expanded state - check for any remaining open menu
+            const anyMenuOpen = document.querySelector('.custom-dropdown.open, .download-menu-dropdown.open') !== null;
+            document.body.classList.toggle('expanded', anyMenuOpen);
         } else {
             // Re-add listener if clicked inside
             setTimeout(() => {
@@ -199,8 +203,10 @@ export class VideoDropdownComponent {
                 this.updateSelectedDisplay();
                 this.onSelectionChange(this.selectedTracks);
                 
-                // Close dropdown
+                // Close dropdown and update body expanded state
                 this.element.classList.remove('open');
+                const anyMenuOpen = document.querySelector('.custom-dropdown.open, .download-menu-dropdown.open') !== null;
+                document.body.classList.toggle('expanded', anyMenuOpen);
             });
             
             this.optionsContainer.appendChild(option);
@@ -363,7 +369,7 @@ export class VideoDropdownComponent {
             }
         }
         
-        // Update display and notify
+        // Update display and notify (but don't close dropdown - let user continue selecting)
         this.updateSelectedDisplay();
         this.onSelectionChange(this.selectedTracks);
     }

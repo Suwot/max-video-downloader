@@ -134,7 +134,31 @@ export class VideoDownloadButtonComponent {
     handleMenuClick(e) {
         e.preventDefault();
         e.stopPropagation();
-        this.toggleMenuDropdown();
+        
+        // Toggle menu state
+        const isVisible = this.menuBtn.classList.contains('open');
+        
+        if (isVisible) {
+            this.menuBtn.classList.remove('open');
+        } else {
+            // Close all other dropdowns and button menus (mutually exclusive)
+            document.querySelectorAll('.custom-dropdown.open, .download-menu-btn.open').forEach(menu => {
+                if (menu !== this.menuBtn) {
+                    menu.classList.remove('open');
+                }
+            });
+            
+            this.menuBtn.classList.add('open');
+            
+            // Setup click outside handler
+            setTimeout(() => {
+                document.addEventListener('click', this.handleClickOutside, { once: true });
+            }, 0);
+        }
+        
+        // Update body expanded state - check for any open menu
+        const anyMenuOpen = document.querySelector('.custom-dropdown.open, .download-menu-btn.open') !== null;
+        document.body.classList.toggle('expanded', anyMenuOpen);
     }
     
     /**
@@ -274,7 +298,13 @@ export class VideoDownloadButtonComponent {
                 e.preventDefault();
                 e.stopPropagation();
                 this.handleMenuItemClick(item.action);
-                this.hideMenuDropdown();
+                
+                // Close menu after selection
+                this.menuBtn.classList.remove('open');
+                
+                // Update body expanded state
+                const anyMenuOpen = document.querySelector('.custom-dropdown.open, .download-menu-btn.open') !== null;
+                document.body.classList.toggle('expanded', anyMenuOpen);
             });
 
             menuDropdown.appendChild(menuItem);
@@ -385,51 +415,16 @@ export class VideoDownloadButtonComponent {
     }
     
     /**
-     * Toggle menu dropdown visibility
-     */
-    toggleMenuDropdown() {
-        const isVisible = this.menuDropdown.classList.contains('show');
-        
-        if (isVisible) {
-            this.hideMenuDropdown();
-        } else {
-            this.showMenuDropdown();
-        }
-    }
-    
-    /**
-     * Show menu dropdown
-     */
-    showMenuDropdown() {
-        // Hide other dropdowns
-        document.querySelectorAll('.download-menu-dropdown.show').forEach(dropdown => {
-            if (dropdown !== this.menuDropdown) {
-                dropdown.classList.remove('show');
-            }
-        });
-
-        this.menuDropdown.classList.add('show');
-        
-        // Setup click outside handler
-        setTimeout(() => {
-            document.addEventListener('click', this.handleClickOutside, { once: true });
-        }, 0);
-    }
-    
-    /**
-     * Hide menu dropdown
-     */
-    hideMenuDropdown() {
-        this.menuDropdown.classList.remove('show');
-    }
-    
-    /**
      * Handle clicks outside dropdown
      * @param {Event} e - Click event
      */
     handleClickOutside(e) {
         if (!this.menuDropdown.contains(e.target)) {
-            this.hideMenuDropdown();
+            this.menuBtn.classList.remove('open');
+            
+            // Update body expanded state - check for any remaining open menu
+            const anyMenuOpen = document.querySelector('.custom-dropdown.open, .download-menu-btn.open') !== null;
+            document.body.classList.toggle('expanded', anyMenuOpen);
         } else {
             // Re-add listener if clicked inside
             setTimeout(() => {
