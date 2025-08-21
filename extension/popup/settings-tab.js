@@ -5,6 +5,7 @@
 import { createLogger } from '../shared/utils/logger.js';
 import { sendPortMessage } from './communication.js';
 import { showConfirmModal } from './ui-utils.js';
+import { renderHistoryItems } from './video/video-renderer.js';
 
 const logger = createLogger('SettingsTab');
 
@@ -498,6 +499,7 @@ function setupNativeHostStatus() {
     if (helpButton) {
         helpButton.addEventListener('click', handleHelpClick);
     }
+
     
     // Request initial native host state
     sendPortMessage({ command: 'getNativeHostState' });
@@ -535,6 +537,26 @@ function handleHelpClick() {
         url: 'https://github.com/maxvideodownloader/wiki/Native-Host-Troubleshooting',
         active: true 
     });
+}
+
+/**
+ * Handle clear history button click
+ */
+export async function handleClearHistoryClick() {
+    const button = document.getElementById('clear-history-button');
+    const originalText = button?.textContent;
+    
+    button.disabled = true;
+    await chrome.storage.local.remove(['downloads_history']);
+    await renderHistoryItems(true);
+    
+    button.classList.add('success');
+    button.textContent = 'History Cleared';
+    setTimeout(() => {
+        button.classList.remove('success');
+        button.textContent = originalText;
+        button.disabled = false;
+    }, 1000);
 }
 
 /**
@@ -670,6 +692,3 @@ function getStatusText(state, info, _error) {
             return 'Unknown';
     }
 }
-
-
-

@@ -1277,6 +1277,41 @@ h3, .h3, .item-title {
   background-color: var(--color-red);
 }
 
+/* Clear history button style - prominent danger action but matches general styling */
+.clear-history-button {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: var(--font-body);
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  -webkit-transition: all var(--transition-normal);
+  transition: all var(--transition-normal);
+  color: white;
+  background-color: var(--color-red);
+  -webkit-box-shadow: 0 1px 0 rgba(0, 0, 0, 0.2) inset;
+          box-shadow: 0 1px 0 rgba(0, 0, 0, 0.2) inset;
+}
+.clear-history-button:hover:not(:disabled) {
+  background-color: var(--color-red-hover);
+}
+.clear-history-button:disabled {
+  cursor: auto;
+}
+.clear-history-button.success {
+  background-color: var(--color-green);
+}
+.clear-history-button.success:hover:not(:disabled) {
+  background-color: var(--color-green);
+}
+.clear-history-button.error {
+  background-color: var(--color-red);
+}
+.clear-history-button.error:hover:not(:disabled) {
+  background-color: var(--color-red);
+}
+
 .status-badge {
   position: absolute;
   top: 4px;

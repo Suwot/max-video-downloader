@@ -7,7 +7,7 @@ import { normalizeUrl } from '../shared/utils/processing-utils.js';
 import { connect, disconnect, sendPortMessage } from './communication.js';
 import { restoreActiveDownloads } from './video/download-progress-handler.js';
 import { renderHistoryItems } from './video/video-renderer.js';
-import { initializeSettingsTab } from './settings-tab.js';
+import { initializeSettingsTab, handleClearHistoryClick } from './settings-tab.js';
 import { switchTab, initializeTooltips, initializeFiltersAndSearch } from './ui-utils.js';
 
 const logger = createLogger('Popup');
@@ -62,6 +62,12 @@ function initializeUIEventHandlers() {
             clearCacheButton.disabled = false;
         }
     });
+
+    // Clear history button
+    const clearHistoryButton = document.getElementById('clear-history-button');
+    if (clearHistoryButton) {
+        clearHistoryButton.addEventListener('click', handleClearHistoryClick);
+    }
 }
 
 // Initialize when DOM is ready
