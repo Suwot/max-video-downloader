@@ -12,6 +12,7 @@ const { spawn } = require('child_process');
 const BaseCommand = require('./base-command');
 const { logDebug } = require('../utils/logger');
 const { getFullEnv } = require('../utils/resources');
+const processManager = require('../lib/process-manager');
 
 /**
  * Command for analyzing media streams and getting available qualities
@@ -89,6 +90,7 @@ class GetQualitiesCommand extends BaseCommand {
                 logDebug('🔍 FFprobe analysis command:', commandLine);
                 
                 const ffprobe = spawn(ffprobePath, ffprobeArgs, { env: getFullEnv() });
+                processManager.register(ffprobe);
                 let killedByTimeout = false;
     
                 // Set timeout for FFprobe analysis

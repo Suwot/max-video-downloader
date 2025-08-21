@@ -12,6 +12,7 @@ const { logDebug } = require('../utils/logger');
 const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
+const processManager = require('../lib/process-manager');
 
 /**
  * Command for handling all file system operations
@@ -245,6 +246,7 @@ return POSIX path of chosenFile`;
             const childProcess = spawn(cmd, args, {
                 windowsVerbatimArguments: process.platform === 'win32'
             });
+            processManager.register(childProcess);
 
             let output = '';
             let errorOutput = '';

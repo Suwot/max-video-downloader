@@ -18,6 +18,7 @@ const { spawn } = require('child_process');
 const BaseCommand = require('./base-command');
 const { logDebug } = require('../utils/logger');
 const { getFullEnv } = require('../utils/resources');
+const processManager = require('../lib/process-manager');
 
 // Command for downloading videos
 class DownloadCommand extends BaseCommand {
@@ -878,6 +879,7 @@ class DownloadCommand extends BaseCommand {
                     env: getFullEnv(),
                     windowsVerbatimArguments: process.platform === 'win32'
                 });
+                processManager.register(ffprobe);
                 
                 logDebug('FFprobe process started with PID:', ffprobe.pid);
                 
@@ -980,6 +982,7 @@ class DownloadCommand extends BaseCommand {
                     windowsVerbatimArguments: process.platform === 'win32',
                     stdio: ['pipe', 'pipe', 'pipe'] // Enable stdin for graceful termination
                 });
+                processManager.register(ffmpeg);
                 
                 logDebug('FFmpeg process started with PID:', ffmpeg.pid);
                 

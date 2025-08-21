@@ -16,6 +16,7 @@ const { spawn } = require('child_process');
 const BaseCommand = require('./base-command');
 const { logDebug } = require('../utils/logger');
 const { getFullEnv } = require('../utils/resources');
+const processManager = require('../lib/process-manager');
 
 /**
  * Command for generating video previews/thumbnails
@@ -56,7 +57,7 @@ class GeneratePreviewCommand extends BaseCommand {
                     if (ffmpeg && !ffmpeg.killed) {
                         logDebug('Killing FFmpeg process due to timeout');
                         killedByTimeout = true;
-                        ffmpeg.kill('SIGTERM');
+                        ffmpeg.kill('SIGKILL');
                     }
                     // Send a clean timeout response instead of an error
                     logDebug('Preview generation timeout after 30 seconds');
@@ -122,6 +123,7 @@ class GeneratePreviewCommand extends BaseCommand {
                 logDebug('🎬 FFmpeg preview command:', commandLine);
                 
                 ffmpeg = spawn(ffmpegPath, ffmpegArgs, { env: getFullEnv() });
+                processManager.register(ffmpeg);
         
                 let errorOutput = '';
         

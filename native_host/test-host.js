@@ -3,11 +3,13 @@
 // Simple test script for the native host
 const { spawn } = require('child_process');
 const path = require('path');
+const processManager = require('./lib/process-manager');
 
 // Create a process to run the host
 const hostProcess = spawn('node', ['./index.js'], {
   stdio: ['pipe', 'pipe', 'pipe']
 });
+processManager.register(hostProcess);
 
 // Send a test connection validation message
 function sendTestMessage() {
