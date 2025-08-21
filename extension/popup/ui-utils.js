@@ -443,10 +443,15 @@ function initializeFilterDropdown() {
         filterOptions.classList.toggle('open', !isOpen);
         
         // Add/remove expanded class on body when dropdown opens/closes
+        // But don't remove expanded if other dropdowns/menus are still open
         if (!isOpen) {
             document.body.classList.add('expanded');
         } else {
-            document.body.classList.remove('expanded');
+            // Only remove expanded if no other menus are open
+            const hasOtherMenusOpen = document.querySelector('.custom-dropdown.open, .download-menu-btn.open') !== null;
+            if (!hasOtherMenusOpen) {
+                document.body.classList.remove('expanded');
+            }
         }
     });
     
@@ -461,8 +466,11 @@ function initializeFilterDropdown() {
     document.addEventListener('click', (e) => {
         if (!filterDropdown.contains(e.target)) {
             filterOptions.classList.remove('open');
-            // Remove expanded class when closing dropdown
-            document.body.classList.remove('expanded');
+            // Only remove expanded class if no other menus are open
+            const hasOtherMenusOpen = document.querySelector('.custom-dropdown.open, .download-menu-btn.open') !== null;
+            if (!hasOtherMenusOpen) {
+                document.body.classList.remove('expanded');
+            }
         }
     });
 }

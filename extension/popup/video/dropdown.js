@@ -121,17 +121,16 @@ export class VideoDropdownComponent {
     }
 	
     // Handle dropdown click to toggle open/close
-    handleClick() {
+    handleClick(e) {
+        e.preventDefault();
+		e.stopPropagation();
+		
         this.element.classList.toggle('open');
         
         // Close all other dropdowns and button menus (mutually exclusive)
         document.querySelectorAll('.custom-dropdown.open, .download-menu-btn.open').forEach(menu => {
             if (menu !== this.element) {
                 menu.classList.remove('open');
-                // Also close the associated dropdown if it's a menu button
-                if (menu.classList.contains('download-menu-btn')) {
-                    menu.parentElement?.querySelector('.download-menu-dropdown')?.classList.remove('open');
-                }
             }
         });
         
@@ -153,7 +152,7 @@ export class VideoDropdownComponent {
             this.element.classList.remove('open');
             
             // Update body expanded state - check for any remaining open menu
-            const anyMenuOpen = document.querySelector('.custom-dropdown.open, .download-menu-dropdown.open') !== null;
+            const anyMenuOpen = document.querySelector('.custom-dropdown.open, .download-menu-btn.open') !== null;
             document.body.classList.toggle('expanded', anyMenuOpen);
         } else {
             // Re-add listener if clicked inside
@@ -203,9 +202,9 @@ export class VideoDropdownComponent {
                 this.updateSelectedDisplay();
                 this.onSelectionChange(this.selectedTracks);
                 
-                // Close dropdown and update body expanded state
+                // Close dropdown and update body expanded state (simple mode closes immediately)
                 this.element.classList.remove('open');
-                const anyMenuOpen = document.querySelector('.custom-dropdown.open, .download-menu-dropdown.open') !== null;
+                const anyMenuOpen = document.querySelector('.custom-dropdown.open, .download-menu-btn.open') !== null;
                 document.body.classList.toggle('expanded', anyMenuOpen);
             });
             
@@ -288,7 +287,9 @@ export class VideoDropdownComponent {
             option.appendChild(input);
             option.appendChild(label);
             
-            option.addEventListener('click', () => {
+            option.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
                 this.handleTrackOptionClick(option, input, track, type, singleSelect, column);
             });
             
