@@ -13,10 +13,17 @@ const NON_MEDIA_DOMAINS = new Set([
   'fonts.gstatic.com'
 ]);
 
-// Segment detection kept intentionally small & strict
 const SEGMENT_EXT_RE = /\.(m4s|ts)(?:$|[?#])/i;
 const INIT_HEADER_RE = /(^|\/)(init|header)\.(mp4|m4s)(?:$|[?#])/i;
-const SEGMENT_PATTERNS = [/(segment|chunk|frag|part|seq)-\d+/i];
+// Minimal, strong path/query signals that indicate streaming segments (no domain or filename heuristics)
+const SEGMENT_PATTERNS = [
+  // common token + numeric id in name
+  /\b(?:seg|segment|chunk|part|frag|seq)[-_]?\d+\b/i,
+  // path segment literally named segment/chunk/part/frag/seq
+  /(^|\/)(?:segments?|chunks?|parts?|frags?|seq)(?=\/|$)/i,
+];
+// Querystring flags that strongly imply per-segment addressing or byte slicing
+const SEGMENT_QUERY_RE = /[?&](?:start_seq|mse_seq|part|segment|chunk|frag|byterange|range)=/i;
 
 // Rare but valid direct binary mimes
 const DIRECT_MIMES = new Set(['application/mp4', 'application/ogg']);
@@ -86,13 +93,18 @@ export function gate(url, metadata = null, minSize = 1024, candidate = null) {
         return false;
     }
 
-    // Reject segment extensions with proper boundaries, and common segment patterns
-    if (SEGMENT_EXT_RE.test(url) || INIT_HEADER_RE.test(url) || SEGMENT_PATTERNS.some(p => p.test(url))) {
-        console.log(`[GATE] Rejected: Segment pattern detected`, { 
-            url, 
-            segmentExt: SEGMENT_EXT_RE.test(url),
-            initHeader: INIT_HEADER_RE.test(url),
-            segmentPattern: SEGMENT_PATTERNS.some(p => p.test(url))
+    // Reject segment extensions with proper boundaries, common path patterns, or query hints
+    const isSegExt = SEGMENT_EXT_RE.test(url);
+    const isInit = INIT_HEADER_RE.test(url);
+    const hasSegPath = SEGMENT_PATTERNS.some(p => p.test(url));
+    const hasSegQuery = SEGMENT_QUERY_RE.test(url);
+    if (isSegExt || isInit || hasSegPath || hasSegQuery) {
+        console.log(`[GATE] Rejected: Segment pattern detected`, {
+            url,
+            segmentExt: isSegExt,
+            initHeader: isInit,
+            segmentPath: hasSegPath,
+            segmentQuery: hasSegQuery
         });
         return false;
     }
