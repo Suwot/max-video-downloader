@@ -628,40 +628,33 @@ function clearAllProcessing() {
 
 // assigns media flags (0-3) based on existing media tracks / containers (HLS / DASH only)
 function detectStreamFlags(videoData) {
-    // Get all track arrays
-    const videoTracksLength = videoData.videoTracks?.length || 0;
-    const audioTracksLength = videoData.audioTracks?.length || 0;
-    const subtitleTracksLength = videoData.subtitleTracks?.length || 0;
-    
-    // Count how many arrays have values
-    const arraysWithValues = [
-        { length: videoTracksLength, tracks: videoData.videoTracks, type: 'video' },
-        { length: audioTracksLength, tracks: videoData.audioTracks, type: 'audio' },
-        { length: subtitleTracksLength, tracks: videoData.subtitleTracks, type: 'subtitle' }
-    ].filter(arr => arr.length > 0);
-    
-    // If more than 1 array has values, count flags by array presence
-    if (arraysWithValues.length > 1) {
-        return {
-            hasVideo: videoTracksLength > 0,
-            hasAudio: audioTracksLength > 0,
-            hasSubtitles: subtitleTracksLength > 0
-        };
-    }
-    
-    // If only 1 array has values, count flags by first entry's containers
-    if (arraysWithValues.length === 1) {
-        const singleArray = arraysWithValues[0];
-        const firstTrack = singleArray.tracks[0];
-        
-        return {
-            hasVideo: !!firstTrack.videoContainer,
-            hasAudio: !!firstTrack.audioContainer,
-            hasSubtitles: !!firstTrack.subtitleContainer
-        };
+    // This addresses cases where videoTracks include audio (av) but audioTracks array is absent.
+    const videoTracks = videoData.videoTracks || [];
+    const audioTracks = videoData.audioTracks || [];
+    const subtitleTracks = videoData.subtitleTracks || [];
+
+    const hasVideoTracks = videoTracks.length > 0;
+    const hasAudioTracks = audioTracks.length > 0;
+    const hasSubtitleTracks = subtitleTracks.length > 0;
+
+    // Quick wins from explicit arrays
+    let hasVideo = hasVideoTracks;
+    let hasAudio = hasAudioTracks;
+    const hasSubtitles = hasSubtitleTracks;
+
+    // If there are no explicit audio tracks, check the first video track for an audio container (AV streams)
+    if (!hasAudio && hasVideoTracks) {
+        const first = videoTracks[0];
+        if (first && first.audioContainer) {
+            hasAudio = true;
+        }
+        // If first is explicitly audio-only (no videoContainer), ensure hasVideo reflects that
+        if (first && !first.videoContainer) {
+            hasVideo = false;
+        }
     }
 
-    return { hasVideo: false, hasAudio: false,  hasSubtitles: false }; // no arrays have values
+    return { hasVideo: !!hasVideo, hasAudio: !!hasAudio, hasSubtitles: !!hasSubtitles };
 }
 
 export {

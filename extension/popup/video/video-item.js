@@ -598,8 +598,8 @@ export class VideoItemComponent {
             isEncrypted: this.videoData.isEncrypted,
             encryptionType: this.videoData.encryptionType,
 			// For advanced dropdowns (HLS/DASH), use selection-based flags; for simple dropdowns, use container-based flags
-			hasVideo: this.dropdown?.isAdvancedMode ? (this.selectedTracks.videoTrack !== null) : !!this.selectedTracks.videoTrack?.videoContainer,
-			hasAudio: this.dropdown?.isAdvancedMode ? (this.selectedTracks.audioTracks.length > 0) : !!this.selectedTracks.videoTrack?.audioContainer,
+			hasVideo: this.selectedTracks.videoTrack !== null && !!this.selectedTracks.videoTrack?.videoContainer,
+			hasAudio: this.selectedTracks.audioTracks.length > 0 || !!this.selectedTracks.videoTrack?.audioContainer,
 			hasSubtitles: this.dropdown?.isAdvancedMode ? (this.selectedTracks.subtitleTracks.length > 0) : this.hasSubtitles
         };
         
