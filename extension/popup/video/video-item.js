@@ -94,7 +94,7 @@ export class VideoItemComponent {
         
         this.element = document.createElement('div');
         this.element.className = 'video-item';
-        this.element.dataset.url = this.videoData.url;
+        this.element.dataset.url = this.videoData.normalizedUrl;
         
         // Set download ID for precise progress mapping (downloads tab only)
         if (this.downloadId) {
@@ -158,7 +158,7 @@ export class VideoItemComponent {
         // Create element and set up basic structure
         this.element = document.createElement('div');
         this.element.className = 'video-item';
-        this.element.dataset.url = this.videoData.url;
+        this.element.dataset.url = this.videoData.normalizedUrl;
         
         // Set download ID for precise progress mapping
         if (this.downloadId) {
