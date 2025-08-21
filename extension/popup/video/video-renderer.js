@@ -190,8 +190,8 @@ function createHistoryItemElement(progressData) {
     }
 
     // Build filename (fallback to downloadUrl if empty)
-    const displayFilename = progressData.filename || 
-        (progressData.downloadUrl ? progressData.downloadUrl.split('/').pop() : 'Unknown');
+    const displayFilename = progressData.filename || progressData.originalCommand?.filename ||
+        (progressData.downloadUrl ? progressData.downloadUrl.split('/').pop() : 'Noname');
 
     // Build stats (only show available data)
     const statsHtml = buildStatsHtml(progressData);
