@@ -1126,6 +1126,7 @@ class DownloadCommand extends BaseCommand {
                     this.sendMessage({
                         command: 'download-error',
                         downloadId,
+                        filename: path.basename(uniqueOutput),
                         success: false,
                         message: message,
                         errorMessage: collectedErrors || null,
