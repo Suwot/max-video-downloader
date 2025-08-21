@@ -1,11 +1,8 @@
 import { sendPortMessage } from '../communication.js';
-import { createLogger } from '../../shared/utils/logger.js';
 import { formatSize, formatDuration, formatBitrate } from '../../shared/utils/processing-utils.js';
 import { VideoItemComponent } from './video-item.js';
 import { applySearchToVideoItem, updateInitialMessageVisibility, applySortingToGroups } from '../ui-utils.js';
 import { setupPreviewHover } from './preview-hover.js';
-
-const logger = createLogger('Video Renderer');
 
 // Render videos using static group structure
 export async function renderVideos(videos = []) {
@@ -98,7 +95,7 @@ export async function renderHistoryItems(fullRender = true) {
                     historyContainer.appendChild(historyItem);
                 });
                 
-                logger.debug(`Full render: ${history.length} history items`);
+                console.debug(`Full render: ${history.length} history items`);
             } else {
                 // Show initial message when no history
                 const newInitialMessage = historyContainer.querySelector('.initial-message');
@@ -136,10 +133,10 @@ export async function renderHistoryItems(fullRender = true) {
                             lastItem.remove();
                         }
                     }
-                    logger.debug(`Incremental render: removed ${excessCount} excess items from DOM`);
+                    console.debug(`Incremental render: removed ${excessCount} excess items from DOM`);
                 }
                 
-                logger.debug('Incremental render: prepended latest item');
+                console.debug('Incremental render: prepended latest item');
             }
             
             // Update section count for incremental render
@@ -149,7 +146,7 @@ export async function renderHistoryItems(fullRender = true) {
             }
         }
     } catch (error) {
-        logger.error('Error rendering history items:', error);
+        console.error('Error rendering history items:', error);
     }
 }
 
@@ -360,7 +357,7 @@ function buildFlagsHtml(progressData) {
                 e.stopPropagation();
                 const filePath = playBtn.getAttribute('data-file-path');
                 const completedAt = parseInt(historyItem.getAttribute('data-completion'), 10);
-                logger.debug('Opening file:', filePath);
+                console.debug('Opening file:', filePath);
                 
                 sendPortMessage({
                     command: 'fileSystem',
@@ -378,7 +375,7 @@ function buildFlagsHtml(progressData) {
                 const isDeleted = historyItem.querySelector('.deleted-flag') !== null;
                 const completedAt = parseInt(historyItem.getAttribute('data-completion'), 10);
                 
-                logger.debug('Showing file in folder:', filePath, 'deleted:', isDeleted);
+                console.debug('Showing file in folder:', filePath, 'deleted:', isDeleted);
                 
                 sendPortMessage({
                     command: 'fileSystem',
@@ -394,7 +391,7 @@ function buildFlagsHtml(progressData) {
                 e.stopPropagation();
                 const filePath = deleteFileBtn.getAttribute('data-file-path');
                 const completedAt = parseInt(historyItem.getAttribute('data-completion'), 10);
-                logger.debug('Deleting file:', filePath, completedAt);
+                console.debug('Deleting file:', filePath, completedAt);
                 
                 sendPortMessage({
                     command: 'fileSystem',
@@ -413,7 +410,7 @@ function buildFlagsHtml(progressData) {
         if (retryBtn) {
             retryBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
-                logger.debug('Retrying download with original command:', progressData.originalCommand);
+                console.debug('Retrying download with original command:', progressData.originalCommand);
                 
                 // Send original command with isRedownload flag (videoData already included from native host)
                 const retryCommand = {
@@ -585,10 +582,10 @@ async function deleteHistoryItem(completedAt) {
             sectionCount.textContent = updatedHistory.length > 0 ? updatedHistory.length : '';
         }
         
-        logger.debug('Deleted history item:', completedAt);
+        console.debug('Deleted history item:', completedAt);
         
     } catch (error) {
-        logger.error('Error deleting history item:', error);
+        console.error('Error deleting history item:', error);
     }
 }
 
@@ -637,7 +634,7 @@ export async function addVideoToUI(video) {
         const group = container.querySelector(`[data-video-type="${video.type}"]`);
         
         if (!group) {
-            logger.warn(`[ADD] No group found for video type: ${video.type}`);
+            console.warn(`[ADD] No group found for video type: ${video.type}`);
             return;
         }
         
@@ -653,7 +650,7 @@ export async function addVideoToUI(video) {
         // Get the videos container within the group
         const groupBody = group.querySelector('.section-content');
         if (!groupBody) {
-            logger.warn(`[ADD] No section content found for video type: ${video.type}`);
+            console.warn(`[ADD] No section content found for video type: ${video.type}`);
             return;
         }
         
@@ -670,10 +667,10 @@ export async function addVideoToUI(video) {
         // Apply current sorting to maintain sort order
         applySortingToGroups();
         
-        logger.debug(`[ADD] Added video to UI: ${video.normalizedUrl}`);
+        console.debug(`[ADD] Added video to UI: ${video.url}`);
         
     } catch (error) {
-        logger.error('[ADD] Error adding video to UI:', error);
+        console.error('[ADD] Error adding video to UI:', error);
     }
 }
 
@@ -683,13 +680,13 @@ export async function addVideoToUI(video) {
  * @param {Object} video - Updated video object
  */
 export async function updateVideoInUI(videoUrl, video) {
-    logger.debug(`[UPD] Updating video:`, videoUrl, video);
+    console.debug(`[UPD] Updating video:`, videoUrl, video);
     try {
         const container = document.getElementById('videos-list');
         const existingElement = container.querySelector(`.video-item[data-url="${videoUrl}"]`);
         
         if (!existingElement) {
-            logger.debug(`[UPD] Video element not found for update: ${videoUrl}`);
+            console.debug(`[UPD] Video element not found for update: ${videoUrl}`);
             return;
         }
         
@@ -730,7 +727,7 @@ export async function updateVideoInUI(videoUrl, video) {
                 }
             }
             
-            logger.debug(`[UPD] Applied targeted preview updates for: ${videoUrl}`);
+            console.debug(`[UPD] Applied targeted preview updates for: ${videoUrl}`);
             return;
         }
         
@@ -747,10 +744,10 @@ export async function updateVideoInUI(videoUrl, video) {
         // Apply current sorting to maintain sort order
         applySortingToGroups();
         
-        logger.debug(`[UPD] Full re-render completed for: ${videoUrl}`);
+        console.debug(`[UPD] Full re-render completed for: ${videoUrl}`);
         
     } catch (error) {
-        logger.error('[UPD] Error updating video in UI:', error);
+        console.error('[UPD] Error updating video in UI:', error);
     }
 }
 
@@ -764,7 +761,7 @@ export async function removeVideoFromUI(videoUrl) {
         const existingElement = container.querySelector(`.video-item[data-url="${videoUrl}"]`);
         
         if (!existingElement) {
-            logger.debug(`[RM] Video element not found for removal: ${videoUrl}`);
+            console.debug(`[RM] Video element not found for removal: ${videoUrl}`);
             return;
         }
         
@@ -784,10 +781,10 @@ export async function removeVideoFromUI(videoUrl) {
         // Update initial message visibility using centralized helper
         updateInitialMessageVisibility();
         
-        logger.debug(`[RM] Removed video from UI: ${videoUrl}`);
+        console.debug(`[RM] Removed video from UI: ${videoUrl}`);
         
     } catch (error) {
-        logger.error('[RM] Error removing video from UI:', error);
+        console.error('[RM] Error removing video from UI:', error);
     }
 }
 
@@ -800,7 +797,7 @@ export function updateHistoryItemDeleted(completedAt) {
     const historyItem = historyContainer.querySelector(`.history-item[data-completion="${completedAt}"]`);
     
     if (!historyItem) {
-        logger.debug('History item not found for deleted file update:', completedAt);
+        console.debug('History item not found for deleted file update:', completedAt);
         return;
     }
     
@@ -845,5 +842,5 @@ export function updateHistoryItemDeleted(completedAt) {
         playBtn.remove();
     }
 
-    logger.debug('Updated history item with deleted flag:', completedAt);
+    console.debug('Updated history item with deleted flag:', completedAt);
 }
