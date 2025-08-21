@@ -684,12 +684,15 @@ function resetVideosTabButtonStates(lookupUrl) {
 function updateProgressTooltip(selectedOption, progressData) {
     // Build compact tooltip content for VOD downloads only: segments • speed
     const parts = [];
-
-    // Add segment info
-    if (progressData.progress !== 0 && progressData.currentSegment) {
-        parts.push(`${progressData.currentSegment} segments`);
+	
+	if (progressData.progress !== 0) {
 		selectedOption.classList.add('has-progress-tooltip');
-    }
+		
+		// Add segment info
+		if (progressData.currentSegment) {
+			parts.push(`${progressData.currentSegment} segments`);
+		}
+	}
 
     // Add speed
     if (progressData.speed) {
