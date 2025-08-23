@@ -71,7 +71,7 @@ export function getActiveDownloads() {
     const activeDownloads = [];
     
     for (const [downloadId, entry] of allDownloads.entries()) {
-        if (entry.downloadRequest && entry.downloadRequest.videoData) {
+        if (entry.downloadRequest && entry.downloadRequest.videoData && entry.status !== 'orphaned') {
             activeDownloads.push({
                 // Core identifiers and metadata from downloadRequest
                 downloadId,
@@ -511,28 +511,36 @@ export async function cancelDownload(cancelRequest) {
             downloadId // Only need downloadId for cancellation
         }, { expectResponse: false });
         
-        // Cleanup timeout - remove entry after 5 seconds if still exists
+        // 5sec timeout - mark as orphaned, UI treats as canceled
         setTimeout(() => {
             const currentEntry = allDownloads.get(downloadId);
-            if (currentEntry) {
-                // Follow same cleanup pattern as normal download-canceled event
-                allDownloads.delete(downloadId);
+            if (currentEntry && currentEntry.status === 'stopping') {
+                currentEntry.status = 'orphaned';
                 notifyDownloadCountChange();
                 processNextDownload();
                 
-                // Broadcast with same data structure as normal cancellation
+                // UI treats orphaned same as canceled
                 broadcastToPopups({
                     command: 'download-canceled',
                     downloadId,
                     downloadUrl: currentEntry.downloadRequest?.downloadUrl,
                     masterUrl: currentEntry.downloadRequest?.masterUrl || null,
                     selectedOptionOrigText: currentEntry.downloadRequest?.selectedOptionOrigText || null,
-                    addedToHistory: false // Cancellations don't go to history
+                    addedToHistory: false
                 });
                 
-                logger.debug('Download cleanup timeout - removed entry:', downloadId);
+                logger.debug('Download marked as orphaned after timeout:', downloadId);
             }
         }, 5000);
+        
+        // 1min hardcap - silent cleanup if NH never responds
+        setTimeout(() => {
+            const currentEntry = allDownloads.get(downloadId);
+            if (currentEntry && currentEntry.status === 'orphaned') {
+                allDownloads.delete(downloadId);
+                logger.warn('Removed orphaned download after 1min timeout:', downloadId);
+            }
+        }, 60000);
         
         logger.debug('Cancellation command sent, status set to stopping:', downloadId);
     } else if (entry.status === 'stopping') {
