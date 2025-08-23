@@ -76,8 +76,11 @@ build_binary() {
     log_info "Building binary for $platform..."
     mkdir -p "$build_dir"
     
-    # Build native host binary
-    npx pkg index.js --target "$pkg_target" --output "$build_dir/$binary_name"
+    # Build native host binary with version
+    APP_VERSION="$VERSION" npx pkg index.js --target "$pkg_target" --output "$build_dir/$binary_name"
+    
+    # Make binary executable (important for double-click functionality)
+    chmod +x "$build_dir/$binary_name"
     
     # Copy FFmpeg binaries
     local ffmpeg_source="bin/$platform"
@@ -87,6 +90,13 @@ build_binary() {
     else
         log_warn "FFmpeg binaries not found at $ffmpeg_source"
     fi
+    
+    # Copy install and uninstall scripts
+    cp install.sh "$build_dir/"
+    cp uninstall.sh "$build_dir/"
+    chmod +x "$build_dir/install.sh"
+    chmod +x "$build_dir/uninstall.sh"
+    log_info "Copied install and uninstall scripts"
     
     log_info "✓ Binary built: $build_dir/$binary_name"
 }
@@ -343,7 +353,7 @@ create_macos_package() {
     local icon_source="../extension/icons/128.png"
     [[ -f "$icon_source" ]] && cp "$icon_source" "$resources_dir/AppIcon.png"
     
-    # Create Info.plist
+    # Create Info.plist (point directly to the binary)
     cat > "$contents_dir/Info.plist" << EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -375,9 +385,7 @@ create_macos_package() {
 </plist>
 EOF
     
-    # Add installer script
-    generate_macos_installer > "$macos_dir/install_native_host.sh"
-    chmod +x "$macos_dir/install_native_host.sh"
+    # Note: No separate installer script needed - wrapper handles installation
     
     # Create DMG
     local dmg_name="MaxVideoDownloader-${VERSION}-${platform}.dmg"
@@ -468,103 +476,6 @@ EOF
 }
 
 # ============================================================================
-# DEV INSTALL/UNINSTALL (for testing on your machine)
-# ============================================================================
-
-install_dev() {
-    local platform=${1:-$(detect_platform)}
-    local build_dir="build/$platform"
-    local binary_name=$(get_binary_name "$platform")
-    local binary_path="$PWD/$build_dir/$binary_name"
-    
-    [[ ! -f "$binary_path" ]] && { log_error "Binary not found. Run: ./build2.sh build $platform"; exit 1; }
-    
-    log_info "Installing native host for testing on your machine..."
-    
-    case "$(uname -s)" in
-        Darwin)
-            local installed=0
-            local browsers=(
-                "/Applications/Google Chrome.app:$HOME/Library/Application Support/Google/Chrome/NativeMessagingHosts:chrome"
-                "/Applications/Arc.app:$HOME/Library/Application Support/Arc/User Data/NativeMessagingHosts:chrome"
-                "/Applications/Microsoft Edge.app:$HOME/Library/Application Support/Microsoft Edge/NativeMessagingHosts:chrome"
-                "/Applications/Brave Browser.app:$HOME/Library/Application Support/BraveSoftware/Brave-Browser/NativeMessagingHosts:chrome"
-                "/Applications/Firefox.app:$HOME/Library/Application Support/Mozilla/NativeMessagingHosts:firefox"
-            )
-            
-            for entry in "${browsers[@]}"; do
-                IFS=':' read -r app_path manifest_dir browser_type <<< "$entry"
-                
-                if [[ -d "$app_path" ]]; then
-                    mkdir -p "$manifest_dir"
-                    if [[ "$browser_type" == "firefox" ]]; then
-                        cat > "$manifest_dir/pro.maxvideodownloader.coapp.json" << EOF
-{
-  "name": "pro.maxvideodownloader.coapp",
-  "description": "MAX Video Downloader Native Host",
-  "path": "$binary_path",
-  "type": "stdio",
-  "allowed_extensions": ["$FIREFOX_EXT_ID"]
-}
-EOF
-                    else
-                        cat > "$manifest_dir/pro.maxvideodownloader.coapp.json" << EOF
-{
-  "name": "pro.maxvideodownloader.coapp",
-  "description": "MAX Video Downloader Native Host",
-  "path": "$binary_path",
-  "type": "stdio",
-  "allowed_origins": ["chrome-extension://$CHROME_EXT_ID/"]
-}
-EOF
-                    fi
-                    log_info "✓ Installed for $(basename "$app_path" .app)"
-                    ((installed++))
-                fi
-            done
-            
-            log_info "✓ Installed for $installed browser(s)"
-            ;;
-        *)
-            log_error "Dev install only supports macOS currently"
-            exit 1
-            ;;
-    esac
-}
-
-uninstall_dev() {
-    log_info "Uninstalling native host from your machine..."
-    
-    case "$(uname -s)" in
-        Darwin)
-            local removed=0
-            local manifest_dirs=(
-                "$HOME/Library/Application Support/Google/Chrome/NativeMessagingHosts"
-                "$HOME/Library/Application Support/Arc/User Data/NativeMessagingHosts"
-                "$HOME/Library/Application Support/Microsoft Edge/NativeMessagingHosts"
-                "$HOME/Library/Application Support/BraveSoftware/Brave-Browser/NativeMessagingHosts"
-                "$HOME/Library/Application Support/Mozilla/NativeMessagingHosts"
-            )
-            
-            for dir in "${manifest_dirs[@]}"; do
-                local manifest_file="$dir/pro.maxvideodownloader.coapp.json"
-                if [[ -f "$manifest_file" ]]; then
-                    rm "$manifest_file"
-                    log_info "✓ Removed from $(basename "$(dirname "$dir")")"
-                    ((removed++))
-                fi
-            done
-            
-            log_info "✓ Removed from $removed location(s)"
-            ;;
-        *)
-            log_error "Dev uninstall only supports macOS currently"
-            exit 1
-            ;;
-    esac
-}
-
-# ============================================================================
 # MAIN COMMANDS
 # ============================================================================
 
@@ -578,8 +489,6 @@ Commands:
   build <platform>     Build binary for platform
   package <platform>   Create distributable package
   dist <platform>      Build + package in one step
-  install [platform]   Install on your machine for testing
-  uninstall            Remove from your machine
   version              Show version
   help                 Show this help
 
@@ -589,8 +498,8 @@ Platforms:
 Examples:
   ./build.sh dist mac-arm64     # Create complete macOS installer
   ./build.sh build mac-arm64    # Just build binary
-  ./build.sh install           # Install for testing on your machine
-  ./build.sh uninstall         # Remove from your machine
+
+Note: For installation, use install.sh after building
 EOF
 }
 
@@ -620,13 +529,6 @@ case "${1:-help}" in
             linux-*) create_linux_package "$platform" ;;
             *) log_error "Unknown platform: $platform"; exit 1 ;;
         esac
-        ;;
-    install)
-        platform=${2:-$(detect_platform)}
-        install_dev "$platform"
-        ;;
-    uninstall)
-        uninstall_dev
         ;;
     help|--help|-h)
         show_help

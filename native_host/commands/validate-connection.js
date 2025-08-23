@@ -21,9 +21,15 @@ class ValidateConnectionCommand extends BaseCommand {
     async execute(params) {
         logDebug('Received connection validation request');
         
-        // Get version from package.json
-        const pkg = require('../../package.json');
-        const version = pkg.version;
+        // Get version
+        const version = process.env.APP_VERSION || (() => {
+            try {
+                const pkg = require('../../package.json');
+                return pkg.version;
+            } catch {
+                return '0.1.0';
+            }
+        })();
         
         // Get binary location
         const location = process.execPath || process.argv[0];

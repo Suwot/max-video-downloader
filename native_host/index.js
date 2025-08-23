@@ -18,44 +18,74 @@ const { logDebug } = require('./utils/logger');
 // Handle CLI commands before Chrome messaging setup
 const args = process.argv.slice(2);
 
+// If no arguments (double-click), run installer
+if (args.length === 0) {
+    const { execSync } = require('child_process');
+    const path = require('path');
+    
+    try {
+        // Get install script path (same directory as executable)
+        const execDir = typeof process.pkg !== 'undefined' 
+            ? path.dirname(process.execPath)
+            : path.dirname(__dirname);
+        const installScript = path.join(execDir, 'install.sh');
+        
+        execSync(`bash "${installScript}"`, { stdio: 'inherit' });
+    } catch (err) {
+        console.error('Installation failed:', err.message);
+        process.exit(1);
+    }
+    process.exit(0);
+}
+
 if (args.includes('-version')) {
-    const pkg = require('../package.json');
-    console.log(`Native Host v${pkg.version}`);
+    // Version is embedded at build time, or fallback to reading package.json
+    const version = process.env.APP_VERSION || (() => {
+        try {
+            const pkg = require('../package.json');
+            return pkg.version;
+        } catch {
+            return '0.1.0';
+        }
+    })();
+    console.log(`Native Host v${version}`);
     process.exit(0);
 }
 
 if (args.includes('-install')) {
-    // For built binaries, implement install directly
-    if (typeof process.pkg !== 'undefined') {
-        console.log('Install functionality will be implemented in the app bundle');
-        console.log('For now, use: ./build.sh -install from the source directory');
-    } else {
-        // Development mode - use build script
-        const { execSync } = require('child_process');
-        try {
-            execSync('./build.sh -install', { stdio: 'inherit' });
-        } catch (err) {
-            console.error('Installation failed:', err.message);
-            process.exit(1);
-        }
+    const { execSync } = require('child_process');
+    const path = require('path');
+    
+    try {
+        // Get install script path (same directory as executable)
+        const execDir = typeof process.pkg !== 'undefined' 
+            ? path.dirname(process.execPath)
+            : path.dirname(__dirname);
+        const installScript = path.join(execDir, 'install.sh');
+        
+        execSync(`bash "${installScript}"`, { stdio: 'inherit' });
+    } catch (err) {
+        console.error('Installation failed:', err.message);
+        process.exit(1);
     }
     process.exit(0);
 }
 
 if (args.includes('-uninstall')) {
-    // For built binaries, implement uninstall directly
-    if (typeof process.pkg !== 'undefined') {
-        console.log('Uninstall functionality will be implemented in the app bundle');
-        console.log('For now, use: ./build.sh -uninstall from the source directory');
-    } else {
-        // Development mode - use build script
-        const { execSync } = require('child_process');
-        try {
-            execSync('./build.sh -uninstall', { stdio: 'inherit' });
-        } catch (err) {
-            console.error('Uninstallation failed:', err.message);
-            process.exit(1);
-        }
+    const { execSync } = require('child_process');
+    const path = require('path');
+    
+    try {
+        // Get uninstall script path (same directory as executable)
+        const execDir = typeof process.pkg !== 'undefined' 
+            ? path.dirname(process.execPath)
+            : path.dirname(__dirname);
+        const uninstallScript = path.join(execDir, 'uninstall.sh');
+        
+        execSync(`bash "${uninstallScript}"`, { stdio: 'inherit' });
+    } catch (err) {
+        console.error('Uninstallation failed:', err.message);
+        process.exit(1);
     }
     process.exit(0);
 }
@@ -106,16 +136,6 @@ function startIdleTimer() {
     }, IDLE_TIMEOUT);
 }
 
-
-
-function handleGracefulShutdown() {
-    logDebug(`Extension disconnected. Active operations: ${activeOperations}`);
-    logDebug('Extension hibernation detected - operations will continue, idle timer will handle shutdown');
-    // Don't do anything - let the normal operation counter and idle timer handle lifecycle
-    // If there are active operations, they'll prevent the idle timer from running
-    // If there are no active operations, the idle timer will naturally exit after 60 seconds
-}
-
 /**
  * Application bootstrap
  */
@@ -144,8 +164,7 @@ async function bootstrap() {
                     logDebug('Error in message processing:', err.message || err);
                     messagingService.sendMessage({ error: err.message || 'Unknown error' }, request.id);
                 });
-            },
-            handleGracefulShutdown
+            }
         );
         
         // Start idle timer (no active operations initially)
