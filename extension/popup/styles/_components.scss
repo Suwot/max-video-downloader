@@ -717,6 +717,7 @@
         display: flex;
         align-items: center;
         gap: 6px;
+		word-break: break-all;
         @extend %theme-text-secondary;
     }
 }
