@@ -39,6 +39,11 @@ class DownloadCommand extends BaseCommand {
             duration: duration || 0,
             fileSizeBytes: fileSizeBytes || 0,
             isLive: isLive || false, // Track if this is a livestream
+			strategy: isLive ? 'livestream' : (duration ? 'time' : 'size'),
+
+            // Windowed speed calc (10s sliding window of unique byte steps)
+            byteSamples: [],            // Array<{t:number, b:number}>, t=Date.now(), b=downloadedBytes
+            lastRecordedBytes: 0,       // For de-duping identical total_size updates
             
             // Current progress
             currentTime: 0,
@@ -84,6 +89,62 @@ class DownloadCommand extends BaseCommand {
         }
     }
 
+    // Record a byte sample only when downloadedBytes increases; keep ~12s history
+    recordByteSample(progressState, nowMs) {
+        const b = progressState.downloadedBytes || 0;
+        if (b <= progressState.lastRecordedBytes) {
+            return;
+        }
+        progressState.lastRecordedBytes = b;
+        progressState.byteSamples.push({ t: nowMs, b });
+        // Prune to last 12 seconds to give a little buffer over the 10s window
+        const cutoff = nowMs - 12000;
+        while (progressState.byteSamples.length > 0 && progressState.byteSamples[0].t < cutoff) {
+            progressState.byteSamples.shift();
+        }
+    }
+
+    // Compute average bytes/sec over the last `windowSec` seconds (default 10)
+    // Uses a virtual "now" sample so stalls decay toward 0 instead of spiking.
+    computeWindowedSpeed(progressState, nowMs, windowSec = 10) {
+        const samples = progressState.byteSamples;
+        if (!samples || samples.length === 0) return 0;
+        const windowMs = windowSec * 1000;
+        const windowStart = nowMs - windowMs;
+  
+        // Prune here as well in case no new bytes arrived (recordByteSample won't run)
+        while (samples.length > 0 && samples[0].t < nowMs - 12000) {
+            samples.shift();
+        }
+        if (samples.length === 0) return 0;
+  
+        // Last known bytes/time from FFmpeg
+        const last = samples[samples.length - 1];
+  
+        // If the last sample is older than the window, then there was no activity in-window.
+        // Return 0 and avoid division by tiny dt.
+        if (last.t <= windowStart) {
+            const dt = nowMs - windowStart;
+            if (dt <= 0) return 0;
+            return 0;
+        }
+  
+        // Find the oldest sample within the window [windowStart, now]
+        let i = 0;
+        while (i < samples.length && samples[i].t < windowStart) i++;
+  
+        // If the window begins between two samples, we could interpolate bytes at windowStart.
+        const oldest = samples[i] || last;
+  
+        // Use a virtual "now" sample with the last known byte count.
+        const newestTime = nowMs;
+        const newestBytes = last.b;
+  
+        const dt = Math.max(1, newestTime - oldest.t); // ms
+        const db = Math.max(0, newestBytes - oldest.b); // bytes
+        return (db * 1000) / dt; // bytes/sec
+    }
+
     // Parse progress data and send throttled updates to UI
     parseAndSendProgress(output, progressState) {
         let hasUpdate = false;
@@ -100,7 +161,13 @@ class DownloadCommand extends BaseCommand {
         // Parse size data
         const totalSize = output.match(/total_size=(\d+)/);
         if (totalSize) {
+            const prevBytes = progressState.downloadedBytes || 0;
             progressState.downloadedBytes = parseInt(totalSize[1], 10);
+            // Record a speed sample only on monotonic increase of total bytes
+            const nowMsForSample = Date.now();
+            if (progressState.downloadedBytes > prevBytes) {
+                this.recordByteSample(progressState, nowMsForSample);
+            }
             hasUpdate = true;
         }
 
@@ -133,39 +200,35 @@ class DownloadCommand extends BaseCommand {
             return;
         }
         
-        // Calculate progress based on media type and available data
+        const strategy = progressState.strategy;
+
+        // Calculate progress based on selected strategy
         let progress = 0;
-        let strategy = 'unknown';
-        
-        if (progressState.isLive) {
-            // For livestreams, we can't calculate percentage progress
-            // Instead, we show continuous activity with elapsed time and bytes
+        if (strategy === 'livestream') {
             progress = -1; // Special value indicating livestream (no percentage)
-            strategy = 'livestream';
-        } else {
-            // Regular downloads - prefer duration-based progress for all types
+        } else if (strategy === 'time') {
             if (progressState.duration > 0 && progressState.currentTime > 0) {
                 progress = (progressState.currentTime / progressState.duration) * 100;
-                strategy = 'time';
-            } else if (progressState.fileSizeBytes > 0 && progressState.downloadedBytes > 0) {
-                progress = (progressState.downloadedBytes / progressState.fileSizeBytes) * 100;
-                strategy = 'size';
             }
-            
-            // Cap at 99.9% until we get final completion
-            progress = Math.min(99.9, Math.max(0, progress));
+        } else if (strategy === 'size') {
+            if (progressState.fileSizeBytes > 0 && progressState.downloadedBytes > 0) {
+                progress = (progressState.downloadedBytes / progressState.fileSizeBytes) * 100;
+            }
         }
-        
-        const progressPercent = progress === -1 ? -1 : Math.round(progress * 10) / 10; // 1 decimal place
+
+        // Cap at 99.9% until we get final completion
+        progress = Math.min(99.9, Math.max(0, progress));
+
+        const progressPercent = strategy === 'livestream' ? -1 : Math.round(progress * 10) / 10; // 1 decimal place
         
         // Throttle updates: only send if significant change or time elapsed
         const significantChange = Math.abs(progressPercent - progressState.lastProgressPercent) >= 0.5;
         const timeElapsed = now - progressState.lastProgressUpdate > 250; // 250ms throttle
         
         if (significantChange || timeElapsed) {
-            // Calculate speed (simple 3-second window)
-            const elapsedSeconds = (now - progressState.startTime) / 1000;
-            const speed = elapsedSeconds > 0 ? progressState.downloadedBytes / elapsedSeconds : 0;
+            // Calculate speed using a 10-second sliding window of unique byte deltas
+            const speed = this.computeWindowedSpeed(progressState, now, 10);
+            const elapsedSeconds = (now - progressState.startTime) / 1000; // kept for UI elapsed timer
             
             // Build progress data matching original structure
             const progressData = {
@@ -174,6 +237,7 @@ class DownloadCommand extends BaseCommand {
                 elapsedTime: Math.round(elapsedSeconds),
                 type: progressState.type,
                 strategy,
+                speedWindowSec: 10,
                 isLive: progressState.isLive, // used to determine dl-tooltip presence
                 downloadedBytes: progressState.downloadedBytes,
                 totalBytes: progressState.fileSizeBytes || null,
