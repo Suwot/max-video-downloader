@@ -511,6 +511,29 @@ export async function cancelDownload(cancelRequest) {
             downloadId // Only need downloadId for cancellation
         }, { expectResponse: false });
         
+        // Cleanup timeout - remove entry after 5 seconds if still exists
+        setTimeout(() => {
+            const currentEntry = allDownloads.get(downloadId);
+            if (currentEntry) {
+                // Follow same cleanup pattern as normal download-canceled event
+                allDownloads.delete(downloadId);
+                notifyDownloadCountChange();
+                processNextDownload();
+                
+                // Broadcast with same data structure as normal cancellation
+                broadcastToPopups({
+                    command: 'download-canceled',
+                    downloadId,
+                    downloadUrl: currentEntry.downloadRequest?.downloadUrl,
+                    masterUrl: currentEntry.downloadRequest?.masterUrl || null,
+                    selectedOptionOrigText: currentEntry.downloadRequest?.selectedOptionOrigText || null,
+                    addedToHistory: false // Cancellations don't go to history
+                });
+                
+                logger.debug('Download cleanup timeout - removed entry:', downloadId);
+            }
+        }, 5000);
+        
         logger.debug('Cancellation command sent, status set to stopping:', downloadId);
     } else if (entry.status === 'stopping') {
         logger.debug('Download already stopping:', downloadId);
