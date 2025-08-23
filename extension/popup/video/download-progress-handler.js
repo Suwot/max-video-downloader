@@ -379,7 +379,7 @@ function updateSingleDropdown(downloadGroup, progressData = {}) {
                     }
 
                     // Build livestream display text with recording indicator
-                    let displayText = '';
+                    let displayText = 'REC: ';
                     if (progressData.elapsedTime) {
                         displayText += `${formatTime(progressData.elapsedTime)}`;
                     }
