@@ -595,8 +595,8 @@ class DownloadCommand extends BaseCommand {
         // Progress tracking arguments
         args.push('-stats', '-progress', 'pipe:2');
         
-        // Network resilience and stream optimization with cancel-friendly timeouts
-        args.push('-timeout', '5000000', '-rw_timeout', '5000000', '-icy', '0'); // 5s timeouts for responsiveness
+		// Increase timeouts to avoid false triggers during long stream startup/handshakes.
+		args.push('-timeout', '30000000', '-rw_timeout', '30000000', '-icy', '0'); // 30s timeouts for startup
         if (type === 'hls' || type === 'dash') {
             args.push(
                 '-reconnect', '1',
