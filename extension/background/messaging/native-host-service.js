@@ -187,6 +187,7 @@ export class NativeHostService {
         await this.ensureConnection();
         
         if (!this.port) {
+            chrome.storage.session.set({ coappAvailable: false });
             throw new Error('Could not connect to native host');
         }
         
@@ -337,18 +338,23 @@ export class NativeHostService {
                 };
                 this.connectionError = null;
                 
+                // Update session state: coapp is available
+                chrome.storage.session.set({ coappAvailable: true });
+                
                 // Connection validated - start idle timeout
                 this.resetConnectionTimeout();
             } else {
                 this.connectionState = 'error';
                 this.connectionError = 'Invalid connection validation response';
                 // Don't clear connectionInfo - we got a response, so coapp exists
+                chrome.storage.session.set({ coappAvailable: false });
             }
         } catch (error) {
             this.connectionState = 'error';
             this.connectionError = error.message || 'Validation failed';
             // Clear connectionInfo on validation failure (coapp not responding properly)
             this.connectionInfo = null;
+            chrome.storage.session.set({ coappAvailable: false });
         }
         
         this.broadcastConnectionState();

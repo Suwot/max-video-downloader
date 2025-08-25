@@ -81,6 +81,10 @@ export async function renderHistoryItems(fullRender = true) {
         const historyContainer = document.querySelector('.downloads-history');
         const initialMessage = historyContainer.querySelector('.initial-message');
 
+        // Check coapp availability once for all history items
+        const session = await chrome.storage.session.get(['coappAvailable']);
+        const coappAvailable = session.coappAvailable || false;
+
         if (fullRender) {
             // Clear container completely and rebuild from scratch
             historyContainer.innerHTML = '<div class="initial-message"><p>You don\'t have any downloads in history</p></div>';
@@ -91,7 +95,7 @@ export async function renderHistoryItems(fullRender = true) {
                 newInitialMessage.style.display = 'none';
                 
                 history.forEach(historyEntry => {
-                    const historyItem = createHistoryItemElement(historyEntry);
+                    const historyItem = createHistoryItemElement(historyEntry, coappAvailable);
                     historyContainer.appendChild(historyItem);
                 });
                 
@@ -111,7 +115,7 @@ export async function renderHistoryItems(fullRender = true) {
             // Incremental render: prepend only the latest (first) item
             if (history.length > 0) {
                 const latestEntry = history[0];
-                const historyItem = createHistoryItemElement(latestEntry);
+                const historyItem = createHistoryItemElement(latestEntry, coappAvailable);
                 
                 // Hide initial message if visible and prepend new item
                 if (initialMessage) {
@@ -153,9 +157,10 @@ export async function renderHistoryItems(fullRender = true) {
 /**
  * Create history item element from final download data
  * @param {Object} progressData - Final download data from download-success/error
+ * @param {boolean} coappAvailable - Whether native coapp is available for file system operations
  * @returns {HTMLElement} History item element
  */
-function createHistoryItemElement(progressData) {
+function createHistoryItemElement(progressData, coappAvailable = false) {
     const historyItem = document.createElement('div');
     // create status variable to determine class
     const status = progressData.command === 'download-success' ? (progressData.isPartial ? 'partial' : 'success') : 'error';
@@ -223,13 +228,13 @@ function createHistoryItemElement(progressData) {
         <div class="history-footer">
             ${statsHtml ? `<div class="download-stats">${statsHtml}</div>` : ''}
             <div class="history-actions">
-                <button class="history-btn history-retry-btn" data-tooltip="Retry download">
+                ${coappAvailable ? `<button class="history-btn history-retry-btn" data-tooltip="Retry download">
                         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-rotate-ccw w-3 h-3" aria-hidden="true">
                             <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path>
                             <path d="M3 3v5h5"></path>
                         </svg>
-                </button>
-                ${progressData.command === 'download-success' && progressData.path && !progressData.deleted ? `
+                </button>` : ''}
+                ${progressData.command === 'download-success' && progressData.path && !progressData.deleted && coappAvailable ? `
                     <button class="history-btn history-delete-file-btn" data-tooltip="Delete file" data-file-path="${progressData.path}">
                         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-red)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-trash-2 w-3 h-3" aria-hidden="true">
                             <path d="M3 6h18"></path>
@@ -240,7 +245,7 @@ function createHistoryItemElement(progressData) {
                         </svg>
                     </button>
                 ` : ''}
-                ${progressData.command === 'download-success' && progressData.path ? `
+                ${progressData.command === 'download-success' && progressData.path && coappAvailable ? `
                     <button class="history-btn history-folder-btn" data-tooltip="Show in folder" data-file-path="${progressData.path}">
                         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-folder-open w-3 h-3" aria-hidden="true">
                             <path d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2"></path>
@@ -346,8 +351,8 @@ function buildFlagsHtml(progressData) {
         });
     }
 
-    // Add file system operation handlers (only for successful downloads)
-    if (progressData.command === 'download-success' && progressData.path) {
+    // Add file system operation handlers (only for successful downloads with coapp available)
+    if (progressData.command === 'download-success' && progressData.path && coappAvailable) {
         const playBtn = historyItem.querySelector('.history-play-btn');
         const folderBtn = historyItem.querySelector('.history-folder-btn');
         const deleteFileBtn = historyItem.querySelector('.history-delete-file-btn');
@@ -403,8 +408,8 @@ function buildFlagsHtml(progressData) {
         }
     }
 
-    // Add retry handler for failed downloads
-    if (progressData.originalCommand) {
+    // Add retry handler for failed downloads (only when coapp available)
+    if (progressData.originalCommand && coappAvailable) {
         const retryBtn = historyItem.querySelector('.history-retry-btn');
         
         if (retryBtn) {

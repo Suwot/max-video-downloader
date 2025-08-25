@@ -540,7 +540,18 @@ export class VideoItemComponent {
     }
     
     // Execute download with specified mode. Download mode ('download', 'download-as', 'extract-audio', 'extract-subs')
-    executeDownload(mode = 'download') {
+    async executeDownload(mode = 'download') {
+        // Check coapp availability from session storage
+        const session = await chrome.storage.session.get(['coappAvailable']);
+        if (!session.coappAvailable) {
+            showError('CoApp is required for downloads. Go to Settings tab to install.');
+            // Reset button state to default since operation failed
+            if (this.downloadButton) {
+                this.downloadButton.updateState('default');
+            }
+            return;
+        }
+        
         const commands = this.createDownloadCommand(mode);
         
         // Handle single command or array of commands (for multi-track extraction)
@@ -1128,7 +1139,14 @@ export class VideoItemComponent {
     /**
      * Handle preview retry button click
      */
-    handlePreviewRetry() {
+    async handlePreviewRetry() {
+        // Check coapp availability from session storage
+        const session = await chrome.storage.session.get(['coappAvailable']);
+        if (!session.coappAvailable) {
+            showError('CoApp is required for preview generation. Go to Settings tab to install.');
+            return;
+        }
+        
         sendPortMessage({
             command: 'generatePreview',
             tabId: this.videoData.tabId,

@@ -84,6 +84,13 @@ class SettingsManager {
 
   async chooseSavePath() {
     try {
+      // Check coapp availability
+      const session = await chrome.storage.session.get(['coappAvailable']);
+      if (!session.coappAvailable) {
+        console.warn('Cannot choose save path - coapp not available');
+        return { success: false, error: 'CoApp not available' };
+      }
+      
       const result = await nativeHostService.sendMessage({
         command: 'fileSystem',
         operation: 'chooseDirectory',

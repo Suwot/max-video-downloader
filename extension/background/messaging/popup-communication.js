@@ -188,6 +188,12 @@ async function handlePortMessage(message, port, portId) {
         case 'fileSystem':
             // Handle file system operations through native host
             try {
+                // Check coapp availability
+                const session = await chrome.storage.session.get(['coappAvailable']);
+                if (!session.coappAvailable) {
+                    throw new Error('CoApp not available');
+                }
+                
                 const result = await nativeHostService.sendMessage({
                     command: 'fileSystem',
                     operation: message.operation,

@@ -415,6 +415,13 @@ async function generateVideoPreview(videoData, sourceUrl = null) {
     const { tabId, normalizedUrl, headers = {}, duration, type } = videoData;
 	
     try {
+        // Skip if coapp not available
+        const session = await chrome.storage.session.get(['coappAvailable']);
+        if (!session.coappAvailable) {
+            logger.debug(`[GP] Skipping preview generation - coapp not available: ${normalizedUrl}`);
+            return;
+        }
+        
         // Skip if already has preview - use videoData directly
         if (videoData.previewUrl || videoData.poster) {
             logger.debug(`[GP] Video already has preview, skipping: ${normalizedUrl}`);
@@ -503,6 +510,21 @@ async function generateVideoPreview(videoData, sourceUrl = null) {
 async function getFFprobeMetadata(videoData) {
 	const { url, type, tabId, normalizedUrl, headers } = videoData;
 	logger.debug(`Getting FFprobe metadata for ${videoData.url}`);
+    
+    // Skip if coapp not available
+    const session = await chrome.storage.session.get(['coappAvailable']);
+    if (!session.coappAvailable) {
+        logger.debug(`Skipping FFprobe metadata - coapp not available: ${normalizedUrl}`);
+        // Update with basic info and mark as valid
+        updateVideo('update', {
+            tabId,
+            normalizedUrl,
+            processing: false,
+            isValid: true
+        });
+        return null;
+    }
+    
     try {
         // Direct call to NHS - gets ffprobe data and expects response
         const response = await nativeHostService.sendMessage({
@@ -567,8 +589,6 @@ async function getFFprobeMetadata(videoData) {
                 processing: false,
                 metaFFprobe: streamInfo,
                 duration: streamInfo.duration,
-                standardizedResolution: standardizedRes,
-                estimatedFileSizeBytes: streamInfo.sizeBytes,
                 videoTracks: videoTracks,
 				hasVideo: streamInfo.hasVideo === true,
 				hasAudio: streamInfo.hasAudio === true,

@@ -108,7 +108,7 @@ export class VideoDownloadButtonComponent {
                     handler: cancelHandler
                 });
                 
-                this.videoItemComponent.executeDownload('extract-audio');
+                await this.videoItemComponent.executeDownload('extract-audio');
             };
         } else {
             // Standard video download handler
@@ -119,7 +119,7 @@ export class VideoDownloadButtonComponent {
                     handler: cancelHandler
                 });
                 
-                this.videoItemComponent.executeDownload('download');
+                await this.videoItemComponent.executeDownload('download');
             };
         }
         
@@ -348,7 +348,7 @@ export class VideoDownloadButtonComponent {
             handler: cancelHandler
         });
         
-        this.videoItemComponent.executeDownload('extract-audio');
+        await this.videoItemComponent.executeDownload('extract-audio');
     }
 
     /**
@@ -361,7 +361,7 @@ export class VideoDownloadButtonComponent {
             handler: cancelHandler
         });
         
-        this.videoItemComponent.executeDownload('extract-subs');
+        await this.videoItemComponent.executeDownload('extract-subs');
     }
     
     /**
@@ -399,7 +399,7 @@ export class VideoDownloadButtonComponent {
             handler: cancelHandler
         });
         
-        this.videoItemComponent.executeDownload('download-as');
+        await this.videoItemComponent.executeDownload('download-as');
     }
     
     /**
