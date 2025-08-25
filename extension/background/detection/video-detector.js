@@ -153,14 +153,15 @@ function addVideoWithCommonProcessing(tabId, url, videoInfo, metadata, source, t
 				...videoData,
 				hasVideo: !!containers.videoContainer,
 				hasAudio: !!containers.audioContainer,
-				videoTracks: {
+				videoTracks: [{
 					url,
 					trackId: generateId(url), // Generate trackId for UI matching
 					type: 'direct',
 					videoContainer: containers.videoContainer,
 					audioContainer: containers.audioContainer,
-					containerDetectionReason: containers.reason
-				}
+					containerDetectionReason: containers.reason,
+					fileSize: Number.isFinite(metadata.contentLength) ? metadata.contentLength : null
+				}]
 			}
         }
     }
