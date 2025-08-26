@@ -6,6 +6,7 @@ node_modules/
 
 # Build directories
 competitor-test/
+chrome-web-store/
 
 # IDE files
 .vscode/

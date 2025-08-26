@@ -1,0 +1,87 @@
+name: ✨ Feature Request
+description: Suggest a new feature or enhancement for MAX Video Downloader
+title: "[Feature] "
+labels: ["enhancement", "needs-triage"]
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to suggest a new feature! Please fill out the form below.
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: "Pre-submission checklist"
+      options:
+        - label: "I have searched existing issues to make sure this hasn't been requested before"
+          required: true
+        - label: "This feature would be useful for other users, not just me"
+          required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: "Problem Description"
+      description: "What problem does this feature solve? What's currently frustrating or missing?"
+      placeholder: "I'm always frustrated when..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: "Proposed Solution"
+      description: "What would you like to see implemented?"
+      placeholder: "I would like to see..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: "Alternative Solutions"
+      description: "What other ways could this problem be solved?"
+      placeholder: "Alternatively, we could..."
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: "Priority"
+      description: "How important is this feature to you?"
+      options:
+        - "Low - Nice to have"
+        - "Medium - Would improve my workflow"
+        - "High - Essential for my use case"
+
+  - type: dropdown
+    id: category
+    attributes:
+      label: "Feature Category"
+      description: "What area of the extension does this relate to?"
+      options:
+        - "Video Detection"
+        - "Download Management"
+        - "User Interface"
+        - "Quality Selection"
+        - "File Management"
+        - "Browser Integration"
+        - "Native Host"
+        - "Performance"
+        - "Accessibility"
+        - "Other"
+
+  - type: textarea
+    id: examples
+    attributes:
+      label: "Examples or Mockups"
+      description: "Any examples, mockups, or screenshots that help explain the feature"
+      placeholder: "Attach images or describe similar features in other apps"
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: "Additional Context"
+      description: "Any other context or information about the feature request"
+      placeholder: "Links, references, or other relevant information"

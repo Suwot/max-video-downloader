@@ -1,0 +1,137 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release'
+        required: true
+        type: string
+
+jobs:
+  build-natives:
+    strategy:
+      matrix:
+        include:
+          - os: macos-latest
+            platform: mac-arm64
+            arch: arm64
+          - os: macos-latest  
+            platform: mac-x64
+            arch: x64
+          - os: windows-latest
+            platform: win-x64
+            arch: x64
+          - os: windows-latest
+            platform: win-arm64
+            arch: arm64
+          - os: ubuntu-latest
+            platform: linux-x64
+            arch: x64
+          - os: ubuntu-latest
+            platform: linux-arm64
+            arch: arm64
+
+    runs-on: ${{ matrix.os }}
+    
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: recursive
+    
+    - uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+    
+    - name: Install dependencies
+      run: npm ci
+    
+    - name: Build native host
+      run: |
+        cd native_host
+        chmod +x build.sh
+        ./build.sh -build ${{ matrix.platform }}
+    
+    - name: Create installer package
+      run: |
+        cd native_host
+        ./build.sh -package ${{ matrix.platform }}
+    
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: native-${{ matrix.platform }}
+        path: native_host/dist/*
+        retention-days: 7
+
+  create-release:
+    needs: build-natives
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: ./artifacts
+    
+    - name: Organize release files
+      run: |
+        mkdir -p ./release
+        find ./artifacts -name "*.dmg" -exec cp {} ./release/ \;
+        find ./artifacts -name "*.zip" -exec cp {} ./release/ \;
+        find ./artifacts -name "*.tar.gz" -exec cp {} ./release/ \;
+        ls -la ./release/
+    
+    - name: Get version
+      id: version
+      run: |
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+        else
+          echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+        fi
+    
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: v${{ steps.version.outputs.version }}
+        name: MAX Video Downloader v${{ steps.version.outputs.version }}
+        draft: false
+        prerelease: false
+        files: ./release/*
+        body: |
+          ## 🎉 MAX Video Downloader v${{ steps.version.outputs.version }}
+          
+          ### 📦 Installation
+          
+          1. **Install browser extension** from your browser's store
+          2. **Download and install native host** for your platform below
+          
+          ### 🖥️ Native Host Downloads
+          
+          | Platform | Download |
+          |----------|----------|
+          | macOS (Apple Silicon) | MaxVideoDownloader-mac-arm64.dmg |
+          | macOS (Intel) | MaxVideoDownloader-mac-x64.dmg |
+          | Windows (x64) | MaxVideoDownloader-win-x64.zip |
+          | Windows (ARM64) | MaxVideoDownloader-win-arm64.zip |
+          | Linux (x64) | MaxVideoDownloader-linux-x64.tar.gz |
+          | Linux (ARM64) | MaxVideoDownloader-linux-arm64.tar.gz |
+          
+          ### 📖 Documentation
+          
+          - [Installation Guide](https://github.com/Suwot/max-video-downloader/blob/main/docs/installation.md)
+          - [Troubleshooting](https://github.com/Suwot/max-video-downloader/blob/main/docs/troubleshooting.md)
+          
+          ### 🆘 Support
+          
+          - [Report Issues](https://github.com/Suwot/max-video-downloader/issues)
+          - [Community Discussions](https://github.com/Suwot/max-video-downloader/discussions)
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
