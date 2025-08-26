@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Direct Video Test — Multiple MP4s</title>
+  <style>
+    :root { font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji"; color-scheme: dark light; }
+    body { margin: 0; padding: 24px; background: canvas; color: canvastext; }
+    h1 { margin: 0 0 8px; font-size: 20px; }
+    p  { margin: 0 0 20px; opacity: .8; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; }
+    figure { margin: 0; padding: 12px; border: 1px solid color-mix(in oklab, canvastext 12%, canvas 88%); border-radius: 14px; background: color-mix(in oklab, canvas 94%, canvastext 6%); box-shadow: 0 1px 2px rgba(0,0,0,.06); display: grid; gap: 8px; }
+    video { width: 100%; height: auto; background: #000; border-radius: 10px; }
+    figcaption { font-size: 14px; font-weight: 600; }
+    .meta { font-size: 12px; opacity: .75; display: flex; gap: 8px; flex-wrap: wrap; }
+    .row { display: flex; gap: 8px; align-items: center; justify-content: space-between; }
+    a { text-decoration: none; font-size: 12px; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; font-size: 11px; }
+  </style>
+</head>
+<body>
+  <h1>Direct Video Test — Multiple MP4s</h1>
+  <p>Plain <code>&lt;video src&gt;</code> elements pointing to direct files (no HLS/DASH). Useful for testing MV3 webRequest detection of direct media.</p>
+
+  <section class="grid" id="list">
+    <!-- All sources are direct MP4 files from Google's public sample bucket -->
+    <figure>
+      <video controls preload="metadata" src="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"></video>
+      <figcaption>Big Buck Bunny — MP4</figcaption>
+      <div class="meta"><span class="mono">/sample/BigBuckBunny.mp4</span><a target="_blank" href="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4">Open direct file</a></div>
+    </figure>
+
+    <figure>
+      <video controls preload="metadata" src="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4"></video>
+      <figcaption>Elephants Dream — MP4</figcaption>
+      <div class="meta"><span class="mono">/sample/ElephantsDream.mp4</span><a target="_blank" href="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4">Open direct file</a></div>
+    </figure>
+
+    <figure>
+      <video controls preload="metadata" src="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4"></video>
+      <figcaption>For Bigger Blazes — MP4</figcaption>
+      <div class="meta"><span class="mono">/sample/ForBiggerBlazes.mp4</span><a target="_blank" href="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4">Open direct file</a></div>
+    </figure>
+
+    <figure>
+      <video controls preload="metadata" src="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4"></video>
+      <figcaption>For Bigger Escapes — MP4</figcaption>
+      <div class="meta"><span class="mono">/sample/ForBiggerEscapes.mp4</span><a target="_blank" href="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4">Open direct file</a></div>
+    </figure>
+
+    <figure>
+      <video controls preload="metadata" src="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4"></video>
+      <figcaption>For Bigger Fun — MP4</figcaption>
+      <div class="meta"><span class="mono">/sample/ForBiggerFun.mp4</span><a target="_blank" href="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4">Open direct file</a></div>
+    </figure>
+
+    <figure>
+      <video controls preload="metadata" src="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerJoyrides.mp4"></video>
+      <figcaption>For Bigger Joyrides — MP4</figcaption>
+      <div class="meta"><span class="mono">/sample/ForBiggerJoyrides.mp4</span><a target="_blank" href="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerJoyrides.mp4">Open direct file</a></div>
+    </figure>
+
+    <figure>
+      <video controls preload="metadata" src="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerMeltdowns.mp4"></video>
+      <figcaption>For Bigger Meltdowns — MP4</figcaption>
+      <div class="meta"><span class="mono">/sample/ForBiggerMeltdowns.mp4</span><a target="_blank" href="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerMeltdowns.mp4">Open direct file</a></div>
+    </figure>
+
+    <figure>
+      <video controls preload="metadata" src="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/SubaruOutbackOnStreetAndDirt.mp4"></video>
+      <figcaption>Subaru Outback — MP4</figcaption>
+      <div class="meta"><span class="mono">/sample/SubaruOutbackOnStreetAndDirt.mp4</span><a target="_blank" href="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/SubaruOutbackOnStreetAndDirt.mp4">Open direct file</a></div>
+    </figure>
+
+    <figure>
+      <video controls preload="metadata" src="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/WeAreGoingOnBullrun.mp4"></video>
+      <figcaption>We Are Going On Bullrun — MP4</figcaption>
+      <div class="meta"><span class="mono">/sample/WeAreGoingOnBullrun.mp4</span><a target="_blank" href="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/WeAreGoingOnBullrun.mp4">Open direct file</a></div>
+    </figure>
+
+    <figure>
+      <video controls preload="metadata" src="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/WhatCarCanYouGetForAGrand.mp4"></video>
+      <figcaption>What Car Can You Get For A Grand — MP4</figcaption>
+      <div class="meta"><span class="mono">/sample/WhatCarCanYouGetForAGrand.mp4</span><a target="_blank" href="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/WhatCarCanYouGetForAGrand.mp4">Open direct file</a></div>
+    </figure>
+  </section>
+
+  <script>
+    // Optional: small logger to see lifecycle in DevTools
+    for (const v of document.querySelectorAll('video')) {
+      const label = v.currentSrc || v.getAttribute('src');
+      v.addEventListener('loadedmetadata', () => console.log('[meta]', label, v.videoWidth + 'x' + v.videoHeight, Math.round(v.duration) + 's'));
+      v.addEventListener('progress', () => console.log('[progress]', label));
+      v.addEventListener('canplay', () => console.log('[canplay]', label));
+      v.addEventListener('error', (e) => console.warn('[error]', label, e));
+    }
+  </script>
+</body>
+</html>
