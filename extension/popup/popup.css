@@ -149,7 +149,8 @@
 }
 
 .download-menu-dropdown, .header {
-  backdrop-filter: var(--backdrop-filter);
+  -webkit-backdrop-filter: var(--backdrop-filter);
+          backdrop-filter: var(--backdrop-filter);
 }
 .theme-dark .download-menu-dropdown, .theme-dark .header {
   background: var(--bg-backdrop-dark);
@@ -377,7 +378,8 @@ h3, .h3, .item-title {
   transition: -webkit-box-shadow var(--transition-normal);
   transition: box-shadow var(--transition-normal);
   transition: box-shadow var(--transition-normal), -webkit-box-shadow var(--transition-normal);
-  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+          backdrop-filter: saturate(180%) blur(20px);
   padding: 6px;
   gap: 6px;
   border: none !important;
@@ -725,7 +727,8 @@ h3, .h3, .item-title {
   opacity: 0;
   visibility: hidden;
   width: 282px;
-  backdrop-filter: var(--backdrop-filter);
+  -webkit-backdrop-filter: var(--backdrop-filter);
+          backdrop-filter: var(--backdrop-filter);
   scrollbar-width: none;
 }
 .theme-dark .options-container {
@@ -1769,7 +1772,8 @@ h3, .h3, .item-title {
           justify-content: space-between;
   padding: 6px;
   gap: 6px;
-  backdrop-filter: var(--backdrop-filter);
+  -webkit-backdrop-filter: var(--backdrop-filter);
+          backdrop-filter: var(--backdrop-filter);
   position: sticky;
   top: 47px;
   z-index: 5;
@@ -2835,6 +2839,10 @@ h3, .h3, .item-title {
 .history-header .history-flag-text.live-flag {
   background-color: var(--color-green-hover);
   color: white;
+}
+.history-header .history-flag-text.browser-flag {
+  background-color: rgba(59, 130, 246, 0.15);
+  color: var(--color-blue);
 }
 
 .history-footer {

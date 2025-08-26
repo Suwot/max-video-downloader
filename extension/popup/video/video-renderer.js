@@ -330,6 +330,12 @@ function buildFlagsHtml(progressData) {
             <span class="history-flag-text live-flag">LIVE REC</span>
         `);
     }
+	// Browser download flag
+    if (progressData.browserDownload) {
+        icons.push(`
+            <span class="history-flag-text browser-flag">BROWSER</span>
+        `);
+    }
     if (progressData.deleted) {
         icons.push(`
             <span class="history-flag-text deleted-flag">DELETED</span>
@@ -470,7 +476,7 @@ function buildStatsHtml(progressData) {
                 Subs
             </span>
         `);
-    } else if (origLabel) {
+    } else if (origLabel && !progressData.browserDownload) {
         const advancedDropdown = origLabel.includes('≈')
         const qualityText = advancedDropdown ? 
             origLabel.split('≈')[0]?.trim() : 
@@ -531,7 +537,7 @@ function buildStatsHtml(progressData) {
     }
     
     // Duration (orange circle)
-    if (progressData.downloadStats.finalDuration) {
+    if (progressData.downloadStats?.finalDuration) {
         const duration = formatDuration(progressData.downloadStats.finalDuration);
         stats.push(`
             <span class="duration">

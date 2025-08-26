@@ -541,18 +541,23 @@ export class VideoItemComponent {
     
     // Execute download with specified mode. Download mode ('download', 'download-as', 'extract-audio', 'extract-subs')
     async executeDownload(mode = 'download') {
-        // Check coapp availability from session storage
+        // Check coapp availability and video type for browser download eligibility
         const session = await chrome.storage.session.get(['coappAvailable']);
-        if (!session.coappAvailable) {
-            showError('CoApp is required for downloads. Go to Settings tab to install.');
-            // Reset button state to default since operation failed
+        const coappAvailable = session.coappAvailable || false;
+        const isDirect = this.videoData.type === 'direct';
+        
+        // Use browser download for direct videos when coapp unavailable
+        const useBrowserDownload = !coappAvailable && isDirect;
+        
+        if (!coappAvailable && !isDirect) {
+            showError('CoApp is required for HLS/DASH downloads. Go to Settings tab to install.');
             if (this.downloadButton) {
                 this.downloadButton.updateState('default');
             }
             return;
         }
         
-        const commands = this.createDownloadCommand(mode);
+        const commands = this.createDownloadCommand(mode, useBrowserDownload);
         
         // Handle single command or array of commands (for multi-track extraction)
         const commandArray = Array.isArray(commands) ? commands : [commands];
@@ -586,7 +591,7 @@ export class VideoItemComponent {
     }
 
     // Create complete download command based on mode and current component state
-    createDownloadCommand(mode = 'download') {
+    createDownloadCommand(mode = 'download', useBrowserDownload = false) {
         const baseData = this.getDownloadData();
         
         // Get selected option text for UI restoration
@@ -623,6 +628,7 @@ export class VideoItemComponent {
             audioOnly: mode === 'extract-audio',
             subsOnly: mode === 'extract-subs',
             choosePath: mode === 'download-as',  // Add choosePath flag for download-as mode
+            browserDownload: useBrowserDownload,  // Flag for browser download routing
             selectedOptionOrigText,
             videoData: minimalVideoData,
             ...baseData

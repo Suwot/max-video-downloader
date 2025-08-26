@@ -133,6 +133,11 @@
             background-color: var(--color-green-hover);
             color: white;
         }
+        
+        &.browser-flag {
+            background-color: rgba(59, 130, 246, 0.15);
+            color: var(--color-blue);
+        }
     }
 }
 

@@ -11,8 +11,6 @@ import { settingsManager } from '../index.js';
 
 const logger = createLogger('Download Manager');
 
-// Storage management - will use settings manager for max history size
-
 // Unified download state management - Single source of truth
 const allDownloads = new Map(); // downloadId -> downloadEntry
 
@@ -193,7 +191,7 @@ export async function processDownloadCommand(downloadCommand) {
         return;
     }
     
-    // Start download immediately
+    // Start download immediately (unified flow handles both coapp and browser downloads)
     await startDownloadImmediately(resolvedCommand);
 }
 
@@ -206,13 +204,18 @@ async function resolveDownloadPaths(downloadCommand) {
     const defaultSavePath = settingsManager.get('defaultSavePath');
     const isFirstTimeSetup = !defaultSavePath;
     
-    // Handle download-as or first-time setup
-    if (downloadCommand.choosePath || isFirstTimeSetup) {
+    // Handle download-as or first-time setup (but not for browser downloads)
+    if ((downloadCommand.choosePath || isFirstTimeSetup) && !downloadCommand.browserDownload) {
         logger.debug('Resolving path via filesystem dialog');
         return await handleDownloadAsFlow({
             ...downloadCommand,
             isFirstTimeSetup: isFirstTimeSetup && !downloadCommand.choosePath
         });
+    }
+    
+    // For browser downloads with choosePath, skip CoApp dialog - Chrome will handle saveAs
+    if (downloadCommand.browserDownload && downloadCommand.choosePath) {
+        logger.debug('Browser download with choosePath - skipping CoApp dialog, Chrome will handle saveAs');
     }
     
     // Use default save path
@@ -297,11 +300,260 @@ async function startDownloadImmediately(downloadRequest) {
         subsOnly: downloadRequest.subsOnly || false
     });
     
-    // Send download command (fire-and-forget)
-    // All responses will come through event listeners
-    nativeHostService.sendMessage(downloadRequest, { expectResponse: false });
+    // Route to appropriate download method
+    if (downloadRequest.browserDownload) {
+        await startBrowserDownload(downloadId, downloadRequest);
+    } else {
+        // Send download command to native host (fire-and-forget)
+        // All responses will come through event listeners
+        nativeHostService.sendMessage(downloadRequest, { expectResponse: false });
+        logger.debug('Download command sent:', downloadId);
+    }
+}
+
+/**
+ * Sanitize filename for Chrome Downloads API
+ * @param {string} filename - Original filename
+ * @returns {string} Sanitized filename
+ */
+function sanitizeFilename(filename) {
+    if (!filename) return 'video';
     
-    logger.debug('Download command sent:', downloadId);
+    // Remove query parameters (everything after ?)
+    let sanitized = filename.split('?')[0];
+    
+    // Remove invalid characters for filenames
+    sanitized = sanitized.replace(/[<>:"/\\|?*]/g, '_');
+    
+    // Remove leading/trailing spaces and dots
+    sanitized = sanitized.trim().replace(/^\.+|\.+$/g, '');
+    
+    // Ensure we have a filename
+    if (!sanitized) sanitized = 'video';
+    
+    return sanitized;
+}
+
+/**
+ * Start browser download - lean deterministic flow
+ * @param {string} downloadId - Download ID
+ * @param {Object} downloadRequest - Complete download request
+ */
+async function startBrowserDownload(downloadId, downloadRequest) {
+    try {
+        // Sanitize filename
+        const sanitizedFilename = sanitizeFilename(downloadRequest.filename);
+        
+        // Create Chrome download with saveAs support for download-as flow
+        const downloadOptions = {
+            url: downloadRequest.downloadUrl,
+            filename: sanitizedFilename
+        };
+        
+        // Add saveAs parameter for download-as flow (choosePath flag)
+        if (downloadRequest.choosePath) {
+            downloadOptions.saveAs = true;
+            logger.debug('Using saveAs dialog for download-as flow');
+        }
+        
+        const browserDownloadId = await chrome.downloads.download(downloadOptions);
+        
+        logger.debug('Browser download started:', downloadId, ', Chrome ID:', browserDownloadId);
+        
+        // Get existing entry and add minimal browser download state
+        const entry = allDownloads.get(downloadId);
+        if (entry) {
+            entry.browserDownloadId = browserDownloadId;
+            entry.progressClock = {
+                startTime: Date.now(),
+                lastBytes: 0,
+                lastTime: Date.now()
+            };
+            
+            // Start polling every 1 second
+            entry.pollIntervalId = setInterval(() => {
+                tickPoll(downloadId);
+            }, 1000);
+        }
+        
+    } catch (error) {
+        logger.error('Browser download failed:', error);
+        
+        // Use existing error handling flow
+        const errorEvent = {
+            command: 'download-error',
+            downloadId,
+            downloadUrl: downloadRequest.downloadUrl,
+            masterUrl: downloadRequest.masterUrl || null,
+            selectedOptionOrigText: downloadRequest.selectedOptionOrigText || null,
+            errorMessage: error.message || 'Browser download failed',
+            browserDownload: true
+        };
+        
+        await handleDownloadEvent(errorEvent);
+    }
+}
+
+/**
+ * Poll Chrome download by ID and convert to existing event format
+ * @param {string} downloadId - Internal download ID
+ * @param {number} chromeDownloadId - Chrome download ID
+ */
+async function tickPoll(downloadId) {
+    const entry = allDownloads.get(downloadId);
+    if (!entry || !entry.browserDownloadId) {
+        return;
+    }
+    
+    try {
+        // Fetch current state
+        const [item] = await chrome.downloads.search({ id: entry.browserDownloadId });
+        
+        if (!item) {
+            stopPolling(entry);
+            const errorEvent = {
+                command: 'download-error',
+                downloadId,
+                downloadUrl: entry.downloadRequest.downloadUrl,
+                masterUrl: entry.downloadRequest.masterUrl || null,
+                selectedOptionOrigText: entry.downloadRequest.selectedOptionOrigText || null,
+                errorMessage: 'Download not found',
+                browserDownload: true
+            };
+            await handleDownloadEvent(errorEvent);
+            return;
+        }
+        
+        // Branch by state
+        if (item.state === 'complete') {
+            // Compute final totals
+            const finalPath = item.filename;
+            const finalName = finalPath.split('/').pop();
+            const finalSize = item.totalBytes || entry.progressData?.totalSize || 0;
+            
+            stopPolling(entry);
+            
+            // Emit unified success
+            const successEvent = {
+                command: 'download-success',
+                downloadId,
+                downloadUrl: entry.downloadRequest.downloadUrl,
+                masterUrl: entry.downloadRequest.masterUrl || null,
+                selectedOptionOrigText: entry.downloadRequest.selectedOptionOrigText || null,
+                filename: finalName,
+                path: finalPath,
+                downloadStats: { totalSize: finalSize },
+                browserDownload: true
+            };
+            
+            await handleDownloadEvent(successEvent);
+            return;
+        }
+        
+        if (item.state === 'interrupted') {
+            stopPolling(entry);
+            
+            // Emit unified error
+            const errorEvent = {
+                command: 'download-error',
+                downloadId,
+                downloadUrl: entry.downloadRequest.downloadUrl,
+                masterUrl: entry.downloadRequest.masterUrl || null,
+                selectedOptionOrigText: entry.downloadRequest.selectedOptionOrigText || null,
+                errorMessage: item.error || 'Download interrupted',
+                browserDownload: true
+            };
+            
+            await handleDownloadEvent(errorEvent);
+            return;
+        }
+        
+        if (item.state === 'in_progress') {
+            // Read numbers
+            const bytes = item.bytesReceived || 0;
+            const total = item.totalBytes ?? 0; // treat 0 as "unknown"
+            
+            // Compute dynamics
+            const now = Date.now();
+            const dt = Math.max(1, (now - entry.progressClock.lastTime) / 1000);
+            const dB = Math.max(0, bytes - entry.progressClock.lastBytes);
+            const speed = dB / dt; // B/s
+            const progress = total > 0 ? Math.round((bytes / total) * 100) : 0;
+            const eta = (total > 0 && speed > 0) ? Math.round((total - bytes) / speed) : null;
+            const elapsed = Math.round((now - entry.progressClock.startTime) / 1000);
+            
+            // Update clock
+            entry.progressClock.lastBytes = bytes;
+            entry.progressClock.lastTime = now;
+            
+            // Emit unified progress
+            const progressEvent = {
+                command: 'download-progress',
+                downloadId,
+                downloadUrl: entry.downloadRequest.downloadUrl,
+                masterUrl: entry.downloadRequest.masterUrl || null,
+                selectedOptionOrigText: entry.downloadRequest.selectedOptionOrigText || null,
+                type: entry.downloadRequest.type,
+                downloadedBytes: bytes,
+                totalSize: total || 0,
+                progress,
+                speed: speed > 0 ? Math.round(speed) : null,
+                eta,
+                elapsedTime: elapsed,
+                browserDownload: true
+            };
+            
+            await handleDownloadEvent(progressEvent);
+        }
+        
+    } catch (error) {
+        logger.error('Error polling browser download (will retry):', downloadId, error);
+        // Keep polling; next tick will retry
+    }
+}
+
+/**
+ * Stop polling helper - lean cleanup
+ * @param {Object} entry - Download entry
+ */
+function stopPolling(entry) {
+    if (entry.pollIntervalId) {
+        clearInterval(entry.pollIntervalId);
+        entry.pollIntervalId = null;
+    }
+}
+
+/**
+ * Cancel browser download - find and cancel Chrome download
+ * @param {string} downloadId - Internal download ID
+ * @param {Object} entry - Download entry
+ */
+async function cancelBrowserDownload(downloadId, entry) {
+    try {
+        // Cancel Chrome download directly using stored ID
+        if (entry.browserDownloadId) {
+            await chrome.downloads.cancel(entry.browserDownloadId);
+            logger.debug('Canceled Chrome download:', entry.browserDownloadId);
+        }
+        
+    } catch (error) {
+        logger.warn('Failed to cancel Chrome download:', error);
+    }
+    
+    // Clean up polling
+    stopPolling(entry);
+    
+    // Use unified completion flow (handles delete, notify, broadcast, processNext)
+    await handleDownloadEvent({
+        command: 'download-canceled',
+        downloadId,
+        downloadUrl: entry.downloadRequest?.downloadUrl,
+        masterUrl: entry.downloadRequest?.masterUrl || null,
+        selectedOptionOrigText: entry.downloadRequest?.selectedOptionOrigText || null,
+        browserDownload: true
+    });
+    
+    logger.debug('Browser download canceled:', downloadId);
 }
 
 // Handle download events from native host (event-driven)
@@ -436,8 +688,6 @@ export function getActiveDownloadCount() {
     };
 }
 
-
-
 // Check if a specific download is currently active
 export function isDownloadActive(downloadUrl) {
     for (const entry of allDownloads.values()) {
@@ -486,16 +736,24 @@ export async function cancelDownload(cancelRequest) {
         // Notify count change
         notifyDownloadCountChange();
         
-        // Broadcast cancellation to UI - minimal data
+        // Broadcast cancellation to UI - include downloadUrl for videos tab matching
         broadcastToPopups({
             command: 'download-canceled',
-            downloadId
+            downloadId,
+            downloadUrl: entry.downloadRequest.downloadUrl,
+            masterUrl: entry.downloadRequest.masterUrl || null,
         });
         
         logger.debug('Queued download removed immediately:', downloadId);
         return;
     } else if (entry.status === 'downloading') {
-        // Set stopping state, wait for native host
+        // Check if this is a browser download (has browserDownloadId)
+        if (entry.browserDownloadId) {
+            await cancelBrowserDownload(downloadId, entry);
+            return;
+        }
+        
+        // Native host download cancellation
         entry.status = 'stopping';
         
         // Broadcast stopping state to UI - minimal data
@@ -568,28 +826,17 @@ async function processNextDownload() {
         return;
     }
     
-    logger.debug('Processing next queued download:', queuedEntry.downloadId);
-    
-    // Update status to downloading
-    queuedEntry.status = 'downloading';
-    // Don't update progressData here - it will be set by first progress event
-    
-    // Notify count change
-    notifyDownloadCountChange();
-    
     // Get downloadId from the Map entry we found
     const downloadId = Array.from(allDownloads.entries())
         .find(([id, entry]) => entry === queuedEntry)?.[0];
     
-    // Broadcast download start to UI - compose from entry data with downloadId
-    broadcastToPopups({
-        command: 'download-started',
-        downloadId, // Essential for UI deduplication
-        videoData: queuedEntry.downloadRequest.videoData
-    });
+    logger.debug('Processing next queued download:', downloadId);
     
-    // Send download command to native host
-    nativeHostService.sendMessage(queuedEntry.downloadRequest, { expectResponse: false });
+    // Remove from queue and restart through unified flow
+    allDownloads.delete(downloadId);
+    
+    // Restart through unified flow (handles both native and browser downloads)
+    await startDownloadImmediately(queuedEntry.downloadRequest);
     
     logger.debug('Queued download promoted to active:', downloadId);
 }
@@ -624,7 +871,10 @@ function generateDownloadId(request) {
     
     // Add stream selection hash for DASH multi-track downloads
     if (request.type === 'dash' && request.streamSelection) {
-        baseId += '_' + simpleHash(request.streamSelection);
+        const ss = typeof request.streamSelection === 'string'
+            ? request.streamSelection
+            : JSON.stringify(request.streamSelection);
+        baseId += '_' + simpleHash(ss);
     }
     
     // Add audio-only flag for audio extraction
@@ -718,7 +968,7 @@ async function addToHistoryStorage(progressData) {
  * @returns {Promise<Object|null>} Resolved command or null if canceled
  */
 async function handleDownloadAsFlow(downloadCommand) {
-    const downloadId = downloadCommand.downloadUrl;
+    const downloadId = downloadCommand.downloadId || downloadCommand.downloadUrl;
     
     try {
         logger.debug(`Handling filesystem dialog for:`, downloadId);
