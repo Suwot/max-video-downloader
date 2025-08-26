@@ -15,8 +15,6 @@
     "dist:win-arm64": "cd native_host && ./build.sh dist win-arm64",
     "dist:linux-x64": "cd native_host && ./build.sh dist linux-x64",
     "dist:linux-arm64": "cd native_host && ./build.sh dist linux-arm64",
-    "install-coapp": "cd native_host && ./install.sh",
-    "uninstall-coapp": "cd native_host && ./uninstall.sh",
     "version-host": "cd native_host && ./build.sh version"
   },
   "devDependencies": {
