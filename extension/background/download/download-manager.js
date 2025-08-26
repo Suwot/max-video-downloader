@@ -312,37 +312,15 @@ async function startDownloadImmediately(downloadRequest) {
 }
 
 /**
- * Sanitize filename for Chrome Downloads API
- * @param {string} filename - Original filename
- * @returns {string} Sanitized filename
- */
-function sanitizeFilename(filename) {
-    if (!filename) return 'video';
-    
-    // Remove query parameters (everything after ?)
-    let sanitized = filename.split('?')[0];
-    
-    // Remove invalid characters for filenames
-    sanitized = sanitized.replace(/[<>:"/\\|?*]/g, '_');
-    
-    // Remove leading/trailing spaces and dots
-    sanitized = sanitized.trim().replace(/^\.+|\.+$/g, '');
-    
-    // Ensure we have a filename
-    if (!sanitized) sanitized = 'video';
-    
-    return sanitized;
-}
-
-/**
  * Start browser download - lean deterministic flow
  * @param {string} downloadId - Download ID
  * @param {Object} downloadRequest - Complete download request
  */
 async function startBrowserDownload(downloadId, downloadRequest) {
     try {
-        // Sanitize filename
-        const sanitizedFilename = sanitizeFilename(downloadRequest.filename);
+        // Sanitize filename with proper container extension
+        const sanitizedFilename = (downloadRequest.filename || 'video')
+            .replace(/[<>:"/\\|*]/g, '_').replace(/\?/g, ' ').trim() + '.' + (downloadRequest.container || 'mp4');
         
         // Create Chrome download with saveAs support for download-as flow
         const downloadOptions = {

@@ -6,14 +6,14 @@ import nativeHostService from '../messaging/native-host-service.js';
 import { broadcastToPopups } from '../messaging/popup-communication.js';
 
 const SETTINGS_DEFAULTS = {
-  maxConcurrentDownloads: 1,
+  maxConcurrentDownloads: 3,
   defaultSavePath: null,
   showDownloadNotifications: true,
-  minFileSizeFilter: 102400, // 100KB in bytes (for video-detector.js)
+  minFileSizeFilter: 200 * 1024, // 200KB in bytes (for video-detector.js)
   minFileSizeFilterUnit: 1024, // KB multiplier (user's preferred unit)
   autoGeneratePreviews: true,
   saveDownloadsInHistory: true,
-  maxHistorySize: 50,
+  maxHistorySize: 100,
   historyAutoRemoveInterval: 30,
   theme: 'dark' // Default theme
 };
