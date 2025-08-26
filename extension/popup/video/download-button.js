@@ -3,10 +3,7 @@
  * Handles download initiation, progress updates, and multi-audio extraction
  */
 
-import { createLogger } from '../../shared/utils/logger.js';
 import { sendPortMessage } from '../communication.js';
-
-const logger = createLogger('VideoDownloadButtonComponent');
 
 // Button state constants
 const BUTTON_STATES = {
@@ -318,7 +315,7 @@ export class VideoDownloadButtonComponent {
      * @param {string} action - Action identifier
      */
     async handleMenuItemClick(action) {
-        logger.debug('Menu item clicked:', action);
+        console.debug('Menu item clicked:', action);
         
         switch (action) {
             case 'extract-audio':
@@ -334,7 +331,7 @@ export class VideoDownloadButtonComponent {
                 await this.handleCopyUrl();
                 break;
             default:
-                logger.debug('Unknown action:', action);
+                console.debug('Unknown action:', action);
         }
     }
     
@@ -374,7 +371,7 @@ export class VideoDownloadButtonComponent {
         if (urlToCopy) {
             try {
                 await navigator.clipboard.writeText(urlToCopy);
-                logger.debug('URL copied to clipboard:', urlToCopy);
+                console.debug('URL copied to clipboard:', urlToCopy);
                 
                 // Show temporary feedback
                 this.downloadBtn.innerHTML= 'Copied!';
@@ -382,7 +379,7 @@ export class VideoDownloadButtonComponent {
                     this.updateState(BUTTON_STATES.DEFAULT);
                 }, 1000);
             } catch (error) {
-                logger.error('Failed to copy URL:', error);
+                console.error('Failed to copy URL:', error);
                 this.updateState(BUTTON_STATES.DEFAULT);
             }
         }

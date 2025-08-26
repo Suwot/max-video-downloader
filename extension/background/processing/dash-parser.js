@@ -10,12 +10,7 @@ import {
     detectContainerFromDashTrack
 } from './parser-utils.js';
 import { fetchManifest } from './manifest-fetcher.js';
-import { createLogger } from '../../shared/utils/logger.js';
 import { standardizeResolution, normalizeUrl } from '../../shared/utils/processing-utils.js';
-
-// Create a logger for the DASH parser
-const logger = createLogger('DASH Parser');
-logger.setLevel('ERROR');
 
 // Track URLs currently being processed to prevent duplicates
 const processingUrls = new Set();
@@ -224,7 +219,7 @@ export async function parseDashManifest(videoObject) {
     processingUrls.add(normalizedUrl);
     
     try {
-        logger.debug(`Fetching manifest: ${url} with headers:`, headers);
+        console.debug(`Fetching manifest: ${url} with headers:`, headers);
         
         // Fetch manifest content
         const fetchResult = await fetchManifest(url, headers);
@@ -232,7 +227,7 @@ export async function parseDashManifest(videoObject) {
         
         // Early return if fetch failed
         if (!fetchResult.success) {
-            logger.warn(`Failed to fetch manifest: ${url} (${fetchResult.status})`);
+            console.warn(`Failed to fetch manifest: ${url} (${fetchResult.status})`);
             return {
                 status: 'fetch-failed',
                 isValid: false,
@@ -248,7 +243,7 @@ export async function parseDashManifest(videoObject) {
         // Validate DASH format
         if (!content.includes('<MPD') || 
             (!content.includes('xmlns="urn:mpeg:dash:schema:mpd') && !content.includes('</MPD>'))) {
-            logger.warn(`Not a valid DASH manifest: ${url}`);
+            console.warn(`Not a valid DASH manifest: ${url}`);
             return {
                 status: 'invalid-format',
                 isValid: false,
@@ -259,7 +254,7 @@ export async function parseDashManifest(videoObject) {
             };
         }
         
-        logger.debug(`Confirmed valid DASH manifest: ${url}`);
+        console.debug(`Confirmed valid DASH manifest: ${url}`);
         
         // Check if this is a live stream first
         const isLive = content.match(/type="dynamic"/i) !== null;
@@ -472,10 +467,10 @@ export async function parseDashManifest(videoObject) {
             status: 'success'
         };
         
-        logger.info(`Successfully parsed MPD: found ${videoTracks?.length} video, ${audioTracks?.length} audio, and ${subtitleTracks?.length} subtitle tracks`);
+        console.info(`Successfully parsed MPD: found ${videoTracks?.length} video, ${audioTracks?.length} audio, and ${subtitleTracks?.length} subtitle tracks`);
         return result;
     } catch (error) {
-        logger.error(`Error parsing MPD: ${error.message}`);
+        console.error(`Error parsing MPD: ${error.message}`);
         return { 
             status: 'parse-error',
             isValid: false,

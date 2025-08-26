@@ -9,12 +9,7 @@ import {
     resolveUrl
 } from './parser-utils.js';
 import { fetchManifest } from './manifest-fetcher.js';
-import { createLogger } from '../../shared/utils/logger.js';
 import { standardizeResolution, normalizeUrl, getBaseDirectory, generateId } from '../../shared/utils/processing-utils.js';
-
-// Create a logger for the HLS parser
-const logger = createLogger('HLS Parser');
-logger.setLevel('ERROR');
 
 // Track URLs currently being processed to prevent duplicates
 const processingUrls = new Set();
@@ -48,7 +43,7 @@ export async function parseHlsManifest(videoObject) {
     processingUrls.add(normalizedUrl);
     
     try {
-        logger.debug(`Fetching manifest: ${url} with headers:`, headers);
+        console.debug(`Fetching manifest: ${url} with headers:`, headers);
         
         // Fetch manifest content
         const fetchResult = await fetchManifest(url, headers);
@@ -56,7 +51,7 @@ export async function parseHlsManifest(videoObject) {
         
         // Early return if fetch failed
         if (!fetchResult.success) {
-            logger.warn(`Failed to fetch manifest: ${url} (${fetchResult.status})`);
+            console.warn(`Failed to fetch manifest: ${url} (${fetchResult.status})`);
             return {
                 status: 'fetch-failed',
                 isValid: false,
@@ -75,7 +70,7 @@ export async function parseHlsManifest(videoObject) {
         
         // Validate HLS format
         if (!content.includes('#EXTM3U')) {
-            logger.warn(`Not a valid HLS manifest: ${url}`);
+            console.warn(`Not a valid HLS manifest: ${url}`);
             return {
                 status: 'invalid-format',
                 isValid: false,
@@ -94,8 +89,8 @@ export async function parseHlsManifest(videoObject) {
         const isMaster = content.includes('#EXT-X-STREAM-INF');
         const isVariant = !isMaster && content.includes('#EXTINF');
         
-        logger.debug(`Confirmed valid HLS ${isMaster ? 'master' : (isVariant ? 'variant' : 'unknown')} manifest: ${url}`);
-        logger.debug(`Using validation results: isMaster=${isMaster}, isVariant=${isVariant}`);
+        console.debug(`Confirmed valid HLS ${isMaster ? 'master' : (isVariant ? 'variant' : 'unknown')} manifest: ${url}`);
+        console.debug(`Using validation results: isMaster=${isMaster}, isVariant=${isVariant}`);
         
         const baseUrl = getBaseDirectory(url);
         
@@ -113,7 +108,7 @@ export async function parseHlsManifest(videoObject) {
 
         if (isMaster) {
             // Parse the master playlist to extract variant URLs, subtitle tracks, and closed captions
-            logger.debug(`Parsing HLS master playlist content: ${content.substring(0, 100)}...`);
+            console.debug(`Parsing HLS master playlist content: ${content.substring(0, 100)}...`);
             const masterParseResult = parseHlsMaster(content, baseUrl, url);
 
             // Store version from master playlist
@@ -140,7 +135,7 @@ export async function parseHlsManifest(videoObject) {
                 ...subtitleTracks
             ];
             
-            logger.debug(`Found ${allTracksWithUrls.length} tracks for metadata extraction (${videoTracks?.length} video, ${audioTracks?.length} audio, ${subtitleTracks?.length} subtitle)`);
+            console.debug(`Found ${allTracksWithUrls.length} tracks for metadata extraction (${videoTracks?.length} video, ${audioTracks?.length} audio, ${subtitleTracks?.length} subtitle)`);
             
             // Try up to 3 tracks for metadata extraction
             let variantInfo = null;
@@ -152,28 +147,28 @@ export async function parseHlsManifest(videoObject) {
                     const trackType = videoTracks.includes(currentTrack) ? 'video' : 
                                      audioTracks.includes(currentTrack) ? 'audio' : 'subtitle';
                     
-                    logger.debug(`Trying track ${i + 1}/${Math.min(3, allTracksWithUrls.length)} (${trackType}): ${currentTrack.url}`);
+                    console.debug(`Trying track ${i + 1}/${Math.min(3, allTracksWithUrls.length)} (${trackType}): ${currentTrack.url}`);
                     
                     variantInfo = await parseHlsVariant(currentTrack.url, headers, tabId);
                     
                     if (variantInfo) {
-                        logger.debug(`Successfully fetched metadata from ${trackType} track ${i + 1}`);
+                        console.debug(`Successfully fetched metadata from ${trackType} track ${i + 1}`);
                         successfulTrackIndex = i;
                         
                         // If it's live, stop iteration immediately regardless of duration
                         if (variantInfo.isLive) {
-                            logger.debug('Detected live stream - stopping variant iteration');
+                            console.debug('Detected live stream - stopping variant iteration');
                             break;
                         }
                         
                         // If it's VOD with duration, we're done
                         if (variantInfo.duration !== null) {
-                            logger.debug('Got duration from VOD stream - stopping iteration');
+                            console.debug('Got duration from VOD stream - stopping iteration');
                             break;
                         }
                     }
                 } catch (error) {
-                    logger.warn(`Failed to fetch track ${i + 1}: ${error.message}`);
+                    console.warn(`Failed to fetch track ${i + 1}: ${error.message}`);
                 }
             }
             
@@ -222,20 +217,20 @@ export async function parseHlsManifest(videoObject) {
                     return track;
                 });
                 
-                logger.debug(`Propagated metadata to ${videoTracks.length} video tracks and ${audioTracks.filter(t => t.url).length} audio tracks`);
+                console.debug(`Propagated metadata to ${videoTracks.length} video tracks and ${audioTracks.filter(t => t.url).length} audio tracks`);
             } else {
-                logger.warn('No valid tracks found for metadata extraction - will set noDuration flag');
+                console.warn('No valid tracks found for metadata extraction - will set noDuration flag');
                 duration = null;
             }
         }
         else if (isVariant) {
             // For variant playlists, extract duration and encryption info directly
-            logger.debug(`Parsing standalone variant playlist`);
+            console.debug(`Parsing standalone variant playlist`);
             const variantInfo = calculateHlsVariantDuration(content);
             duration = variantInfo.duration;
             isLive = variantInfo.isLive;
             
-            logger.debug(`Variant duration: ${duration}s, isLive: ${isLive}`);
+            console.debug(`Variant duration: ${duration}s, isLive: ${isLive}`);
             
             // Extract encryption info
             const encryptionInfo = extractHlsEncryptionInfo(content);
@@ -244,7 +239,7 @@ export async function parseHlsManifest(videoObject) {
             
             // Extract HLS version for standalone variant
             version = extractHlsVersion(content);
-            logger.debug(`Standalone variant version: ${version}`);
+            console.debug(`Standalone variant version: ${version}`);
             
             // Create a single-item video tracks array with HLS defaults
             videoTracks = [{
@@ -269,7 +264,7 @@ export async function parseHlsManifest(videoObject) {
                 timestampDetected: Date.now()
             }];
             
-            logger.debug(`Created standalone video track entry with container info: ${JSON.stringify(videoTracks[0])}`);
+            console.debug(`Created standalone video track entry with container info: ${JSON.stringify(videoTracks[0])}`);
         }
         
         // Set the parsing completion timestamp
@@ -302,13 +297,13 @@ export async function parseHlsManifest(videoObject) {
         // Add noDuration flag if no duration could be extracted from any track
         if (duration === null && isMaster) {
             result.noDuration = true;
-            logger.debug('Added noDuration flag - no valid tracks found for duration extraction');
+            console.debug('Added noDuration flag - no valid tracks found for duration extraction');
         }
 
-        logger.info(`Successfully parsed HLS: found ${videoTracks.length} video tracks, ${audioTracks?.length} audio tracks, ${subtitleTracks?.length} subtitle tracks, ${closedCaptions?.length} closed caption tracks`);
+        console.info(`Successfully parsed HLS: found ${videoTracks.length} video tracks, ${audioTracks?.length} audio tracks, ${subtitleTracks?.length} subtitle tracks, ${closedCaptions?.length} closed caption tracks`);
         return result;
     } catch (error) {
-        logger.error(`Error parsing HLS: ${error.message}`);
+        console.error(`Error parsing HLS: ${error.message}`);
         return { 
             status: 'parse-error',
             error: error.message,
@@ -340,7 +335,7 @@ export async function parseHlsManifest(videoObject) {
 function parseHlsMaster(content, baseUrl, masterUrl) {
     // Extract the HLS version from the master playlist
     const version = extractHlsVersion(content);
-    logger.debug(`Processing master playlist v: ${version} with ${content.split(/\r?\n/).length} lines`);
+    console.debug(`Processing master playlist v: ${version} with ${content.split(/\r?\n/).length} lines`);
 
     // Use the unified variant entry extraction
     const variantEntries = extractMasterVariantEntries(content, baseUrl, masterUrl);
@@ -476,7 +471,7 @@ function parseHlsMaster(content, baseUrl, masterUrl) {
             }
         }
     }
-    logger.debug(`Found ${audioTracks.length} audio track(s), ${subtitleTracks.length} subtitle track(s) and ${closedCaptions.length} closed caption track(s) in HLS master: ${masterUrl}`);
+    console.debug(`Found ${audioTracks.length} audio track(s), ${subtitleTracks.length} subtitle track(s) and ${closedCaptions.length} closed caption track(s) in HLS master: ${masterUrl}`);
 
     // Sort video tracks by bandwidth (highest first for best quality)
     if (videoTracks.length > 0) {
@@ -485,7 +480,7 @@ function parseHlsMaster(content, baseUrl, masterUrl) {
             const bBandwidth = b.metaJS.averageBandwidth || b.metaJS.bandwidth || 0;
             return bBandwidth - aBandwidth;
         });
-        logger.debug(`Video tracks sorted by bandwidth, highest: ${videoTracks[0].metaJS.bandwidth}`);
+        console.debug(`Video tracks sorted by bandwidth, highest: ${videoTracks[0].metaJS.bandwidth}`);
     }
 
     return {
@@ -507,7 +502,7 @@ function parseHlsMaster(content, baseUrl, masterUrl) {
  */
 async function parseHlsVariant(variantUrl, headers = null, _tabId) {
     try {
-        logger.debug(`Fetching variant: ${variantUrl} with headers:`, headers);
+        console.debug(`Fetching variant: ${variantUrl} with headers:`, headers);
         
         // Use the unified fetchManifest function with retry logic
         const fetchResult = await fetchManifest(variantUrl, headers, {
@@ -516,7 +511,7 @@ async function parseHlsVariant(variantUrl, headers = null, _tabId) {
         });
         
         if (!fetchResult.success) {
-            logger.warn(`❌ Failed fetching variant ${variantUrl}: ${fetchResult.status}`);
+            console.warn(`❌ Failed fetching variant ${variantUrl}: ${fetchResult.status}`);
             return { 
                 duration: null, 
                 isLive: true,
@@ -530,10 +525,10 @@ async function parseHlsVariant(variantUrl, headers = null, _tabId) {
         }
         
         const content = fetchResult.content;
-        logger.debug(`Received variant playlist (${content.length} bytes)`);
+        console.debug(`Received variant playlist (${content.length} bytes)`);
         
         if (content.length === 0) {
-            logger.warn(`Empty response for variant ${variantUrl}`);
+            console.warn(`Empty response for variant ${variantUrl}`);
             return { 
                 duration: null, 
                 isLive: true,
@@ -547,14 +542,14 @@ async function parseHlsVariant(variantUrl, headers = null, _tabId) {
         
         // Extract different types of metadata from variant playlist
         const durationInfo = calculateHlsVariantDuration(content);
-        logger.debug(`Variant duration info: ${JSON.stringify(durationInfo)}`);
+        console.debug(`Variant duration info: ${JSON.stringify(durationInfo)}`);
         
         const encryptionInfo = extractHlsEncryptionInfo(content);
-        logger.debug(`Variant encryption info: ${JSON.stringify(encryptionInfo)}`);
+        console.debug(`Variant encryption info: ${JSON.stringify(encryptionInfo)}`);
 
         // Extract HLS version
         const version = extractHlsVersion(content);
-        logger.debug(`Variant version: ${version}`);
+        console.debug(`Variant version: ${version}`);
         
         // Build a complete result object with HLS defaults
         const result = {
@@ -568,10 +563,10 @@ async function parseHlsVariant(variantUrl, headers = null, _tabId) {
             audioContainer: 'm4a'
         };
 
-        logger.debug(`Complete variant info: ${JSON.stringify(result)}`);
+        console.debug(`Complete variant info: ${JSON.stringify(result)}`);
         return result;
     } catch (error) {
-        logger.error(`❌ ERROR parsing variant ${variantUrl}: ${error.message}`);
+        console.error(`❌ ERROR parsing variant ${variantUrl}: ${error.message}`);
         // Return complete object with defaults
         return { 
             duration: null, 
@@ -779,19 +774,19 @@ function extractHlsVersion(content) {
  */
 export async function extractHlsVariantUrls(url, headers = null, _tabId) {
     try {
-        logger.debug(`Extracting variant URLs from master: ${url}`);
+        console.debug(`Extracting variant URLs from master: ${url}`);
         // Fetch the master playlist content
         const fetchResult = await fetchManifest(url, headers, {
             maxRetries: 2
         });
         if (!fetchResult.success) {
-            logger.warn(`Failed to fetch master playlist for variant extraction: ${fetchResult.status}`);
+            console.warn(`Failed to fetch master playlist for variant extraction: ${fetchResult.status}`);
             return [];
         }
         // Quick validation that this is an HLS master playlist
         const content = fetchResult.content;
         if (!content.includes('#EXTM3U') || !content.includes('#EXT-X-STREAM-INF')) {
-            logger.warn(`Content is not an HLS master playlist`);
+            console.warn(`Content is not an HLS master playlist`);
             return [];
         }
         const baseUrl = getBaseDirectory(url);
@@ -800,7 +795,7 @@ export async function extractHlsVariantUrls(url, headers = null, _tabId) {
         const variantEntries = extractMasterVariantEntries(content, baseUrl, normalizedMasterUrl);
         return variantEntries.map(entry => entry.normalizedUrl);
     } catch (error) {
-        logger.error(`Error extracting variant URLs from ${url}: ${error.message}`);
+        console.error(`Error extracting variant URLs from ${url}: ${error.message}`);
         return [];
     }
 }
@@ -834,7 +829,7 @@ function extractMasterVariantEntries(content, baseUrl, masterUrl) {
             currentStreamInf = null;
         }
     }
-    logger.debug(`Extracted ${entries.length} variant entries from master playlist`);
+    console.debug(`Extracted ${entries.length} variant entries from master playlist`);
     return entries;
 }
 
@@ -847,19 +842,19 @@ function extractMasterVariantEntries(content, baseUrl, masterUrl) {
  */
 export async function extractHlsMediaUrls(url, headers = null, _tabId) {
     try {
-        logger.debug(`Extracting all media URLs from master: ${url}`);
+        console.debug(`Extracting all media URLs from master: ${url}`);
         // Fetch the master playlist content
         const fetchResult = await fetchManifest(url, headers, {
             maxRetries: 2
         });
         if (!fetchResult.success) {
-            logger.warn(`Failed to fetch master playlist for media URL extraction: ${fetchResult.status}`);
+            console.warn(`Failed to fetch master playlist for media URL extraction: ${fetchResult.status}`);
             return { videoTracks: [], audioTracks: [], subtitleTracks: [] };
         }
         // Quick validation that this is an HLS master playlist
         const content = fetchResult.content;
         if (!content.includes('#EXTM3U') || !content.includes('#EXT-X-STREAM-INF')) {
-            logger.warn(`Content is not an HLS master playlist`);
+            console.warn(`Content is not an HLS master playlist`);
             return { videoTracks: [], audioTracks: [], subtitleTracks: [] };
         }
         const baseUrl = getBaseDirectory(url);
@@ -899,14 +894,14 @@ export async function extractHlsMediaUrls(url, headers = null, _tabId) {
             }
         }
         
-        logger.debug(`Extracted ${videoTrackUrls.length} video track URLs, ${audioUrls.length} audio URLs, ${subtitleUrls.length} subtitle URLs`);
+        console.debug(`Extracted ${videoTrackUrls.length} video track URLs, ${audioUrls.length} audio URLs, ${subtitleUrls.length} subtitle URLs`);
         return { 
             videoTracks: videoTrackUrls, 
             audioTracks: audioUrls, 
             subtitleTracks: subtitleUrls 
         };
     } catch (error) {
-        logger.error(`Error extracting media URLs from ${url}: ${error.message}`);
+        console.error(`Error extracting media URLs from ${url}: ${error.message}`);
         return { videoTracks: [], audioTracks: [], subtitleTracks: [] };
     }
 }

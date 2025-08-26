@@ -2,12 +2,9 @@
  * Settings Tab Component - Streamlined settings UI
  */
 
-import { createLogger } from '../shared/utils/logger.js';
 import { sendPortMessage } from './communication.js';
 import { showConfirmModal } from './ui-utils.js';
 import { renderHistoryItems } from './video/video-renderer.js';
-
-const logger = createLogger('SettingsTab');
 
 let currentSettings = null;
 
@@ -42,11 +39,11 @@ const SETTING_CONFIGS = {
  * Initialize settings tab - replace placeholder and set up UI
  */
 export async function initializeSettingsTab() {
-    logger.debug('Initializing settings tab');
+    console.debug('Initializing settings tab');
 
     const settingsTab = document.querySelector('.tab-content[data-tab-id="settings-tab"]');
     if (!settingsTab) {
-        logger.error('Settings tab container not found');
+        console.error('Settings tab container not found');
         return;
     }
 
@@ -173,7 +170,7 @@ async function handleChooseSavePath() {
     try {
         sendPortMessage({ command: 'chooseSavePath' });
     } catch (error) {
-        logger.error('Error choosing save path:', error);
+        console.error('Error choosing save path:', error);
     }
 }
 
@@ -196,7 +193,7 @@ async function confirmHistoryReduction(newLimit, triggerElement) {
         }
         return true;
     } catch (error) {
-        logger.error('Error checking history count:', error);
+        console.error('Error checking history count:', error);
         return true; // Continue without confirmation if we can't check
     }
 }
@@ -205,7 +202,7 @@ async function confirmHistoryReduction(newLimit, triggerElement) {
  * Update settings in background
  */
 function updateSettings(settings) {
-    logger.debug('Updating settings:', settings);
+    console.debug('Updating settings:', settings);
     currentSettings = settings;
 
     sendPortMessage({
@@ -230,7 +227,7 @@ function showSuccessFeedback(input) {
  * Update settings UI with current values - unified approach
  */
 export function updateSettingsUI(settings) {
-    logger.debug('Updating settings UI:', settings);
+    console.debug('Updating settings UI:', settings);
     currentSettings = settings;
     
     // Apply theme immediately when settings are loaded
@@ -431,7 +428,7 @@ function handleUnitClick(settingKey, clickedUnit) {
  */
 function applyThemeFromSettings(themeValue) {
     if (!themeValue || (themeValue !== 'dark' && themeValue !== 'light')) {
-        logger.warn('Invalid theme value, using dark as fallback:', themeValue);
+        console.warn('Invalid theme value, using dark as fallback:', themeValue);
         themeValue = 'dark';
     }
     
@@ -444,7 +441,7 @@ function applyThemeFromSettings(themeValue) {
         document.body.classList.remove('theme-dark');
     }
     
-    logger.debug('Applied theme from settings:', themeValue);
+    console.debug('Applied theme from settings:', themeValue);
 }
 
 /**
@@ -513,7 +510,7 @@ async function handleReconnectClick() {
         sendPortMessage({ command: 'reconnectNativeHost' });
         // Connection state updates will be handled automatically via nativeHostConnectionState
     } catch (error) {
-        logger.error('Error sending reconnect command:', error);
+        console.error('Error sending reconnect command:', error);
     }
 }
 

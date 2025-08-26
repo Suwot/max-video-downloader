@@ -5,10 +5,6 @@
 
 import { cleanupVideosForTab, getVideosForDisplay } from "../processing/video-store.js";
 import { cleanupProcessingForTab } from "../processing/video-processor.js";
-import { createLogger } from "../../shared/utils/logger.js";
-
-// Create a logger instance for the Tab Tracker module
-const logger = createLogger("Tab Tracker");
 
 // Track domain (origin) for each tab to detect domain changes
 // Map<tabId, origin> - tracks the current domain for each tab
@@ -40,12 +36,12 @@ function shouldCleanupOnNavigation(tabId, newUrl) {
 
     // Domain changed - update tracking and return true for cleanup
     tabDomains.set(tabId, newOrigin);
-    logger.debug(
+    console.debug(
       `Domain change detected for tab ${tabId}: ${currentOrigin} -> ${newOrigin}`
     );
     return true;
   } catch (error) {
-    logger.warn(`Error checking domain change for tab ${tabId}:`, error);
+    console.warn(`Error checking domain change for tab ${tabId}:`, error);
     return false;
   }
 }
@@ -92,7 +88,7 @@ function updateTabIcon(tabId) {
     })
     .catch(() => {
       // Tab doesn't exist - this is normal during tab closure
-      logger.debug(`Tab ${tabId} no longer exists, skipping icon update`);
+      console.debug(`Tab ${tabId} no longer exists, skipping icon update`);
     });
 }
 
@@ -101,12 +97,12 @@ function updateTabIcon(tabId) {
  * @returns {Promise<boolean>} Success status
  */
 function initTabTracking() {
-  logger.info("Initializing tab tracking service");
+  console.info("Initializing tab tracking service");
 
   try {
     // Listen for tab removal events
     chrome.tabs.onRemoved.addListener((tabId) => {
-      logger.debug("Tab removed:", tabId);
+      console.debug("Tab removed:", tabId);
 
       // Cleanup all tab-related data
       cleanupVideosForTab(tabId, false);
@@ -120,7 +116,7 @@ function initTabTracking() {
 
     // Listen for tab activation (when a tab becomes visible/active)
     chrome.tabs.onActivated.addListener((activeInfo) => {
-      logger.debug("Tab activated:", activeInfo.tabId);
+      console.debug("Tab activated:", activeInfo.tabId);
       updateTabIcon(activeInfo.tabId);
     });
 
@@ -128,7 +124,7 @@ function initTabTracking() {
     // This is needed because Chrome resets extension icons on page load
     chrome.tabs.onUpdated.addListener((tabId, changeInfo, _tab) => {
       if (changeInfo.status === "complete") {
-        logger.debug("Tab loaded completely:", tabId);
+        console.debug("Tab loaded completely:", tabId);
         updateTabIcon(tabId);
       }
     });
@@ -138,13 +134,13 @@ function initTabTracking() {
       // Only handle main frame navigation (not iframes)
       if (details.frameId === 0) {
         if (shouldCleanupOnNavigation(details.tabId, details.url)) {
-          logger.debug(
+          console.debug(
             `Domain change detected, cleaning up tab ${details.tabId}`
           );
           cleanupVideosForTab(details.tabId);
           // Icon is now reset immediately by cleanupVideosForTab
         } else {
-          logger.debug(
+          console.debug(
             `Same domain navigation for tab ${details.tabId}, preserving videos`
           );
           // Icon will be updated by onUpdated when page completes loading
@@ -154,7 +150,7 @@ function initTabTracking() {
 
     return true;
   } catch (error) {
-    logger.error("Failed to initialize tab tracking:", error);
+    console.error("Failed to initialize tab tracking:", error);
     return false;
   }
 }

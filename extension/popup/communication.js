@@ -4,15 +4,12 @@
  * Other modules use sendPortMessage directly
  */
 
-import { createLogger } from '../shared/utils/logger.js';
 import { updateDownloadProgress } from './video/download-progress-handler.js';
 import { renderVideos, addVideoToUI, updateVideoInUI, removeVideoFromUI, renderHistoryItems, updateHistoryItemDeleted } from './video/video-renderer.js';
 import { updateUICounters, showToast, showSuccess, showError } from './ui-utils.js';
 import { formatSize } from '../shared/utils/processing-utils.js';
 import { updateSettingsUI, updateNativeHostStatus } from './settings-tab.js';
 import { currentTabId } from './index.js';
-
-const logger = createLogger('Communication');
 
 // Port connection
 let backgroundPort = null;
@@ -35,11 +32,11 @@ function connect() {
         backgroundPort = chrome.runtime.connect({ name: 'popup' });
         isConnected = true;
         
-        logger.debug('Connected to background script');
+        console.debug('Connected to background script');
         
         // Handle disconnect
         backgroundPort.onDisconnect.addListener(() => {
-            logger.debug('Disconnected from background script');
+            console.debug('Disconnected from background script');
             backgroundPort = null;
             isConnected = false;
         });
@@ -49,7 +46,7 @@ function connect() {
         
         return backgroundPort;
     } catch (error) {
-        logger.error('Failed to connect to background:', error);
+        console.error('Failed to connect to background:', error);
         backgroundPort = null;
         isConnected = false;
         return null;
@@ -60,13 +57,13 @@ function connect() {
  * Handle messages from background script
  */
 async function handleIncomingMessage(message) {
-    logger.debug('Received message:', message.command);
+    console.debug('Received message:', message.command);
     
     // Filter tab-specific messages early to reduce redundant processing
     const tabSpecificCommands = ['videos-state-update', 'update-ui-counters'];
     if (tabSpecificCommands.includes(message.command) && message.tabId) {
         if (currentTabId && message.tabId !== currentTabId) {
-            logger.debug(`Ignoring ${message.command} for tab ${message.tabId} (current: ${currentTabId})`);
+            console.debug(`Ignoring ${message.command} for tab ${message.tabId} (current: ${currentTabId})`);
             return;
         }
     }
@@ -148,7 +145,7 @@ async function handleIncomingMessage(message) {
             break;
 
         default:
-            logger.warn('Unknown message command:', message.command);
+            console.warn('Unknown message command:', message.command);
     }
 }
 
@@ -156,7 +153,7 @@ async function handleIncomingMessage(message) {
  * Handle video state updates
  */
 async function handleVideoStateUpdate(message) {
-    logger.debug(`Video update: ${message.action}`, message);
+    console.debug(`Video update: ${message.action}`, message);
 
     try {
         switch (message.action) {
@@ -195,7 +192,7 @@ async function handleVideoStateUpdate(message) {
                 break;
         }
     } catch (error) {
-        logger.error('Error handling video state update:', error);
+        console.error('Error handling video state update:', error);
         // Fallback to full refresh on error
         if (message.videos) {
             await renderVideos(message.videos);
@@ -220,13 +217,13 @@ async function sendRuntimeMessage(message, timeout = 5000) {
                 clearTimeout(timeoutId);
                 
                 if (chrome.runtime.lastError) {
-                    logger.error('Runtime message failed:', chrome.runtime.lastError.message);
+                    console.error('Runtime message failed:', chrome.runtime.lastError.message);
                     reject(new Error(chrome.runtime.lastError.message));
                     return;
                 }
                 
                 if (response && response.error) {
-                    logger.error('Background script error:', response.error);
+                    console.error('Background script error:', response.error);
                     reject(new Error(response.error));
                     return;
                 }
@@ -235,7 +232,7 @@ async function sendRuntimeMessage(message, timeout = 5000) {
             });
         } catch (error) {
             clearTimeout(timeoutId);
-            logger.error('Failed to send runtime message:', error);
+            console.error('Failed to send runtime message:', error);
             reject(error);
         }
     });
@@ -249,7 +246,7 @@ async function sendRuntimeMessage(message, timeout = 5000) {
 function sendPortMessage(message) {
     const port = connect();
     if (!port || !isConnected) {
-        logger.warn('No port connection available for message:', message.command);
+        console.warn('No port connection available for message:', message.command);
         return false;
     }
     
@@ -257,7 +254,7 @@ function sendPortMessage(message) {
         port.postMessage(message);
         return true;
     } catch (error) {
-        logger.error('Port message failed:', error);
+        console.error('Port message failed:', error);
         backgroundPort = null;
         isConnected = false;
         return false;
@@ -276,7 +273,7 @@ function disconnect() {
         }
         backgroundPort = null;
         isConnected = false;
-        logger.debug('Disconnected from background');
+        console.debug('Disconnected from background');
     }
 }
 

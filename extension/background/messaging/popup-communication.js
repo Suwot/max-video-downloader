@@ -5,7 +5,6 @@
 
 // Add static imports at the top
 import { processDownloadCommand, cancelDownload, getActiveDownloadCount, getActiveDownloads } from '../download/download-manager.js';
-import { createLogger } from '../../shared/utils/logger.js';
 import { clearPreviewCache, getCacheStats } from '../../shared/utils/preview-cache.js';
 import { clearAllHeaders } from '../../shared/utils/headers-utils.js';
 import { getVideo, dismissVideoFromTab, cleanupAllVideos, sendFullRefresh } from '../processing/video-store.js';
@@ -17,12 +16,9 @@ import { generateVideoPreview, clearAllProcessing } from '../processing/video-pr
 // Track all popup connections - simplified single map
 const popupPorts = new Map(); // key = portId, value = {port, tabId, url}
 
-// Create a logger instance for the UI Communication module
-const logger = createLogger('UI Communication');
-
 // Handle messages coming through port connection
 async function handlePortMessage(message, port, portId) {
-    logger.debug('Received port message:', message);
+    console.debug('Received port message:', message);
     
     // Handle popup registration with URL and tab ID
     if (message.command === 'register' && message.tabId) {
@@ -33,7 +29,7 @@ async function handlePortMessage(message, port, portId) {
             url: message.url || null
         });
         
-        logger.debug(`Registered popup for tab ${message.tabId}${message.url ? ` with URL: ${message.url}` : ''}`);
+        console.debug(`Registered popup for tab ${message.tabId}${message.url ? ` with URL: ${message.url}` : ''}`);
         return;
     }
     
@@ -45,7 +41,7 @@ async function handlePortMessage(message, port, portId) {
     
     // Validate tabId for tab-specific commands only (except re-downloads)
     if (tabSpecificCommands.includes(message.command) && !isRedownload && !message.tabId) {
-        logger.error(`Tab-specific command '${message.command}' missing required tabId:`, message);
+        console.error(`Tab-specific command '${message.command}' missing required tabId:`, message);
         return;
     }
     
@@ -70,7 +66,7 @@ async function handlePortMessage(message, port, portId) {
                 command: 'activeDownloadsData',
                 activeDownloads: activeDownloads
             });
-            logger.debug(`Sent ${activeDownloads.length} active downloads with progress data for UI restoration`);
+            console.debug(`Sent ${activeDownloads.length} active downloads with progress data for UI restoration`);
             break;
 
         case 'generatePreview':
@@ -81,10 +77,10 @@ async function handlePortMessage(message, port, portId) {
                     if (video) {
                         // Call generateVideoPreview directly - it will handle the full flow
                         await generateVideoPreview(video);
-                        logger.debug(`Manual preview generation triggered for: ${message.url}`);
+                        console.debug(`Manual preview generation triggered for: ${message.url}`);
                     }
                 } catch (error) {
-                    logger.error(`Error in manual preview generation: ${error.message}`);
+                    console.error(`Error in manual preview generation: ${error.message}`);
                 }
             }
             break;
@@ -96,7 +92,7 @@ async function handlePortMessage(message, port, portId) {
             
         case 'download':
             if (isRedownload) {
-                logger.debug('🔄 Processing re-download request:', message);
+                console.debug('🔄 Processing re-download request:', message);
             }
             processDownloadCommand(message);
             break;
@@ -111,7 +107,7 @@ async function handlePortMessage(message, port, portId) {
             cleanupAllVideos(); // Includes icon reset for all tabs
 			clearAllProcessing(); // Clear all processing state
             await clearPreviewCache(); // Clear preview cache
-            logger.debug('Cleared all caches (video + headers + preview + icons)');
+            console.debug('Cleared all caches (video + headers + preview + icons)');
             
             // Send confirmation back to popup
             port.postMessage({
@@ -127,9 +123,9 @@ async function handlePortMessage(message, port, portId) {
                     command: 'previewCacheStats',
                     stats: stats
                 });
-                logger.debug('Sent preview cache stats to popup:', stats);
+                console.debug('Sent preview cache stats to popup:', stats);
             } catch (error) {
-                logger.error('Error getting preview cache stats:', error);
+                console.error('Error getting preview cache stats:', error);
                 port.postMessage({
                     command: 'previewCacheStats',
                     stats: { count: 0, size: 0 },
@@ -147,7 +143,7 @@ async function handlePortMessage(message, port, portId) {
                     success: result.success
                 });
             } catch (error) {
-                logger.error('Error choosing save path:', error);
+                console.error('Error choosing save path:', error);
                 port.postMessage({
                     command: 'settingsState',
                     settings: settingsManager.getAll(),
@@ -169,7 +165,7 @@ async function handlePortMessage(message, port, portId) {
                 await nativeHostService.reconnect();
                 // Connection state will be broadcast automatically via nativeHostConnectionState
             } catch (error) {
-                logger.error('Error reconnecting native host:', error);
+                console.error('Error reconnecting native host:', error);
                 // Send current state even on error - it contains the error info
                 port.postMessage({
                     command: 'nativeHostConnectionState',
@@ -181,7 +177,7 @@ async function handlePortMessage(message, port, portId) {
         case 'ensureNativeHostConnection':
             // Ensure native host connection for popup startup
             nativeHostService.ensureConnection().catch(err => {
-                logger.debug('Popup native host connection failed:', err.message);
+                console.debug('Popup native host connection failed:', err.message);
             });
             break;
             
@@ -199,7 +195,7 @@ async function handlePortMessage(message, port, portId) {
                     operation: message.operation,
                     params: message.params
                 });
-                logger.debug(`File system operation completed: ${message.operation}`, result);
+                console.debug(`File system operation completed: ${message.operation}`, result);
                 
                 // Handle deleteFile operation - always update history storage regardless of success/error
                 if (message.operation === 'deleteFile' && message.completedAt) {
@@ -216,7 +212,7 @@ async function handlePortMessage(message, port, portId) {
                         });
                         
                         await chrome.storage.local.set({ downloads_history: updatedHistory });
-                        logger.debug('Updated history with deleted flag:', message.completedAt);
+                        console.debug('Updated history with deleted flag:', message.completedAt);
                         
                         // Send response back to popup for UI update (pass through original result)
                         port.postMessage({
@@ -227,7 +223,7 @@ async function handlePortMessage(message, port, portId) {
                             completedAt: message.completedAt
                         });
                     } catch (storageError) {
-                        logger.error('Failed to update history after file deletion:', storageError);
+                        console.error('Failed to update history after file deletion:', storageError);
                         port.postMessage({
                             command: 'fileSystemResponse',
                             operation: 'deleteFile',
@@ -238,7 +234,7 @@ async function handlePortMessage(message, port, portId) {
                     }
                 }
             } catch (error) {
-                logger.warn(`File system operation failed: ${message.operation}`, error);
+                console.warn(`File system operation failed: ${message.operation}`, error);
                 
                 // Handle showInFolder and openFile errors - treat "File not found" as deleted file (reuse existing logic)
                 if ((message.operation === 'showInFolder' || message.operation === 'openFile') && error.message === 'File not found' && message.completedAt) {
@@ -255,7 +251,7 @@ async function handlePortMessage(message, port, portId) {
                         });
                         
                         await chrome.storage.local.set({ downloads_history: updatedHistory });
-                        logger.debug(`Updated history with deleted flag after ${message.operation} error:`, message.completedAt);
+                        console.debug(`Updated history with deleted flag after ${message.operation} error:`, message.completedAt);
                         
                         // Send response back to popup for UI update
                         port.postMessage({
@@ -266,7 +262,7 @@ async function handlePortMessage(message, port, portId) {
                             completedAt: message.completedAt
                         });
                     } catch (storageError) {
-                        logger.error(`Failed to update history after ${message.operation} error:`, storageError);
+                        console.error(`Failed to update history after ${message.operation} error:`, storageError);
                         port.postMessage({
                             command: 'fileSystemResponse',
                             operation: message.operation,
@@ -293,9 +289,9 @@ async function handlePortMessage(message, port, portId) {
                         });
                         
                         await chrome.storage.local.set({ downloads_history: updatedHistory });
-                        logger.debug('Updated history with deleted flag after error:', message.completedAt);
+                        console.debug('Updated history with deleted flag after error:', message.completedAt);
                     } catch (storageError) {
-                        logger.error('Failed to update history after file deletion error:', storageError);
+                        console.error('Failed to update history after file deletion error:', storageError);
                     }
                     
                     port.postMessage({
@@ -316,9 +312,9 @@ async function handlePortMessage(message, port, portId) {
                     command: 'settingsState',
                     settings: settings
                 });
-                logger.debug('Sent current settings to popup:', settings);
+                console.debug('Sent current settings to popup:', settings);
             } catch (error) {
-                logger.error('Error getting settings:', error);
+                console.error('Error getting settings:', error);
                 port.postMessage({
                     command: 'settingsState',
                     settings: {},
@@ -336,9 +332,9 @@ async function handlePortMessage(message, port, portId) {
                     settings: updatedSettings,
                     success: success
                 });
-                logger.debug('Updated settings and sent response to popup:', updatedSettings);
+                console.debug('Updated settings and sent response to popup:', updatedSettings);
             } catch (error) {
-                logger.error('Error updating settings:', error);
+                console.error('Error updating settings:', error);
                 port.postMessage({
                     command: 'settingsState',
                     settings: settingsManager.getAll(),
@@ -349,7 +345,7 @@ async function handlePortMessage(message, port, portId) {
             break;
             
         default:
-            logger.warn('Unknown command received:', message.command);
+            console.warn('Unknown command received:', message.command);
     }
 }
 
@@ -358,11 +354,11 @@ async function handlePortMessage(message, port, portId) {
  * Currently not used at all
  */
 async function handleRuntimeMessage(message, sender, sendResponse) {
-    logger.debug('Received runtime message:', message.command);
+    console.debug('Received runtime message:', message.command);
     
     switch (message.command) {
         default:
-            logger.warn('Unknown runtime message command:', message.command);
+            console.warn('Unknown runtime message command:', message.command);
             sendResponse({ success: false, error: 'Unknown command' });
     }
 }
@@ -371,7 +367,7 @@ async function handleRuntimeMessage(message, sender, sendResponse) {
  * Sets up port connection for popup communication
  */
 function setupPopupPort(port, portId) {
-    logger.debug('Popup connected with port ID:', portId);
+    console.debug('Popup connected with port ID:', portId);
     
     // Set up message listener
     port.onMessage.addListener((message) => {
@@ -382,7 +378,7 @@ function setupPopupPort(port, portId) {
     port.onDisconnect.addListener(() => {
         const portInfo = popupPorts.get(portId);
         if (portInfo) {
-            logger.debug(`Popup disconnected: tab ${portInfo.tabId}, port ${portId}`);
+            console.debug(`Popup disconnected: tab ${portInfo.tabId}, port ${portId}`);
         }
         popupPorts.delete(portId);
     });
@@ -404,7 +400,7 @@ function broadcastToPopups(message) {
             
             portInfo.port.postMessage(message);
         } catch (error) {
-            logger.error(`Error broadcasting to port ${portId}:`, error);
+            console.error(`Error broadcasting to port ${portId}:`, error);
             invalidPorts.push(portId);
         }
     }
@@ -412,7 +408,7 @@ function broadcastToPopups(message) {
     // Clean up invalid ports
     if (invalidPorts.length > 0) {
         invalidPorts.forEach(id => popupPorts.delete(id));
-        logger.debug(`Cleaned up ${invalidPorts.length} invalid port(s)`);
+        console.debug(`Cleaned up ${invalidPorts.length} invalid port(s)`);
     }
 }
 
@@ -433,7 +429,7 @@ function getActivePopupPortForTab(tabId) {
             } else {
                 // Clean up invalid port
                 popupPorts.delete(portId);
-                logger.debug(`Removed invalid port for tab ${tabId}`);
+                console.debug(`Removed invalid port for tab ${tabId}`);
             }
         }
     }
@@ -444,7 +440,7 @@ function getActivePopupPortForTab(tabId) {
  * Initialize the UI communication service
  */
 async function initUICommunication() {
-    logger.info('Initializing UI communication service');
+    console.info('Initializing UI communication service');
     
     // Set up listener for port connections
     chrome.runtime.onConnect.addListener(port => {
@@ -452,7 +448,7 @@ async function initUICommunication() {
             const portId = `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
             setupPopupPort(port, portId);
         } else {
-            logger.warn('Unknown port connection:', port.name);
+            console.warn('Unknown port connection:', port.name);
         }
     });
 	

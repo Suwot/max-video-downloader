@@ -3,12 +3,6 @@
  * Captures and provides request headers for media content
  */
 
-import { createLogger } from './logger.js';
-
-// Create a logger instance for the headers utilities
-const logger = createLogger('Headers Utils');
-logger.setLevel('ERROR');
-
 // Store headers by requestId
 // Map<requestId, headers>
 const requestHeadersStore = new Map();
@@ -51,19 +45,19 @@ function extractHeaders(requestHeaders) {
  */
 function captureRequestHeaders(details) {
     if (!details.requestId) {
-        logger.warn('No requestId in details, cannot store headers');
+        console.warn('No requestId in details, cannot store headers');
         return;
     }
     try {
         // Extract headers
         const headers = extractHeaders(details.requestHeaders);
-        logger.info(`Captured headers for url: ${details.url}, requestId ${details.requestId}`, headers);
+        console.info(`Captured headers for url: ${details.url}, requestId ${details.requestId}`, headers);
 		
         if (!headers) return;
         // Store by requestId only
         requestHeadersStore.set(details.requestId, headers);
     } catch (e) {
-        logger.warn('Error capturing headers:', e);
+        console.warn('Error capturing headers:', e);
     }
 }
 
@@ -94,17 +88,17 @@ function formatHeaders(headers) {
  */
 function getRequestHeaders(requestId) {
     if (!requestId) {
-        logger.warn(`Invalid request for headers - requestId: ${requestId}`);
+        console.warn(`Invalid request for headers - requestId: ${requestId}`);
         return null;
     }
     try {
         if (requestHeadersStore.has(requestId)) {
             return formatHeaders(requestHeadersStore.get(requestId));
         }
-        logger.debug(`No headers found for requestId ${requestId}`);
+        console.debug(`No headers found for requestId ${requestId}`);
         return null;
     } catch (e) {
-        logger.error(`Error getting headers for requestId ${requestId}:`, e);
+        console.error(`Error getting headers for requestId ${requestId}:`, e);
         return null;
     }
 }
@@ -114,7 +108,7 @@ function getRequestHeaders(requestId) {
  */
 async function initHeaderTracking() {
     if (!chrome.webRequest) {
-        logger.error('webRequest API not available, header tracking disabled');
+        console.error('webRequest API not available, header tracking disabled');
         return;
     }
     
@@ -135,9 +129,9 @@ async function initHeaderTracking() {
             listenerOptions
         );
         
-        logger.info('Header tracking initialized with options:', listenerOptions);
+        console.info('Header tracking initialized with options:', listenerOptions);
     } catch (e) {
-        logger.error('Failed to initialize header tracking:', e);
+        console.error('Failed to initialize header tracking:', e);
     }
 }
 
@@ -146,7 +140,7 @@ async function initHeaderTracking() {
  */
 function clearAllHeaders() {
     requestHeadersStore.clear();
-    logger.debug('All headers cleared');
+    console.debug('All headers cleared');
 }
 
 /**
@@ -166,7 +160,7 @@ function getHeadersStats() {
 function removeHeadersByRequestId(requestId) {
     if (!requestId) return;
     requestHeadersStore.delete(requestId);
-    logger.debug(`Removed headers for requestId ${requestId}`);
+    console.debug(`Removed headers for requestId ${requestId}`);
 }
 
 // Export functions

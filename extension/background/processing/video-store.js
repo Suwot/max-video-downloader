@@ -4,12 +4,8 @@
  */
 
 import { normalizeUrl } from '../../shared/utils/processing-utils.js';
-import { createLogger } from '../../shared/utils/logger.js';
 import { broadcastToPopups } from '../messaging/popup-communication.js';
 import { updateTabIcon } from '../state/tab-manager.js';
-
-// Create a logger instance for the Video Store module
-const logger = createLogger('Video Store');
 
 // Central store for all detected videos, keyed by tab ID, then normalized URL
 // Map<tabId, Map<normalizedUrl, videoInfo>>
@@ -52,7 +48,7 @@ function getVideoByUrl(url) {
         
         return null;
     } catch (err) {
-        logger.error(`Error in getVideoByUrl: ${err.message}`);
+        console.error(`Error in getVideoByUrl: ${err.message}`);
         return null;
     }
 }
@@ -69,11 +65,11 @@ function updateVideo(action, updates) {
     const { tabId, normalizedUrl } = updates;
     
     if (!tabId || !normalizedUrl) {
-        logger.error('[UV]: updateVideo requires tabId and normalizedUrl in updates');
+        console.error('[UV]: updateVideo requires tabId and normalizedUrl in updates');
         return false;
     }
     
-    logger.debug(`[UV]: ${action} for ${normalizedUrl}`, updates);
+    console.debug(`[UV]: ${action} for ${normalizedUrl}`, updates);
 
     // Initialize tab map if it doesn't exist
     if (!allDetectedVideos.has(tabId)) {
@@ -84,7 +80,7 @@ function updateVideo(action, updates) {
     // Handle batch removal operations (variant deduplication)
     if (action === 'remove' && Array.isArray(normalizedUrl)) {
         const urls = normalizedUrl;
-        logger.debug(`[UV]: Batch remove operation: ${urls.length} URLs`);
+        console.debug(`[UV]: Batch remove operation: ${urls.length} URLs`);
         
         // Apply updates to all URLs with consistent merge logic
         urls.forEach(url => {
@@ -137,7 +133,7 @@ function updateVideo(action, updates) {
         videoData: JSON.parse(JSON.stringify(finalVideo)) // Deep clone for UI
     });
     
-    logger.debug(`[UV]: ${action} completed for ${normalizedUrl}`);
+    console.debug(`[UV]: ${action} completed for ${normalizedUrl}`);
 
     // Only update tab icon and send counters when video count changes (add/remove actions)
     if (action === 'add' || action === 'remove') {
@@ -169,7 +165,7 @@ function dismissVideoFromTab(tabId, url) {
         validForDisplay: false
     });
     
-    logger.info(`Dismissed video ${url} for tab ${tabId}`);
+    console.info(`Dismissed video ${url} for tab ${tabId}`);
 }
 
 
@@ -190,7 +186,7 @@ function restoreVideoInTab(tabId, url) {
         timestampDismissed: undefined, // Remove the dismissed timestamp
         validForDisplay: true
     });
-    logger.info(`Restored video ${url} for tab ${tabId}`);
+    console.info(`Restored video ${url} for tab ${tabId}`);
 }
 
 // Get videos for UI display with efficient filtering
@@ -216,7 +212,7 @@ function sendFullRefresh(tabId) {
         counts: videoCounts // Include counts in full refresh
     });
     
-    logger.debug(`Sent full refresh with ${videos.length} videos for tab ${tabId}`);
+    console.debug(`Sent full refresh with ${videos.length} videos for tab ${tabId}`);
 }
 
 // Get video counts by type for a tab (only validForDisplay videos) { hls, dash, direct, unknown, total }
@@ -238,7 +234,7 @@ function getVideoTypeCounts(tabId) {
 
 // Clean up videos for a specific tab
 function cleanupVideosForTab(tabId) {
-    logger.debug(`Cleaning up videos for tab ${tabId}`);
+    console.debug(`Cleaning up videos for tab ${tabId}`);
     
     // Clear videos from allDetectedVideos
     if (allDetectedVideos.has(tabId)) {
@@ -256,7 +252,7 @@ function cleanupVideosForTab(tabId) {
 
 // Clean up all videos from all tabs
 function cleanupAllVideos() {
-    logger.debug('Cleaning up all detected videos');
+    console.debug('Cleaning up all detected videos');
     
     allDetectedVideos.clear();
     variantMasterMap.clear();
@@ -264,7 +260,7 @@ function cleanupAllVideos() {
     // Reset all tab icons after global cleanup
     updateTabIcon(); // Global reset (no tabId parameter)
 
-    logger.info('All detected videos cleared');
+    console.info('All detected videos cleared');
 }
 
 export {

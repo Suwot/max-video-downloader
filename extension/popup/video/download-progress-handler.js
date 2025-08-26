@@ -3,13 +3,10 @@
  * Handles progress mapping, UI updates, and download state restoration
  */
 
-import { createLogger } from '../../shared/utils/logger.js';
 import { sendPortMessage } from '../communication.js';
 import { formatSize, formatTime } from '../../shared/utils/processing-utils.js';
 import { renderHistoryItems } from './video-renderer.js';
 import { VideoItemComponent } from './video-item.js';
-
-const logger = createLogger('DownloadProgress');
 
 /**
  * Pure orchestrator for download progress updates
@@ -17,7 +14,7 @@ const logger = createLogger('DownloadProgress');
  * @param {Object} progressData - Progress data from background
  */
 export async function updateDownloadProgress(progressData = {}) {
-    logger.debug('Progress update received:', progressData.command, progressData.progress ? progressData.progress + '%' : 'No progress');
+    console.debug('Progress update received:', progressData.command, progressData.progress ? progressData.progress + '%' : 'No progress');
 
     // Handle downloads tab creation for new downloads (efficient one-time events)
     if (progressData.command === 'download-queued' && progressData.videoData) {
@@ -29,9 +26,9 @@ export async function updateDownloadProgress(progressData = {}) {
 
         if (!existingItem) {
             await createVideoItemInDownloads(progressData, 'queued');
-            logger.debug('Created new queued download item:', downloadId);
+            console.debug('Created new queued download item:', downloadId);
         } else {
-            logger.debug('Download item already exists, skipping creation:', downloadId);
+            console.debug('Download item already exists, skipping creation:', downloadId);
         }
     } else if (progressData.command === 'filename-resolved') {
         // Handle filename resolution update
@@ -42,7 +39,7 @@ export async function updateDownloadProgress(progressData = {}) {
             const existingItem = activeDownloadsContainer?.querySelector(`.video-item[data-download-id="${downloadId}"]`);
             if (existingItem && existingItem._component) {
                 existingItem._component.updateResolvedFilename(progressData.resolvedFilename);
-                logger.debug('Updated resolved filename for download:', downloadId, progressData.resolvedFilename);
+                console.debug('Updated resolved filename for download:', downloadId, progressData.resolvedFilename);
             }
         }
     } else if (progressData.command === 'download-started' && progressData.videoData) {
@@ -74,10 +71,10 @@ export async function updateDownloadProgress(progressData = {}) {
                     handler: cancelHandler
                 });
             }
-            logger.debug('Updated existing download item to starting state with cancel handler:', downloadId);
+            console.debug('Updated existing download item to starting state with cancel handler:', downloadId);
         } else {
             // Only create new item if none exists (shouldn't happen with proper restoration)
-            logger.debug('Creating new download item for started download:', downloadId);
+            console.debug('Creating new download item for started download:', downloadId);
             await createVideoItemInDownloads(progressData, 'starting');
         }
     }
@@ -96,7 +93,7 @@ export async function updateDownloadProgress(progressData = {}) {
         handleDownloadCompletion(progressData, addedToHistory);
     }
 
-    logger.debug('All UI elements updated for command:', progressData.command);
+    console.debug('All UI elements updated for command:', progressData.command);
 }
 
 /**
@@ -106,7 +103,7 @@ export async function updateDownloadProgress(progressData = {}) {
 export function restoreDownloadStates(activeDownloads = []) {
     if (activeDownloads.length === 0) return;
 
-    logger.debug('Restoring download states for', activeDownloads.length, 'active downloads');
+    console.debug('Restoring download states for', activeDownloads.length, 'active downloads');
 
     activeDownloads.forEach(downloadEntry => {
         const lookupUrl = downloadEntry.masterUrl || downloadEntry.downloadUrl;
@@ -165,7 +162,7 @@ export function restoreDownloadStates(activeDownloads = []) {
                     });
                 }
 
-                logger.debug('Restored button state for:', lookupUrl, 'to', downloadEntry.status);
+                console.debug('Restored button state for:', lookupUrl, 'to', downloadEntry.status);
             }
         });
     });
@@ -213,7 +210,7 @@ function updateDownloadButton(progressData = {}) {
     const allElements = findMatchingVideoElements(progressData);
 
     if (allElements.length === 0) {
-        logger.debug('No video elements found for download:', progressData.downloadUrl);
+        console.debug('No video elements found for download:', progressData.downloadUrl);
         return;
     }
 
@@ -234,7 +231,7 @@ function updateSingleDownloadButtonState(videoElement, progressData = {}) {
     if (component && component.downloadButton) {
         updateComponentButtonState(component.downloadButton, progressData);
     } else {
-        logger.warn('Video element missing component reference:', progressData.downloadUrl);
+        console.warn('Video element missing component reference:', progressData.downloadUrl);
     }
 }
 
@@ -259,7 +256,7 @@ function updateComponentButtonState(downloadButtonComponent, progressData = {}) 
                 text: 'Cancel',
                 handler: cancelHandler
             });
-            logger.debug('Component download button set to queued state');
+            console.debug('Component download button set to queued state');
             break;
 
         case 'download-started':
@@ -268,7 +265,7 @@ function updateComponentButtonState(downloadButtonComponent, progressData = {}) 
                 text: 'Starting...',
                 handler: cancelHandler
             });
-            logger.debug('Component download button set to starting state with cancel handler');
+            console.debug('Component download button set to starting state with cancel handler');
             break;
 
         case 'download-progress':
@@ -281,13 +278,13 @@ function updateComponentButtonState(downloadButtonComponent, progressData = {}) 
                     cancelHandler();
                 }
             });
-            logger.debug('Component download button switched to Stop mode');
+            console.debug('Component download button switched to Stop mode');
             break;
 
         case 'download-stopping':
             // Handle stopping state from background
             downloadButtonComponent.updateState('stopping');
-            logger.debug('Component download button set to stopping state');
+            console.debug('Component download button set to stopping state');
             break;
 
         case 'download-success':
@@ -295,7 +292,7 @@ function updateComponentButtonState(downloadButtonComponent, progressData = {}) 
             downloadButtonComponent.updateState('success', {
                 text: 'Completed!'
             });
-            logger.debug('Component download button set to success state');
+            console.debug('Component download button set to success state');
             break;
 
         case 'download-error':
@@ -303,7 +300,7 @@ function updateComponentButtonState(downloadButtonComponent, progressData = {}) 
             downloadButtonComponent.updateState('error', {
                 text: 'Error'
             });
-            logger.debug('Component download button set to error state');
+            console.debug('Component download button set to error state');
             break;
 
         case 'download-canceled':
@@ -311,7 +308,7 @@ function updateComponentButtonState(downloadButtonComponent, progressData = {}) 
             downloadButtonComponent.updateState('canceled', {
                 text: 'Canceled'
             });
-            logger.debug('Component download button set to canceled state');
+            console.debug('Component download button set to canceled state');
             break;
     }
 }
@@ -332,7 +329,7 @@ function updateDropdown(progressData = {}) {
     ).filter(Boolean);
 
     if (downloadGroups.length === 0) {
-        logger.debug('No download group elements found for download:', progressData.downloadUrl);
+        console.debug('No download group elements found for download:', progressData.downloadUrl);
         return;
     }
 
@@ -359,7 +356,7 @@ function updateSingleDropdown(downloadGroup, progressData = {}) {
             if (dropdownOption) {
                 dropdownOption.classList.add('queued');
             }
-            logger.debug('Dropdown option set to queued state');
+            console.debug('Dropdown option set to queued state');
             break;
 
         case 'download-progress':
@@ -443,7 +440,7 @@ function updateSingleDropdown(downloadGroup, progressData = {}) {
                 dropdownOption.classList.add('downloading');
             }
 
-            logger.debug('Dropdown progress updated:', progress + '%');
+            console.debug('Dropdown progress updated:', progress + '%');
             break;
 
         case 'download-success':
@@ -476,7 +473,7 @@ function updateSingleDropdown(downloadGroup, progressData = {}) {
                 dropdownOption.style.removeProperty('--progress');
             }
 
-            logger.debug('Dropdown restored to original state');
+            console.debug('Dropdown restored to original state');
             break;
     }
 }
@@ -491,7 +488,7 @@ async function createVideoItemInDownloads(downloadRequestOrVideoData, initialSta
     try {
         const activeDownloadsContainer = document.querySelector('.active-downloads');
         if (!activeDownloadsContainer) {
-            logger.error('Active downloads container not found');
+            console.error('Active downloads container not found');
             return;
         }
 
@@ -508,10 +505,10 @@ async function createVideoItemInDownloads(downloadRequestOrVideoData, initialSta
         // Append to end for proper queue order (oldest downloads at top)
         activeDownloadsContainer.appendChild(videoElement);
 
-        logger.debug('Created video item in downloads tab with state:', initialState);
+        console.debug('Created video item in downloads tab with state:', initialState);
 
     } catch (error) {
-        logger.error('Error creating video item in downloads:', error);
+        console.error('Error creating video item in downloads:', error);
     }
 }
 
@@ -538,7 +535,7 @@ export async function restoreActiveDownloads() {
         // when the background responds with activeDownloadsData message
 
     } catch (error) {
-        logger.error('Error requesting active downloads:', error);
+        console.error('Error requesting active downloads:', error);
     }
 }
 
@@ -582,17 +579,17 @@ export function handleActiveDownloadsData(activeDownloads) {
                     updateDropdown(downloadEntry.progressData);
                 }
             } else {
-                logger.warn('Download entry missing videoData, skipping:', downloadEntry.downloadUrl);
+                console.warn('Download entry missing videoData, skipping:', downloadEntry.downloadUrl);
             }
         });
 
-        logger.debug(`Restored ${activeDownloads.length} active downloads from in-memory Map`);
+        console.debug(`Restored ${activeDownloads.length} active downloads from in-memory Map`);
 
         // Restore button states for ongoing downloads in videos tab
         restoreDownloadStates(activeDownloads);
 
     } catch (error) {
-        logger.error('Error handling active downloads data:', error);
+        console.error('Error handling active downloads data:', error);
     }
 }
 
@@ -621,7 +618,7 @@ async function handleDownloadCompletion(progressData, addToHistory = false) {
 
             if (videoItemToRemove) {
                 videoItemToRemove.remove();
-                logger.debug(`Immediately removed from downloads-tab:`, downloadId || lookupUrl);
+                console.debug(`Immediately removed from downloads-tab:`, downloadId || lookupUrl);
             }
 
             // Show initial message if no more active downloads remain
@@ -645,10 +642,10 @@ async function handleDownloadCompletion(progressData, addToHistory = false) {
             await renderHistoryItems(false);
         }
 
-        logger.debug(`UI cleanup completed for ${progressData.command}:`, lookupUrl);
+        console.debug(`UI cleanup completed for ${progressData.command}:`, lookupUrl);
 
     } catch (error) {
-        logger.error('Error handling download completion UI:', error);
+        console.error('Error handling download completion UI:', error);
     }
 }
 
@@ -668,11 +665,11 @@ function resetVideosTabButtonStates(lookupUrl) {
             if (component && component.downloadButton) {
                 // Reset to default state (same as auto-restore logic)
                 component.downloadButton.updateState('default');
-                logger.debug('Reset videos-tab button state to default:', lookupUrl);
+                console.debug('Reset videos-tab button state to default:', lookupUrl);
             }
         });
     } catch (error) {
-        logger.error('Error resetting videos-tab button states:', error);
+        console.error('Error resetting videos-tab button states:', error);
     }
 }
 /**

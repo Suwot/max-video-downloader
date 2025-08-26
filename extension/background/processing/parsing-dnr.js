@@ -3,11 +3,6 @@
  * Applies header rules only during manifest parsing operations
  */
 
-import { createLogger } from '../../shared/utils/logger.js';
-
-const logger = createLogger('Parsing DNR');
-// logger.setLevel('ERROR');
-
 // Maximum rule ID supported by Chrome
 const MAX_RULE_ID = 2147483647;
 
@@ -29,12 +24,12 @@ function generateParsingRuleId() {
  */
 async function applyParsingRule(url, headers) {
     if (!chrome.declarativeNetRequest) {
-        logger.debug('declarativeNetRequest API not available');
+        console.debug('declarativeNetRequest API not available');
         return null;
     }
 
     if (!headers || Object.keys(headers).length === 0) {
-        logger.debug('No headers provided for parsing rule');
+        console.debug('No headers provided for parsing rule');
         return null;
     }
 
@@ -52,7 +47,7 @@ async function applyParsingRule(url, headers) {
         }
 
         if (headerRules.length === 0) {
-            logger.debug('No valid headers for parsing rule');
+            console.debug('No valid headers for parsing rule');
             return null;
         }
 
@@ -81,10 +76,10 @@ async function applyParsingRule(url, headers) {
             addRules: [rule]
         });
 
-        logger.debug(`Applied parsing rule ${ruleId} for ${url}`);
+        console.debug(`Applied parsing rule ${ruleId} for ${url}`);
         return ruleId;
     } catch (error) {
-        logger.error(`Error applying parsing rule for ${url}:`, error);
+        console.error(`Error applying parsing rule for ${url}:`, error);
         return null;
     }
 }
@@ -104,10 +99,10 @@ async function removeParsingRule(ruleId) {
             removeRuleIds: [ruleId]
         });
 
-        logger.debug(`Removed parsing rule ${ruleId}`);
+        console.debug(`Removed parsing rule ${ruleId}`);
         return true;
     } catch (error) {
-        logger.error(`Error removing parsing rule ${ruleId}:`, error);
+        console.error(`Error removing parsing rule ${ruleId}:`, error);
         return false;
     }
 }
@@ -128,11 +123,11 @@ async function cleanupOrphanedRules() {
             await chrome.declarativeNetRequest.updateSessionRules({
                 removeRuleIds: ruleIds
             });
-            logger.info(`Cleaned up ${ruleIds.length} orphaned parsing rules on startup`);
+            console.info(`Cleaned up ${ruleIds.length} orphaned parsing rules on startup`);
         }
         return true;
     } catch (error) {
-        logger.error('Error cleaning up orphaned rules:', error);
+        console.error('Error cleaning up orphaned rules:', error);
         return false;
     }
 }

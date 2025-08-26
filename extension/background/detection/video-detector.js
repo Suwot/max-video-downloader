@@ -1,13 +1,8 @@
-import { createLogger } from '../../shared/utils/logger.js';
 import { addDetectedVideo } from '../processing/video-processor.js';
 import { getRequestHeaders, removeHeadersByRequestId } from '../../shared/utils/headers-utils.js';
 import { probe, gate } from './video-type-identifier.js';
 import { settingsManager } from '../index.js';
 import { generateId } from '../../shared/utils/processing-utils.js';
-
-// Create a logger instance for video detection
-const logger = createLogger('VideoDetector');
-logger.setLevel('ERROR');
 
 /**
  * Get containers from MIME type for direct assignment during detection
@@ -69,7 +64,7 @@ async function getTabUrl(tabId, initiatorUrl = null) {
             if (matchingTabs.length === 1) {
                 // Single match - use this tab
                 const tab = matchingTabs[0];
-                logger.debug(`Resolved tabId ${tabId} to ${tab.id} using initiator: ${initiatorUrl}`);
+                console.debug(`Resolved tabId ${tabId} to ${tab.id} using initiator: ${initiatorUrl}`);
                 return {
                     tabId: tab.id, // Return the resolved tabId
                     pageUrl: tab.url || null,
@@ -83,7 +78,7 @@ async function getTabUrl(tabId, initiatorUrl = null) {
                 const mostRecentTab = matchingTabs.reduce((latest, current) =>
                     (current.lastAccessed || 0) > (latest.lastAccessed || 0) ? current : latest
                 );
-                logger.debug(`Resolved tabId ${tabId} to ${mostRecentTab.id} (most recent of ${matchingTabs.length}) using initiator: ${initiatorUrl}`);
+                console.debug(`Resolved tabId ${tabId} to ${mostRecentTab.id} (most recent of ${matchingTabs.length}) using initiator: ${initiatorUrl}`);
                 return {
                     tabId: mostRecentTab.id, // Return the resolved tabId
                     pageUrl: mostRecentTab.url || null,
@@ -93,11 +88,11 @@ async function getTabUrl(tabId, initiatorUrl = null) {
                     windowId: mostRecentTab.windowId || null
                 };
             } else {
-                logger.debug(`No matching tabs found for initiator: ${initiatorUrl}`);
+                console.debug(`No matching tabs found for initiator: ${initiatorUrl}`);
                 return null;
             }
         } catch (error) {
-            logger.debug(`Error querying tabs for initiator ${initiatorUrl}:`, error.message);
+            console.debug(`Error querying tabs for initiator ${initiatorUrl}:`, error.message);
             return null;
         }
     }
@@ -109,7 +104,7 @@ async function getTabUrl(tabId, initiatorUrl = null) {
 
     try {
         const tab = await chrome.tabs.get(tabId);
-        // logger.debug(`Retrieved tab info for ${tabId}:`, tab);
+        // console.debug(`Retrieved tab info for ${tabId}:`, tab);
         return {
             tabId, // Keep original tabId
             pageUrl: tab.url || null,
@@ -119,7 +114,7 @@ async function getTabUrl(tabId, initiatorUrl = null) {
             windowId: tab.windowId || null
         };
     } catch (error) {
-        logger.debug(`Could not get URL for tab ${tabId}:`, error.message);
+        console.debug(`Could not get URL for tab ${tabId}:`, error.message);
         return null;
     }
 }
@@ -172,7 +167,7 @@ function addVideoWithCommonProcessing(tabId, url, videoInfo, metadata, source, t
         if (headers) {
             videoData.headers = headers;
         } else {
-            logger.debug(`No headers found for requestId: ${requestId}`);
+            console.debug(`No headers found for requestId: ${requestId}`);
         }
     }
 
@@ -188,14 +183,14 @@ function addVideoWithCommonProcessing(tabId, url, videoInfo, metadata, source, t
  */
 export async function processWebRequest(details, metadata = null) {
     const { tabId, url, requestId, initiator } = details;
-    // logger.info(`Received URL ${url} after processing in onHeadersReceived:`, metadata)
+    // console.info(`Received URL ${url} after processing in onHeadersReceived:`, metadata)
 
     // Get tab URL for page context tracking (with fallback for negative tabId)
     const tabInfo = await getTabUrl(tabId, initiator);
 
     // If we couldn't resolve the tab, skip processing
     if (!tabInfo) {
-        logger.debug(`Could not resolve tab for tabId ${tabId}, initiator: ${initiator}`);
+        console.debug(`Could not resolve tab for tabId ${tabId}, initiator: ${initiator}`);
         return;
     }
 
@@ -205,14 +200,14 @@ export async function processWebRequest(details, metadata = null) {
     // Use new probe → gate pattern
     const candidate = probe(url, metadata);
     if (!candidate) {
-        logger.debug(`No candidate type detected for: ${url}`);
+        console.debug(`No candidate type detected for: ${url}`);
         return;
     }
 
     // Apply gate filtering (pass candidate for type-aware filtering)
     const minFileSize = settingsManager.get('minFileSizeFilter');
     if (!gate(url, metadata, minFileSize, candidate)) {
-        logger.debug(`Candidate rejected by gate: ${url}`);
+        console.debug(`Candidate rejected by gate: ${url}`);
         return;
     }
 
@@ -226,11 +221,11 @@ export async function processWebRequest(details, metadata = null) {
  */
 export function processContentScriptVideo(tabId, videoData) {
     if (!tabId || tabId <= 0 || !videoData) {
-        logger.warn('Invalid content script video data:', { tabId, videoData });
+        console.warn('Invalid content script video data:', { tabId, videoData });
         return;
     }
 
-    logger.debug(`Processing content script video for tab ${tabId}:`, videoData);
+    console.debug(`Processing content script video for tab ${tabId}:`, videoData);
 
     // Add the video through the video manager
     addDetectedVideo(videoData);
@@ -240,7 +235,7 @@ export function processContentScriptVideo(tabId, videoData) {
  * Initialize the video detector - sets up web request listeners and message handlers
  */
 export function initVideoDetector() {
-    logger.info('Initializing video detector');
+    console.info('Initializing video detector');
 
     setupWebRequestListener();     // Set up web request listener for video detection    
     setupMessageListener();        // Set up message listener for content script and other communications
@@ -252,11 +247,11 @@ export function initVideoDetector() {
 function setupWebRequestListener() {
     chrome.webRequest.onHeadersReceived.addListener(
         function (details) {
-            logger.info(`NEW onHeadersReceived request for url: ${details.url}, requestId: ${details.requestId}`, details);
+            console.info(`NEW onHeadersReceived request for url: ${details.url}, requestId: ${details.requestId}`, details);
             
             // Filter out extension-initiated requests to prevent self-processing loops
             if (details.initiator && details.initiator.startsWith('chrome-extension://')) {
-                logger.debug(`Skipping extension-initiated request: ${details.initiator}`);
+                console.debug(`Skipping extension-initiated request: ${details.initiator}`);
                 return;
             }
             
@@ -346,7 +341,7 @@ function setupWebRequestListener() {
             // Call the video detector with the metadata (async, but don't await to avoid blocking)
             processWebRequest(details, metadata)
                 .catch(error => {
-                    logger.debug('Error in processWebRequest:', error);
+                    console.debug('Error in processWebRequest:', error);
                 })
                 .finally(() => {
                     // Always cleanup headers after processing, regardless of success/failure
@@ -362,7 +357,7 @@ function setupWebRequestListener() {
         function(details) {
             if (details && details.requestId) {
                 removeHeadersByRequestId(details.requestId);
-                logger.debug(`Cleaned up headers for failed requestId: ${details.requestId}`, details);
+                console.debug(`Cleaned up headers for failed requestId: ${details.requestId}`, details);
             }
         },
         { urls: ["<all_urls>"], types: ["xmlhttprequest", "other", "media"] }
@@ -380,7 +375,7 @@ function setupMessageListener() {
             if (tabId && tabId > 0) {
                 // Process async but don't await to avoid blocking the message handler
                 processContentScriptVideo(tabId, request).catch(error => {
-                    logger.debug('Error in processContentScriptVideo:', error);
+                    console.debug('Error in processContentScriptVideo:', error);
                 });
             }
             return false;
@@ -390,7 +385,7 @@ function setupMessageListener() {
         return false;
     });
 
-    logger.debug('Message listener set up for video detection');
+    console.debug('Message listener set up for video detection');
 }
 
 /**
@@ -404,7 +399,7 @@ function shouldSkipBasedOnContentRange(contentRange, url) {
     const rangeMatch = /bytes (\d+)-(\d+)\/(\d+)/.exec(contentRange);
 
     if (!rangeMatch) {
-        logger.debug(`Invalid Content-Range format: ${contentRange} for URL: ${url}`);
+        console.debug(`Invalid Content-Range format: ${contentRange} for URL: ${url}`);
         return false; // If we can't parse it, don't skip
     }
 
@@ -422,10 +417,10 @@ function shouldSkipBasedOnContentRange(contentRange, url) {
     const shouldKeep = start === 0 || coverage >= 0.95;
 
     if (shouldKeep) {
-        logger.debug(`Keeping Content-Range request: ${contentRange} (${(coverage * 100).toFixed(1)}% coverage, starts at ${start}) for URL: ${url}`);
+        console.debug(`Keeping Content-Range request: ${contentRange} (${(coverage * 100).toFixed(1)}% coverage, starts at ${start}) for URL: ${url}`);
         return false; // Don't skip
     } else {
-        logger.debug(`Skipping partial Content-Range request: ${contentRange} (${(coverage * 100).toFixed(1)}% coverage, starts at ${start}) for URL: ${url}`);
+        console.debug(`Skipping partial Content-Range request: ${contentRange} (${(coverage * 100).toFixed(1)}% coverage, starts at ${start}) for URL: ${url}`);
         return true; // Skip
     }
 }

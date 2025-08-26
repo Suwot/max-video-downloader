@@ -4,9 +4,6 @@
  */
 
 import { formatSize, buildTrackLabel } from '../../shared/utils/processing-utils.js';
-import { createLogger } from '../../shared/utils/logger.js';
-
-const logger = createLogger('VideoDropdownComponent');
 
 // Container compatibility matrix for track muxing
 const CONTAINER_COMPATIBILITY = {

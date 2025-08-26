@@ -3,15 +3,7 @@
  * Common utilities for HLS and DASH parsing operations
  */
 
-import { createLogger } from '../../shared/utils/logger.js';
-
-const logger = createLogger('Parser Utils');
-logger.setLevel('ERROR');
-
-/**
- * Simple codec to container mapping for DASH tracks
- * Only includes cases that need specific containers, everything else falls back to universal containers
- */
+// Simple codec to container mapping for DASH tracks. Only includes cases that need specific containers, everything else falls back to universal containers
 const DASH_CODEC_CONTAINERS = {
     // Video codecs that need WebM
     'vp8': 'webm',

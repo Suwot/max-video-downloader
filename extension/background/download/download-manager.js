@@ -4,12 +4,9 @@
  * No external state dependencies - fully self-contained
  */
 
-import { createLogger } from '../../shared/utils/logger.js';
 import nativeHostService from '../messaging/native-host-service.js';
 import { broadcastToPopups } from '../messaging/popup-communication.js';
 import { settingsManager } from '../index.js';
-
-const logger = createLogger('Download Manager');
 
 // Unified download state management - Single source of truth
 const allDownloads = new Map(); // downloadId -> downloadEntry
@@ -54,7 +51,7 @@ async function processHistoryQueue() {
         try {
             await operation();
         } catch (error) {
-            logger.error('History storage operation failed:', error);
+            console.error('History storage operation failed:', error);
         }
     }
     
@@ -110,14 +107,14 @@ function notifyDownloadCountChange() {
         counts: counts
     });
     
-    logger.debug('Download count updated:', counts);
+    console.debug('Download count updated:', counts);
 }
 
 /**
  * Initialize download manager
  */
 export async function initDownloadManager() {
-    logger.info('Initializing download manager');
+    console.info('Initializing download manager');
     
     try {
         // Register event listeners for download events
@@ -130,9 +127,9 @@ export async function initDownloadManager() {
         // One-time cleanup: Remove legacy active downloads storage
         try {
             await chrome.storage.local.remove(['downloads_active']);
-            logger.debug('Cleaned up legacy active downloads storage');
+            console.debug('Cleaned up legacy active downloads storage');
         } catch (error) {
-            logger.debug('No legacy storage to clean up');
+            console.debug('No legacy storage to clean up');
         }
         
         // Initialize badge icon with current in-memory count
@@ -144,10 +141,10 @@ export async function initDownloadManager() {
         // Set up periodic history cleanup (every 24 hours)
         setInterval(cleanupOldHistoryItems, 24 * 60 * 60 * 1000);
         
-        logger.info('Download manager initialized successfully');
+        console.info('Download manager initialized successfully');
         return true;
     } catch (error) {
-        logger.error('Failed to initialize download manager:', error);
+        console.error('Failed to initialize download manager:', error);
         return false;
     }
 }
@@ -162,9 +159,9 @@ export async function processDownloadCommand(downloadCommand) {
     const downloadId = generateDownloadId(downloadCommand);
     downloadCommand.downloadId = downloadId;
     
-    logger.debug('Processing download command:', downloadCommand.command || 'download');
-    logger.debug('Generated downloadId:', downloadId);
-    logger.debug('Download URL:', downloadCommand.downloadUrl);
+    console.debug('Processing download command:', downloadCommand.command || 'download');
+    console.debug('Generated downloadId:', downloadId);
+    console.debug('Download URL:', downloadCommand.downloadUrl);
     
     // Resolve paths and handle filesystem dialogs
     const resolvedCommand = await resolveDownloadPaths(downloadCommand);
@@ -176,7 +173,7 @@ export async function processDownloadCommand(downloadCommand) {
     // Simple deduplication check using downloadId
     const existingEntry = allDownloads.get(downloadId);
     if (existingEntry) {
-        logger.debug('Download already active or queued:', downloadId, 'status:', existingEntry.status);
+        console.debug('Download already active or queued:', downloadId, 'status:', existingEntry.status);
         return;
     }
     
@@ -186,7 +183,7 @@ export async function processDownloadCommand(downloadCommand) {
     const maxConcurrentDownloads = settingsManager.get('maxConcurrentDownloads');
     
     if (activeCount >= maxConcurrentDownloads) {
-        logger.debug('Queue download - at concurrent limit:', downloadId);
+        console.debug('Queue download - at concurrent limit:', downloadId);
         await queueDownload(resolvedCommand);
         return;
     }
@@ -206,7 +203,7 @@ async function resolveDownloadPaths(downloadCommand) {
     
     // Handle download-as or first-time setup (but not for browser downloads)
     if ((downloadCommand.choosePath || isFirstTimeSetup) && !downloadCommand.browserDownload) {
-        logger.debug('Resolving path via filesystem dialog');
+        console.debug('Resolving path via filesystem dialog');
         return await handleDownloadAsFlow({
             ...downloadCommand,
             isFirstTimeSetup: isFirstTimeSetup && !downloadCommand.choosePath
@@ -215,7 +212,7 @@ async function resolveDownloadPaths(downloadCommand) {
     
     // For browser downloads with choosePath, skip CoApp dialog - Chrome will handle saveAs
     if (downloadCommand.browserDownload && downloadCommand.choosePath) {
-        logger.debug('Browser download with choosePath - skipping CoApp dialog, Chrome will handle saveAs');
+        console.debug('Browser download with choosePath - skipping CoApp dialog, Chrome will handle saveAs');
     }
     
     // Use default save path
@@ -257,7 +254,7 @@ async function queueDownload(downloadCommand) {
         subsOnly: downloadCommand.subsOnly || false
     });
     
-    logger.debug('Download queued:', downloadId);
+    console.debug('Download queued:', downloadId);
 }
 
 /**
@@ -283,7 +280,7 @@ async function startDownloadImmediately(downloadRequest) {
     createDownloadNotification(downloadRequest.filename);
     
     if (downloadRequest.isRedownload) {
-        logger.debug('🔄 Using preserved headers for re-download:', Object.keys(downloadRequest.headers || {}));
+        console.debug('🔄 Using preserved headers for re-download:', Object.keys(downloadRequest.headers || {}));
     }
     
     // Broadcast download start to UI - compose from entry data
@@ -307,7 +304,7 @@ async function startDownloadImmediately(downloadRequest) {
         // Send download command to native host (fire-and-forget)
         // All responses will come through event listeners
         nativeHostService.sendMessage(downloadRequest, { expectResponse: false });
-        logger.debug('Download command sent:', downloadId);
+        console.debug('Download command sent:', downloadId);
     }
 }
 
@@ -331,12 +328,12 @@ async function startBrowserDownload(downloadId, downloadRequest) {
         // Add saveAs parameter for download-as flow (choosePath flag)
         if (downloadRequest.choosePath) {
             downloadOptions.saveAs = true;
-            logger.debug('Using saveAs dialog for download-as flow');
+            console.debug('Using saveAs dialog for download-as flow');
         }
         
         const browserDownloadId = await chrome.downloads.download(downloadOptions);
         
-        logger.debug('Browser download started:', downloadId, ', Chrome ID:', browserDownloadId);
+        console.debug('Browser download started:', downloadId, ', Chrome ID:', browserDownloadId);
         
         // Get existing entry and add minimal browser download state
         const entry = allDownloads.get(downloadId);
@@ -355,7 +352,7 @@ async function startBrowserDownload(downloadId, downloadRequest) {
         }
         
     } catch (error) {
-        logger.error('Browser download failed:', error);
+        console.error('Browser download failed:', error);
         
         // Use existing error handling flow
         const errorEvent = {
@@ -485,7 +482,7 @@ async function tickPoll(downloadId) {
         }
         
     } catch (error) {
-        logger.error('Error polling browser download (will retry):', downloadId, error);
+        console.error('Error polling browser download (will retry):', downloadId, error);
         // Keep polling; next tick will retry
     }
 }
@@ -511,11 +508,11 @@ async function cancelBrowserDownload(downloadId, entry) {
         // Cancel Chrome download directly using stored ID
         if (entry.browserDownloadId) {
             await chrome.downloads.cancel(entry.browserDownloadId);
-            logger.debug('Canceled Chrome download:', entry.browserDownloadId);
+            console.debug('Canceled Chrome download:', entry.browserDownloadId);
         }
         
     } catch (error) {
-        logger.warn('Failed to cancel Chrome download:', error);
+        console.warn('Failed to cancel Chrome download:', error);
     }
     
     // Clean up polling
@@ -531,19 +528,19 @@ async function cancelBrowserDownload(downloadId, entry) {
         browserDownload: true
     });
     
-    logger.debug('Browser download canceled:', downloadId);
+    console.debug('Browser download canceled:', downloadId);
 }
 
 // Handle download events from native host (event-driven)
 async function handleDownloadEvent(event) {
     const { command, downloadUrl, sessionId, downloadId } = event;
     
-    logger.debug('Handling download event:', command, downloadUrl, sessionId);
-    logger.debug('Event downloadId:', event.downloadId);
+    console.debug('Handling download event:', command, downloadUrl, sessionId);
+    console.debug('Event downloadId:', event.downloadId);
     
     const downloadEntry = allDownloads.get(downloadId);
     if (!downloadEntry) {
-        logger.warn('Download entry not found for downloadId:', downloadId);
+        console.warn('Download entry not found for downloadId:', downloadId);
         return;
     }
 
@@ -560,7 +557,7 @@ async function handleDownloadEvent(event) {
             masterUrl: downloadEntry.downloadRequest.masterUrl || null
         });
 
-        logger.debug('Filename resolved for download:', downloadId, event.resolvedFilename);
+        console.debug('Filename resolved for download:', downloadId, event.resolvedFilename);
         return; // Don't process further for filename-resolved events
     }
 
@@ -685,7 +682,7 @@ export function getActiveDownloadUrls() {
 // Debug function to log current download manager state
 export function debugDownloadManagerState() {
     const entries = Array.from(allDownloads.entries());
-    logger.debug('Download Manager State:', {
+    console.debug('Download Manager State:', {
         allDownloads: entries.map(([id, entry]) => ({ id, status: entry.status, url: entry.downloadRequest.downloadUrl })),
         counts: getActiveDownloadCount()
     });
@@ -699,11 +696,11 @@ export function debugDownloadManagerState() {
 export async function cancelDownload(cancelRequest) {
     const downloadId = cancelRequest.downloadId || cancelRequest.downloadUrl;
     
-    logger.debug('Canceling download:', downloadId);
+    console.debug('Canceling download:', downloadId);
     
     const entry = allDownloads.get(downloadId);
     if (!entry) {
-        logger.debug('No download found to cancel:', downloadId);
+        console.debug('No download found to cancel:', downloadId);
         return;
     }
     
@@ -722,7 +719,7 @@ export async function cancelDownload(cancelRequest) {
             masterUrl: entry.downloadRequest.masterUrl || null,
         });
         
-        logger.debug('Queued download removed immediately:', downloadId);
+        console.debug('Queued download removed immediately:', downloadId);
         return;
     } else if (entry.status === 'downloading') {
         // Check if this is a browser download (has browserDownloadId)
@@ -765,7 +762,7 @@ export async function cancelDownload(cancelRequest) {
                     addedToHistory: false
                 });
                 
-                logger.debug('Download marked as orphaned after timeout:', downloadId);
+                console.debug('Download marked as orphaned after timeout:', downloadId);
             }
         }, 5000);
         
@@ -774,13 +771,13 @@ export async function cancelDownload(cancelRequest) {
             const currentEntry = allDownloads.get(downloadId);
             if (currentEntry && currentEntry.status === 'orphaned') {
                 allDownloads.delete(downloadId);
-                logger.warn('Removed orphaned download after 1min timeout:', downloadId);
+                console.warn('Removed orphaned download after 1min timeout:', downloadId);
             }
         }, 60000);
         
-        logger.debug('Cancellation command sent, status set to stopping:', downloadId);
+        console.debug('Cancellation command sent, status set to stopping:', downloadId);
     } else if (entry.status === 'stopping') {
-        logger.debug('Download already stopping:', downloadId);
+        console.debug('Download already stopping:', downloadId);
     }
 }
 
@@ -808,7 +805,7 @@ async function processNextDownload() {
     const downloadId = Array.from(allDownloads.entries())
         .find(([id, entry]) => entry === queuedEntry)?.[0];
     
-    logger.debug('Processing next queued download:', downloadId);
+    console.debug('Processing next queued download:', downloadId);
     
     // Remove from queue and restart through unified flow
     allDownloads.delete(downloadId);
@@ -816,7 +813,7 @@ async function processNextDownload() {
     // Restart through unified flow (handles both native and browser downloads)
     await startDownloadImmediately(queuedEntry.downloadRequest);
     
-    logger.debug('Queued download promoted to active:', downloadId);
+    console.debug('Queued download promoted to active:', downloadId);
 }
 
 /**
@@ -885,9 +882,9 @@ function updateBadgeIcon(count) {
             chrome.action.setBadgeBackgroundColor({ color: '#444444' });
         }
         
-        logger.debug('Badge updated with count:', count);
+        console.debug('Badge updated with count:', count);
     } catch (error) {
-        logger.error('Error updating badge:', error);
+        console.error('Error updating badge:', error);
     }
 }
 
@@ -901,7 +898,7 @@ async function addToHistoryStorage(progressData) {
     // Check if history saving is enabled
     const saveDownloadsInHistory = settingsManager.get('saveDownloadsInHistory');
     if (!saveDownloadsInHistory) {
-        logger.debug('History saving disabled, skipping:', progressData.downloadUrl);
+        console.debug('History saving disabled, skipping:', progressData.downloadUrl);
         return;
     }
 
@@ -932,9 +929,9 @@ async function addToHistoryStorage(progressData) {
             }
             
             await chrome.storage.local.set({ downloads_history: history });
-            logger.debug('Added to history storage:', progressData.downloadUrl, progressData.command);
+            console.debug('Added to history storage:', progressData.downloadUrl, progressData.command);
         } catch (error) {
-            logger.error('Error adding to history storage:', error);
+            console.error('Error adding to history storage:', error);
             throw error;
         }
     });
@@ -949,7 +946,7 @@ async function handleDownloadAsFlow(downloadCommand) {
     const downloadId = downloadCommand.downloadId || downloadCommand.downloadUrl;
     
     try {
-        logger.debug(`Handling filesystem dialog for:`, downloadId);
+        console.debug(`Handling filesystem dialog for:`, downloadId);
 
         // Generate default filename with container extension (native host will handle final naming)
         const defaultName = `${downloadCommand.filename}.${downloadCommand.container}`;
@@ -965,7 +962,7 @@ async function handleDownloadAsFlow(downloadCommand) {
         });
         
         if (filesystemResponse.error) {
-            logger.debug('Filesystem dialog canceled or failed:', filesystemResponse.error);
+            console.debug('Filesystem dialog canceled or failed:', filesystemResponse.error);
             // Broadcast error to UI
             broadcastToPopups({
                 command: 'download-canceled',
@@ -977,7 +974,7 @@ async function handleDownloadAsFlow(downloadCommand) {
             return null;
         }
 
-        logger.debug('Filesystem dialog successful:', filesystemResponse);
+        console.debug('Filesystem dialog successful:', filesystemResponse);
         
         // If this is first-time setup, save the directory as default save path
         if (downloadCommand.isFirstTimeSetup) {
@@ -990,7 +987,7 @@ async function handleDownloadAsFlow(downloadCommand) {
                 
                 const success = await settingsManager.updateAll(updatedSettings);
                 if (success) {
-                    logger.debug('Saved default save path from first download:', filesystemResponse.directory);
+                    console.debug('Saved default save path from first download:', filesystemResponse.directory);
                     
                     // Broadcast updated settings to any open popups (for UI update)
                     broadcastToPopups({
@@ -1000,7 +997,7 @@ async function handleDownloadAsFlow(downloadCommand) {
                     });
                 }
             } catch (error) {
-                logger.warn('Failed to save default save path:', error);
+                console.warn('Failed to save default save path:', error);
             }
         }
         
@@ -1028,7 +1025,7 @@ async function handleDownloadAsFlow(downloadCommand) {
         return resolvedCommand;
         
     } catch (error) {
-        logger.error('Download As flow failed:', error);
+        console.error('Download As flow failed:', error);
         
         // Broadcast error to UI
         broadcastToPopups({
@@ -1065,10 +1062,10 @@ async function cleanupOldHistoryItems() {
             
             if (history.length !== originalLength) {
                 await chrome.storage.local.set({ downloads_history: history });
-                logger.debug(`Cleaned up ${originalLength - history.length} old history items`);
+                console.debug(`Cleaned up ${originalLength - history.length} old history items`);
             }
         } catch (error) {
-            logger.error('Error cleaning up old history items:', error);
+            console.error('Error cleaning up old history items:', error);
             throw error;
         }
     });

@@ -7,10 +7,6 @@ import { initTabTracking } from './state/tab-manager.js';
 import { initUICommunication } from './messaging/popup-communication.js';
 import { initDownloadManager } from './download/download-manager.js';
 import { initVideoDetector } from './detection/video-detector.js';
-import { createLogger } from '../shared/utils/logger.js';
-
-// Create a logger instance for the background script
-const logger = createLogger('Background');
 
 // Create and export Settings Manager instance
 export const settingsManager = new SettingsManager();
@@ -65,14 +61,14 @@ function startDebugLogger() {
  */
 async function initializeServices() {
     try {
-        logger.info('Initializing background services');
+        console.info('Initializing background services');
 
         // Initialize Settings Manager first since other services depend on it
         await settingsManager.initialize();
         
         // Initialize native host connection early for UI readiness
         nativeHostService.ensureConnection().catch(err => {
-            logger.debug('Initial native host connection failed:', err.message);
+            console.debug('Initial native host connection failed:', err.message);
         });
         
 
@@ -83,9 +79,9 @@ async function initializeServices() {
         await initHeaderTracking();      // Initialize header tracking
         await cleanupOrphanedRules();    // Clean up orphaned parsing rules
 
-        logger.info('All background services initialized');
+        console.info('All background services initialized');
     } catch (error) {
-        logger.error('Failed to initialize background services:', error);
+        console.error('Failed to initialize background services:', error);
     }
 }
 
@@ -94,20 +90,20 @@ initializeServices(); // Initialize all services
 
 // Handle service worker wake events
 chrome.runtime.onStartup.addListener(() => {
-    logger.info('Extension startup - ensuring native host connection');
+    console.info('Extension startup - ensuring native host connection');
     nativeHostService.ensureConnection().catch(err => {
-        logger.debug('Startup native host connection failed:', err.message);
+        console.debug('Startup native host connection failed:', err.message);
     });
 });
 
 chrome.runtime.onInstalled.addListener(() => {
-    logger.info('Extension installed - ensuring native host connection');
+    console.info('Extension installed - ensuring native host connection');
     nativeHostService.ensureConnection().catch(err => {
-        logger.debug('Install native host connection failed:', err.message);
+        console.debug('Install native host connection failed:', err.message);
     });
 });
 
 // Sleep handler
 chrome.runtime.onSuspend.addListener(() => {
-  logger.debug('Background going to sleep - native host will continue running active operations');
+  console.debug('Background going to sleep - native host will continue running active operations');
 });

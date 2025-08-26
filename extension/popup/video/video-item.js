@@ -5,13 +5,10 @@
 
 import { formatDuration } from '../../shared/utils/processing-utils.js';
 import { sendPortMessage } from '../communication.js';
-import { createLogger } from '../../shared/utils/logger.js';
 import { VideoDropdownComponent, isTrackCompatibleWithVideo } from './dropdown.js';
 import { VideoDownloadButtonComponent } from './download-button.js';
 import { setupPreviewHover } from './preview-hover.js';
 import { showInfo, showError } from '../ui-utils.js';
-
-const logger = createLogger('VideoItemComponent');
 
 /**
  * VideoItemComponent - Manages complete video item state and UI
@@ -514,7 +511,7 @@ export class VideoItemComponent {
             const dropdownElement = this.dropdown.render();
             elementsDiv.appendChild(dropdownElement);
         } else {
-			logger.debug('creating simple DD with no tracks available');
+			console.debug('creating simple DD with no tracks available');
 			
             // Create simple placeholder (no dropdown functionality)
             const placeholderDropdown = document.createElement('div');
@@ -566,7 +563,7 @@ export class VideoItemComponent {
         const validCommands = commandArray.filter(cmd => cmd && Object.keys(cmd).length > 0);
         
         if (validCommands.length === 0) {
-            logger.debug(`No valid commands generated for ${mode}`);
+            console.debug(`No valid commands generated for ${mode}`);
             return;
         }
         
@@ -574,7 +571,7 @@ export class VideoItemComponent {
         for (const command of validCommands) {
             if (!command.downloadUrl) {
                 showError('URL is missing, can\'t download');
-                logger.error(`Missing downloadUrl in command for ${mode}:`, command);
+                console.error(`Missing downloadUrl in command for ${mode}:`, command);
                 
                 // Reset button state to default since operation failed
                 if (this.downloadButton) {
@@ -586,7 +583,7 @@ export class VideoItemComponent {
         
         validCommands.forEach(command => {
             sendPortMessage(command);
-            logger.debug(`Executed ${mode} command:`, command);
+            console.debug(`Executed ${mode} command:`, command);
         });
     }
 
@@ -1123,7 +1120,7 @@ export class VideoItemComponent {
      */
     handleTrackSelectionChange(newSelection) {
         this.selectedTracks = newSelection;
-        logger.debug('Track selection updated:', newSelection);
+        console.debug('Track selection updated:', newSelection);
         
         // Update container compatibility if needed
         if (this.dropdown) {

@@ -3,11 +3,7 @@
  * Single purpose: fetch manifest content with parsing-scoped DNR
  */
 
-import { createLogger } from '../../shared/utils/logger.js';
 import { applyParsingRule, removeParsingRule } from './parsing-dnr.js';
-
-const logger = createLogger('Manifest Fetcher');
-logger.setLevel('ERROR');
 
 /**
  * Fetch manifest content with parsing-scoped DNR rules
@@ -39,7 +35,7 @@ export async function fetchManifest(url, headers, options = {}) {
                 const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
                 
                 if (attempt > 0) {
-                    logger.debug(`Retry attempt ${attempt}/${maxRetries} for ${url}`);
+                    console.debug(`Retry attempt ${attempt}/${maxRetries} for ${url}`);
                 }
                 
                 const response = await fetch(url, {

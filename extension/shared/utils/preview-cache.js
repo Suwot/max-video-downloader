@@ -8,10 +8,7 @@ const DB_NAME = "VideoPreviewCache";
 const STORE_NAME = "previews";
 const DB_VERSION = 1;
 
-// Create a logger instance
-import { createLogger } from "./logger.js";
 import { broadcastToPopups } from "../../background/messaging/popup-communication.js";
-const logger = createLogger("Preview Cache");
 
 /**
  * Initialize the database
@@ -22,24 +19,24 @@ function initDB() {
     const request = indexedDB.open(DB_NAME, DB_VERSION);
 
     request.onerror = (event) => {
-      logger.error("Database failed to open:", event.target.error);
+      console.error("Database failed to open:", event.target.error);
       reject(new Error("Database failed to open"));
     };
 
     request.onsuccess = (event) => {
-      logger.debug("Database opened successfully");
+      console.debug("Database opened successfully");
       resolve(request.result);
     };
 
     request.onupgradeneeded = (event) => {
-      logger.debug("Database upgrade needed, creating object store");
+      console.debug("Database upgrade needed, creating object store");
       const db = event.target.result;
 
       // Create the object store if it doesn't exist
       if (!db.objectStoreNames.contains(STORE_NAME)) {
         const store = db.createObjectStore(STORE_NAME, { keyPath: "url" });
         store.createIndex("createdAt", "createdAt", { unique: false });
-        logger.debug("Created object store:", STORE_NAME);
+        console.debug("Created object store:", STORE_NAME);
       }
     };
   });
@@ -69,12 +66,12 @@ async function storePreview(url, previewDataUrl) {
       });
 
       request.onsuccess = () => {
-        logger.debug(`Stored preview for: ${url}`);
+        console.debug(`Stored preview for: ${url}`);
         resolve();
       };
 
       request.onerror = (event) => {
-        logger.error(`Failed to store preview for ${url}:`, event.target.error);
+        console.error(`Failed to store preview for ${url}:`, event.target.error);
         reject(event.target.error);
       };
     });
@@ -82,7 +79,7 @@ async function storePreview(url, previewDataUrl) {
     // Send updated cache stats to popups
     sendCacheStatsUpdate();
   } catch (error) {
-    logger.error("Failed to store preview in cache:", error);
+    console.error("Failed to store preview in cache:", error);
     // Fail gracefully - don't let caching errors disrupt the app
   }
 }
@@ -106,7 +103,7 @@ async function getPreview(url) {
       };
 
       request.onerror = (event) => {
-        logger.error(
+        console.error(
           `Failed to retrieve preview for ${url}:`,
           event.target.error
         );
@@ -115,11 +112,11 @@ async function getPreview(url) {
     });
 
     if (!result) {
-      logger.debug(`No cached preview found for: ${url}`);
+      console.debug(`No cached preview found for: ${url}`);
       return null;
     }
 
-    logger.debug(`Found cached preview for: ${url}`);
+    console.debug(`Found cached preview for: ${url}`);
 
     // Convert Blob back to data URL
     return new Promise((resolve) => {
@@ -128,7 +125,7 @@ async function getPreview(url) {
       reader.readAsDataURL(result.previewImage);
     });
   } catch (error) {
-    logger.error("Failed to retrieve preview from cache:", error);
+    console.error("Failed to retrieve preview from cache:", error);
     return null; // Return null if anything goes wrong
   }
 }
@@ -147,12 +144,12 @@ async function clearPreviewCache() {
       const request = store.clear();
 
       request.onsuccess = () => {
-        logger.debug("Preview cache cleared successfully");
+        console.debug("Preview cache cleared successfully");
         resolve();
       };
 
       request.onerror = (event) => {
-        logger.error("Failed to clear preview cache:", event.target.error);
+        console.error("Failed to clear preview cache:", event.target.error);
         reject(event.target.error);
       };
     });
@@ -162,7 +159,7 @@ async function clearPreviewCache() {
 
     return true;
   } catch (error) {
-    logger.error("Failed to clear preview cache:", error);
+    console.error("Failed to clear preview cache:", error);
     return false;
   }
 }
@@ -197,15 +194,15 @@ async function getCacheStats() {
       };
 
       request.onerror = (event) => {
-        logger.error("Failed to get cache stats:", event.target.error);
+        console.error("Failed to get cache stats:", event.target.error);
         reject(event.target.error);
       };
     });
 
-    logger.debug(`Cache stats: ${count} items, ${Math.round(size / 1024)} KB`);
+    console.debug(`Cache stats: ${count} items, ${Math.round(size / 1024)} KB`);
     return { count, size };
   } catch (error) {
-    logger.error("Failed to get cache stats:", error);
+    console.error("Failed to get cache stats:", error);
     return { count: 0, size: 0 };
   }
 }
@@ -222,7 +219,7 @@ async function sendCacheStatsUpdate() {
     });
 
   } catch (error) {
-    logger.error("Failed to send cache stats update:", error);
+    console.error("Failed to send cache stats update:", error);
   }
 }
 

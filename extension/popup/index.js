@@ -2,15 +2,12 @@
  * Popup entry point - simple initialization and coordination
  */
 
-import { createLogger } from '../shared/utils/logger.js';
 import { normalizeUrl } from '../shared/utils/processing-utils.js';
 import { connect, disconnect, sendPortMessage } from './communication.js';
 import { restoreActiveDownloads } from './video/download-progress-handler.js';
 import { renderHistoryItems } from './video/video-renderer.js';
 import { initializeSettingsTab, handleClearHistoryClick } from './settings-tab.js';
 import { switchTab, initializeTooltips, initializeFiltersAndSearch } from './ui-utils.js';
-
-const logger = createLogger('Popup');
 
 // Simple local tab ID - no need for separate state management
 let currentTabId = null;
@@ -56,7 +53,7 @@ function initializeUIEventHandlers() {
             sendPortMessage({ command: 'clearCaches' });
             clearCacheButton.dataset.constraint = 'Cache cleared!';
         } catch (error) {
-            logger.error('Error clearing cache:', error);
+            console.error('Error clearing cache:', error);
             clearCacheButton.dataset.constraint = 'Failed to clear cache';
         } finally {
             clearCacheButton.disabled = false;
@@ -73,12 +70,12 @@ function initializeUIEventHandlers() {
 // Initialize when DOM is ready
 document.addEventListener('DOMContentLoaded', async () => {
     try {
-        logger.debug('Popup initializing...');
+        console.debug('Popup initializing...');
 
         // Get active tab and set tab ID first
         const activeTab = await getActiveTab();
         currentTabId = activeTab.id;
-        logger.debug('Active tab ID set:', activeTab.id);
+        console.debug('Active tab ID set:', activeTab.id);
 
         // Initialize UI event handlers
         initializeUIEventHandlers();
@@ -114,7 +111,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         await restoreActiveDownloads();
         await renderHistoryItems();
     } catch (error) {
-        logger.error('Initialization error:', error);
+        console.error('Initialization error:', error);
         const container = document.getElementById('videos-list');
         if (container) {
             container.innerHTML = `
