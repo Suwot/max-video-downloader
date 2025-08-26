@@ -1,7 +1,7 @@
 {
-  "name": "video-downloader-mv3",
+  "name": "max-video-downloader",
   "version": "0.1.0",
-  "description": "MAX Video Downloader - Chrome extension with native host",
+  "description": "MAX Video Downloader - Chrome extension with native coapp",
   "main": "native_host/index.js",
   "type": "module",
   "scripts": {
@@ -15,8 +15,8 @@
     "dist:win-arm64": "cd native_host && ./build.sh dist win-arm64",
     "dist:linux-x64": "cd native_host && ./build.sh dist linux-x64",
     "dist:linux-arm64": "cd native_host && ./build.sh dist linux-arm64",
-    "install": "cd native_host && ./install.sh",
-    "uninstall": "cd native_host && ./uninstall.sh",
+    "install-coapp": "cd native_host && ./install.sh",
+    "uninstall-coapp": "cd native_host && ./uninstall.sh",
     "version-host": "cd native_host && ./build.sh version"
   },
   "devDependencies": {
