@@ -18,6 +18,7 @@
 **Fallback chains**: Use `mostReliable || lessReliable || guaranteed` pattern, not weighted options
 **Avoid dynamic imports**: Use static imports when possible for better performance and bundling
 **Service worker restriction**: Background service worker (anything in `background/` folder) CAN'T use dynamic imports - it's a Chrome extension restriction
+**Bundle-friendly code**: Write code that bundles well - avoid complex dynamic patterns that break esbuild
 **Leverage platform lifecycles**: Popup dies on close, service worker terminates, content scripts are per-tab
 **Return rich data**: Better to return more from one call than make multiple calls
 **Cache expensive operations only**: Don't cache cheap operations
@@ -26,6 +27,8 @@
 ## Code Quality
 
 **Use `npm run lint` for all syntax and style checks**: Run from project root for comprehensive linting across extension and native_host code - covers syntax, style, and Chrome extension best practices
+**Test bundled builds**: Use `npm run build:cws` and `./test-bundled-extension.sh` to verify production builds work
+**Console statements**: Use `console.warn/error` for important messages (preserved in builds), avoid `console.log/debug/info` (removed in production)
 **Avoid `node -c` for syntax checking**: Always use `npm run lint` instead for consistent error checking and style validation
 
 ## Code Organization

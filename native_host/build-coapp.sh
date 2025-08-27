@@ -483,7 +483,7 @@ show_help() {
     cat << EOF
 MAX Video Downloader Build System
 
-Usage: ./build.sh <command> [platform]
+Usage: ./build-coapp.sh <command> [platform]
 
 Commands:
   build <platform>     Build binary for platform
@@ -496,8 +496,8 @@ Platforms:
   mac-arm64, mac-x64, win-x64, win-arm64, linux-x64, linux-arm64
 
 Examples:
-  ./build.sh dist mac-arm64     # Create complete macOS installer
-  ./build.sh build mac-arm64    # Just build binary
+  ./build-coapp.sh dist mac-arm64     # Create complete macOS installer
+  ./build-coapp.sh build mac-arm64    # Just build binary
 
 Note: For installation, use install.sh after building
 EOF

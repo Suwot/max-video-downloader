@@ -45,7 +45,7 @@ cd native_host && node test-host.js
 ./test_streaming.sh
 
 # Check what browsers are detected
-cd native_host && ./build.sh -detect-browsers
+cd native_host && ./build-coapp.sh -detect-browsers
 ```
 
 ### Single Test Execution

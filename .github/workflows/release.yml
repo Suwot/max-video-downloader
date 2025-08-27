@@ -54,12 +54,12 @@ jobs:
       run: |
         cd native_host
         chmod +x build.sh
-        ./build.sh -build ${{ matrix.platform }}
+        ./build-coapp.sh -build ${{ matrix.platform }}
     
     - name: Create installer package
       run: |
         cd native_host
-        ./build.sh -package ${{ matrix.platform }}
+        ./build-coapp.sh -package ${{ matrix.platform }}
     
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4

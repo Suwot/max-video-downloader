@@ -20,13 +20,13 @@ log_info "Building native host binaries..."
 cd native_host
 
 # Build for all platforms
-./build.sh -build mac-arm64
-./build.sh -build mac-x64  
-./build.sh -build win-x64
-./build.sh -build linux-x64
+./build-coapp.sh -build mac-arm64
+./build-coapp.sh -build mac-x64  
+./build-coapp.sh -build win-x64
+./build-coapp.sh -build linux-x64
 
 # Create macOS app bundle
-./build.sh -package-app
+./build-coapp.sh -package-app
 
 cd ..
 

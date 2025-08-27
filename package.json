@@ -7,18 +7,20 @@
   "scripts": {
     "lint": "eslint extension/ native_host/ *.js",
     "lint:fix": "eslint extension/ native_host/ *.js --fix",
-    "build": "cd native_host && ./build.sh build",
-    "build:mac": "cd native_host && ./build.sh build mac-arm64",
-    "dist:mac-arm64": "cd native_host && ./build.sh dist mac-arm64",
-    "dist:mac-x64": "cd native_host && ./build.sh dist mac-x64",
-    "dist:win-x64": "cd native_host && ./build.sh dist win-x64",
-    "dist:win-arm64": "cd native_host && ./build.sh dist win-arm64",
-    "dist:linux-x64": "cd native_host && ./build.sh dist linux-x64",
-    "dist:linux-arm64": "cd native_host && ./build.sh dist linux-arm64",
-    "version-host": "cd native_host && ./build.sh version"
+    "build": "cd native_host && ./build-coapp.sh build",
+    "build:mac": "cd native_host && ./build-coapp.sh build mac-arm64",
+    "build:cws": "./build-cws-esbuild.sh && ./test-bundled-extension.sh",
+    "dist:mac-arm64": "cd native_host && ./build-coapp.sh dist mac-arm64",
+    "dist:mac-x64": "cd native_host && ./build-coapp.sh dist mac-x64",
+    "dist:win-x64": "cd native_host && ./build-coapp.sh dist win-x64",
+    "dist:win-arm64": "cd native_host && ./build-coapp.sh dist win-arm64",
+    "dist:linux-x64": "cd native_host && ./build-coapp.sh dist linux-x64",
+    "dist:linux-arm64": "cd native_host && ./build-coapp.sh dist linux-arm64",
+    "version-host": "cd native_host && ./build-coapp.sh version"
   },
   "devDependencies": {
-    "eslint": "^9.31.0"
+    "eslint": "^9.31.0",
+    "esbuild": "^0.19.12"
   },
   "dependencies": {
     "pkg": "^5.8.1"
