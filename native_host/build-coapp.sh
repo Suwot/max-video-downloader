@@ -7,7 +7,8 @@ set -e
 
 VERSION=$(node -p "require('../package.json').version")
 APP_NAME="pro.maxvideodownloader.coapp"
-CHROME_EXT_ID="bkblnddclhmmgjlmbofhakhhbklkcofd"
+CHROME_EXT_ID_DEV="bkblnddclhmmgjlmbofhakhhbklkcofd"
+CHROME_EXT_ID_PROD="kjinbaahkmjgkkedfdgpkkelehofieke"
 FIREFOX_EXT_ID="max-video-downloader@rostislav.dev"
 
 # ============================================================================
@@ -112,7 +113,8 @@ generate_macos_installer() {
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BINARY_PATH="$SCRIPT_DIR/mvdcoapp"
-CHROME_EXT_ID="bkblnddclhmmgjlmbofhakhhbklkcofd"
+CHROME_EXT_ID_DEV="bkblnddclhmmgjlmbofhakhhbklkcofd"
+CHROME_EXT_ID_PROD="kjinbaahkmjgkkedfdgpkkelehofieke"
 FIREFOX_EXT_ID="max-video-downloader@rostislav.dev"
 
 create_chrome_manifest() {
@@ -123,7 +125,10 @@ create_chrome_manifest() {
   "description": "MAX Video Downloader Native Host",
   "path": "$BINARY_PATH",
   "type": "stdio",
-  "allowed_origins": ["chrome-extension://$CHROME_EXT_ID/"]
+  "allowed_origins": [
+    "chrome-extension://$CHROME_EXT_ID_DEV/",
+    "chrome-extension://$CHROME_EXT_ID_PROD/"
+  ]
 }
 MANIFEST_EOF
 }
@@ -190,7 +195,8 @@ set "INSTALL_DIR=%~dp0"
 set "TARGET_DIR=%LOCALAPPDATA%\MaxVideoDownloader"
 set "BINARY_PATH=%TARGET_DIR%\mvdcoapp.exe"
 set "TEMP_DIR=%LOCALAPPDATA%\.mvdcoapp"
-set "CHROME_EXT_ID=bkblnddclhmmgjlmbofhakhhbklkcofd"
+set "CHROME_EXT_ID_DEV=bkblnddclhmmgjlmbofhakhhbklkcofd"
+set "CHROME_EXT_ID_PROD=kjinbaahkmjgkkedfdgpkkelehofieke"
 set "FIREFOX_EXT_ID=max-video-downloader@rostislav.dev"
 
 echo Installing to: %TARGET_DIR%
@@ -210,7 +216,10 @@ echo   "name": "pro.maxvideodownloader.coapp",
 echo   "description": "MAX Video Downloader Native Host",
 echo   "path": "%BINARY_PATH:\=\\%",
 echo   "type": "stdio",
-echo   "allowed_origins": ["chrome-extension://%CHROME_EXT_ID%/"]
+echo   "allowed_origins": [
+echo     "chrome-extension://%CHROME_EXT_ID_DEV%/",
+echo     "chrome-extension://%CHROME_EXT_ID_PROD%/"
+echo   ]
 echo }
 ) > "%CHROME_TEMPLATE%"
 
@@ -255,7 +264,8 @@ generate_linux_installer() {
 #!/bin/bash
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BINARY_PATH="$SCRIPT_DIR/mvdcoapp"
-CHROME_EXT_ID="bkblnddclhmmgjlmbofhakhhbklkcofd"
+CHROME_EXT_ID_DEV="bkblnddclhmmgjlmbofhakhhbklkcofd"
+CHROME_EXT_ID_PROD="kjinbaahkmjgkkedfdgpkkelehofieke"
 FIREFOX_EXT_ID="max-video-downloader@rostislav.dev"
 
 create_chrome_manifest() {
@@ -267,7 +277,10 @@ create_chrome_manifest() {
   "description": "MAX Video Downloader Native Host",
   "path": "$BINARY_PATH",
   "type": "stdio",
-  "allowed_origins": ["chrome-extension://$CHROME_EXT_ID/"]
+  "allowed_origins": [
+    "chrome-extension://$CHROME_EXT_ID_DEV/",
+    "chrome-extension://$CHROME_EXT_ID_PROD/"
+  ]
 }
 MANIFEST_EOF
 }

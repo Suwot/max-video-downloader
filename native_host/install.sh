@@ -9,7 +9,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BINARY_PATH="$SCRIPT_DIR/mvdcoapp"
 
 # Extension IDs
-CHROME_EXT_ID="bkblnddclhmmgjlmbofhakhhbklkcofd"
+CHROME_EXT_ID_DEV="bkblnddclhmmgjlmbofhakhhbklkcofd"
+CHROME_EXT_ID_PROD="kjinbaahkmjgkkedfdgpkkelehofieke"
 FIREFOX_EXT_ID="max-video-downloader@rostislav.dev"
 
 # Colors for output
@@ -40,7 +41,10 @@ create_chrome_manifest() {
   "description": "MAX Video Downloader Native Host",
   "path": "$BINARY_PATH",
   "type": "stdio",
-  "allowed_origins": ["chrome-extension://$CHROME_EXT_ID/"]
+  "allowed_origins": [
+    "chrome-extension://$CHROME_EXT_ID_DEV/",
+    "chrome-extension://$CHROME_EXT_ID_PROD/"
+  ]
 }
 MANIFEST_EOF
 }
