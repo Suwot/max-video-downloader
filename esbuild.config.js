@@ -91,6 +91,7 @@ async function buildAll() {
     
   } catch (error) {
     console.error('💥 Build failed:', error);
+    // eslint-disable-next-line no-undef
     process.exit(1);
   }
 }

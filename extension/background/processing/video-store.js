@@ -222,7 +222,7 @@ function getVideoTypeCounts(tabId) {
     if (!tabVideosMap) return counts;
     for (const video of tabVideosMap.values()) {
         if (!video.validForDisplay) continue;
-        if (video.type && counts.hasOwnProperty(video.type)) {
+        if (video.type && Object.prototype.hasOwnProperty.call(counts, video.type)) {
             counts[video.type]++;
         } else {
             counts.unknown++;

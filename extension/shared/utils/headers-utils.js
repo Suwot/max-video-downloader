@@ -119,7 +119,7 @@ async function initHeaderTracking() {
         // Check if we need to add extraHeaders (Chrome)
         // Firefox doesn't need or support this option
         if (chrome.webRequest.OnSendHeadersOptions && 
-            chrome.webRequest.OnSendHeadersOptions.hasOwnProperty('EXTRA_HEADERS')) {
+            Object.prototype.hasOwnProperty.call(chrome.webRequest.OnSendHeadersOptions, 'EXTRA_HEADERS')) {
             listenerOptions.push('extraHeaders');
         }
         

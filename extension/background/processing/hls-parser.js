@@ -384,7 +384,7 @@ function parseHlsMaster(content, baseUrl, masterUrl) {
     for (const line of lines) {
         if (line.startsWith('#EXT-X-MEDIA:')) {
             // Parse attributes
-            const attrPattern = /([A-Z0-9\-]+)=(("[^"]*")|([^,]*))/g;
+            const attrPattern = /([A-Z0-9-]+)=(("[^"]*")|([^,]*))/g;
             let match;
             const attrs = {};
             while ((match = attrPattern.exec(line)) !== null) {
@@ -872,7 +872,7 @@ export async function extractHlsMediaUrls(url, headers = null, _tabId) {
         for (const line of lines) {
             if (line.startsWith('#EXT-X-MEDIA:')) {
                 // Parse attributes
-                const attrPattern = /([A-Z0-9\-]+)=(("[^"]*")|([^,]*))/g;
+                const attrPattern = /([A-Z0-9-]+)=(("[^"]*")|([^,]*))/g;
                 let match;
                 const attrs = {};
                 while ((match = attrPattern.exec(line)) !== null) {
