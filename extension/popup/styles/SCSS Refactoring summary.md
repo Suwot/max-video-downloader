@@ -159,7 +159,6 @@ ovements Achieved
     .theme-light & {
         background-color: var(--bg-element-light);
         color: var(--text-primary-light);
-        box-shadow: var(--bg-element-shadow-light);
         &:hover { background-color: var(--bg-element-hover-light); }
     }
 }

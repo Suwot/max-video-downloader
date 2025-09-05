@@ -290,7 +290,7 @@
         .theme-light & {
             background-color: var(--bg-element-light);
             color: var(--text-secondary-light);
-            box-shadow: var(--bg-element-shadow-light);
+            border: 1px solid var(--border-primary-light);
         }
         
         // Borders between options

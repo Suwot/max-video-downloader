@@ -523,8 +523,11 @@ export async function restoreActiveDownloads() {
         }
 
         // Clear existing content
-        activeDownloadsContainer.innerHTML = `<div class="initial-message">
-                                <p>Ongoing downloads will appear here</p>
+        activeDownloadsContainer.innerHTML = `
+							<div class="initial-message">
+								<div class="content">	
+                                	<p>No active downloads.</p>
+								</div>
                             </div>`;
 
         // Request active downloads from background service worker

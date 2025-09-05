@@ -10,51 +10,55 @@
     overflow: visible;
 }
 
-// Initial states
 .initial-message {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    text-align: center;
-    font-size: var(--font-h2);
-    border-radius: 12px;
-    min-height: 76px;
-    @extend %theme-bg-static;
-
+	display: flex;
+	flex-direction: column;
+	
+	.theme-light & {background-color: var(--bg-primary-light);}
+	
 	#videos-list & {
-		margin: 0 6px 6px;
+		padding: 6px;
 	}
+	
+	.content {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		text-align: center;
+		font-size: var(--font-h2);
+		border-radius: 12px;
+		min-height: 76px;
+		@extend %theme-bg-static;
 
-    // Override text color for muted appearance
-    .theme-dark & {
-        color: #aaa;
-    }
+		// Override text color for muted appearance
+		.theme-dark & {
+			color: #aaa;
+		}
 
-    .theme-light & {
-        color: #757575;
-    }
+		.theme-light & {
+			color: #757575;
+		}
 
-    svg {
-        margin-block-end: 16px;
-        opacity: 0.7;
+		svg {
+			margin-block-end: 16px;
+			opacity: 0.7;
 
-        .theme-dark & {
-            fill: #aaa;
-        }
+			.theme-dark & {
+				fill: #aaa;
+			}
 
-        .theme-light & {
-            fill: #757575;
-        }
-    }
+			.theme-light & {
+				fill: #757575;
+			}
+		}
 
-    p {
-        margin: 4px 0;
-    }
-    
+		p { margin: 4px 0; }
+	}
+	
     // Default state: show no-videos message, hide no-matches message
     .no-videos-message {
-        display: block;
+        display: flex;
     }
     
     .no-matches-message {
@@ -68,10 +72,11 @@
         }
         
         .no-matches-message {
-            display: block;
+            display: flex;
         }
     }
 }
+
 
 // =====================================================
 // HEADER

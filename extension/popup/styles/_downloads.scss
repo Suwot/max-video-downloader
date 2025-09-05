@@ -168,9 +168,11 @@
     opacity: 0.6;
     transition: opacity var(--transition-fast);
 	cursor: pointer;
+    @extend %theme-text-secondary;
 
     &:hover {
         opacity: 1;
+        @extend %theme-text-primary;
         
         .theme-dark & {
             background-color: rgba(255, 255, 255, 0.05);
@@ -179,14 +181,6 @@
         .theme-light & {
             background-color: rgba(0, 0, 0, 0.05);
         }
-    }
-
-    svg {
-        @extend %theme-text-secondary;
-    }
-
-    &:hover svg {
-        @extend %theme-text-primary;
     }
 }
 

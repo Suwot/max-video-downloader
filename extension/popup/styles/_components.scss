@@ -493,6 +493,8 @@
 	
 	&.clear-cache-button:hover {
 		background-color: var(--color-red-hover) !important;
+		
+		svg {stroke: white;}
 	}
 }
 
@@ -507,9 +509,11 @@
 	// Active filter state
 	&.active .filter-btn {
 		background-color: var(--color-blue);
+		color: white;
 		
 		&:hover {
 			background-color: var(--color-blue-hover) !important;
+			color: white;
 		}
 	}
 	
@@ -530,7 +534,7 @@
 		
 		.theme-light & {
 			background: var(--bg-secondary-light);
-			border: 1px solid var(--border-color-light);
+			border: 1px solid var(--border-primary-light);
 		}
 		
 		&.open {

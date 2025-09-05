@@ -48,7 +48,8 @@
     }
 
     .theme-light & {
-        box-shadow: var(--bg-element-shadow-light);
+        background-color: var(--bg-primary-light);
+        border: var(--border-primary-light) 1px solid;
     }
 
     &:hover .tab-button::after {

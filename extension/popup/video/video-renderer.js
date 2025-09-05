@@ -87,7 +87,13 @@ export async function renderHistoryItems(fullRender = true) {
 
         if (fullRender) {
             // Clear container completely and rebuild from scratch
-            historyContainer.innerHTML = '<div class="initial-message"><p>You don\'t have any downloads in history</p></div>';
+            historyContainer.innerHTML = `
+				<div class="initial-message">
+					<div class="content">	
+						<p>History is empty.</p>
+					</div>
+				</div>
+			`;
             
             if (history.length > 0) {
                 // Hide initial message and render all history items
